@@ -1237,16 +1237,21 @@ func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
 // assignedDifficulty returns the difficulty we assigned when the job was
 // sent to the miner. Falls back to currentDifficulty if unknown.
 func (mc *MinerConn) assignedDifficulty(jobID string) float64 {
+	curDiff := mc.currentDifficulty()
 	if jobID == "" {
-		return mc.currentDifficulty()
+		//fmt.Printf("no job id, diff %v\n", curDiff)
+		return curDiff
 	}
 	mc.jobMu.Lock()
 	diff, ok := mc.jobDifficulty[jobID]
 	mc.jobMu.Unlock()
 	if ok && diff > 0 {
+		//fmt.Printf("job diff found: %v\n", diff)
 		return diff
 	}
-	return mc.currentDifficulty()
+
+	//fmt.Printf("no job diff found, diff  %v\n", curDiff)
+	return curDiff
 }
 
 func (mc *MinerConn) cleanFlagFor(job *Job) bool {
@@ -1944,12 +1949,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 	// in mining.notify; miners reverse it back when constructing the header.
 	prevhashLE := hexToLEHex(job.PrevHash)
 	shareTarget := mc.shareTargetOrDefault()
-	mc.setJobDifficulty(job.JobID, mc.currentDifficulty())
 
 	// clean_jobs should only be true when the template actually changed (prevhash/height)
 	// so miners don’t drop work on harmless re-notifies.
 	cleanJobs := job.Clean && mc.cleanFlagFor(job)
 	mc.trackJob(job, cleanJobs)
+	mc.setJobDifficulty(job.JobID, mc.currentDifficulty())
 
 	// Stratum notify shape per docs/protocols/stratum-v1.mediawiki:
 	// [job_id, prevhash, coinb1, coinb2, merkle_branch[], version, nbits, ntime, clean_jobs].
