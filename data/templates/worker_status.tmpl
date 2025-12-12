@@ -1,0 +1,450 @@
+{{/* Worker status template (migrated from worker_status.html) */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Worker Info</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		{{if .Error}}
+			<div class="card">
+				<p class="text-sm" style="color:#f88d8d;">{{.Error}}</p>
+				<p class="text-sm" style="margin-top:10px;">
+					<a href="/worker">← Back to worker login</a>
+				</p>
+			</div>
+		{{else if .Worker}}
+			<div class="card">
+				<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+					<div style="flex:1;min-width:220px;">
+						<p class="text-sm" style="margin:0 0 4px 0;">
+							<strong>Privacy mode</strong>
+							{{if .PrivacyMode}}is enabled and hides wallet addresses, hashes, and coinbase details by default.{{else}}is disabled and the full worker info is visible right now.{{end}}
+						</p>
+						<p class="text-sm" style="color:#b3bbd4;margin:0;">
+							This setting only applies to the current view and is not saved.
+						</p>
+					</div>
+					<button id="privacyToggle" class="btn" type="button" data-privacy-mode="{{if .PrivacyMode}}on{{else}}off{{end}}">
+						{{if .PrivacyMode}}Show wallet/hash details{{else}}Hide wallet/hash details{{end}}
+					</button>
+				</div>
+			</div>
+			<div class="card">
+				<div class="grid">
+					<div>
+						<div class="label">Miner</div>
+						<div class="value">
+							{{if .Worker.MinerName}}
+								<span class="mono">
+									{{.Worker.MinerName}}{{if .Worker.MinerVersion}} {{.Worker.MinerVersion}}{{end}}
+								</span>
+							{{else if .Worker.MinerType}}
+								<span class="mono">{{.Worker.MinerType}}</span>
+							{{else}}
+								—
+							{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Hashrate</div>
+						<div class="value">{{if .Worker.RollingHashrate}}{{formatHashrate .Worker.RollingHashrate}}{{else}}---{{end}}</div>
+					</div>
+					<div>
+						<div class="label">Wallet checked</div>
+						<div class="value">
+							{{if .Worker.WalletValidated}}Yes{{else}}No{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Wallet result</div>
+						<div class="value">
+							{{if .Worker.WalletValidated}}
+								Valid
+							{{else}}
+								Unknown
+							{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Wallet address</div>
+						<div class="value">
+							{{if .Worker.WalletAddress}}
+								<span class="code-box copyable" title="Click to copy wallet address" data-copy="{{.Worker.WalletAddress}}">{{.Worker.WalletAddress}}</span>
+							{{else}}
+								—
+							{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Pending balance (BTC)</div>
+						<div class="value">
+							{{formatBTCShort .Worker.BalanceSats}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Difficulty</div>
+						<div class="value">{{formatDiff .Worker.Difficulty}}</div>
+					</div>
+					<div>
+						<div class="label">Window acc/sub</div>
+						<div class="value">{{.Worker.WindowAccepted}} / {{.Worker.WindowSubmissions}}</div>
+					</div>
+					<div>
+						<div class="label">Shares/min</div>
+						<div class="value">{{printf "%.1f" .Worker.ShareRate}}</div>
+					</div>
+					<div>
+						<div class="label">Accepted</div>
+						<div class="value">{{.Worker.Accepted}}</div>
+					</div>
+					<div>
+						<div class="label">Rejected</div>
+						<div class="value">{{.Worker.Rejected}}</div>
+					</div>
+					<div>
+						<div class="label">Last share</div>
+						<div class="value">{{formatTime .Worker.LastShare}}</div>
+					</div>
+					<div>
+						<div class="label">Last share hash</div>
+						<div class="value">
+							{{if .Worker.LastShareHash}}
+								<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
+							{{else if .Worker.DisplayLastShare}}
+								<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
+							{{else}}
+								—
+							{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Ban status</div>
+						<div class="value">
+							{{if .Worker.Banned}}
+								<span class="badge">Banned</span><br>
+								<span class="label">Until</span> {{formatTime .Worker.BannedUntil}}<br>
+								{{if .Worker.BanReason}}<span class="label">Reason</span> {{.Worker.BanReason}}{{end}}
+							{{else}}
+								—
+							{{end}}
+						</div>
+					</div>
+					<div>
+						<div class="label">Last reject</div>
+						<div class="value">
+							{{if .Worker.LastReject}}
+								<span class="badge">{{.Worker.LastReject}}</span>
+							{{else}}
+								—
+							{{end}}
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="card" style="margin-top:16px;">
+				<div class="label">Last share / job details</div>
+				{{if .Worker.LastShare.IsZero}}
+					<p class="text-sm" style="margin-top:8px;">No shares recorded yet for this worker.</p>
+				{{else}}
+					<p class="text-sm" style="margin-top:8px;">
+						Time: {{formatTime .Worker.LastShare}}<br>
+						Status:
+						{{if .Worker.LastShareAccepted}}
+							Accepted
+						{{else if .Worker.LastReject}}
+							Rejected (reason: {{.Worker.LastReject}})
+							{{if and .HideLowDiffErrors (or (eq .Worker.LastReject "lowDiff") (eq .Worker.LastReject "low difficulty share"))}}
+								&mdash; low-diff reject hidden from worker stats due to hide_low_diff_errors setting
+							{{end}}
+						{{else}}
+							Unknown
+						{{end}}<br>
+						Difficulty:
+						{{if gt .Worker.LastShareDifficulty 0.0}}
+							{{printf "%.8f" .Worker.LastShareDifficulty}}
+						{{else if gt .Worker.Difficulty 0.0}}
+							{{printf "%.8f" .Worker.Difficulty}} (current target)
+						{{else}}
+							unknown
+						{{end}}<br>
+						Hash:
+						{{if .Worker.LastShareHash}}
+							<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
+						{{else if .Worker.DisplayLastShare}}
+							<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
+						{{else}}
+							unknown
+						{{end}}
+					</p>
+					{{$root := .}}
+					{{with .Worker.LastShareDebug}}
+						<div class="mt-3">
+							<div class="label">Template / debug payload</div>
+							<p class="text-sm" style="margin-top:8px;">
+								These fields reflect the last submitted share header and coinbase transaction.
+							</p>
+							{{if .Header}}
+								<p class="text-sm">
+									<span class="mono">block_header (hex):</span><br>
+									<span class="code-box copyable" title="Click to copy block header" data-copy="{{.Header}}">{{.Header}}</span>
+								</p>
+							{{end}}
+							{{if .ShareHash}}
+								<p class="text-sm">
+									<span class="mono">share_hash_le (hex):</span><br>
+									<span class="code-box copyable" title="Click to copy share hash" data-copy="{{.ShareHash}}">{{.ShareHash}}</span>
+								</p>
+							{{end}}
+							{{if .Target}}
+								<p class="text-sm">
+									<span class="mono">target (hex):</span><br>
+									<span class="code-box copyable" title="Click to copy target" data-copy="{{.Target}}">{{.Target}}</span>
+								</p>
+							{{end}}
+							{{if .MerkleRootBE}}
+								<p class="text-sm">
+									<span class="mono">merkle_root_be (hex):</span><br>
+									<span class="code-box copyable" title="Click to copy merkle root (BE)" data-copy="{{.MerkleRootBE}}">{{.MerkleRootBE}}</span>
+								</p>
+							{{end}}
+							{{if .MerkleRootLE}}
+								<p class="text-sm">
+									<span class="mono">merkle_root_le (hex):</span><br>
+									<span class="code-box copyable" title="Click to copy merkle root (LE)" data-copy="{{.MerkleRootLE}}">{{.MerkleRootLE}}</span>
+								</p>
+							{{end}}
+							{{if .Coinbase}}
+								<p class="text-sm">
+									<span class="mono">
+										<a href="https://www.blockchain.com/explorer/assets/btc/decode-transaction" target="_blank" rel="noreferrer" title="Open decode tool; paste this coinbase hex there">
+											coinbase_tx (hex):
+										</a>
+									</span><br>
+									<span class="code-box copyable" title="Click to copy coinbase hex" data-copy="{{.Coinbase}}">{{.Coinbase}}</span>
+								</p>
+							{{end}}
+							{{if or .CoinbaseVersion .CoinbaseLockTime .CoinbaseHeight .CoinbaseOutputs}}
+								<h2 style="margin-top:16px;margin-bottom:6px;font-size:14px;">Decoded coinbase</h2>
+								<p class="text-sm">
+									Version: {{if .CoinbaseVersion}}{{.CoinbaseVersion}}{{else}}unknown{{end}}<br>
+									Locktime: {{if .CoinbaseLockTime}}{{.CoinbaseLockTime}}{{else}}0{{end}}<br>
+									Block height (BIP34): {{if .CoinbaseHeight}}{{.CoinbaseHeight}}{{else}}unknown{{end}}
+								</p>
+								<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
+									This is the exact coinbase transaction the pool will send to the node if this share becomes a block. Each row below is a coinbase output: "Pool payout" is the pool's fee output, "Worker payout" is the miner's reward, and a 0-value output in position 0 is the SegWit witness commitment (no payout).
+								</p>
+								{{if .CoinbaseOutputs}}
+									<div style="overflow-x:auto;margin-top:8px;">
+										<table class="table">
+											<thead>
+												<tr>
+													<th>Output #</th>
+													<th>Role</th>
+													<th>Value (BTC)</th>
+													<th>Value (fiat)</th>
+													<th>% of coinbase</th>
+													<th>Address</th>
+													<th>scriptPubKey (hex)</th>
+												</tr>
+											</thead>
+											<tbody>
+												{{range $i, $o := .CoinbaseOutputs}}
+													<tr>
+														<td>{{$i}}</td>
+														<td>
+															{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex)}}
+																Worker payout (miner reward)
+															{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex)}}
+																Pool payout (operator fee)
+															{{else if and (eq $i 0) (eq $o.ValueSats 0)}}
+																Witness commitment (no payout)
+															{{else}}
+																Other coinbase output
+															{{end}}
+														</td>
+														<td>{{formatBTCShort $o.ValueSats}}</td>
+														<td>
+															{{if gt $root.BTCPriceFiat 0.0}}
+																{{formatFiat $o.ValueSats $root.BTCPriceFiat $root.FiatCurrency}}
+															{{else}}
+																—
+															{{end}}
+														</td>
+														<td>{{printf "%.4f%%" $o.Percent}}</td>
+														<td>
+															{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex) $root.Worker.WalletAddress}}
+																<span class="mono">
+																	<a href="https://mempool.space/address/{{$root.Worker.WalletAddress}}" target="_blank" rel="noreferrer" title="View {{$root.Worker.WalletAddress}} on mempool.space">
+																		{{$root.Worker.WalletAddress}}
+																	</a>
+																</span>
+															{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex) $root.PayoutAddress}}
+																<span class="mono">
+																	<a href="https://mempool.space/address/{{$root.PayoutAddress}}" target="_blank" rel="noreferrer" title="View {{$root.PayoutAddress}} on mempool.space">
+																		{{$root.PayoutAddress}}
+																	</a>
+																</span>
+															{{else}}
+																—
+															{{end}}
+														</td>
+														<td>
+															<span class="code-box copyable" title="Click to copy scriptPubKey hex" data-copy="{{$o.ScriptHex}}">{{$o.ScriptHex}}</span>
+														</td>
+													</tr>
+												{{end}}
+											</tbody>
+										</table>
+									</div>
+									{{if $root.FiatNote}}
+										<p class="text-sm" style="margin-top:8px;color:#b3bbd4;">
+											{{$root.FiatNote}}
+										</p>
+									{{end}}
+								{{end}}
+							{{end}}
+						</div>
+					{{end}}
+				{{end}}
+			</div>
+		{{else}}
+			<div class="card">
+				<p class="text-sm">No worker found.</p>
+				<p class="text-sm" style="margin-top:10px;">
+					<a href="/worker">← Back to worker login</a>
+				</p>
+			</div>
+		{{end}}
+
+		{{template "footer" .}}
+	</div>
+	<script>
+	(function() {
+		const toggle = document.getElementById('privacyToggle');
+		if (!toggle) {
+			return;
+		}
+		toggle.addEventListener('click', () => {
+			const params = new URLSearchParams(window.location.search);
+			if (toggle.dataset.privacyMode === 'on') {
+				params.set('privacy', 'off');
+			} else {
+				params.delete('privacy');
+			}
+			const query = params.toString();
+			window.location.search = query ? '?' + query : '';
+		});
+	})();
+	</script>
+	<script>
+	(function() {
+		const REFRESH_INTERVAL = 30000; // fallback when headers are missing
+		let refreshTimer;
+		const workerHash = "{{js .QueriedWorkerHash}}";
+
+		if (!workerHash) return; // No worker to refresh
+
+		function updateWorkerInfo(data) {
+			// Find the worker in the workers array by SHA256
+			const worker = data.workers.find(w => w.worker_sha256 === workerHash);
+			if (!worker) return; // Worker not found
+
+			// Update dynamic fields
+			const updateField = (selector, value) => {
+				const el = document.querySelector(selector);
+				if (el) el.textContent = value || '—';
+			};
+
+			// Format hashrate
+			const formatHashrate = (h) => {
+				if (!h) return '---';
+				const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+				let val = h, idx = 0;
+				while (val >= 1000 && idx < units.length - 1) {
+					val /= 1000;
+					idx++;
+				}
+				return val.toFixed(2) + ' ' + units[idx];
+			};
+
+			// Format difficulty
+			const formatDiff = (d) => {
+				if (!d) return '—';
+				if (d < 1000000) return d.toFixed(0);
+				return (d / 1000000).toFixed(2) + 'M';
+			};
+
+			// Update stats (find cards by their labels)
+			document.querySelectorAll('.card').forEach(card => {
+				const label = card.querySelector('.label');
+				if (!label) return;
+
+				const labelText = label.textContent.trim();
+				const valueEl = card.querySelector('.value');
+				if (!valueEl) return;
+
+				if (labelText === 'Accepted / Rejected') {
+					valueEl.textContent = `${worker.accepted} / ${worker.rejected}`;
+				} else if (labelText === 'Current difficulty') {
+					valueEl.textContent = formatDiff(worker.difficulty);
+				} else if (labelText === 'Rolling hashrate') {
+					valueEl.textContent = formatHashrate(worker.rolling_hashrate);
+				} else if (labelText === 'Last share' && worker.last_share) {
+					const lastShare = new Date(worker.last_share);
+					const now = new Date();
+					const diffSec = Math.floor((now - lastShare) / 1000);
+					if (diffSec < 60) {
+						valueEl.textContent = `${diffSec}s ago`;
+					} else if (diffSec < 3600) {
+						valueEl.textContent = `${Math.floor(diffSec / 60)}m ago`;
+					} else {
+						valueEl.textContent = lastShare.toLocaleString();
+					}
+				}
+			});
+		}
+
+		function scheduleNextFetch(delay) {
+			if (refreshTimer) {
+				clearTimeout(refreshTimer);
+			}
+			refreshTimer = setTimeout(fetchUpdate, Math.max(0, delay));
+		}
+
+		function scheduleFromHeader(nextHeader) {
+			let delay = REFRESH_INTERVAL;
+			if (nextHeader) {
+				const nextDate = new Date(nextHeader);
+				if (!Number.isNaN(nextDate.getTime())) {
+					delay = Math.max(0, nextDate.getTime() - Date.now() + 1000);
+				}
+			}
+			scheduleNextFetch(delay);
+		}
+
+		function fetchUpdate() {
+			fetch('/api/workers?per_page=1000') // Fetch enough to find our worker
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					const nextHeader = response.headers.get('X-JSON-Next-Update-At');
+					return response.json().then(data => {
+						updateWorkerInfo(data);
+						scheduleFromHeader(nextHeader);
+					});
+				})
+				.catch(error => {
+					console.error('Error fetching worker info update:', error);
+					scheduleFromHeader(undefined);
+				});
+		}
+
+		// Start periodic updates
+		scheduleNextFetch(0);
+	})();
+	</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+{{/* Pool configuration / limits summary (server-only) */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Pool Info</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>Pool configuration</h1>
+
+		<div class="card">
+			<div class="label">Identity</div>
+			<div class="grid">
+				<div>
+					<div class="label">Brand</div>
+					<div class="value">{{.BrandName}}</div>
+					<p class="text-sm">
+						Domain: {{if .BrandDomain}}<span class="mono">{{.BrandDomain}}</span>{{else}}(not set){{end}}
+					</p>
+				</div>
+				<div>
+					<div class="label">Pool wallet</div>
+					<div class="value mono">
+						{{if .DisplayPayoutAddress}}{{.DisplayPayoutAddress}}{{else}}(not configured){{end}}
+					</div>
+					<p class="text-sm">
+						Pool fee wallet: the operator's share of each block is sent here. When dual payout is enabled, worker rewards go directly to their own wallets.
+					</p>
+				</div>
+				<div>
+					<div class="label">Coinbase message</div>
+					<div class="value mono">
+						{{if .DisplayCoinbaseMessage}}{{.DisplayCoinbaseMessage}}{{else}}(default){{end}}
+					</div>
+					<p class="text-sm">Appears in the coinbase of blocks this pool finds.</p>
+				</div>
+				<div>
+				<div class="label">Pool uptime</div>
+				<div class="value mono" id="pool-uptime">--</div>
+			</div>
+		</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Connection limits</div>
+			<div class="grid">
+				<div>
+					<div class="label">Listen address</div>
+					<div class="value mono">{{.ListenAddr}}</div>
+					<p class="text-sm">TCP address miners connect to.</p>
+				</div>
+				<div>
+					<div class="label">Max connections</div>
+					<div class="value mono">
+						{{if gt .MaxConns 0}}{{.MaxConns}}{{else}}(unlimited){{end}}
+					</div>
+					<p class="text-sm">Upper bound on concurrent miner connections.</p>
+				</div>
+				<div>
+					<div class="label">Accept rate limit</div>
+					<div class="value mono">
+						{{if gt .MaxAcceptsPerSecond 0}}
+							{{.MaxAcceptsPerSecond}} conn/s, burst {{.MaxAcceptBurst}}
+						{{else}}
+							(no per-second limit)
+						{{end}}
+					</div>
+					<p class="text-sm">Token-bucket limiter for new TCP accepts.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Difficulty settings</div>
+			<div class="grid">
+				<div>
+					<div class="label">Minimum difficulty</div>
+					<div class="value mono">{{formatDiff .MinDifficulty}}</div>
+				</div>
+				<div>
+					<div class="label">Maximum difficulty</div>
+					<div class="value mono">{{formatDiff .MaxDifficulty}}</div>
+				</div>
+				<div>
+					<div class="label">Suggested difficulty lock</div>
+					<div class="value mono">
+						{{if .LockSuggestedDifficulty}}enabled{{else}}disabled{{end}}
+					</div>
+					<p class="text-sm">Whether miners can pin their own difficulty via <span class="mono">mining.suggest_difficulty</span>.</p>
+				</div>
+				<div>
+					<div class="label">Hide low-diff errors</div>
+					<div class="value mono">
+						{{if .HideLowDiffErrors}}enabled{{else}}disabled{{end}}
+					</div>
+					<p class="text-sm">If enabled, low-difficulty shares return generic success instead of explicit errors.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Pool fee</div>
+			<div class="grid">
+				<div>
+					<div class="label">Pool fee percent</div>
+					<div class="value mono">{{printf "%.3f" .PoolFeePercent}}%</div>
+					<p class="text-sm">
+						Fee charged on block rewards. Coinbase transactions automatically split rewards between the pool and worker unless the worker wallet matches the pool wallet.
+					</p>
+				</div>
+			</div>
+		</div>
+
+	{{template "footer" .}}
+</div>
+<script>
+	(function () {
+		const uptimeEl = document.getElementById('pool-uptime');
+		if (!uptimeEl) {
+			return;
+		}
+		const REFRESH_INTERVAL = 30000;
+
+		function formatDuration(ns) {
+			if (!ns) return '—';
+			const seconds = Math.floor(ns / 1e9);
+			const days = Math.floor(seconds / 86400);
+			const hours = Math.floor((seconds % 86400) / 3600);
+			const mins = Math.floor((seconds % 3600) / 60);
+			const secs = seconds % 60;
+			if (days > 0) return `${days}d ${hours}h ${mins}m`;
+			if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+			if (mins > 0) return `${mins}m ${secs}s`;
+			return `${secs}s`;
+		}
+
+		function updatePoolInfo(data) {
+			if (!data) return;
+			if (data.uptime) {
+				uptimeEl.textContent = formatDuration(data.uptime);
+			}
+		}
+
+		function fetchPoolInfo() {
+			fetch('/api/pool')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					updatePoolInfo(data);
+				})
+				.catch(error => {
+					console.error('Error fetching pool info:', error);
+				});
+		}
+
+		fetchPoolInfo();
+		setInterval(fetchPoolInfo, REFRESH_INTERVAL);
+	})();
+</script>
+</body>
+</html>

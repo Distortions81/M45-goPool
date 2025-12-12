@@ -1,0 +1,395 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"sync"
+	"time"
+)
+
+const (
+	rpcRetryMinBackoff = 250 * time.Millisecond
+	rpcRetryMaxBackoff = 5 * time.Second
+	rpcMaxAttempts     = 3
+
+	rpcCircuitTrip    = 5
+	rpcCircuitOpenFor = 30 * time.Second
+)
+
+type rpcRequest struct {
+	Jsonrpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Method  string      `json:"method"`
+	Params  interface{} `json:"params"`
+}
+
+type rpcResponse struct {
+	Result json.RawMessage `json:"result"`
+	Error  *rpcError       `json:"error"`
+	ID     int             `json:"id"`
+}
+
+type rpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *rpcError) Error() string {
+	return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message)
+}
+
+type httpStatusError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *httpStatusError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("rpc http status %s: %s", e.Status, e.Body)
+	}
+	return fmt.Sprintf("rpc http status %s", e.Status)
+}
+
+type RPCClient struct {
+	url     string
+	user    string
+	pass    string
+	client  *http.Client
+	lp      *http.Client
+	idMu    sync.Mutex
+	nextID  int
+	metrics *PoolMetrics
+
+	cbMu                sync.Mutex
+	consecutiveFailures int
+	circuitOpenUntil    time.Time
+
+	lastErrMu sync.RWMutex
+	lastErr   error
+
+	// Optional hook invoked on successful RPC responses so other components
+	// (e.g., the status server) can opportunistically warm caches based on
+	// normal RPC traffic without changing how calls are issued.
+	resultHook func(method string, params interface{}, raw json.RawMessage)
+}
+
+func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
+	// Use a shared Transport so RPC calls reuse connections and avoid
+	// per-request TCP/TLS handshakes. This improves latency consistency
+	// and reduces overhead under load.
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 5 * time.Second,
+		// Bitcoind RPC doesn't use Expect: 100-continue, but keep a small
+		// timeout so misbehaving proxies can't stall us indefinitely.
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	return &RPCClient{
+		url:     cfg.RPCURL,
+		user:    cfg.RPCUser,
+		pass:    cfg.RPCPass,
+		metrics: metrics,
+		client: &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: transport,
+		},
+		lp: &http.Client{
+			Timeout:   0, // longpoll waits for bitcoind to respond on new blocks
+			Transport: transport,
+		},
+		nextID: 1,
+	}
+}
+
+// SetResultHook registers a callback that is invoked after every successful
+// RPC call, with the method name, request params, and raw JSON result.
+// It is safe to call on a running client; subsequent calls replace the hook.
+func (c *RPCClient) SetResultHook(hook func(method string, params interface{}, raw json.RawMessage)) {
+	c.cbMu.Lock()
+	c.resultHook = hook
+	c.cbMu.Unlock()
+}
+
+func (c *RPCClient) call(method string, params interface{}, out interface{}) error {
+	return c.callCtx(context.Background(), method, params, out)
+}
+
+func (c *RPCClient) callLongPoll(method string, params interface{}, out interface{}) error {
+	return c.callLongPollCtx(context.Background(), method, params, out)
+}
+
+func (c *RPCClient) callCtx(ctx context.Context, method string, params interface{}, out interface{}) error {
+	return c.callWithClientCtx(ctx, c.client, method, params, out)
+}
+
+func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params interface{}, out interface{}) error {
+	return c.callWithClientCtx(ctx, c.lp, method, params, out)
+}
+
+func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
+	if wait := c.circuitWait(); wait > 0 {
+		err := fmt.Errorf("rpc circuit open for %s", wait.Round(time.Second))
+		c.recordLastError(err)
+		return err
+	}
+
+	var lastErr error
+	backoff := rpcRetryMinBackoff
+	for attempt := 0; attempt < rpcMaxAttempts; attempt++ {
+		if ctx.Err() != nil {
+			c.recordLastError(ctx.Err())
+			return ctx.Err()
+		}
+		lastErr = c.performCall(ctx, client, method, params, out)
+		if lastErr == nil {
+			c.recordRPCCallSuccess()
+			return nil
+		}
+		c.recordLastError(lastErr)
+		if c.metrics != nil {
+			c.metrics.mu.Lock()
+			c.metrics.rpcErrorCount++
+			c.metrics.mu.Unlock()
+		}
+		if attempt == rpcMaxAttempts-1 || !c.shouldRetry(lastErr) {
+			c.recordRPCCallFailure()
+			return lastErr
+		}
+
+		sleep := withJitter(backoff)
+		if err := sleepContext(ctx, sleep); err != nil {
+			c.recordLastError(err)
+			c.recordRPCCallFailure()
+			return err
+		}
+		backoff = nextRetryBackoff(backoff)
+	}
+	c.recordRPCCallFailure()
+	return lastErr
+}
+
+func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
+	c.idMu.Lock()
+	id := c.nextID
+	c.nextID++
+	c.idMu.Unlock()
+
+	reqObj := rpcRequest{
+		Jsonrpc: "1.0",
+		ID:      id,
+		Method:  method,
+		Params:  params,
+	}
+
+	body, err := fastJSONMarshal(reqObj)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", c.url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+	req.SetBasicAuth(c.user, c.pass)
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := client.Do(req)
+	if c.metrics != nil {
+		c.metrics.ObserveRPCLatency(method, client == c.lp, time.Since(start))
+	}
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Some daemons include a useful JSON-RPC error even when returning a non-200 status.
+		// Surface the RPC error (e.g. -32601 method not found) instead of losing it behind the HTTP status.
+		var rpcResp rpcResponse
+		if err := fastJSONUnmarshal(data, &rpcResp); err == nil && rpcResp.Error != nil {
+			return rpcResp.Error
+		}
+		errBody := string(bytes.TrimSpace(data))
+		return &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: errBody}
+	}
+
+	if len(data) == 0 {
+		return fmt.Errorf("rpc empty response body")
+	}
+
+	var rpcResp rpcResponse
+	if err := fastJSONUnmarshal(data, &rpcResp); err != nil {
+		return fmt.Errorf("decode rpc response: %w", err)
+	}
+	if rpcResp.Error != nil {
+		return rpcResp.Error
+	}
+
+	// Publish the raw result to any registered hook so other components
+	// can opportunistically warm caches.
+	c.cbMu.Lock()
+	hook := c.resultHook
+	c.cbMu.Unlock()
+	if hook != nil {
+		hook(method, params, rpcResp.Result)
+	}
+
+	if out == nil {
+		return nil
+	}
+	return fastJSONUnmarshal(rpcResp.Result, out)
+}
+
+func (c *RPCClient) circuitWait() time.Duration {
+	c.cbMu.Lock()
+	defer c.cbMu.Unlock()
+	if c.circuitOpenUntil.IsZero() {
+		return 0
+	}
+	if time.Now().After(c.circuitOpenUntil) {
+		c.circuitOpenUntil = time.Time{}
+		return 0
+	}
+	return time.Until(c.circuitOpenUntil)
+}
+
+func (c *RPCClient) recordRPCCallSuccess() {
+	c.lastErrMu.Lock()
+	c.lastErr = nil
+	c.lastErrMu.Unlock()
+
+	c.cbMu.Lock()
+	c.consecutiveFailures = 0
+	c.circuitOpenUntil = time.Time{}
+	c.cbMu.Unlock()
+}
+
+func (c *RPCClient) recordRPCCallFailure() {
+	c.cbMu.Lock()
+	c.consecutiveFailures++
+	if c.consecutiveFailures >= rpcCircuitTrip {
+		c.circuitOpenUntil = time.Now().Add(rpcCircuitOpenFor)
+		c.consecutiveFailures = 0
+	}
+	c.cbMu.Unlock()
+}
+
+func (c *RPCClient) shouldRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return true
+	}
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode >= 500
+	}
+	return false
+}
+
+func nextRetryBackoff(cur time.Duration) time.Duration {
+	if cur <= 0 {
+		return rpcRetryMinBackoff
+	}
+	cur *= 2
+	if cur > rpcRetryMaxBackoff {
+		return rpcRetryMaxBackoff
+	}
+	return cur
+}
+
+func withJitter(base time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	jitter := base / 2
+	if jitter <= 0 {
+		return base
+	}
+
+	// Use crypto/rand for unpredictable jitter to avoid timing-based patterns
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to time-based jitter if crypto/rand fails (should be rare)
+		return base + time.Duration(time.Now().UnixNano()%int64(jitter))
+	}
+	randVal := binary.BigEndian.Uint64(buf[:])
+	return base + time.Duration(randVal%uint64(jitter))
+}
+
+func (c *RPCClient) recordLastError(err error) {
+	if err == nil {
+		return
+	}
+	c.lastErrMu.Lock()
+	c.lastErr = err
+	c.lastErrMu.Unlock()
+}
+
+func (c *RPCClient) LastError() error {
+	c.lastErrMu.RLock()
+	defer c.lastErrMu.RUnlock()
+	return c.lastErr
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// Fetch the scriptPubKey for the payout address using local address
+// validation instead of relying on bitcoind wallet RPCs. This avoids extra
+// RPC calls and does not require the node's wallet to know about the
+// address. Accepts base58 and bech32/bech32m destinations.
+func fetchPayoutScript(_ *RPCClient, addr string) ([]byte, error) {
+	if addr == "" {
+		return nil, fmt.Errorf("PAYOUT_ADDRESS env var is required for coinbase outputs")
+	}
+
+	params := ChainParams()
+	script, err := scriptForAddress(addr, params)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payout address %s: %w", addr, err)
+	}
+	return script, nil
+}

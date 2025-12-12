@@ -1,0 +1,13 @@
+goPool
+data/*.pem
+data/state/*.json
+data/state/*.json.bak
+data/state/secrets.json
+data/mainnet_state/*.json
+data/mainnet_state/*.json.bak
+data/mainnet_logs/
+data/mainnet_state/*.bin
+data/mainnet_state/*.bin.bak
+
+scripts/bitcoin-node
+data/found_blocks.jsonl

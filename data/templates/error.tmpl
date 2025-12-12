@@ -1,0 +1,38 @@
+{{/* Generic error page for HTML endpoints */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} {{.Title}}</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>{{.Title}}</h1>
+		<div class="card">
+			<div class="label">What happened</div>
+			<p class="text-sm" style="margin-top:8px;">
+				{{.Message}}
+			</p>
+			{{if .Detail}}
+				<p class="text-sm" style="margin-top:4px;color:#f88d8d;">
+					{{.Detail}}
+				</p>
+			{{end}}
+		</div>
+		<div class="card">
+			<div class="label">Request details</div>
+			<p class="text-sm" style="margin-top:8px;">
+				Status code: <span class="mono">{{.StatusCode}}</span><br>
+				Path: <span class="mono">{{.Path}}</span>
+			</p>
+			<p class="text-sm" style="margin-top:8px;color:#b3bbd4;">
+				You can navigate using the links in the header above, or return to the main status page.
+			</p>
+		</div>
+		{{template "footer" .}}
+	</div>
+</body>
+</html>
+

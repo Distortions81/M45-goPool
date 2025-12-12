@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# install-bitcoind.sh
+# Helper script to install a *local, portable* Bitcoin Core (bitcoind) under
+# ./bitcoin-node and write a basic bitcoin.conf tuned for goPool on
+# the chosen network. Intended for testing/development only on generic Linux.
+#
+# Usage:
+#   ./scripts/install-bitcoind.sh [mainnet|testnet|signet|regtest]
+# Defaults to regtest when no network is provided.
+
+NETWORK="${1:-regtest}"
+case "${NETWORK}" in
+  mainnet|testnet|signet|regtest) ;;
+  *)
+    echo "Usage: $0 [mainnet|testnet|signet|regtest]" >&2
+    exit 1
+    ;;
+esac
+
+# Install into a local node directory under the current repo.
+NODE_ROOT="$(pwd)/bitcoin-node"
+NODE_DATA="${NODE_ROOT}/data/${NETWORK}"
+CONF_DIR="${NODE_DATA}"
+CONF_FILE="${CONF_DIR}/bitcoin.conf"
+mkdir -p "${CONF_DIR}"
+
+# Download a portable Bitcoin Core tarball into ./bitcoin-node if it is not
+# already present, and expose bitcoind under ./bitcoin-node/bin.
+BITCOIN_VERSION="${BITCOIN_VERSION:-27.0}"
+ARCH="$(uname -m)"
+case "${ARCH}" in
+  x86_64|amd64)
+    PKG_ARCH="x86_64-linux-gnu"
+    ;;
+  aarch64|arm64)
+    PKG_ARCH="aarch64-linux-gnu"
+    ;;
+  *)
+    echo "Unsupported architecture '${ARCH}'. Please install Bitcoin Core manually from https://bitcoincore.org/en/download/ and re-run this script." >&2
+    exit 1
+    ;;
+esac
+
+BIN_DIR="${NODE_ROOT}/bin"
+BITCOIND="${BIN_DIR}/bitcoind"
+
+if [ ! -x "${BITCOIND}" ]; then
+  mkdir -p "${BIN_DIR}"
+  TMP_DIR="${NODE_ROOT}/tmp"
+  mkdir -p "${TMP_DIR}"
+  TARBALL="bitcoin-${BITCOIN_VERSION}-${PKG_ARCH}.tar.gz"
+  URL="https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/${TARBALL}"
+  echo "Downloading Bitcoin Core ${BITCOIN_VERSION} (${PKG_ARCH}) from:"
+  echo "  ${URL}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -L "${URL}" -o "${TMP_DIR}/${TARBALL}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "${TMP_DIR}/${TARBALL}" "${URL}"
+  else
+    echo "ERROR: Neither curl nor wget is available. Please install one of them or download Bitcoin Core manually." >&2
+    exit 1
+  fi
+
+  echo "Extracting Bitcoin Core into ${NODE_ROOT}..."
+  tar -xzf "${TMP_DIR}/${TARBALL}" -C "${TMP_DIR}"
+  EXTRACTED_DIR="$(find "${TMP_DIR}" -maxdepth 1 -type d -name "bitcoin-${BITCOIN_VERSION}*" | head -n1)"
+  if [ -z "${EXTRACTED_DIR}" ]; then
+    echo "ERROR: Unable to locate extracted Bitcoin Core directory under ${TMP_DIR}" >&2
+    exit 1
+  fi
+  cp -f "${EXTRACTED_DIR}/bin/"* "${BIN_DIR}/"
+  chmod +x "${BIN_DIR}/bitcoind" "${BIN_DIR}/bitcoin-cli" || true
+fi
+
+if [ -f "${CONF_FILE}" ]; then
+  backup="${CONF_FILE}.$(date +%Y%m%d-%H%M%S).bak"
+  echo "Existing bitcoin.conf found; backing up to ${backup}"
+  cp "${CONF_FILE}" "${backup}"
+fi
+
+RPC_USER="poolrpc"
+if command -v openssl >/dev/null 2>&1; then
+  RPC_PASS="$(openssl rand -hex 16)"
+else
+  RPC_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+fi
+
+echo "Writing ${CONF_FILE} for ${NETWORK}..."
+cat >"${CONF_FILE}" <<EOF
+server=1
+daemon=1
+
+rpcuser=${RPC_USER}
+rpcpassword=${RPC_PASS}
+rpcallowip=127.0.0.1
+
+# ZMQ for block notifications (used by the pool)
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28333
+
+EOF
+
+case "${NETWORK}" in
+  mainnet)
+    # Mainnet uses default ports: 8332 (RPC), 8333 (P2P).
+    ;;
+  testnet)
+    cat >>"${CONF_FILE}" <<EOF
+[test]
+rpcbind=127.0.0.1
+rpcport=18332
+EOF
+    ;;
+  signet)
+    cat >>"${CONF_FILE}" <<EOF
+[signet]
+rpcbind=127.0.0.1
+rpcport=38332
+EOF
+    ;;
+  regtest)
+    cat >>"${CONF_FILE}" <<EOF
+[regtest]
+rpcbind=127.0.0.1
+rpcport=18443
+wallet=testwallet
+fallbackfee=0.0002
+EOF
+    ;;
+esac
+
+echo
+echo "Bitcoin Core installed and configured."
+echo "Node root: ${NODE_ROOT}"
+echo "Data dir:  ${NODE_DATA}"
+echo "Config:    ${CONF_FILE}"
+echo "RPC_USER=${RPC_USER}"
+echo "RPC_PASS=${RPC_PASS}"
+
+case "${NETWORK}" in
+  mainnet)
+    echo
+    echo "Start mainnet node:"
+    echo "  \"${BITCOIND}\" -daemon -datadir=\"${NODE_DATA}\""
+    echo
+    echo "Example pool config:"
+    echo "  rpc_url:  \"http://127.0.0.1:8332\""
+    echo "  rpc_user: \"${RPC_USER}\""
+    echo "  rpc_pass: \"${RPC_PASS}\""
+    ;;
+  testnet)
+    echo
+    echo "Start testnet node:"
+    echo "  \"${BITCOIND}\" -daemon -testnet -datadir=\"${NODE_DATA}\""
+    echo
+    echo "Example pool config:"
+    echo "  rpc_url:  \"http://127.0.0.1:18332\""
+    echo "  rpc_user: \"${RPC_USER}\""
+    echo "  rpc_pass: \"${RPC_PASS}\""
+    ;;
+  signet)
+    echo
+    echo "Start signet node:"
+    echo "  \"${BITCOIND}\" -daemon -signet -datadir=\"${NODE_DATA}\""
+    echo
+    echo "Example pool config:"
+    echo "  rpc_url:  \"http://127.0.0.1:38332\""
+    echo "  rpc_user: \"${RPC_USER}\""
+    echo "  rpc_pass: \"${RPC_PASS}\""
+    ;;
+  regtest)
+    echo
+    echo "Start regtest node (with wallet 'testwallet' auto-selected):"
+    echo "  \"${BITCOIND}\" -daemon -regtest -datadir=\"${NODE_DATA}\""
+    echo
+    echo "Example pool config (matches config.json.example in this repo):"
+    echo "  rpc_url:  \"http://127.0.0.1:18443\""
+    echo "  rpc_user: \"${RPC_USER}\""
+    echo "  rpc_pass: \"${RPC_PASS}\""
+    ;;
+esac
+
+echo
+echo "To run the pool against this node, you can either set env vars or pass flags."
+case "${NETWORK}" in
+  mainnet)
+    POOL_RPC_URL="http://127.0.0.1:8332"
+    ;;
+  testnet)
+    POOL_RPC_URL="http://127.0.0.1:18332"
+    ;;
+  signet)
+    POOL_RPC_URL="http://127.0.0.1:38332"
+    ;;
+  regtest)
+    POOL_RPC_URL="http://127.0.0.1:18443"
+    ;;
+esac
+echo "Env-style:"
+echo "  export RPC_URL=${POOL_RPC_URL}"
+echo "  export RPC_USER=${RPC_USER}"
+echo "  export RPC_PASS=${RPC_PASS}"
+echo "  export DATA_DIR=./data"
+echo
+echo "Or start the pool with flags (example):"
+case "${NETWORK}" in
+  mainnet)
+    echo "  go run main.go -mainnet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
+    ;;
+  testnet)
+    echo "  go run main.go -testnet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
+    ;;
+  signet)
+    echo "  go run main.go -signet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
+    ;;
+  regtest)
+    echo "  go run main.go -regtest -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
+    ;;
+esac
+echo
+echo "Remember to generate a payout address from the chosen network's wallet"
+echo "and set it as PAYOUT_ADDRESS / payout_address in the pool config."

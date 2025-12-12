@@ -1,0 +1,279 @@
+{{/* Server info page template (formerly admin.html) */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Server Info</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>Server information</h1>
+
+		<div class="card">
+			<div class="label">Backend status</div>
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
+				<div>
+					<div class="label">Bitcoin RPC</div>
+					<div class="mono" id="server-rpc-status">--</div>
+				</div>
+				<div>
+					<div class="label">Accounting</div>
+					<div class="mono" id="server-accounting-status">--</div>
+				</div>
+				<div>
+					<div class="label">Last job feed error</div>
+					<div class="mono" id="server-job-feed-error">--</div>
+				</div>
+				<div>
+					<div class="label">ZMQ feed</div>
+					<div class="mono" id="server-zmq-status">--</div>
+					<div class="text-sm" id="server-zmq-counts">disconnects: --, reconnects: --</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Process stats</div>
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
+				<div>
+					<div class="label">Goroutines</div>
+					<div class="mono" id="server-goroutines">--</div>
+				</div>
+				<div>
+					<div class="label">Go heap (alloc/sys)</div>
+					<div class="mono" id="server-go-heap">-- / --</div>
+				</div>
+				<div>
+					<div class="label">Process RSS</div>
+					<div class="mono" id="server-process-rss">--</div>
+				</div>
+				<div>
+					<div class="label">Pool CPU use</div>
+					<div class="mono" id="server-pool-cpu">--</div>
+				</div>
+				<div>
+					<div class="label">Storage (free/total)</div>
+					<div class="mono" id="server-storage">-- / --</div>
+				</div>
+				<div>
+					<div class="label">System RAM (used/total)</div>
+					<div class="mono" id="server-ram">-- / --</div>
+				</div>
+				<div>
+					<div class="label">Total System load (1/5/15m)</div>
+					<div class="mono" id="server-load">-- / -- / --</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Pool metrics (since start)</div>
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
+				<div>
+					<div class="label">VarDiff adjustments</div>
+					<div class="mono" id="server-vardiff">--</div>
+				</div>
+				<div>
+					<div class="label">Block submissions</div>
+					<div class="mono" id="server-block-submissions">--</div>
+				</div>
+				<div>
+					<div class="label">RPC getblocktemplate latency</div>
+					<div class="mono" id="server-rpc-gbt">--</div>
+				</div>
+				<div>
+					<div class="label">RPC submitblock latency</div>
+					<div class="mono" id="server-rpc-submit">--</div>
+				</div>
+				<div>
+					<div class="label">Error counters</div>
+					<div class="mono" id="server-error-counters">--</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">JSON API endpoints</div>
+			<ul class="list">
+				<li><a class="mono" href="/api/status-page">/api/status-page</a> &mdash; cached overview data used by the main status UI</li>
+				<li><a class="mono" href="/api/pool">/api/pool</a> &mdash; pool configuration, uptime, and high-level stats</li>
+				<li><a class="mono" href="/api/workers">/api/workers</a> &mdash; paginated worker list with censored fields</li>
+				<li><a class="mono" href="/api/node">/api/node</a> &mdash; Bitcoin node identity and sync status</li>
+				<li><a class="mono" href="/api/blocks">/api/blocks</a> &mdash; recent found blocks (censored)</li>
+				<li><a class="mono" href="/api/diagnostics">/api/diagnostics</a> &mdash; process and system diagnostics</li>
+				<li><a class="mono" href="/api/pool-hashrate">/api/pool-hashrate</a> &mdash; rolling pool hashrate samples for graphs</li>
+			</ul>
+			<p class="text-sm" style="margin-top:8px;">
+				All APIs return JSON and are intended for internal dashboards or power users. Fields may change between versions.
+			</p>
+		</div>
+
+	{{template "footer" .}}
+</div>
+<script>
+	(function () {
+		const REFRESH_INTERVAL = 30000;
+
+		const rpcStatusEl = document.getElementById('server-rpc-status');
+		const accountingEl = document.getElementById('server-accounting-status');
+		const jobFeedEl = document.getElementById('server-job-feed-error');
+		const zmqStatusEl = document.getElementById('server-zmq-status');
+		const zmqCountsEl = document.getElementById('server-zmq-counts');
+		const vardiffEl = document.getElementById('server-vardiff');
+		const blockSubEl = document.getElementById('server-block-submissions');
+		const rpcGBTEl = document.getElementById('server-rpc-gbt');
+		const rpcSubmitEl = document.getElementById('server-rpc-submit');
+		const errorCountersEl = document.getElementById('server-error-counters');
+
+		const goroutinesEl = document.getElementById('server-goroutines');
+		const goHeapEl = document.getElementById('server-go-heap');
+		const processRSSEl = document.getElementById('server-process-rss');
+		const poolCPUEl = document.getElementById('server-pool-cpu');
+		const storageEl = document.getElementById('server-storage');
+		const ramEl = document.getElementById('server-ram');
+		const loadEl = document.getElementById('server-load');
+
+		function formatBytes(bytes) {
+			if (bytes === undefined || bytes === null) {
+				return '0 B';
+			}
+			let val = Number(bytes);
+			if (isNaN(val) || val <= 0) {
+				return '0 B';
+			}
+			const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+			let idx = 0;
+			while (val >= 1024 && idx < units.length - 1) {
+				val /= 1024;
+				idx++;
+			}
+			return `${val.toFixed(2)} ${units[idx]}`;
+		}
+
+		function formatPercent(value) {
+			if (value === undefined || value === null) {
+				return '--';
+			}
+			return `${Number(value).toFixed(3)}%`;
+		}
+
+		function formatSeconds(value) {
+			if (value === undefined || value === null) {
+				return '0.000';
+			}
+			return Number(value).toFixed(3);
+		}
+
+		function formatLoad(value) {
+			if (value === undefined || value === null) {
+				return '--';
+			}
+			return Number(value).toFixed(2);
+		}
+
+		function updateStatusPage(data) {
+			if (!data) return;
+			if (rpcStatusEl) {
+				rpcStatusEl.textContent = data.rpc_error ? 'Not connected' : 'OK';
+			}
+			if (accountingEl) {
+				accountingEl.textContent = data.accounting_error ? `Error: ${data.accounting_error}` : 'OK';
+			}
+			if (jobFeedEl) {
+				if (data.job_feed?.last_error) {
+					let text = `Error: ${data.job_feed.last_error}`;
+					if (data.job_feed.last_error_at) {
+						text += ` (at ${data.job_feed.last_error_at})`;
+					}
+					jobFeedEl.textContent = text;
+				} else {
+					jobFeedEl.textContent = 'None';
+				}
+			}
+			if (zmqStatusEl) {
+				zmqStatusEl.textContent = data.job_feed?.zmq_healthy ? 'OK' : 'Offline';
+			}
+			if (zmqCountsEl) {
+				const disconnects = data.job_feed?.zmq_disconnects ?? 0;
+				const reconnects = data.job_feed?.zmq_reconnects ?? 0;
+				zmqCountsEl.textContent = `disconnects: ${disconnects}, reconnects: ${reconnects}`;
+			}
+			if (vardiffEl) {
+				vardiffEl.textContent = `up: ${data.vardiff_up || 0}   down: ${data.vardiff_down || 0}`;
+			}
+			if (blockSubEl) {
+				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
+			}
+			if (rpcGBTEl) {
+				rpcGBTEl.textContent = `last: ${formatSeconds(data.rpc_gbt_last_sec)}s, max: ${formatSeconds(data.rpc_gbt_max_sec)}s, calls: ${data.rpc_gbt_count || 0}`;
+			}
+			if (rpcSubmitEl) {
+				rpcSubmitEl.textContent = `last: ${formatSeconds(data.rpc_submit_last_sec)}s, max: ${formatSeconds(data.rpc_submit_max_sec)}s, calls: ${data.rpc_submit_count || 0}`;
+			}
+			if (errorCountersEl) {
+				errorCountersEl.textContent = `RPC errors: ${data.rpc_errors || 0}   Share errors: ${data.share_errors || 0}`;
+			}
+		}
+
+		function updateDiagnostics(data) {
+			if (!data) return;
+			if (goroutinesEl) {
+				goroutinesEl.textContent = data.process_goroutines ?? '--';
+			}
+			if (goHeapEl) {
+				goHeapEl.textContent = `${formatBytes(data.go_mem_alloc_bytes)} / ${formatBytes(data.go_mem_sys_bytes)}`;
+			}
+			if (processRSSEl) {
+				processRSSEl.textContent = formatBytes(data.process_rss_bytes);
+			}
+			if (poolCPUEl) {
+				poolCPUEl.textContent = formatPercent(data.process_cpu_percent);
+			}
+			if (storageEl) {
+				storageEl.textContent = `${formatBytes(data.disk_free_bytes)} / ${formatBytes(data.disk_total_bytes)}`;
+			}
+			if (ramEl) {
+				ramEl.textContent = `${formatBytes(data.system_mem_used_bytes)} / ${formatBytes(data.system_mem_total_bytes)}`;
+			}
+			if (loadEl) {
+				loadEl.textContent = `${formatLoad(data.system_load1)} / ${formatLoad(data.system_load5)} / ${formatLoad(data.system_load15)}`;
+			}
+		}
+
+		function fetchStatusPage() {
+			fetch('/api/status-page')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(updateStatusPage)
+				.catch(error => {
+					console.error('Error fetching server status:', error);
+				});
+		}
+
+		function fetchDiagnostics() {
+			fetch('/api/diagnostics')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(updateDiagnostics)
+				.catch(error => {
+					console.error('Error fetching diagnostics:', error);
+				});
+		}
+
+		function refresh() {
+			fetchStatusPage();
+			fetchDiagnostics();
+		}
+
+		refresh();
+		setInterval(refresh, REFRESH_INTERVAL);
+	})();
+</script>
+</body>
+</html>

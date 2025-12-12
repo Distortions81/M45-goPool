@@ -1,0 +1,64 @@
+{{/* Worker login template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Worker Login</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<div class="card">
+			<form method="get" action="/worker/sha256" id="workerLookupForm">
+				<div class="label">Worker ID</div>
+				<div class="input-row">
+					<input class="input" type="text" id="workerInput">
+					<input type="hidden" name="hash" id="workerHash">
+					<button class="btn" type="submit">Login</button>
+				</div>
+				<p class="text-sm">Use the full wallet.worker-name from your miner.</p>
+			</form>
+			{{if .Error}}
+				<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.Error}}</p>
+			{{end}}
+		</div>
+
+		{{template "footer" .}}
+	</div>
+	<script>
+	// SHA256 implementation for client-side hashing
+	async function sha256(str) {
+		try {
+			const buffer = new TextEncoder().encode(str);
+			const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+			const hashArray = Array.from(new Uint8Array(hashBuffer));
+			return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+		} catch (error) {
+			console.error('SHA256 error:', error);
+			alert('Error: Secure context (HTTPS) required for client-side hashing. Please contact the pool administrator.');
+			throw error;
+		}
+	}
+
+	// Handle worker lookup form submission
+	document.getElementById('workerLookupForm').addEventListener('submit', async function(e) {
+		e.preventDefault();
+		const workerInput = document.getElementById('workerInput').value.trim();
+		if (!workerInput) {
+			alert('Please enter a worker name');
+			return;
+		}
+		try {
+			// Hash the worker name
+			const hash = await sha256(workerInput);
+			document.getElementById('workerHash').value = hash;
+			// Submit the form
+			this.submit();
+		} catch (error) {
+			console.error('Form submission error:', error);
+		}
+	});
+	</script>
+</body>
+</html>

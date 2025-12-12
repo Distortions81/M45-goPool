@@ -1,0 +1,234 @@
+{{/* Node accountability / identity page */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Node Info</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>Bitcoin node identity</h1>
+
+		<div class="card">
+			<div class="grid">
+				<div>
+					<div class="label">Pool software</div>
+					<div class="value mono">{{.PoolSoftware}}</div>
+					<p class="text-sm">Build/implementation name of this solo pool.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Chain identity checks</div>
+			<div class="grid">
+				<div>
+					<div class="label">Genesis hash (height 0)</div>
+					<div class="value mono" id="node-genesis-hash">--</div>
+				</div>
+				<div>
+					<div class="label">Expected Bitcoin genesis</div>
+					<div class="value mono" id="node-genesis-expected">--</div>
+				</div>
+				<div>
+					<div class="label">Matches known Bitcoin genesis</div>
+					<div class="value mono" id="node-genesis-match">--</div>
+				</div>
+				<div>
+					<div class="label">Best block hash</div>
+					<div class="value mono" id="node-best-hash">--</div>
+					<p class="text-sm">You can paste this into an external Bitcoin explorer for extra verification.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="grid">
+				<div>
+					<div class="label">Software</div>
+					<div class="value mono" id="node-subversion">--</div>
+					<p class="text-sm">Reported by <span class="mono">getnetworkinfo.subversion</span>.</p>
+				</div>
+				<div>
+					<div class="label">Network</div>
+					<div class="value mono" id="node-network">--</div>
+					<p class="text-sm">Derived from <span class="mono">getblockchaininfo.chain</span>.</p>
+				</div>
+				<div>
+					<div class="label">RPC endpoint</div>
+					<div class="value mono">{{.NodeRPCURL}}</div>
+					<p class="text-sm">Where this pool talks to the node.</p>
+				</div>
+				<div>
+					<div class="label">ZMQ endpoint</div>
+					<div class="value mono">
+						{{if .NodeZMQAddr}}{{.NodeZMQAddr}}{{else}}(not configured){{end}}
+					</div>
+					<p class="text-sm">If set, new blocks are received via ZMQ.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Sync status</div>
+			<div class="grid">
+				<div>
+					<div class="label">Blocks / headers</div>
+					<div class="value mono" id="node-blocks">-- / --</div>
+				</div>
+				<div>
+					<div class="label">Initial block download</div>
+					<div class="value mono" id="node-ibd">--</div>
+				</div>
+				<div>
+					<div class="label">Peers (total / in / out)</div>
+					<div class="value mono" id="node-connections">-- / -- / --</div>
+				</div>
+				<div>
+					<div class="label">Chain size on disk</div>
+					<div class="value mono" id="node-size">--</div>
+				</div>
+				<div>
+					<div class="label">Pruned node</div>
+					<div class="value mono" id="node-pruned">--</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="label">Pool identity</div>
+			<div class="grid">
+				<div>
+					<div class="label">Pool wallet</div>
+					<div class="value mono">
+						{{if .DisplayPayoutAddress}}{{.DisplayPayoutAddress}}{{else}}(not configured){{end}}
+					</div>
+					<p class="text-sm">
+						Pool fee wallet: the operator's share of each block is sent here. With dual payout enabled, worker rewards are paid directly to their own wallets.
+					</p>
+				</div>
+				<div>
+					<div class="label">Coinbase message</div>
+					<div class="value mono">
+						{{if .DisplayCoinbaseMessage}}{{.DisplayCoinbaseMessage}}{{else}}(default){{end}}
+					</div>
+					<p class="text-sm">Appears in the coinbase of blocks this pool finds.</p>
+				</div>
+			</div>
+			<p class="text-sm" style="margin-top:10px;">
+				These fields let users confirm that the node, payout address, and coinbase tags match the operator's
+				publicly documented solo pool details.
+			</p>
+		</div>
+
+	{{template "footer" .}}
+</div>
+<script>
+	(function () {
+		const REFRESH_INTERVAL = 30000;
+
+		const genesisHashEl = document.getElementById('node-genesis-hash');
+		const genesisExpectedEl = document.getElementById('node-genesis-expected');
+		const genesisMatchEl = document.getElementById('node-genesis-match');
+		const bestHashEl = document.getElementById('node-best-hash');
+		const subversionEl = document.getElementById('node-subversion');
+		const networkEl = document.getElementById('node-network');
+		const blocksEl = document.getElementById('node-blocks');
+		const ibdEl = document.getElementById('node-ibd');
+		const connectionsEl = document.getElementById('node-connections');
+		const sizeEl = document.getElementById('node-size');
+		const prunedEl = document.getElementById('node-pruned');
+
+		function formatBytes(bytes) {
+			if (bytes === undefined || bytes === null) {
+				return '--';
+			}
+			let val = Number(bytes);
+			if (isNaN(val) || val <= 0) {
+				return '0 B';
+			}
+			const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+			let idx = 0;
+			while (val >= 1024 && idx < units.length - 1) {
+				val /= 1024;
+				idx++;
+			}
+			return `${val.toFixed(2)} ${units[idx]}`;
+		}
+
+		function displayNumber(value) {
+			if (value === undefined || value === null) {
+				return '--';
+			}
+			return value;
+		}
+
+		function displayBoolean(value) {
+			if (value === undefined || value === null) {
+				return '--';
+			}
+			return value ? 'true' : 'false';
+		}
+
+		function updateNodeInfo(data) {
+			if (!data) return;
+			if (genesisHashEl) {
+				genesisHashEl.textContent = data.genesis_hash || '--';
+			}
+			if (genesisExpectedEl) {
+				genesisExpectedEl.textContent = data.genesis_expected || '--';
+			}
+			if (genesisMatchEl) {
+				genesisMatchEl.textContent = data.genesis_match === undefined ? '--' : (data.genesis_match ? 'true' : 'false');
+			}
+			if (bestHashEl) {
+				bestHashEl.textContent = data.best_block_hash || '--';
+			}
+			if (subversionEl) {
+				subversionEl.textContent = data.node_subversion || '--';
+			}
+			if (networkEl) {
+				networkEl.textContent = data.node_network || '--';
+			}
+			if (blocksEl) {
+				const blocks = displayNumber(data.node_blocks);
+				const headers = displayNumber(data.node_headers);
+				blocksEl.textContent = `${blocks} / ${headers}`;
+			}
+			if (ibdEl) {
+				ibdEl.textContent = displayBoolean(data.node_initial_block_download);
+			}
+			if (connectionsEl) {
+				const total = displayNumber(data.node_connections);
+				const inbound = displayNumber(data.node_connections_in);
+				const outbound = displayNumber(data.node_connections_out);
+				connectionsEl.textContent = `${total} / ${inbound} / ${outbound}`;
+			}
+			if (sizeEl) {
+				sizeEl.textContent = formatBytes(data.node_size_on_disk_bytes);
+			}
+			if (prunedEl) {
+				prunedEl.textContent = displayBoolean(data.node_pruned);
+			}
+		}
+
+		function fetchNodeInfo() {
+			fetch('/api/node')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(updateNodeInfo)
+				.catch(error => {
+					console.error('Error fetching node info:', error);
+				});
+		}
+
+		fetchNodeInfo();
+		setInterval(fetchNodeInfo, REFRESH_INTERVAL);
+	})();
+</script>
+</body>
+</html>

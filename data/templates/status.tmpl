@@ -1,0 +1,692 @@
+{{/* Status page template (migrated from status.html) */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Overview</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<div class="overview-banner" id="overview-banner" data-host="{{.BrandDomain}}">
+			<div>
+				<p class="overview-banner-title">Mining connection info</p>
+				<div class="overview-banner-line">
+					<span class="overview-banner-label">Plain Stratum</span>
+					<span class="overview-banner-value">stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}</span>
+				</div>
+				{{if .StratumTLSListen}}
+				<div class="overview-banner-line">
+					<span class="overview-banner-label">Encrypted Stratum</span>
+					<span class="overview-banner-value">stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}</span>
+				</div>
+				{{end}}
+				<div class="overview-banner-line">
+					<span class="overview-banner-label">Credentials</span>
+					<span class="overview-banner-value">username: &lt;your BTC address&gt;.&lt;worker name&gt;, password: x</span>
+				</div>
+			</div>
+		</div>
+		<div class="grid">
+			<div class="card">
+				<div class="label">Open connections</div>
+				<div class="value">--</div>
+				<div class="card-context">Number of mining devices currently connected</div>
+			</div>
+			<div class="card">
+				<div class="label">Shares per minute</div>
+				<div class="value">--</div>
+				<div class="card-context">Indicative of server load</div>
+			</div>
+			<div class="card">
+				<div class="label">Estimated pool hashrate</div>
+				<div class="value" id="status-pool-hashrate">--</div>
+			</div>
+			<div class="card">
+				<div class="label">Pool fee</div>
+				{{if gt .PoolFeePercent 0.0}}
+					<div class="value">
+						{{printf "%.2f" .PoolFeePercent}}%
+					</div>
+					<div class="card-context">Split coinbase, pays directly to miner</div>
+				{{else}}
+					<div class="value">None</div>
+					<div class="card-context">No fee charged</div>
+				{{end}}
+			</div>
+		</div>
+
+		<!-- Pool Hashrate Graph -->
+		<div class="card" style="margin-top:16px;">
+			<div class="label">Pool Hashrate</div>
+			<canvas id="hashrateChart" style="width:100%;height:200px;"></canvas>
+		</div>
+
+		<h2 id="workers">Recent work <span class="text-sm" style="font-weight:400;">&mdash; <a href="/workers">view all</a></span></h2>
+		<div class="card">
+			<div style="overflow-x:auto;">
+				<table class="table" id="status-workers-table">
+					<thead>
+						<tr>
+							<th title="Worker name">Worker</th>
+							<th title="Rolling hashrate">Hashrate</th>
+							<th title="Current difficulty">Difficulty</th>
+							<th title="Worker payout wallet">Wallet</th>
+							<th title="Pending balance (BTC)">Balance</th>
+							<th title="Accepted / submitted in current window">Window acc/sub</th>
+							<th title="Accepted shares per minute">Shares/min</th>
+							<th title="Total accepted shares">Accepted</th>
+							<th title="Miner software (name/version)">Miner</th>
+							<th title="Current ban status">Ban status</th>
+							<th title="Last accepted share time">Last share</th>
+							<th title="Last reject reason, if any">Last reject</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td colspan="12" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<h2>Best shares</h2>
+		<div class="card">
+			<div style="overflow-x:auto;">
+				<table class="table" id="status-best-shares-table">
+					<thead>
+						<tr>
+							<th>Worker</th>
+							<th>Difficulty</th>
+							<th>When</th>
+							<th>Hash</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td colspan="4" class="text-sm">Loading best shares…</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<h2>Found blocks</h2>
+		<div class="card">
+			<div style="overflow-x:auto;">
+				<table class="table" id="status-found-blocks-table">
+					<thead>
+						<tr>
+							<th>Height</th>
+							<th>Hash</th>
+							<th>Miner</th>
+							<th>Pool (sats)</th>
+							<th>Worker (sats)</th>
+							<th>Share difficulty</th>
+							<th>When</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td colspan="7" class="text-sm">Loading found blocks…</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<h2>Miner types</h2>
+		<div class="card" id="status-miner-types-card">
+			<p class="text-sm" id="status-miner-types-placeholder">Loading miner type data…</p>
+			<ul class="list" id="status-miner-types-list" style="display:none;"></ul>
+		</div>
+
+		<h2>Banned workers</h2>
+		<div class="card">
+			<p class="text-sm" style="margin-top:0;margin-bottom:8px;color:#f88d8d;" id="status-banned-placeholder-text">
+				Red worker names indicate invalid wallet-style worker IDs. Loading banned worker data…
+			</p>
+			<div style="overflow-x:auto;">
+				<table class="table" id="status-banned-workers-table">
+					<thead>
+						<tr>
+							<th title="Worker name">Worker</th>
+							<th title="Estimated hashrate over a recent window">Hashrate</th>
+							<th title="Current difficulty">Difficulty</th>
+							<th title="Accepted / submitted in current window">Window acc/sub</th>
+							<th title="Accepted shares per minute">Shares/min</th>
+							<th title="Total accepted shares">Accepted</th>
+							<th title="Total rejected shares">Rejected</th>
+							<th title="Miner software (name/version)">Miner</th>
+							<th title="Ban details">Ban status</th>
+							<th title="Time the last valid share was accepted">Last share</th>
+							<th title="Last reject reason, if any">Last reject</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td colspan="11" class="text-sm" id="status-banned-workers-placeholder">Loading banned workers…</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		{{template "footer" .}}
+	</div>
+	<script>
+	// Pool Hashrate Graph
+	(function() {
+		const canvas = document.getElementById('hashrateChart');
+		if (!canvas) return;
+
+		// Set canvas size to match display size for crisp rendering
+		function resizeCanvas() {
+			const dpr = window.devicePixelRatio || 1;
+			const rect = canvas.getBoundingClientRect();
+			canvas.width = rect.width * dpr;
+			canvas.height = rect.height * dpr;
+			const ctx = canvas.getContext('2d');
+			ctx.scale(dpr, dpr);
+			return ctx;
+		}
+
+		let ctx = resizeCanvas();
+
+		// Re-render on window resize
+		window.addEventListener('resize', function() {
+			ctx = resizeCanvas();
+			drawGraph();
+		});
+		const maxDataPoints = 60; // 5 minutes at 5-second intervals
+		const hashrateData = [];
+		const timestamps = [];
+		let smoothedHashrate = null;
+
+		function drawGraph() {
+			// Use display dimensions (logical pixels) for drawing
+			const rect = canvas.getBoundingClientRect();
+			const width = rect.width;
+			const height = rect.height;
+			const paddingLeft = 70; // Extra padding for Y-axis labels
+			const paddingRight = 20;
+			const paddingTop = 20;
+			const paddingBottom = 30;
+			const graphWidth = width - paddingLeft - paddingRight;
+			const graphHeight = height - paddingTop - paddingBottom;
+
+			// Clear canvas
+			ctx.clearRect(0, 0, width, height);
+
+			if (hashrateData.length === 0) {
+				ctx.fillStyle = '#b3bbd4';
+				ctx.font = '14px monospace';
+				ctx.textAlign = 'center';
+				ctx.fillText('Waiting for data...', width / 2, height / 2);
+				return;
+			}
+
+			// Find min/max for scaling with minimum scale of 0 to 10 TH/s
+			const minScale = 0;
+			const maxScale = 10e12; // 10 TH/s in H/s
+			const dataMax = Math.max(...hashrateData);
+			const dataMin = Math.min(...hashrateData);
+
+			const maxHashrate = Math.max(dataMax, maxScale);
+			const minHashrate = minScale;
+			const range = maxHashrate - minHashrate;
+
+			// Draw grid lines
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight / 4) * i;
+				ctx.beginPath();
+				ctx.moveTo(paddingLeft, y);
+				ctx.lineTo(width - paddingRight, y);
+				ctx.stroke();
+			}
+
+			// Draw Y-axis labels (hashrate)
+			ctx.fillStyle = '#b3bbd4';
+			ctx.font = '11px monospace';
+			ctx.textAlign = 'right';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight / 4) * i;
+				const value = maxHashrate - (range / 4) * i;
+				const formatted = formatHashrateShort(value);
+				ctx.fillText(formatted, paddingLeft - 8, y + 4);
+			}
+
+			// Draw the line graph
+			ctx.strokeStyle = '#4a9eff';
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+
+			hashrateData.forEach((hashrate, index) => {
+				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
+				const y = paddingTop + graphHeight - ((hashrate - minHashrate) / range) * graphHeight;
+
+				if (index === 0) {
+					ctx.moveTo(x, y);
+				} else {
+					ctx.lineTo(x, y);
+				}
+			});
+
+			ctx.stroke();
+
+			// Draw points
+			ctx.fillStyle = '#4a9eff';
+			hashrateData.forEach((hashrate, index) => {
+				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
+				const y = paddingTop + graphHeight - ((hashrate - minHashrate) / range) * graphHeight;
+				ctx.beginPath();
+				ctx.arc(x, y, 3, 0, Math.PI * 2);
+				ctx.fill();
+			});
+
+			// Draw X-axis tickmarks and labels
+			ctx.fillStyle = '#b3bbd4';
+			ctx.strokeStyle = '#b3bbd4';
+			ctx.font = '11px monospace';
+			ctx.textAlign = 'center';
+			const now = new Date();
+			for (let i = 0; i <= 4; i++) {
+				const x = paddingLeft + (graphWidth / 4) * i;
+				const secondsAgo = (maxDataPoints - 1 - (maxDataPoints / 4) * i) * 5;
+				const minutes = Math.floor(secondsAgo / 60);
+
+				// Draw tickmark
+				ctx.beginPath();
+				ctx.moveTo(x, height - paddingBottom);
+				ctx.lineTo(x, height - paddingBottom + 5);
+				ctx.stroke();
+			}
+
+			// Draw "minutes" label centered below the axis
+			ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
+		}
+
+		function formatHashrateShort(h) {
+			if (!h) return '0';
+			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+			let val = h, idx = 0;
+			while (val >= 1000 && idx < units.length - 1) {
+				val /= 1000;
+				idx++;
+			}
+			return val.toFixed(1) + ' ' + units[idx];
+		}
+
+		function updateHashrateGraph(newHashrate) {
+			if (!newHashrate || newHashrate <= 0) return;
+
+			// Apply a small client-side EMA so the graph transitions smoothly
+			// between backend updates instead of stepping sharply each poll.
+			if (smoothedHashrate === null) {
+				smoothedHashrate = newHashrate;
+			} else {
+				const alpha = 0.25; // smoothing factor (0..1); lower = smoother
+				smoothedHashrate = smoothedHashrate + alpha * (newHashrate - smoothedHashrate);
+			}
+
+			hashrateData.push(smoothedHashrate);
+			timestamps.push(new Date());
+
+			// Keep only last maxDataPoints
+			if (hashrateData.length > maxDataPoints) {
+				hashrateData.shift();
+				timestamps.shift();
+			}
+
+			drawGraph();
+		}
+
+		// Initial draw
+		drawGraph();
+
+		// Expose update function globally so auto-refresh can call it
+		window.updateHashrateGraph = updateHashrateGraph;
+
+		// Redraw on window resize
+		window.addEventListener('resize', drawGraph);
+	})();
+
+	(function() {
+		const REFRESH_INTERVAL = 30000; // 30 seconds
+
+		function formatHashrate(h) {
+			if (!h) return '---';
+			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+			let val = h, idx = 0;
+			while (val >= 1000 && idx < units.length - 1) {
+				val /= 1000;
+				idx++;
+			}
+			return val.toFixed(2) + ' ' + units[idx];
+		}
+
+		function formatShareRate(rate) {
+			if (!rate) return '0';
+			if (rate < 1000) return rate.toFixed(1);
+			if (rate < 1000000) return (rate / 1000).toFixed(1) + 'K';
+			if (rate < 1000000000) return (rate / 1000000).toFixed(1) + 'M';
+			return (rate / 1000000000).toFixed(1) + 'G';
+		}
+
+		function formatDiff(d) {
+			if (!d) return '—';
+			if (d < 1000000) return d.toFixed(0);
+			return (d / 1000000).toFixed(2) + 'M';
+		}
+
+		function formatTimeAgo(value) {
+			if (!value) return '—';
+			const date = new Date(value);
+			if (Number.isNaN(date.getTime())) return '—';
+			const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+			if (diffSec < 0) return '—';
+			if (diffSec < 5) return 'just now';
+			if (diffSec < 60) return `${diffSec}s ago`;
+			if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+			if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+			return date.toLocaleString();
+		}
+
+		function formatBTCShort(sats) {
+			const btc = (Number(sats) || 0) / 1e8;
+			return `${btc.toFixed(8)} BTC`;
+		}
+
+		function shortWallet(value) {
+			if (!value) return '—';
+			const str = String(value);
+			if (str.length <= 12) return str;
+			return `${str.slice(0, 6)}...${str.slice(-4)}`;
+		}
+
+		function renderWorkersTable(workers) {
+			const tbody = document.querySelector('#status-workers-table tbody');
+			if (!tbody) return;
+			if (!workers || workers.length === 0) {
+				tbody.innerHTML = '<tr><td colspan="12" class="text-sm">No worker stats yet.</td></tr>';
+				return;
+			}
+			const rows = workers.map(worker => {
+				const name = worker.display_name || worker.name || '—';
+				const wallet = shortWallet(worker.wallet_address);
+				const miner = worker.miner_name ? `<span class="mono">${worker.miner_name}</span>` :
+					(worker.miner_type ? `<span class="mono">${worker.miner_type}</span>` : '—');
+				const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+				const banStatus = worker.banned ? `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeAgo(worker.banned_until)}${worker.ban_reason ? `<br><span class="label">Reason</span> ${worker.ban_reason}` : ''}` : '—';
+				const lastShare = formatTimeAgo(worker.last_share);
+				const lastReject = worker.last_reject ? `<span class="badge">${worker.last_reject}</span>` : '—';
+				return `
+					<tr>
+						<td class="mono">${name}</td>
+						<td>${formatHashrate(worker.rolling_hashrate)}</td>
+						<td>${formatDiff(worker.difficulty)}</td>
+						<td class="mono">${wallet}</td>
+						<td>${formatBTCShort(worker.balance_sats)}</td>
+						<td>${Math.max(0, worker.window_accepted || 0)} / ${Math.max(0, worker.window_submissions || 0)}</td>
+						<td>${shareRate}</td>
+						<td>${worker.accepted || 0}</td>
+						<td>${miner}</td>
+						<td>${banStatus}</td>
+						<td>${lastShare}</td>
+						<td>${lastReject}</td>
+					</tr>`;
+			});
+			tbody.innerHTML = rows.join('');
+		}
+
+		function renderBestSharesTable(bestShares) {
+			const tbody = document.querySelector('#status-best-shares-table tbody');
+			if (!tbody) return;
+			if (!bestShares || bestShares.length === 0) {
+				tbody.innerHTML = '<tr><td colspan="4" class="text-sm">No high-difficulty shares recorded yet.</td></tr>';
+				return;
+			}
+			const rows = bestShares.map(share => `
+				<tr>
+					<td class="mono">${share.display_worker || share.worker || '—'}</td>
+					<td>${formatDiff(share.difficulty)}</td>
+					<td>${formatTimeAgo(share.timestamp)}</td>
+					<td class="mono">${share.display_hash || share.hash || '—'}</td>
+				</tr>
+			`);
+			tbody.innerHTML = rows.join('');
+		}
+
+		function renderFoundBlocksTable(blocks) {
+			const tbody = document.querySelector('#status-found-blocks-table tbody');
+			if (!tbody) return;
+			if (!blocks || blocks.length === 0) {
+				tbody.innerHTML = '<tr><td colspan="7" class="text-sm">No blocks found yet.</td></tr>';
+				return;
+			}
+				const rows = blocks.map(block => `
+					<tr>
+						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
+					<td class="mono">${block.display_hash || block.hash || '—'}</td>
+					<td class="mono">${block.display_worker || block.worker || '—'}</td>
+					<td>${block.pool_fee_sats || 0}</td>
+					<td>${block.worker_payout_sats || 0}</td>
+					<td>${formatDiff(block.share_diff)}</td>
+					<td>${formatTimeAgo(block.timestamp)}</td>
+				</tr>
+			`);
+			tbody.innerHTML = rows.join('');
+		}
+
+		function renderMinerTypesList(minerTypes) {
+			const list = document.getElementById('status-miner-types-list');
+			const placeholder = document.getElementById('status-miner-types-placeholder');
+			if (!list || !placeholder) return;
+			if (!minerTypes || minerTypes.length === 0) {
+				placeholder.textContent = 'No miner type information recorded yet.';
+				placeholder.style.display = '';
+				list.style.display = 'none';
+				list.innerHTML = '';
+				return;
+			}
+			placeholder.style.display = 'none';
+			list.style.display = '';
+			const entries = minerTypes.map(mt => {
+				const versionText = mt.versions && mt.versions.length ?
+					mt.versions.map((v, idx) => `${idx ? ', ' : ''}${v.version || '(unknown)'} (${v.workers})`).join('') :
+					'(no version info)';
+				const total = mt.total_workers || 0;
+				return `
+					<li>
+						<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+							<div>
+								<span class="mono">${mt.name}</span><br>
+								<span class="text-sm">${total} worker${total === 1 ? '' : 's'}</span>
+							</div>
+							<div class="text-sm mono" style="text-align:right;">
+								${versionText}
+							</div>
+						</div>
+					</li>`;
+			});
+			list.innerHTML = entries.join('');
+		}
+
+		function renderBannedWorkersTable(bannedWorkers) {
+			const tbody = document.querySelector('#status-banned-workers-table tbody');
+			const warning = document.getElementById('status-banned-placeholder-text');
+			if (!tbody) return;
+			if (!bannedWorkers || bannedWorkers.length === 0) {
+				tbody.innerHTML = '<tr><td colspan="11" class="text-sm">No banned workers.</td></tr>';
+				if (warning) {
+					warning.style.display = 'none';
+				}
+				return;
+			}
+			if (warning) {
+				warning.style.display = '';
+				warning.textContent = 'Red worker names indicate invalid wallet-style worker IDs.';
+			}
+			const rows = bannedWorkers.map(worker => {
+				const name = worker.display_name || worker.name || '—';
+				const wallet = shortWallet(worker.wallet_address);
+				const miner = worker.miner_name ? `<span class="mono">${worker.miner_name}</span>` :
+					(worker.miner_type ? `<span class="mono">${worker.miner_type}</span>` : '—');
+				const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+				const banStatus = `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeAgo(worker.banned_until)}${worker.ban_reason ? `<br><span class="label">Reason</span> ${worker.ban_reason}` : ''}`;
+				const lastShare = formatTimeAgo(worker.last_share);
+				const lastReject = worker.last_reject ? `<span class="badge">${worker.last_reject}</span>` : '—';
+				return `
+					<tr>
+						<td class="mono">${name}</td>
+						<td>${formatHashrate(worker.rolling_hashrate)}</td>
+						<td>${formatDiff(worker.difficulty)}</td>
+						<td>${Math.max(0, worker.window_accepted || 0)} / ${Math.max(0, worker.window_submissions || 0)}</td>
+						<td>${shareRate}</td>
+						<td>${worker.accepted || 0}</td>
+						<td>${worker.rejected || 0}</td>
+						<td>${miner}</td>
+						<td>${banStatus}</td>
+						<td>${lastShare}</td>
+						<td>${lastReject}</td>
+					</tr>`;
+			});
+			tbody.innerHTML = rows.join('');
+		}
+
+		function updateGridCards(newData) {
+			if (!newData) return;
+			const cardContainers = document.querySelectorAll('.grid > .card');
+			cardContainers.forEach(card => {
+				const label = card.querySelector('.label');
+				const valueEl = card.querySelector('.value');
+				if (!label || !valueEl) return;
+				const labelText = label.textContent.trim();
+				switch (labelText) {
+					case 'Open connections':
+						valueEl.textContent = newData.active_miners || '0';
+						break;
+					case 'Shares per minute':
+						if (newData.shares_per_second_short) {
+							valueEl.textContent = formatShareRate(newData.shares_per_second_short) + ' (' +
+								formatShareRate(newData.shares_per_second) + ' avg)';
+						} else {
+							valueEl.textContent = formatShareRate(newData.shares_per_second);
+						}
+						break;
+					case 'Estimated pool hashrate':
+						valueEl.textContent = formatHashrate(newData.pool_hashrate);
+						if (window.updateHashrateGraph && newData.pool_hashrate) {
+							window.updateHashrateGraph(newData.pool_hashrate);
+						}
+						break;
+				}
+			});
+		}
+
+		function updateRenderTime(duration) {
+			const renderTimeEl = document.querySelector('.mono:last-of-type');
+			if (!renderTimeEl || !duration) return;
+			const ms = duration / 1000000;
+			renderTimeEl.textContent = ms.toFixed(2) + 'ms';
+		}
+
+		function updateDOM(newData) {
+			if (!newData) return;
+			updateGridCards(newData);
+			renderWorkersTable(newData.workers);
+			renderBestSharesTable(newData.best_shares);
+			renderFoundBlocksTable(newData.found_blocks);
+			renderMinerTypesList(newData.miner_types);
+			renderBannedWorkersTable(newData.banned_workers);
+			updateRenderTime(newData.render_duration);
+		}
+
+		function fetchUpdate() {
+			fetch('/api/status-page')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					updateDOM(data);
+				})
+				.catch(error => {
+					console.error('Error fetching status update:', error);
+				});
+		}
+
+		fetchUpdate();
+	setInterval(fetchUpdate, REFRESH_INTERVAL);
+	})();
+	</script>
+	<script>
+	(function() {
+		const REFRESH_INTERVAL = 5000;
+		const valueEl = document.getElementById('status-pool-hashrate');
+		if (!valueEl) {
+			return;
+		}
+
+		function formatHashrate(value) {
+			if (!value || value <= 0) {
+				return '---';
+			}
+			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+			let val = value;
+			let idx = 0;
+			while (val >= 1000 && idx < units.length - 1) {
+				val /= 1000;
+				idx++;
+			}
+			return `${val.toFixed(2)} ${units[idx]}`;
+		}
+
+		function updateHashrateDisplay(rate) {
+			const formatted = formatHashrate(rate);
+			if (valueEl.textContent !== formatted) {
+				valueEl.textContent = formatted;
+			}
+			if (window.updateHashrateGraph && rate > 0) {
+				window.updateHashrateGraph(rate);
+			}
+		}
+
+		function fetchHashrate() {
+			fetch('/api/pool-hashrate')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					if (data && typeof data.pool_hashrate === 'number') {
+						updateHashrateDisplay(data.pool_hashrate);
+					}
+				})
+				.catch(err => {
+					console.error('Error fetching pool hashrate:', err);
+				});
+		}
+
+		fetchHashrate();
+		setInterval(fetchHashrate, REFRESH_INTERVAL);
+	})();
+	</script>
+	<script>
+	;(function () {
+		const banner = document.getElementById("overview-banner");
+		if (!banner) {
+			return;
+		}
+		const host = banner.dataset.host || window.location.hostname || "localhost";
+		banner.querySelectorAll("[data-stratum-host]").forEach(el => {
+			el.textContent = host;
+		});
+	})();
+	</script>
+</body>
+</html>
