@@ -1,5 +1,3 @@
-//go:build debug
-
 package main
 
 import (
@@ -9,9 +7,8 @@ import (
 	"github.com/bytedance/gopkg/util/logger"
 )
 
-// buildShareDebug constructs a rich ShareDebug payload for a share, including
-// a fully decoded coinbase transaction. This is compiled only in debug builds
-// so production binaries do not pay the cost of per-share coinbase decoding.
+// buildShareDebug constructs a ShareDebug payload for a share, including the
+// decoded coinbase transaction so the worker info page can always show it.
 func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, hash []byte, target *big.Int, extranonce2 string, merkleRoot []byte) *ShareDebug {
 	if job == nil {
 		return nil
