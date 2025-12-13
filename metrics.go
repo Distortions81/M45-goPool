@@ -1,10 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bytedance/gopkg/util/logger"
 )
 
 const defaultBestShareLimit = 12
@@ -25,6 +30,7 @@ type PoolMetrics struct {
 	bestShares     [defaultBestShareLimit]BestShare
 	bestShareCount int
 	bestSharesMu   sync.RWMutex
+	bestSharesFile string
 
 	// Simple RPC latency summaries for diagnostics (seconds).
 	rpcGBTLast     float64
@@ -37,6 +43,50 @@ type PoolMetrics struct {
 
 func NewPoolMetrics() *PoolMetrics {
 	return &PoolMetrics{}
+}
+
+func (m *PoolMetrics) SetBestSharesFile(path string) {
+	if m == nil || path == "" {
+		return
+	}
+	m.bestSharesFile = path
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		logger.Warn("create best shares directory", "error", err, "path", filepath.Dir(path))
+	}
+	if err := m.loadBestSharesFile(path); err != nil {
+		logger.Warn("load best shares file", "error", err, "path", path)
+	}
+}
+
+func (m *PoolMetrics) loadBestSharesFile(path string) error {
+	if m == nil || path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var shares []BestShare
+	if err := json.Unmarshal(data, &shares); err != nil {
+		return err
+	}
+	m.bestSharesMu.Lock()
+	defer m.bestSharesMu.Unlock()
+	m.bestShareCount = 0
+	for _, share := range shares {
+		if share.Difficulty <= 0 {
+			continue
+		}
+		if m.bestShareCount >= defaultBestShareLimit {
+			break
+		}
+		m.bestShares[m.bestShareCount] = share
+		m.bestShareCount++
+	}
+	return nil
 }
 
 func (m *PoolMetrics) RecordShare(accepted bool, reason string) {
@@ -216,16 +266,9 @@ func (m *PoolMetrics) RecordBestShare(share BestShare) {
 		return
 	}
 
-	m.bestSharesMu.RLock()
-	if m.bestShareCount >= defaultBestShareLimit && share.Difficulty <= m.bestShares[m.bestShareCount-1].Difficulty {
-		m.bestSharesMu.RUnlock()
-		return
-	}
-	m.bestSharesMu.RUnlock()
-
 	m.bestSharesMu.Lock()
-	defer m.bestSharesMu.Unlock()
 	if m.bestShareCount >= defaultBestShareLimit && share.Difficulty <= m.bestShares[m.bestShareCount-1].Difficulty {
+		m.bestSharesMu.Unlock()
 		return
 	}
 
@@ -237,19 +280,29 @@ func (m *PoolMetrics) RecordBestShare(share BestShare) {
 			m.bestShares[idx] = share
 			m.bestShareCount++
 		}
-		return
+	} else {
+		end := m.bestShareCount
+		if end >= defaultBestShareLimit {
+			end = defaultBestShareLimit - 1
+		}
+		for i := end; i > idx; i-- {
+			m.bestShares[i] = m.bestShares[i-1]
+		}
+		m.bestShares[idx] = share
+		if m.bestShareCount < defaultBestShareLimit {
+			m.bestShareCount++
+		}
 	}
 
-	end := m.bestShareCount
-	if end >= defaultBestShareLimit {
-		end = defaultBestShareLimit - 1
+	var snapshot []BestShare
+	if m.bestSharesFile != "" && m.bestShareCount > 0 {
+		snapshot = make([]BestShare, m.bestShareCount)
+		copy(snapshot, m.bestShares[:m.bestShareCount])
 	}
-	for i := end; i > idx; i-- {
-		m.bestShares[i] = m.bestShares[i-1]
-	}
-	m.bestShares[idx] = share
-	if m.bestShareCount < defaultBestShareLimit {
-		m.bestShareCount++
+	m.bestSharesMu.Unlock()
+
+	if len(snapshot) > 0 {
+		m.persistBestShares(snapshot)
 	}
 }
 
@@ -260,4 +313,24 @@ func sanitizeLabel(val, fallback string) string {
 	val = strings.ToLower(val)
 	val = strings.ReplaceAll(val, " ", "_")
 	return val
+}
+
+func (m *PoolMetrics) persistBestShares(shares []BestShare) {
+	if m == nil || len(shares) == 0 || m.bestSharesFile == "" {
+		return
+	}
+	data, err := json.MarshalIndent(shares, "", "  ")
+	if err != nil {
+		logger.Warn("marshal best shares", "error", err)
+		return
+	}
+	tmp := m.bestSharesFile + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		logger.Warn("write best shares temp file", "error", err, "path", tmp)
+		return
+	}
+	if err := os.Rename(tmp, m.bestSharesFile); err != nil {
+		logger.Warn("rename best shares file", "error", err, "tmp", tmp, "target", m.bestSharesFile)
+		return
+	}
 }
