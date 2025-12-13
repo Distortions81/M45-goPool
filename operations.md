@@ -2,9 +2,9 @@
 
 ## Configuration files
 
-- `data/state/config.toml` (or legacy `data/config.toml`): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings; advanced tuning fields now belong in `tuning.toml`.
-- `data/state/secrets.toml` (or legacy `data/secrets.toml`): sensitive values like `rpc_user` / `rpc_pass`. These are never written back into `config.toml`.
-- `data/state/tuning.toml` (or legacy `data/tuning.toml`, optional): advanced tuning and limits that are merged on top of `config.toml`. Deleting this file reverts to the sane built-in defaults plus the base config. See `data/state/tuning.toml.example` for the current list of advanced knobs.
+- `data/config/config.toml` (**required**): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings; advanced tuning fields now belong in `tuning.toml`.
+- `data/config/secrets.toml` (**required**): sensitive values like `rpc_user` / `rpc_pass` needed to connect to bitcoind. These are never written back into `config.toml`.
+- `data/config/tuning.toml` (optional): advanced tuning and limits that are merged on top of `config.toml`. Deleting this file reverts to the sane built-in defaults plus the base config. See `data/config/examples/tuning.toml.example` for the current list of advanced knobs.
 
 ## Tuning highlights
 
@@ -27,6 +27,7 @@
 
 ## Logging
 
-- Logs live under `data_dir/<network>_logs` (e.g. `data/mainnet_logs`):
+- Logs live under `data_dir/logs` (e.g. `data/logs`):
   - `pool.log`: structured pool log. By default only errors are logged; build with `-tags debug` or `-tags verbose` for more output.
   - `net-debug.log`: network traffic log emitted only when building with `-tags debug`.
+  - `errors.log`: error-only log for easier troubleshooting.

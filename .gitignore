@@ -1,14 +1,11 @@
 goPool
 data/*.pem
 data/*.toml
-data/state/*.toml
-data/state/*.toml.bak
-data/found_blocks.jsonl
-data/mainnet_state/*.toml
-data/mainnet_state/*.toml.bak
-data/mainnet_logs/
-data/mainnet_state/*.bin
-data/mainnet_state/*.bin.bak
+data/config/*.toml
+data/config/*.toml.bak
+data/config/examples/*.toml.example
+data/state/
+data/logs/
+data/banlist.json
 
 scripts/bitcoin-node
-data/best_shares.json

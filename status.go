@@ -2771,7 +2771,7 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	path := filepath.Join(dataDir, "found_blocks.jsonl")
+	path := filepath.Join(dataDir, "state", "found_blocks.jsonl")
 	f, err := os.Open(path)
 	if err != nil {
 		return nil

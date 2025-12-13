@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -119,13 +118,7 @@ func defaultConfig() Config {
 	}
 }
 
-// defaultConfigPath returns the preferred path for the main pool config.
-// Newer deployments keep config under data/state/config.toml; if that file
-// is missing, we fall back to the legacy data/config.toml location.
+// defaultConfigPath returns the path for the main pool config.
 func defaultConfigPath() string {
-	stateCfg := filepath.Join(defaultDataDir, "state", "config.toml")
-	if _, err := os.Stat(stateCfg); err == nil {
-		return stateCfg
-	}
-	return filepath.Join(defaultDataDir, "config.toml")
+	return filepath.Join(defaultDataDir, "config", "config.toml")
 }

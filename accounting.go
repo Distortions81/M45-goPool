@@ -466,15 +466,12 @@ func syncFileIfExists(path string) error {
 	return f.Sync()
 }
 
-func NewAccountStore(cfg Config, enableShareLog bool, networkLabel string) (*AccountStore, error) {
+func NewAccountStore(cfg Config, enableShareLog bool) (*AccountStore, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
 	}
-	if networkLabel == "" {
-		networkLabel = "mainnet"
-	}
-	stateDir := filepath.Join(dir, networkLabel+"_state")
+	stateDir := filepath.Join(dir, "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, err
 	}

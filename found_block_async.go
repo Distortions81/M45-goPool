@@ -34,14 +34,15 @@ func startFoundBlockLogger() {
 			if dir == "" {
 				dir = defaultDataDir
 			}
-			path := filepath.Join(dir, "found_blocks.jsonl")
+			stateDir := filepath.Join(dir, "state")
+			path := filepath.Join(stateDir, "found_blocks.jsonl")
 			// Lazily (re)open the log file when the target path changes.
 			if path != curPath || f == nil {
 				if f != nil {
 					_ = f.Close()
 					f = nil
 				}
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(stateDir, 0o755); err != nil {
 					logger.Warn("found block log mkdir", "error", err)
 					continue
 				}

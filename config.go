@@ -404,12 +404,13 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 	}
 }
 
-// secretsConfig holds sensitive values that operators may prefer to keep out
-// of the main config.toml so it can be checked into version control or shared
-// more freely.
+// secretsConfig holds sensitive RPC credentials required for pool operation.
+// These values are kept in a separate file (secrets.toml) so the main
+// config.toml can be checked into version control or shared without exposing
+// credentials.
 //
-// When present, these values override any corresponding fields from
-// config.toml.
+// Both rpc_user and rpc_pass are required for the pool to communicate with
+// bitcoind and must be set in secrets.toml.
 type secretsConfig struct {
 	RPCUser string `toml:"rpc_user"`
 	RPCPass string `toml:"rpc_pass"`
@@ -429,14 +430,19 @@ func loadConfig(configPath, secretsPath string) Config {
 		configFileExisted = true
 		applyBaseConfig(&cfg, *bc)
 	} else {
-		// Config file doesn't exist, write out defaults
-		if err := rewriteConfigFile(configPath, cfg); err != nil {
-			fatal("write default config", err, "path", configPath)
-		}
-		examplePath := filepath.Join(filepath.Dir(configPath), "config.toml.example")
-		logger.Info("created default config file; edit it or copy the example",
-			"path", configPath,
-			"example", examplePath)
+		// Config file doesn't exist - create example and exit
+		examplePath := filepath.Join(cfg.DataDir, "config", "examples", "config.toml.example")
+		ensureExampleFiles(cfg.DataDir)
+
+		fmt.Printf("\n📝 Configuration file is missing: %s\n\n", configPath)
+		fmt.Printf("   To get started:\n")
+		fmt.Printf("   1. Copy the example: %s\n", examplePath)
+		fmt.Printf("   2. To:               %s\n", configPath)
+		fmt.Printf("   3. Edit the file and set your payout_address (required)\n")
+		fmt.Printf("   4. Configure other settings as needed\n")
+		fmt.Printf("   5. Restart goPool\n\n")
+
+		os.Exit(1)
 	}
 	ensureExampleFiles(cfg.DataDir)
 
@@ -451,53 +457,41 @@ func loadConfig(configPath, secretsPath string) Config {
 		}
 	}
 
-	// Optional secrets overlay: if data_dir/secrets.toml exists, values
-	// from that file override sensitive fields like RPC credentials.
+	// Load secrets file: RPC credentials are required for pool operation.
+	// Secrets are kept in a separate file so the main config can be shared
+	// or version-controlled without exposing sensitive credentials.
 	if secretsPath == "" {
-		// Prefer the newer data_dir/state/secrets.toml, but fall back to
-		// data_dir/secrets.toml for backward compatibility.
-		stateSecretsPath := filepath.Join(cfg.DataDir, "state", "secrets.toml")
-		if _, err := os.Stat(stateSecretsPath); err == nil {
-			secretsPath = stateSecretsPath
-		} else {
-			secretsPath = filepath.Join(cfg.DataDir, "secrets.toml")
-		}
+		secretsPath = filepath.Join(cfg.DataDir, "config", "secrets.toml")
 	}
-	secretsExamplePath := filepath.Join(filepath.Dir(secretsPath), "secrets.toml.example")
-	ensureExampleFile(secretsExamplePath, secretsConfigExample)
 	if sc, ok, err := loadSecretsFile(secretsPath); err != nil {
 		fatal("secrets file", err, "path", secretsPath)
 	} else if ok {
 		applySecretsConfig(&cfg, *sc)
 	} else {
-		logger.Info("secrets file missing; copy secrets.toml.example and provide RPC credentials",
-			"path", secretsPath,
-			"example", secretsExamplePath)
+		secretsExamplePath := filepath.Join(cfg.DataDir, "config", "examples", "secrets.toml.example")
+		fmt.Printf("\n🔐 Secrets file is missing. RPC credentials are required.\n\n")
+		fmt.Printf("   To configure:\n")
+		fmt.Printf("   1. Copy example: %s\n", secretsExamplePath)
+		fmt.Printf("   2. To:           %s\n", secretsPath)
+		fmt.Printf("   3. Edit the file and set your rpc_user and rpc_pass\n")
+		fmt.Printf("   4. Restart goPool\n\n")
+
+		os.Exit(1)
 	}
 
-	// Optional advanced/tuning overlay: if data_dir/state/tuning.toml (or the
-	// legacy data_dir/tuning.toml) exists, load it as a second config file and
-	// apply it on top of the main config. This lets operators keep advanced
-	// knobs separate and delete the file to fall back to defaults.
-	tuningPath := filepath.Join(cfg.DataDir, "state", "tuning.toml")
-	if _, err := os.Stat(tuningPath); errors.Is(err, os.ErrNotExist) {
-		legacy := filepath.Join(cfg.DataDir, "tuning.toml")
-		if _, err2 := os.Stat(legacy); err2 == nil {
-			tuningPath = legacy
-		} else {
-			tuningPath = ""
-		}
-	}
+	// Optional advanced/tuning overlay: if data_dir/config/tuning.toml exists,
+	// load it as a second config file and apply it on top of the main config.
+	// This lets operators keep advanced knobs separate and delete the file to
+	// fall back to defaults.
+	tuningPath := filepath.Join(cfg.DataDir, "config", "tuning.toml")
 	var tuningOverrides tuningFileConfig
 	var tuningConfigLoaded bool
-	if tuningPath != "" {
-		if tf, ok, err := loadTuningFile(tuningPath); err != nil {
-			fatal("tuning config file", err, "path", tuningPath)
-		} else if ok {
-			applyTuningConfig(&cfg, *tf)
-			tuningConfigLoaded = ok
-			tuningOverrides = *tf
-		}
+	if tf, ok, err := loadTuningFile(tuningPath); err != nil {
+		fatal("tuning config file", err, "path", tuningPath)
+	} else if ok {
+		applyTuningConfig(&cfg, *tf)
+		tuningConfigLoaded = ok
+		tuningOverrides = *tf
 	}
 
 	// Sanitize payout address to strip stray whitespace or unexpected
@@ -545,12 +539,26 @@ func ensureExampleFiles(dataDir string) {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	stateDir := filepath.Join(dataDir, "state")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		logger.Warn("create state directory for example configs failed", "dir", stateDir, "error", err)
+	examplesDir := filepath.Join(dataDir, "config", "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		logger.Warn("create examples directory for example configs failed", "dir", examplesDir, "error", err)
 		return
 	}
-	ensureExampleFile(filepath.Join(stateDir, "tuning.toml.example"), exampleTuningConfigBytes())
+
+	// Create config.toml.example
+	configExample := defaultConfig()
+	configExample.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
+	configExample.DonationAddress = "OPTIONAL_DONATION_WALLET_ADDRESS"
+	configExamplePath := filepath.Join(examplesDir, "config.toml.example")
+	if err := rewriteConfigFile(configExamplePath, configExample); err != nil {
+		logger.Warn("write config example", "path", configExamplePath, "error", err)
+	}
+
+	// Create secrets.toml.example
+	ensureExampleFile(filepath.Join(examplesDir, "secrets.toml.example"), secretsConfigExample)
+
+	// Create tuning.toml.example
+	ensureExampleFile(filepath.Join(examplesDir, "tuning.toml.example"), exampleTuningConfigBytes())
 }
 
 func ensureExampleFile(path string, contents []byte) {

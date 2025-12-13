@@ -254,9 +254,7 @@ func main() {
 
 	bindFlag := flag.String("bind", "", "bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100)")
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL (e.g. http://127.0.0.1:8332)")
-	rpcUserFlag := flag.String("rpc-user", "", "override RPC username")
-	rpcPassFlag := flag.String("rpc-pass", "", "override RPC password")
-	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/state)")
+	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/config)")
 	floodFlag := flag.Bool("flood", false, "enable flood-test mode (force min/max difficulty to 0.01)")
 	mainnetFlag := flag.Bool("mainnet", false, "force mainnet defaults for RPC/ZMQ ports")
 	testnetFlag := flag.Bool("testnet", false, "force testnet defaults for RPC/ZMQ ports")
@@ -315,20 +313,6 @@ func main() {
 
 	cfgPath := defaultConfigPath()
 	cfg := loadConfig(cfgPath, *secretsPathFlag)
-	// Ensure a config.toml.example exists alongside the active config so
-	// operators can see all available fields and defaults. Only create it
-	// when missing to avoid overwriting local edits.
-	examplePath := filepath.Join(filepath.Dir(cfgPath), "config.toml.example")
-	if _, err := os.Stat(examplePath); errors.Is(err, os.ErrNotExist) {
-		ex := defaultConfig()
-		// Insert helpful placeholders for addresses so example configs
-		// are self-documenting but clearly not production-ready.
-		ex.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
-		ex.DonationAddress = "OPTIONAL_DONATION_WALLET_ADDRESS"
-		if err := rewriteConfigFile(examplePath, ex); err != nil {
-			logger.Warn("write example config", "path", examplePath, "error", err)
-		}
-	}
 	if *floodFlag {
 		// Flood-test mode: clamp difficulty to a very low fixed
 		// level so miners send many low-difficulty shares. This is
@@ -371,12 +355,6 @@ func main() {
 		case *regtestFlag:
 			cfg.RPCURL = "http://127.0.0.1:18443"
 		}
-	}
-	if *rpcUserFlag != "" {
-		cfg.RPCUser = *rpcUserFlag
-	}
-	if *rpcPassFlag != "" {
-		cfg.RPCPass = *rpcPassFlag
 	}
 
 	// Apply bind IP override if specified
@@ -436,23 +414,17 @@ func main() {
 	}
 
 	// Select btcd network params for local address validation based on the
-	// configured/selected network and derive a simple network label used
-	// for per-network state/log directories. Defaults to mainnet when no
-	// explicit network flag is provided.
-	networkLabel := "mainnet"
+	// configured/selected network. Defaults to mainnet when no explicit
+	// network flag is provided.
 	switch {
 	case *regtestFlag:
 		SetChainParams("regtest")
-		networkLabel = "regtest"
 	case *testnetFlag:
 		SetChainParams("testnet3")
-		networkLabel = "testnet"
 	case *signetFlag:
 		SetChainParams("signet")
-		networkLabel = "signet"
 	default:
 		SetChainParams("mainnet")
-		networkLabel = "mainnet"
 	}
 
 	// Derive a concise, pool-branded coinbase tag of the form
@@ -491,7 +463,7 @@ func main() {
 		}
 	}
 
-	logPath, err := initLogOutput(cfg, networkLabel)
+	logPath, err := initLogOutput(cfg)
 	if err != nil {
 		fatal("log file", err)
 	}
@@ -499,7 +471,7 @@ func main() {
 	// except for explicit operator-facing prints.
 	configureLoggerOutput(newRollingFileWriter(logPath))
 
-	errorLogPath, err := initErrorLogOutput(cfg, networkLabel)
+	errorLogPath, err := initErrorLogOutput(cfg)
 	if err != nil {
 		fatal("error log file", err)
 	}
@@ -508,7 +480,7 @@ func main() {
 	var netLogPath string
 	if debugEnabled() {
 		var err error
-		netLogPath, err = initNetLogOutput(cfg, networkLabel)
+		netLogPath, err = initNetLogOutput(cfg)
 		if err != nil {
 			fatal("net log file", err)
 		}
@@ -534,14 +506,14 @@ func main() {
 	}
 
 	metrics := NewPoolMetrics()
-	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "best_shares.json"))
+	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
 	startTime := time.Now()
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
 	startPendingSubmissionReplayer(ctx, cfg, rpcClient)
 
-	accounting, err := NewAccountStore(cfg, debugEnabled(), networkLabel)
+	accounting, err := NewAccountStore(cfg, debugEnabled())
 	if err != nil {
 		fatal("accounting", err)
 	}
@@ -950,15 +922,12 @@ func main() {
 	return
 }
 
-func initLogOutput(cfg Config, networkLabel string) (string, error) {
+func initLogOutput(cfg Config) (string, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
 	}
-	if networkLabel == "" {
-		networkLabel = "mainnet"
-	}
-	logDir := filepath.Join(dir, networkLabel+"_logs")
+	logDir := filepath.Join(dir, "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return "", err
 	}
@@ -966,15 +935,12 @@ func initLogOutput(cfg Config, networkLabel string) (string, error) {
 	return path, nil
 }
 
-func initNetLogOutput(cfg Config, networkLabel string) (string, error) {
+func initNetLogOutput(cfg Config) (string, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
 	}
-	if networkLabel == "" {
-		networkLabel = "mainnet"
-	}
-	logDir := filepath.Join(dir, networkLabel+"_logs")
+	logDir := filepath.Join(dir, "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return "", err
 	}
@@ -982,15 +948,12 @@ func initNetLogOutput(cfg Config, networkLabel string) (string, error) {
 	return path, nil
 }
 
-func initErrorLogOutput(cfg Config, networkLabel string) (string, error) {
+func initErrorLogOutput(cfg Config) (string, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
 	}
-	if networkLabel == "" {
-		networkLabel = "mainnet"
-	}
-	logDir := filepath.Join(dir, networkLabel+"_logs")
+	logDir := filepath.Join(dir, "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return "", err
 	}

@@ -9,7 +9,7 @@ import "testing"
 // logging.
 func TestAccountStoreStartsEmpty(t *testing.T) {
 	cfg := Config{DataDir: t.TempDir()}
-	store, err := NewAccountStore(cfg, false, "mainnet")
+	store, err := NewAccountStore(cfg, false)
 	if err != nil {
 		t.Fatalf("NewAccountStore failed: %v", err)
 	}

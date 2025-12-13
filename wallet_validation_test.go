@@ -10,7 +10,7 @@ import (
 
 func newDummyAccountStore(t *testing.T) *AccountStore {
 	cfg := Config{DataDir: t.TempDir()}
-	store, err := NewAccountStore(cfg, false, "mainnet")
+	store, err := NewAccountStore(cfg, false)
 	if err != nil {
 		t.Fatalf("NewAccountStore failed: %v", err)
 	}

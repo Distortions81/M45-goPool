@@ -14,7 +14,7 @@ import (
 // last JSON object written. It is used to verify logFoundBlock behaviour.
 func readLastFoundBlockRecord(t *testing.T, dir string) map[string]interface{} {
 	t.Helper()
-	path := filepath.Join(dir, "found_blocks.jsonl")
+	path := filepath.Join(dir, "state", "found_blocks.jsonl")
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		data, err := os.ReadFile(path)

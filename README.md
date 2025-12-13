@@ -26,5 +26,5 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and publ
    # or
    go build -o goPool && ./goPool
    ```
-2. Edit configuration under `data/state/config.toml`/`secrets.toml` (see `operations.md` for the deployment and tuning guidance).
+2. Edit configuration under `data/config/config.toml` and `data/config/secrets.toml` (see `operations.md` for deployment and tuning guidance).
 3. Point your miner at the Stratum listen address.
