@@ -72,20 +72,13 @@
 							<th title="Worker name">Worker</th>
 							<th title="Rolling hashrate">Hashrate</th>
 							<th title="Current difficulty">Difficulty</th>
-							<th title="Worker payout wallet">Wallet</th>
-							<th title="Pending balance (BTC)">Balance</th>
-							<th title="Accepted / submitted in current window">Window acc/sub</th>
 							<th title="Accepted shares per minute">Shares/min</th>
 							<th title="Total accepted shares">Accepted</th>
-							<th title="Miner software (name/version)">Miner</th>
-							<th title="Current ban status">Ban status</th>
-							<th title="Last accepted share time">Last share</th>
-							<th title="Last reject reason, if any">Last reject</th>
 						</tr>
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="12" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
+							<td colspan="5" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -411,35 +404,22 @@
 		function renderWorkersTable(workers) {
 			const tbody = document.querySelector('#status-workers-table tbody');
 			if (!tbody) return;
-			if (!workers || workers.length === 0) {
-				tbody.innerHTML = '<tr><td colspan="12" class="text-sm">No worker stats yet.</td></tr>';
-				return;
-			}
-			const rows = workers.map(worker => {
-				const name = worker.display_name || worker.name || '—';
-				const wallet = shortWallet(worker.wallet_address);
-				const miner = worker.miner_name ? `<span class="mono">${worker.miner_name}</span>` :
-					(worker.miner_type ? `<span class="mono">${worker.miner_type}</span>` : '—');
-				const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
-				const banStatus = worker.banned ? `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeAgo(worker.banned_until)}${worker.ban_reason ? `<br><span class="label">Reason</span> ${worker.ban_reason}` : ''}` : '—';
-				const lastShare = formatTimeAgo(worker.last_share);
-				const lastReject = worker.last_reject ? `<span class="badge">${worker.last_reject}</span>` : '—';
-				return `
-					<tr>
-						<td class="mono">${name}</td>
-						<td>${formatHashrate(worker.rolling_hashrate)}</td>
-						<td>${formatDiff(worker.difficulty)}</td>
-						<td class="mono">${wallet}</td>
-						<td>${formatBTCShort(worker.balance_sats)}</td>
-						<td>${Math.max(0, worker.window_accepted || 0)} / ${Math.max(0, worker.window_submissions || 0)}</td>
-						<td>${shareRate}</td>
-						<td>${worker.accepted || 0}</td>
-						<td>${miner}</td>
-						<td>${banStatus}</td>
-						<td>${lastShare}</td>
-						<td>${lastReject}</td>
-					</tr>`;
-			});
+				if (!workers || workers.length === 0) {
+					tbody.innerHTML = '<tr><td colspan="5" class="text-sm">No worker stats yet.</td></tr>';
+					return;
+				}
+				const rows = workers.map(worker => {
+					const name = worker.display_name || worker.name || '—';
+					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+					return `
+						<tr>
+							<td class="mono">${name}</td>
+							<td>${formatHashrate(worker.rolling_hashrate)}</td>
+							<td>${formatDiff(worker.difficulty)}</td>
+							<td>${shareRate}</td>
+							<td>${worker.accepted || 0}</td>
+						</tr>`;
+				});
 			tbody.innerHTML = rows.join('');
 		}
 
