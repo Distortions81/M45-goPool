@@ -530,7 +530,6 @@ type StatusData struct {
 	MinDifficulty           float64 `json:"min_difficulty"`
 	MaxDifficulty           float64 `json:"max_difficulty"`
 	LockSuggestedDifficulty bool    `json:"lock_suggested_difficulty"`
-	HideLowDiffErrors       bool    `json:"hide_low_diff_errors"`
 	HashrateEMATauSeconds   float64 `json:"hashrate_ema_tau_seconds"`
 	NTimeForwardSlackSec    int     `json:"ntime_forward_slack_seconds"`
 	// Worker database summary (status page only).
@@ -2097,21 +2096,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 
-	// When hide_low_diff_errors is enabled, treat low-diff shares as
-	// non-fatal from a UI perspective: still track them separately, but
-	// do not show "lowDiff" as the last reject reason for workers.
-	if s.cfg.HideLowDiffErrors {
-		for i := range workers {
-			if strings.EqualFold(workers[i].LastReject, "lowDiff") {
-				workers[i].LastReject = ""
-			}
-		}
-		for i := range bannedWorkers {
-			if strings.EqualFold(bannedWorkers[i].LastReject, "lowDiff") {
-				bannedWorkers[i].LastReject = ""
-			}
-		}
-	}
 	foundBlocks := loadFoundBlocks(s.cfg.DataDir, 10)
 
 	// Aggregate workers by miner type for a "miner types" summary near the
@@ -2415,7 +2399,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		MinDifficulty:            s.cfg.MinDifficulty,
 		MaxDifficulty:            s.cfg.MaxDifficulty,
 		LockSuggestedDifficulty:  s.cfg.LockSuggestedDifficulty,
-		HideLowDiffErrors:        s.cfg.HideLowDiffErrors,
 		WorkerDatabase:           workerDBStats,
 		Warnings:                 warnings,
 	}
@@ -2472,7 +2455,6 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinDifficulty:           s.cfg.MinDifficulty,
 		MaxDifficulty:           s.cfg.MaxDifficulty,
 		LockSuggestedDifficulty: s.cfg.LockSuggestedDifficulty,
-		HideLowDiffErrors:       s.cfg.HideLowDiffErrors,
 		HashrateEMATauSeconds:   s.cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSec:    s.cfg.NTimeForwardSlackSeconds,
 		RenderDuration:          time.Since(start),

@@ -785,13 +785,7 @@ func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff floa
 		mc.stats.WindowDifficulty += creditedDiff
 		mc.updateHashrateLocked(creditedDiff, now)
 	} else {
-		// When hide_low_diff_errors is enabled, treat low-difficulty shares
-		// as non-fatal from the operator's perspective: they still count
-		// toward low-diff spam detection, but are not included in the
-		// generic "rejected" counters.
-		if !(reason == "lowDiff" && mc.cfg.HideLowDiffErrors) {
-			mc.stats.Rejected++
-		}
+		mc.stats.Rejected++
 	}
 	mc.stats.LastShare = now
 
@@ -2440,32 +2434,21 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			)
 		}
 		debug := mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
-		// When HideLowDiffErrors is enabled, treat low-diff shares as accepted
-		// at the protocol layer (miner sees success) but do NOT credit
-		// hashrate or difficulty in our accounting. This prevents inflated
-		// hashrate when miners return low-diff shares.
-		acceptedForStats := false
-		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
+	acceptedForStats := false
+	mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
 
-		// Optionally hide low-diff errors from the miner to avoid aggressive
-		// reconnect behavior on certain ASICs. When enabled we still log and
-		// account for the reject, but return a generic success.
-		if mc.cfg.HideLowDiffErrors {
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
-		} else {
-			if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
-				mc.logBan(rejectLowDiff.String(), workerName, invalids)
-				mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
-			} else {
-				mc.writeResponse(StratumResponse{
-					ID:     req.ID,
-					Result: false,
-					Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
-				})
-			}
-		}
-		return
+	if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
+		mc.logBan(rejectLowDiff.String(), workerName, invalids)
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+	} else {
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
+		})
 	}
+	return
+}
 
 	shareHash := hashHex
 	debug := mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)

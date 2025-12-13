@@ -157,9 +157,6 @@
 							Accepted
 						{{else if .Worker.LastReject}}
 							Rejected (reason: {{.Worker.LastReject}})
-							{{if and .HideLowDiffErrors (or (eq .Worker.LastReject "lowDiff") (eq .Worker.LastReject "low difficulty share"))}}
-								&mdash; low-diff reject hidden from worker stats due to hide_low_diff_errors setting
-							{{end}}
 						{{else}}
 							Unknown
 						{{end}}<br>

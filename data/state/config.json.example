@@ -41,7 +41,6 @@
   "max_difficulty": 16000,
   "min_difficulty": 512,
   "lock_suggested_difficulty": false,
-  "hide_low_diff_errors": true,
   "hashrate_ema_tau_seconds": 600,
   "ntime_forward_slack_seconds": 7000,
   "ban_invalid_submissions_after": 60,

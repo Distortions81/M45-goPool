@@ -163,10 +163,6 @@ type Config struct {
 	// If true, workers that call mining.suggest_difficulty will be kept at
 	// that difficulty (clamped to min/max) and VarDiff will not adjust them.
 	LockSuggestedDifficulty bool
-	// If true, low-difficulty shares are still logged and counted for
-	// accounting, but the miner receives a generic success instead of an
-	// explicit low-diff error to avoid noisy reconnect behavior.
-	HideLowDiffErrors bool
 	// HashrateEMATauSeconds controls the time constant (in seconds) for the
 	// per-connection hashrate exponential moving average.
 	HashrateEMATauSeconds float64
@@ -245,7 +241,6 @@ type EffectiveConfig struct {
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
-	HideLowDiffErrors                 bool    `json:"hide_low_diff_errors,omitempty"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
 	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
 	BanInvalidSubmissionsAfter        int     `json:"ban_invalid_submissions_after,omitempty"`
@@ -303,7 +298,6 @@ type fileConfig struct {
 	MaxDifficulty                     *float64 `json:"max_difficulty"`
 	MinDifficulty                     *float64 `json:"min_difficulty"`
 	LockSuggestedDifficulty           *bool    `json:"lock_suggested_difficulty"`
-	HideLowDiffErrors                 *bool    `json:"hide_low_diff_errors"`
 	HashrateEMATauSeconds             *float64 `json:"hashrate_ema_tau_seconds"`
 	NTimeForwardSlackSec              *int     `json:"ntime_forward_slack_seconds"`
 	BanInvalidSubmissionsAfter        *int     `json:"ban_invalid_submissions_after"`
@@ -451,7 +445,6 @@ func defaultConfig() Config {
 		MaxDifficulty:                 16000,
 		MinDifficulty:                 512,
 		LockSuggestedDifficulty:       false,
-		HideLowDiffErrors:             true,
 		HashrateEMATauSeconds:         defaultHashrateEMATauSeconds,
 		NTimeForwardSlackSeconds:      defaultNTimeForwardSlackSeconds,
 		BanInvalidSubmissionsAfter:    60,
@@ -568,7 +561,6 @@ func rewriteConfigFile(path string, cfg Config) error {
 	fc.MinDifficulty = float64Ptr(cfg.MinDifficulty)
 	fc.PoolFeePercent = float64Ptr(cfg.PoolFeePercent)
 	fc.LockSuggestedDifficulty = boolPtr(cfg.LockSuggestedDifficulty)
-	fc.HideLowDiffErrors = boolPtr(cfg.HideLowDiffErrors)
 	fc.CoinbasePoolTag = stringPtr(cfg.CoinbasePoolTag)
 	fc.HashrateEMATauSeconds = float64Ptr(cfg.HashrateEMATauSeconds)
 	fc.NTimeForwardSlackSec = intPtr(cfg.NTimeForwardSlackSeconds)
@@ -778,9 +770,6 @@ func applyFileConfig(cfg *Config, fc fileConfig) {
 	if fc.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.LockSuggestedDifficulty
 	}
-	if fc.HideLowDiffErrors != nil {
-		cfg.HideLowDiffErrors = *fc.HideLowDiffErrors
-	}
 	if fc.HashrateEMATauSeconds != nil && *fc.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.HashrateEMATauSeconds
 	}
@@ -804,9 +793,6 @@ func applyFileConfig(cfg *Config, fc fileConfig) {
 	}
 	if fc.ReconnectBanDurationSeconds != nil && *fc.ReconnectBanDurationSeconds > 0 {
 		cfg.ReconnectBanDurationSeconds = *fc.ReconnectBanDurationSeconds
-	}
-	if cfg.LockSuggestedDifficulty {
-		cfg.HideLowDiffErrors = false
 	}
 }
 
@@ -866,7 +852,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		MinDifficulty:                     cfg.MinDifficulty,
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
-		HideLowDiffErrors:             cfg.HideLowDiffErrors,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,
 		BanInvalidSubmissionsAfter:    cfg.BanInvalidSubmissionsAfter,
