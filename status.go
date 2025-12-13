@@ -473,8 +473,10 @@ type StatusData struct {
 	RenderDuration           time.Duration     `json:"render_duration"`
 	PageCached               bool              `json:"page_cached"`
 	ActiveMiners             int               `json:"active_miners"`
+	ActiveTLSMiners          int               `json:"active_tls_miners"`
 	SharesPerSecond          float64           `json:"shares_per_second"`
 	SharesPerSecondShort     float64           `json:"shares_per_second_short,omitempty"`
+	SharesPerMinute          float64           `json:"shares_per_minute,omitempty"`
 	Accepted                 uint64            `json:"accepted"`
 	Rejected                 uint64            `json:"rejected"`
 	StaleShares              uint64            `json:"stale_shares"`
@@ -535,29 +537,32 @@ type StatusData struct {
 }
 
 type statusPageJobFeed struct {
-	LastError         string  `json:"last_error,omitempty"`
-	LastErrorAt       string  `json:"last_error_at,omitempty"`
-	ZMQHealthy        bool    `json:"zmq_healthy"`
-	ZMQDisconnects    uint64  `json:"zmq_disconnects"`
-	ZMQReconnects     uint64  `json:"zmq_reconnects"`
-	LastRawBlockAt    string  `json:"last_raw_block_at,omitempty"`
-	LastRawBlockBytes int     `json:"last_raw_block_bytes,omitempty"`
-	LastHashTx        string  `json:"last_hash_tx,omitempty"`
-	LastHashTxAt      string  `json:"last_hash_tx_at,omitempty"`
-	LastRawTxAt       string  `json:"last_raw_tx_at,omitempty"`
-	LastRawTxBytes    int     `json:"last_raw_tx_bytes,omitempty"`
-	BlockHash         string  `json:"block_hash,omitempty"`
-	BlockHeight       int64   `json:"block_height,omitempty"`
-	BlockTime         string  `json:"block_time,omitempty"`
-	BlockBits         string  `json:"block_bits,omitempty"`
-	BlockDifficulty   float64 `json:"block_difficulty,omitempty"`
+	LastError         string   `json:"last_error,omitempty"`
+	LastErrorAt       string   `json:"last_error_at,omitempty"`
+	ErrorHistory      []string `json:"error_history,omitempty"`
+	ZMQHealthy        bool     `json:"zmq_healthy"`
+	ZMQDisconnects    uint64   `json:"zmq_disconnects"`
+	ZMQReconnects     uint64   `json:"zmq_reconnects"`
+	LastRawBlockAt    string   `json:"last_raw_block_at,omitempty"`
+	LastRawBlockBytes int      `json:"last_raw_block_bytes,omitempty"`
+	LastHashTx        string   `json:"last_hash_tx,omitempty"`
+	LastHashTxAt      string   `json:"last_hash_tx_at,omitempty"`
+	LastRawTxAt       string   `json:"last_raw_tx_at,omitempty"`
+	LastRawTxBytes    int      `json:"last_raw_tx_bytes,omitempty"`
+	BlockHash         string   `json:"block_hash,omitempty"`
+	BlockHeight       int64    `json:"block_height,omitempty"`
+	BlockTime         string   `json:"block_time,omitempty"`
+	BlockBits         string   `json:"block_bits,omitempty"`
+	BlockDifficulty   float64  `json:"block_difficulty,omitempty"`
 }
 
 type statusPageJSON struct {
 	APIVersion           string            `json:"api_version"`
 	ActiveMiners         int               `json:"active_miners"`
+	ActiveTLSMiners      int               `json:"active_tls_miners"`
 	SharesPerSecond      float64           `json:"shares_per_second"`
 	SharesPerSecondShort float64           `json:"shares_per_second_short,omitempty"`
+	SharesPerMinute      float64           `json:"shares_per_minute,omitempty"`
 	PoolHashrate         float64           `json:"pool_hashrate,omitempty"`
 	RenderDuration       time.Duration     `json:"render_duration"`
 	Workers              []WorkerView      `json:"workers"`
@@ -671,24 +676,25 @@ func cloneStringSlice(src []string) []string {
 }
 
 type JobFeedView struct {
-	Ready             bool    `json:"ready"`
-	LastSuccess       string  `json:"last_success"`
-	LastError         string  `json:"last_error,omitempty"`
-	LastErrorAt       string  `json:"last_error_at,omitempty"`
-	ZMQHealthy        bool    `json:"zmq_healthy"`
-	ZMQDisconnects    uint64  `json:"zmq_disconnects"`
-	ZMQReconnects     uint64  `json:"zmq_reconnects"`
-	LastRawBlockAt    string  `json:"last_raw_block_at,omitempty"`
-	LastRawBlockBytes int     `json:"last_raw_block_bytes,omitempty"`
-	LastHashTx        string  `json:"last_hash_tx,omitempty"`
-	LastHashTxAt      string  `json:"last_hash_tx_at,omitempty"`
-	LastRawTxAt       string  `json:"last_raw_tx_at,omitempty"`
-	LastRawTxBytes    int     `json:"last_raw_tx_bytes,omitempty"`
-	BlockHash         string  `json:"block_hash,omitempty"`
-	BlockHeight       int64   `json:"block_height,omitempty"`
-	BlockTime         string  `json:"block_time,omitempty"`
-	BlockBits         string  `json:"block_bits,omitempty"`
-	BlockDifficulty   float64 `json:"block_difficulty,omitempty"`
+	Ready             bool     `json:"ready"`
+	LastSuccess       string   `json:"last_success"`
+	LastError         string   `json:"last_error,omitempty"`
+	LastErrorAt       string   `json:"last_error_at,omitempty"`
+	ErrorHistory      []string `json:"error_history,omitempty"`
+	ZMQHealthy        bool     `json:"zmq_healthy"`
+	ZMQDisconnects    uint64   `json:"zmq_disconnects"`
+	ZMQReconnects     uint64   `json:"zmq_reconnects"`
+	LastRawBlockAt    string   `json:"last_raw_block_at,omitempty"`
+	LastRawBlockBytes int      `json:"last_raw_block_bytes,omitempty"`
+	LastHashTx        string   `json:"last_hash_tx,omitempty"`
+	LastHashTxAt      string   `json:"last_hash_tx_at,omitempty"`
+	LastRawTxAt       string   `json:"last_raw_tx_at,omitempty"`
+	LastRawTxBytes    int      `json:"last_raw_tx_bytes,omitempty"`
+	BlockHash         string   `json:"block_hash,omitempty"`
+	BlockHeight       int64    `json:"block_height,omitempty"`
+	BlockTime         string   `json:"block_time,omitempty"`
+	BlockBits         string   `json:"block_bits,omitempty"`
+	BlockDifficulty   float64  `json:"block_difficulty,omitempty"`
 }
 
 type MinerTypeView struct {
@@ -740,6 +746,14 @@ func computeWindowHashrate(stats MinerStats, now time.Time) float64 {
 		return 0
 	}
 	return (stats.WindowDifficulty * hashPerShare) / window.Seconds()
+}
+
+func computeWindowShareRate(stats MinerStats, now time.Time) float64 {
+	hashrate := computeWindowHashrate(stats, now)
+	if hashrate <= 0 {
+		return 0
+	}
+	return (hashrate / hashPerShare) * 60
 }
 
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
@@ -1593,8 +1607,10 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 		data := statusPageJSON{
 			APIVersion:           apiVersion,
 			ActiveMiners:         full.ActiveMiners,
+			ActiveTLSMiners:      full.ActiveTLSMiners,
 			SharesPerSecond:      full.SharesPerSecond,
 			SharesPerSecondShort: full.SharesPerSecondShort,
+			SharesPerMinute:      full.SharesPerMinute,
 			PoolHashrate:         full.PoolHashrate,
 			RenderDuration:       full.RenderDuration,
 			Workers:              full.Workers,
@@ -1607,6 +1623,7 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 			JobFeed: statusPageJobFeed{
 				LastError:         full.JobFeed.LastError,
 				LastErrorAt:       full.JobFeed.LastErrorAt,
+				ErrorHistory:      full.JobFeed.ErrorHistory,
 				ZMQHealthy:        full.JobFeed.ZMQHealthy,
 				ZMQDisconnects:    full.JobFeed.ZMQDisconnects,
 				ZMQReconnects:     full.JobFeed.ZMQReconnects,
@@ -2188,13 +2205,15 @@ func (s *StatusServer) buildStatusData() StatusData {
 
 	// Pool-wide share rates derived directly from per-connection stats.
 	var (
+		sharesPerMinute float64
 		sharesPerSecond float64
 	)
 	for _, w := range allWorkers {
 		if w.ShareRate > 0 {
-			sharesPerSecond += w.ShareRate / 60
+			sharesPerMinute += w.ShareRate
 		}
 	}
+	sharesPerSecond = sharesPerMinute / 60
 	poolHashrate := s.computePoolHashrate()
 
 	// Limit the number of workers displayed on the main status page to
@@ -2322,6 +2341,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		if payload.LastRawTxBytes > 0 {
 			jobFeed.LastRawTxBytes = payload.LastRawTxBytes
 		}
+		jobFeed.ErrorHistory = fs.ErrorHistory
 	}
 
 	brandName := strings.TrimSpace(s.cfg.StatusBrandName)
@@ -2333,6 +2353,14 @@ func (s *StatusServer) buildStatusData() StatusData {
 	activeMiners := 0
 	if s.jobMgr != nil {
 		activeMiners = s.jobMgr.ActiveMiners()
+	}
+	activeTLSMiners := 0
+	if s.registry != nil {
+		for _, mc := range s.registry.Snapshot() {
+			if mc != nil && mc.isTLSConnection {
+				activeTLSMiners++
+			}
+		}
 	}
 
 	bt := strings.TrimSpace(buildTime)
@@ -2406,7 +2434,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 		PoolSoftware:             poolSoftwareName,
 		BuildTime:                bt,
 		ActiveMiners:             activeMiners,
+		ActiveTLSMiners:          activeTLSMiners,
 		SharesPerSecond:          sharesPerSecond,
+		SharesPerSecondShort:     sharesPerSecond,
+		SharesPerMinute:          sharesPerMinute,
 		Accepted:                 accepted,
 		Rejected:                 nonStaleNonLowRejected,
 		StaleShares:              stale,

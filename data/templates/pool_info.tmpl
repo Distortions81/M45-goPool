@@ -53,6 +53,13 @@
 					<p class="text-sm">TCP address miners connect to.</p>
 				</div>
 				<div>
+					<div class="label">TLS listen address</div>
+					<div class="value mono">
+						{{if .StratumTLSListen}}{{.StratumTLSListen}}{{else}}(disabled){{end}}
+					</div>
+					<p class="text-sm">Optional TLS endpoint for miners that support <span class="mono">stratum+tls</span>.</p>
+				</div>
+				<div>
 					<div class="label">Max connections</div>
 					<div class="value mono">
 						{{if gt .MaxConns 0}}{{.MaxConns}}{{else}}(unlimited){{end}}
@@ -107,6 +114,28 @@
 			</div>
 		</div>
 
+		<div class="card">
+			<div class="label">Pool metrics (since start)</div>
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
+				<div>
+					<div class="label">Block submissions</div>
+					<div class="mono" id="pool-block-submissions">--</div>
+				</div>
+				<div>
+					<div class="label">RPC getblocktemplate latency</div>
+					<div class="mono" id="pool-rpc-gbt">--</div>
+				</div>
+				<div>
+					<div class="label">RPC submitblock latency</div>
+					<div class="mono" id="pool-rpc-submit">--</div>
+				</div>
+				<div>
+					<div class="label">Error counters</div>
+					<div class="mono" id="pool-error-counters">--</div>
+				</div>
+			</div>
+		</div>
+
 	{{template "footer" .}}
 </div>
 <script>
@@ -116,6 +145,10 @@
 			return;
 		}
 		const REFRESH_INTERVAL = 10000;
+		const blockSubEl = document.getElementById('pool-block-submissions');
+		const rpcGBTEl = document.getElementById('pool-rpc-gbt');
+		const rpcSubmitEl = document.getElementById('pool-rpc-submit');
+		const errorCountersEl = document.getElementById('pool-error-counters');
 
 		function formatDuration(ns) {
 			if (!ns) return '—';
@@ -130,10 +163,37 @@
 			return `${secs}s`;
 		}
 
+		function formatMilliseconds(value) {
+			if (value === undefined || value === null) {
+				return '0.000 ms';
+			}
+			const ms = Number(value) * 1000;
+			if (!Number.isFinite(ms)) {
+				return '0.000 ms';
+			}
+			return `${ms.toFixed(3)} ms`;
+		}
+
 		function updatePoolInfo(data) {
 			if (!data) return;
 			if (data.uptime) {
 				uptimeEl.textContent = formatDuration(data.uptime);
+			}
+		}
+
+		function updatePoolMetrics(data) {
+			if (!data) return;
+			if (blockSubEl) {
+				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
+			}
+			if (rpcGBTEl) {
+				rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
+			}
+			if (rpcSubmitEl) {
+				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;
+			}
+			if (errorCountersEl) {
+				errorCountersEl.textContent = `RPC errors: ${data.rpc_errors || 0}   Share errors: ${data.share_errors || 0}`;
 			}
 		}
 
@@ -151,8 +211,22 @@
 				});
 		}
 
+		function fetchPoolMetrics() {
+			fetch('/api/status-page')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(updatePoolMetrics)
+				.catch(error => {
+					console.error('Error fetching pool metrics:', error);
+				});
+		}
+
 		fetchPoolInfo();
+		fetchPoolMetrics();
 		setInterval(fetchPoolInfo, REFRESH_INTERVAL);
+		setInterval(fetchPoolMetrics, REFRESH_INTERVAL);
 	})();
 </script>
 </body>

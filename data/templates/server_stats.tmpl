@@ -23,7 +23,7 @@
 					<div class="mono" id="server-accounting-status">--</div>
 				</div>
 				<div>
-					<div class="label">Last job feed error</div>
+					<div class="label">Job feed errors</div>
 					<div class="mono" id="server-job-feed-error">--</div>
 				</div>
 				<div>
@@ -74,34 +74,12 @@
 					<div class="mono" id="server-pool-cpu">--</div>
 				</div>
 				<div>
-					<div class="label">System RAM (used/total)</div>
-					<div class="mono" id="server-ram">-- / --</div>
+					<div class="label">System RAM</div>
+					<div class="mono" id="server-ram">--</div>
 				</div>
 				<div>
 					<div class="label">Total System load (1/5/15m)</div>
 					<div class="mono" id="server-load">-- / -- / --</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="card">
-			<div class="label">Pool metrics (since start)</div>
-			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
-				<div>
-					<div class="label">Block submissions</div>
-					<div class="mono" id="server-block-submissions">--</div>
-				</div>
-				<div>
-					<div class="label">RPC getblocktemplate latency</div>
-					<div class="mono" id="server-rpc-gbt">--</div>
-				</div>
-				<div>
-					<div class="label">RPC submitblock latency</div>
-					<div class="mono" id="server-rpc-submit">--</div>
-				</div>
-				<div>
-					<div class="label">Error counters</div>
-					<div class="mono" id="server-error-counters">--</div>
 				</div>
 			</div>
 		</div>
@@ -143,11 +121,6 @@
 		const zmqRawTxRowEl = document.getElementById('server-zmq-rawtx-row');
 		const zmqBlockTipRowEl = document.getElementById('server-zmq-block-tip-row');
 		const zmqBlockDiffRowEl = document.getElementById('server-zmq-block-diff-row');
-		const blockSubEl = document.getElementById('server-block-submissions');
-		const rpcGBTEl = document.getElementById('server-rpc-gbt');
-		const rpcSubmitEl = document.getElementById('server-rpc-submit');
-		const errorCountersEl = document.getElementById('server-error-counters');
-
 		const goroutinesEl = document.getElementById('server-goroutines');
 		const goHeapEl = document.getElementById('server-go-heap');
 		const processRSSEl = document.getElementById('server-process-rss');
@@ -179,13 +152,6 @@
 			return `${Number(value).toFixed(3)}%`;
 		}
 
-		function formatSeconds(value) {
-			if (value === undefined || value === null) {
-				return '0.000';
-			}
-			return Number(value).toFixed(3);
-		}
-
 		function formatLoad(value) {
 			if (value === undefined || value === null) {
 				return '--';
@@ -207,12 +173,17 @@
 				accountingEl.textContent = data.accounting_error ? `Error: ${data.accounting_error}` : 'OK';
 			}
 			if (jobFeedEl) {
-				if (data.job_feed?.last_error) {
-					let text = `Error: ${data.job_feed.last_error}`;
-					if (data.job_feed.last_error_at) {
-						text += ` (at ${data.job_feed.last_error_at})`;
+				const rawHistory = data.job_feed?.error_history ?? [];
+				if (rawHistory.length > 0) {
+					const history = rawHistory.slice().reverse();
+					const entries = history.map((msg, idx) => {
+						const prefix = idx === 0 ? 'Error' : 'Previous';
+						return `${prefix}: ${msg}`;
+					});
+					if (data.job_feed?.last_error_at) {
+						entries[0] += ` (at ${data.job_feed.last_error_at})`;
 					}
-					jobFeedEl.textContent = text;
+					jobFeedEl.textContent = entries.join(' | ');
 				} else {
 					jobFeedEl.textContent = 'None';
 				}
@@ -289,18 +260,6 @@
 				}
 				setRowVisibility(zmqBlockDiffRowEl, hasBlockDiff);
 			}
-			if (blockSubEl) {
-				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
-			}
-			if (rpcGBTEl) {
-				rpcGBTEl.textContent = `last: ${formatSeconds(data.rpc_gbt_last_sec)}s, max: ${formatSeconds(data.rpc_gbt_max_sec)}s, calls: ${data.rpc_gbt_count || 0}`;
-			}
-			if (rpcSubmitEl) {
-				rpcSubmitEl.textContent = `last: ${formatSeconds(data.rpc_submit_last_sec)}s, max: ${formatSeconds(data.rpc_submit_max_sec)}s, calls: ${data.rpc_submit_count || 0}`;
-			}
-			if (errorCountersEl) {
-				errorCountersEl.textContent = `RPC errors: ${data.rpc_errors || 0}   Share errors: ${data.share_errors || 0}`;
-			}
 		}
 
 		function updateDiagnostics(data) {
@@ -318,7 +277,7 @@
 				poolCPUEl.textContent = formatPercent(data.process_cpu_percent);
 			}
 			if (ramEl) {
-				ramEl.textContent = `${formatBytes(data.system_mem_used_bytes)} / ${formatBytes(data.system_mem_total_bytes)}`;
+				ramEl.textContent = formatBytes(data.system_mem_total_bytes);
 			}
 			if (loadEl) {
 				loadEl.textContent = `${formatLoad(data.system_load1)} / ${formatLoad(data.system_load5)} / ${formatLoad(data.system_load15)}`;

@@ -97,32 +97,6 @@
 			</div>
 		</div>
 
-		<div class="card">
-			<div class="label">Pool identity</div>
-			<div class="grid">
-				<div>
-					<div class="label">Pool wallet</div>
-					<div class="value mono">
-						{{if .DisplayPayoutAddress}}{{.DisplayPayoutAddress}}{{else}}(not configured){{end}}
-					</div>
-					<p class="text-sm">
-						Pool fee wallet: the operator's share of each block is sent here. With dual payout enabled, worker rewards are paid directly to their own wallets.
-					</p>
-				</div>
-				<div>
-					<div class="label">Coinbase message</div>
-					<div class="value mono">
-						{{if .DisplayCoinbaseMessage}}{{.DisplayCoinbaseMessage}}{{else}}(default){{end}}
-					</div>
-					<p class="text-sm">Appears in the coinbase of blocks this pool finds.</p>
-				</div>
-			</div>
-			<p class="text-sm" style="margin-top:10px;">
-				These fields let users confirm that the node, payout address, and coinbase tags match the operator's
-				publicly documented solo pool details.
-			</p>
-		</div>
-
 	{{template "footer" .}}
 </div>
 <script>

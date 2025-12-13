@@ -105,22 +105,25 @@ type ZMQBlockTip struct {
 	Difficulty float64
 }
 
+const jobFeedErrorHistorySize = 3
+
 type JobManager struct {
-	rpc            *RPCClient
-	cfg            Config
-	mu             sync.RWMutex
-	curJob         *Job
-	payoutScript   []byte
-	extraID        uint32
-	subs           map[chan *Job]struct{}
-	subsMu         sync.Mutex
-	zmqHealthy     atomic.Bool
-	zmqDisconnects uint64
-	zmqReconnects  uint64
-	lastErrMu      sync.RWMutex
-	lastErr        error
-	lastErrAt      time.Time
-	lastJobSuccess time.Time
+	rpc               *RPCClient
+	cfg               Config
+	mu                sync.RWMutex
+	curJob            *Job
+	payoutScript      []byte
+	extraID           uint32
+	subs              map[chan *Job]struct{}
+	subsMu            sync.Mutex
+	zmqHealthy        atomic.Bool
+	zmqDisconnects    uint64
+	zmqReconnects     uint64
+	lastErrMu         sync.RWMutex
+	lastErr           error
+	lastErrAt         time.Time
+	lastJobSuccess    time.Time
+	jobFeedErrHistory []string
 	// Refresh coordination to prevent duplicate refreshes from longpoll/ZMQ
 	refreshMu          sync.Mutex
 	lastRefreshAttempt time.Time
@@ -144,6 +147,7 @@ type JobFeedStatus struct {
 	LastSuccess    time.Time
 	LastError      error
 	LastErrorAt    time.Time
+	ErrorHistory   []string
 	ZMQHealthy     bool
 	ZMQDisconnects uint64
 	ZMQReconnects  uint64
@@ -158,7 +162,22 @@ func (jm *JobManager) recordJobError(err error) {
 	jm.lastErr = err
 	jm.lastErrAt = time.Now()
 	jm.lastJobSuccess = time.Time{}
+	jm.appendJobFeedError(err.Error())
 	jm.lastErrMu.Unlock()
+}
+
+func (jm *JobManager) appendJobFeedError(msg string) {
+	if msg == "" {
+		return
+	}
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return
+	}
+	jm.jobFeedErrHistory = append(jm.jobFeedErrHistory, msg)
+	if len(jm.jobFeedErrHistory) > jobFeedErrorHistorySize {
+		jm.jobFeedErrHistory = jm.jobFeedErrHistory[len(jm.jobFeedErrHistory)-jobFeedErrorHistorySize:]
+	}
 }
 
 func (jm *JobManager) recordJobSuccess(job *Job) {
@@ -178,6 +197,7 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 	lastErr := jm.lastErr
 	lastErrAt := jm.lastErrAt
 	lastSuccess := jm.lastJobSuccess
+	errorHistory := append([]string(nil), jm.jobFeedErrHistory...)
 	jm.lastErrMu.RUnlock()
 
 	jm.mu.RLock()
@@ -193,6 +213,7 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 		LastSuccess:    lastSuccess,
 		LastError:      lastErr,
 		LastErrorAt:    lastErrAt,
+		ErrorHistory:   errorHistory,
 		ZMQHealthy:     jm.zmqHealthy.Load(),
 		ZMQDisconnects: atomic.LoadUint64(&jm.zmqDisconnects),
 		ZMQReconnects:  atomic.LoadUint64(&jm.zmqReconnects),

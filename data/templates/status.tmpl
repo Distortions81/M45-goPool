@@ -146,21 +146,12 @@
 					<thead>
 						<tr>
 							<th title="Worker name">Worker</th>
-							<th title="Estimated hashrate over a recent window">Hashrate</th>
-							<th title="Current difficulty">Difficulty</th>
-							<th title="Accepted / submitted in current window">Window acc/sub</th>
-							<th title="Accepted shares per minute">Shares/min</th>
-							<th title="Total accepted shares">Accepted</th>
-							<th title="Total rejected shares">Rejected</th>
-							<th title="Miner software (name/version)">Miner</th>
 							<th title="Ban details">Ban status</th>
-							<th title="Time the last valid share was accepted">Last share</th>
-							<th title="Last reject reason, if any">Last reject</th>
 						</tr>
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="11" class="text-sm" id="status-banned-workers-placeholder">Loading banned workers…</td>
+							<td colspan="2" class="text-sm" id="status-banned-workers-placeholder">Loading banned workers…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -501,7 +492,7 @@
 			const warning = document.getElementById('status-banned-placeholder-text');
 			if (!tbody) return;
 			if (!bannedWorkers || bannedWorkers.length === 0) {
-				tbody.innerHTML = '<tr><td colspan="11" class="text-sm">No banned workers.</td></tr>';
+				tbody.innerHTML = '<tr><td colspan="2" class="text-sm">No banned workers.</td></tr>';
 				if (warning) {
 					warning.style.display = 'none';
 				}
@@ -513,26 +504,11 @@
 			}
 			const rows = bannedWorkers.map(worker => {
 				const name = worker.display_name || worker.name || '—';
-				const wallet = shortWallet(worker.wallet_address);
-				const miner = worker.miner_name ? `<span class="mono">${worker.miner_name}</span>` :
-					(worker.miner_type ? `<span class="mono">${worker.miner_type}</span>` : '—');
-				const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
 				const banStatus = `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeAgo(worker.banned_until)}${worker.ban_reason ? `<br><span class="label">Reason</span> ${worker.ban_reason}` : ''}`;
-				const lastShare = formatTimeAgo(worker.last_share);
-				const lastReject = worker.last_reject ? `<span class="badge">${worker.last_reject}</span>` : '—';
 				return `
 					<tr>
 						<td class="mono">${name}</td>
-						<td>${formatHashrate(worker.rolling_hashrate)}</td>
-						<td>${formatDiff(worker.difficulty)}</td>
-						<td>${Math.max(0, worker.window_accepted || 0)} / ${Math.max(0, worker.window_submissions || 0)}</td>
-						<td>${shareRate}</td>
-						<td>${worker.accepted || 0}</td>
-						<td>${worker.rejected || 0}</td>
-						<td>${miner}</td>
 						<td>${banStatus}</td>
-						<td>${lastShare}</td>
-						<td>${lastReject}</td>
 					</tr>`;
 			});
 			tbody.innerHTML = rows.join('');
@@ -548,14 +524,16 @@
 				const labelText = label.textContent.trim();
 				switch (labelText) {
 					case 'Open connections':
-						valueEl.textContent = newData.active_miners || '0';
+						{
+							const total = newData.active_miners ?? 0;
+							const tls = newData.active_tls_miners ?? 0;
+							valueEl.innerHTML = `${total} <span class="text-sm" style="color:#666;">(${tls} TLS)</span>`;
+						}
 						break;
 					case 'Shares per minute':
-						if (newData.shares_per_second_short) {
-							valueEl.textContent = formatShareRate(newData.shares_per_second_short) + ' (' +
-								formatShareRate(newData.shares_per_second) + ' avg)';
-						} else {
-							valueEl.textContent = formatShareRate(newData.shares_per_second);
+						{
+							const rate = newData.shares_per_minute ?? 0;
+							valueEl.textContent = formatShareRate(rate);
 						}
 						break;
 					case 'Estimated pool hashrate':

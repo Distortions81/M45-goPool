@@ -254,6 +254,8 @@ type MinerConn struct {
 	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
 	// for this connection, derived from accepted work over time.
 	rollingHashrateValue float64
+	// isTLSConnection tracks whether this miner connected over the TLS listener.
+	isTLSConnection bool
 }
 
 type rpcCaller interface {
@@ -486,7 +488,7 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	return job.PayoutScript, ws, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
 }
 
-func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore) *MinerConn {
+func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, isTLS bool) *MinerConn {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -570,6 +572,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		subscribeDeadline: subDeadline,
 		authorizeTimeout:  cfg.AuthorizeTimeout,
 		bootstrapDone:     false,
+		isTLSConnection:   isTLS,
 	}
 }
 
@@ -1277,10 +1280,12 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	}
 
 	mc.statsMu.Lock()
-	windowStart := mc.stats.WindowStart
-	windowAccepted := mc.stats.WindowAccepted
-	windowSubmissions := mc.stats.WindowSubmissions
+	stats := mc.stats
 	mc.statsMu.Unlock()
+
+	windowStart := stats.WindowStart
+	windowAccepted := stats.WindowAccepted
+	windowSubmissions := stats.WindowSubmissions
 
 	if windowSubmissions == 0 || windowStart.IsZero() {
 		return
@@ -1330,7 +1335,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 
 	// Traditional vardiff: keep each miner near a target shares/min
 	// by scaling difficulty in proportion to the observed share rate.
-	accRate := float64(windowAccepted) / elapsed.Minutes()
+	accRate := computeWindowShareRate(stats, now)
 	target := mc.vardiff.TargetSharesPerMin
 	if target <= 0 {
 		target = 4
@@ -2434,21 +2439,21 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			)
 		}
 		debug := mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
-	acceptedForStats := false
-	mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
+		acceptedForStats := false
+		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
 
-	if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
-		mc.logBan(rejectLowDiff.String(), workerName, invalids)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
-	} else {
-		mc.writeResponse(StratumResponse{
-			ID:     req.ID,
-			Result: false,
-			Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
-		})
+		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
+			mc.logBan(rejectLowDiff.String(), workerName, invalids)
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+		} else {
+			mc.writeResponse(StratumResponse{
+				ID:     req.ID,
+				Result: false,
+				Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
+			})
+		}
+		return
 	}
-	return
-}
 
 	shareHash := hashHex
 	debug := mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)

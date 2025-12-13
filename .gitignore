@@ -10,5 +10,5 @@ data/mainnet_logs/
 data/mainnet_state/*.bin
 data/mainnet_state/*.bin.bak
 
-
 scripts/bitcoin-node
+data/best_shares.json
