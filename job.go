@@ -83,12 +83,29 @@ const (
 
 var errStaleTemplate = errors.New("stale template")
 
-// blockBufferPool reuses buffers for block assembly to reduce allocations
-// when constructing raw blocks for submitblock or tests.
+// blockBufferPool reuses buffers for raw block assembly.
 var blockBufferPool = sync.Pool{
 	New: func() interface{} {
 		return new(bytes.Buffer)
 	},
+}
+
+type JobFeedPayloadStatus struct {
+	LastRawBlockAt    time.Time
+	LastRawBlockBytes int
+	LastHashTx        string
+	LastHashTxAt      time.Time
+	LastRawTxAt       time.Time
+	LastRawTxBytes    int
+	BlockTip          ZMQBlockTip
+}
+
+type ZMQBlockTip struct {
+	Hash       string
+	Height     int64
+	Time       time.Time
+	Bits       string
+	Difficulty float64
 }
 
 type JobManager struct {
@@ -110,6 +127,8 @@ type JobManager struct {
 	// Refresh coordination to prevent duplicate refreshes from longpoll/ZMQ
 	refreshMu          sync.Mutex
 	lastRefreshAttempt time.Time
+	zmqPayload         JobFeedPayloadStatus
+	zmqPayloadMu       sync.RWMutex
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte) *JobManager {
@@ -129,6 +148,7 @@ type JobFeedStatus struct {
 	ZMQHealthy     bool
 	ZMQDisconnects uint64
 	ZMQReconnects  uint64
+	Payload        JobFeedPayloadStatus
 }
 
 func (jm *JobManager) recordJobError(err error) {
@@ -177,7 +197,44 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 		ZMQHealthy:     jm.zmqHealthy.Load(),
 		ZMQDisconnects: atomic.LoadUint64(&jm.zmqDisconnects),
 		ZMQReconnects:  atomic.LoadUint64(&jm.zmqReconnects),
+		Payload:        jm.payloadStatus(),
 	}
+}
+
+func (jm *JobManager) recordRawBlockPayload(size int) {
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.LastRawBlockAt = time.Now()
+	jm.zmqPayload.LastRawBlockBytes = size
+	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.BlockTip = tip
+	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) recordHashTx(hash string) {
+	if hash == "" {
+		return
+	}
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.LastHashTx = hash
+	jm.zmqPayload.LastHashTxAt = time.Now()
+	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) recordRawTxPayload(size int) {
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.LastRawTxAt = time.Now()
+	jm.zmqPayload.LastRawTxBytes = size
+	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
+	jm.zmqPayloadMu.RLock()
+	defer jm.zmqPayloadMu.RUnlock()
+	return jm.zmqPayload
 }
 
 func nextBackoff(cur time.Duration) time.Duration {
@@ -728,11 +785,11 @@ func (jm *JobManager) markZMQHealthy() {
 	if jm.cfg.ZMQBlockAddr == "" {
 		return
 	}
-	if !jm.zmqHealthy.Load() {
-		logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
+	if jm.zmqHealthy.Swap(true) {
+		return
 	}
+	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
-	jm.zmqHealthy.Store(true)
 }
 
 func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
@@ -828,6 +885,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 // Prefer block notifications when bitcoind is configured with -zmqpubhashblock (docs/protocols/zmq.md).
 func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
 	backoff := minBackoff
+zmqLoop:
 	for {
 		if ctx.Err() != nil {
 			return
@@ -853,14 +911,17 @@ func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
 			continue
 		}
 
-		if err := sub.SetSubscribe("hashblock"); err != nil {
-			jm.markZMQUnhealthy("subscribe", err)
-			sub.Close()
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
-				return
+		topics := []string{"hashblock", "rawblock", "hashtx", "rawtx"}
+		for _, topic := range topics {
+			if err := sub.SetSubscribe(topic); err != nil {
+				jm.markZMQUnhealthy("subscribe", err)
+				sub.Close()
+				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+					return
+				}
+				backoff = nextBackoff(backoff)
+				continue zmqLoop
 			}
-			backoff = nextBackoff(backoff)
-			continue
 		}
 
 		if err := sub.SetRcvtimeo(zmqRecvTimeout); err != nil {
@@ -911,18 +972,40 @@ func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
 				continue
 			}
 
-			blockHash := hex.EncodeToString(frames[1])
-			logger.Info("zmq block notification", "block_hash", blockHash)
-			jm.markZMQHealthy()
-			if err := jm.refreshJobCtx(ctx); err != nil {
-				logger.Error("refresh after zmq block error", "error", err)
-				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
-					return
+			topic := string(frames[0])
+			payload := frames[1]
+			switch topic {
+			case "hashblock":
+				blockHash := hex.EncodeToString(payload)
+				logger.Info("zmq block notification", "block_hash", blockHash)
+				jm.markZMQHealthy()
+				if err := jm.refreshJobCtx(ctx); err != nil {
+					logger.Error("refresh after zmq block error", "error", err)
+					if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+						return
+					}
+					backoff = nextBackoff(backoff)
+					continue
 				}
-				backoff = nextBackoff(backoff)
+				backoff = minBackoff
+			case "rawblock":
+				tip, err := parseRawBlockTip(payload)
+				if err != nil {
+					if debugLogging {
+						logger.Debug("parse raw block tip failed", "error", err)
+					}
+				} else {
+					jm.recordBlockTip(tip)
+				}
+				jm.recordRawBlockPayload(len(payload))
+			case "hashtx":
+				txHash := hex.EncodeToString(payload)
+				jm.recordHashTx(txHash)
+			case "rawtx":
+				jm.recordRawTxPayload(len(payload))
+			default:
 				continue
 			}
-			backoff = minBackoff
 		}
 	}
 }
@@ -986,6 +1069,141 @@ func difficultyFromHash(hash []byte) float64 {
 
 	f := new(big.Float).SetPrec(256).SetInt(diff1Target)
 	f.Quo(f, new(big.Float).SetInt(n))
+	val, _ := f.Float64()
+	return val
+}
+
+func parseRawBlockTip(payload []byte) (ZMQBlockTip, error) {
+	if len(payload) < 80 {
+		return ZMQBlockTip{}, fmt.Errorf("block payload too short")
+	}
+	header := payload[:80]
+	bits := binary.LittleEndian.Uint32(header[72:76])
+	tipTime := binary.LittleEndian.Uint32(header[68:72])
+	height, err := parseCoinbaseHeight(payload)
+	if err != nil {
+		return ZMQBlockTip{}, err
+	}
+	hash := blockHashFromHeader(header)
+	return ZMQBlockTip{
+		Hash:       hash,
+		Height:     height,
+		Time:       time.Unix(int64(tipTime), 0).UTC(),
+		Bits:       fmt.Sprintf("%08x", bits),
+		Difficulty: difficultyFromBits(bits),
+	}, nil
+}
+
+func parseCoinbaseHeight(block []byte) (int64, error) {
+	offset := 80
+	if offset >= len(block) {
+		return 0, fmt.Errorf("missing tx count")
+	}
+	txCount, n, err := readVarInt(block[offset:])
+	if err != nil {
+		return 0, err
+	}
+	offset += n
+	if txCount == 0 {
+		return 0, fmt.Errorf("zero tx count")
+	}
+	if len(block) < offset+4 {
+		return 0, fmt.Errorf("missing tx version")
+	}
+	offset += 4
+	inCount, n, err := readVarInt(block[offset:])
+	if err != nil {
+		return 0, err
+	}
+	offset += n
+	if inCount == 0 {
+		return 0, fmt.Errorf("zero inputs")
+	}
+	if len(block) < offset+36 {
+		return 0, fmt.Errorf("missing prevout")
+	}
+	offset += 36
+	scriptLen, n, err := readVarInt(block[offset:])
+	if err != nil {
+		return 0, err
+	}
+	offset += n
+	if len(block) < offset+int(scriptLen) {
+		return 0, fmt.Errorf("script too short")
+	}
+	script := block[offset : offset+int(scriptLen)]
+	pushData, err := extractPushData(script)
+	if err != nil {
+		return 0, err
+	}
+	return bytesToInt64(pushData), nil
+}
+
+func extractPushData(script []byte) ([]byte, error) {
+	if len(script) == 0 {
+		return nil, fmt.Errorf("empty script")
+	}
+	op := script[0]
+	switch {
+	case op <= 0x4b:
+		if len(script) < 1+int(op) {
+			return nil, fmt.Errorf("script shorter than push")
+		}
+		return script[1 : 1+int(op)], nil
+	case op == 0x4c:
+		if len(script) < 2 {
+			return nil, fmt.Errorf("script too short for OP_PUSHDATA1")
+		}
+		size := int(script[1])
+		if len(script) < 2+size {
+			return nil, fmt.Errorf("script shorter than push1")
+		}
+		return script[2 : 2+size], nil
+	case op == 0x4d:
+		if len(script) < 3 {
+			return nil, fmt.Errorf("script too short for OP_PUSHDATA2")
+		}
+		size := int(binary.LittleEndian.Uint16(script[1:3]))
+		if len(script) < 3+size {
+			return nil, fmt.Errorf("script shorter than push2")
+		}
+		return script[3 : 3+size], nil
+	case op == 0x4e:
+		if len(script) < 5 {
+			return nil, fmt.Errorf("script too short for OP_PUSHDATA4")
+		}
+		size := int(binary.LittleEndian.Uint32(script[1:5]))
+		if len(script) < 5+size {
+			return nil, fmt.Errorf("script shorter than push4")
+		}
+		return script[5 : 5+size], nil
+	default:
+		return nil, fmt.Errorf("unsupported script opcode %02x", op)
+	}
+}
+
+func bytesToInt64(b []byte) int64 {
+	var v int64
+	for i := len(b) - 1; i >= 0; i-- {
+		v = (v << 8) | int64(b[i])
+	}
+	return v
+}
+
+func blockHashFromHeader(header []byte) string {
+	hash := doubleSHA256(header)
+	return hex.EncodeToString(reverseBytes(hash))
+}
+
+func difficultyFromBits(bits uint32) float64 {
+	bitsStr := fmt.Sprintf("%08x", bits)
+	target, err := targetFromBits(bitsStr)
+	if err != nil || target.Sign() == 0 {
+		return 0
+	}
+	f := new(big.Float).SetPrec(256).SetInt(diff1Target)
+	d := new(big.Float).SetPrec(256).SetInt(target)
+	f.Quo(f, d)
 	val, _ := f.Float64()
 	return val
 }

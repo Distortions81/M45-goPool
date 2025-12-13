@@ -535,11 +535,22 @@ type StatusData struct {
 }
 
 type statusPageJobFeed struct {
-	LastError      string `json:"last_error,omitempty"`
-	LastErrorAt    string `json:"last_error_at,omitempty"`
-	ZMQHealthy     bool   `json:"zmq_healthy"`
-	ZMQDisconnects uint64 `json:"zmq_disconnects"`
-	ZMQReconnects  uint64 `json:"zmq_reconnects"`
+	LastError         string  `json:"last_error,omitempty"`
+	LastErrorAt       string  `json:"last_error_at,omitempty"`
+	ZMQHealthy        bool    `json:"zmq_healthy"`
+	ZMQDisconnects    uint64  `json:"zmq_disconnects"`
+	ZMQReconnects     uint64  `json:"zmq_reconnects"`
+	LastRawBlockAt    string  `json:"last_raw_block_at,omitempty"`
+	LastRawBlockBytes int     `json:"last_raw_block_bytes,omitempty"`
+	LastHashTx        string  `json:"last_hash_tx,omitempty"`
+	LastHashTxAt      string  `json:"last_hash_tx_at,omitempty"`
+	LastRawTxAt       string  `json:"last_raw_tx_at,omitempty"`
+	LastRawTxBytes    int     `json:"last_raw_tx_bytes,omitempty"`
+	BlockHash         string  `json:"block_hash,omitempty"`
+	BlockHeight       int64   `json:"block_height,omitempty"`
+	BlockTime         string  `json:"block_time,omitempty"`
+	BlockBits         string  `json:"block_bits,omitempty"`
+	BlockDifficulty   float64 `json:"block_difficulty,omitempty"`
 }
 
 type statusPageJSON struct {
@@ -660,13 +671,24 @@ func cloneStringSlice(src []string) []string {
 }
 
 type JobFeedView struct {
-	Ready          bool   `json:"ready"`
-	LastSuccess    string `json:"last_success"`
-	LastError      string `json:"last_error,omitempty"`
-	LastErrorAt    string `json:"last_error_at,omitempty"`
-	ZMQHealthy     bool   `json:"zmq_healthy"`
-	ZMQDisconnects uint64 `json:"zmq_disconnects"`
-	ZMQReconnects  uint64 `json:"zmq_reconnects"`
+	Ready             bool    `json:"ready"`
+	LastSuccess       string  `json:"last_success"`
+	LastError         string  `json:"last_error,omitempty"`
+	LastErrorAt       string  `json:"last_error_at,omitempty"`
+	ZMQHealthy        bool    `json:"zmq_healthy"`
+	ZMQDisconnects    uint64  `json:"zmq_disconnects"`
+	ZMQReconnects     uint64  `json:"zmq_reconnects"`
+	LastRawBlockAt    string  `json:"last_raw_block_at,omitempty"`
+	LastRawBlockBytes int     `json:"last_raw_block_bytes,omitempty"`
+	LastHashTx        string  `json:"last_hash_tx,omitempty"`
+	LastHashTxAt      string  `json:"last_hash_tx_at,omitempty"`
+	LastRawTxAt       string  `json:"last_raw_tx_at,omitempty"`
+	LastRawTxBytes    int     `json:"last_raw_tx_bytes,omitempty"`
+	BlockHash         string  `json:"block_hash,omitempty"`
+	BlockHeight       int64   `json:"block_height,omitempty"`
+	BlockTime         string  `json:"block_time,omitempty"`
+	BlockBits         string  `json:"block_bits,omitempty"`
+	BlockDifficulty   float64 `json:"block_difficulty,omitempty"`
 }
 
 type MinerTypeView struct {
@@ -1583,11 +1605,22 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 			RPCError:             full.RPCError,
 			AccountingError:      full.AccountingError,
 			JobFeed: statusPageJobFeed{
-				LastError:      full.JobFeed.LastError,
-				LastErrorAt:    full.JobFeed.LastErrorAt,
-				ZMQHealthy:     full.JobFeed.ZMQHealthy,
-				ZMQDisconnects: full.JobFeed.ZMQDisconnects,
-				ZMQReconnects:  full.JobFeed.ZMQReconnects,
+				LastError:         full.JobFeed.LastError,
+				LastErrorAt:       full.JobFeed.LastErrorAt,
+				ZMQHealthy:        full.JobFeed.ZMQHealthy,
+				ZMQDisconnects:    full.JobFeed.ZMQDisconnects,
+				ZMQReconnects:     full.JobFeed.ZMQReconnects,
+				LastRawBlockAt:    full.JobFeed.LastRawBlockAt,
+				LastRawBlockBytes: full.JobFeed.LastRawBlockBytes,
+				LastHashTx:        full.JobFeed.LastHashTx,
+				LastHashTxAt:      full.JobFeed.LastHashTxAt,
+				LastRawTxAt:       full.JobFeed.LastRawTxAt,
+				LastRawTxBytes:    full.JobFeed.LastRawTxBytes,
+				BlockHash:         full.JobFeed.BlockHash,
+				BlockHeight:       full.JobFeed.BlockHeight,
+				BlockTime:         full.JobFeed.BlockTime,
+				BlockBits:         full.JobFeed.BlockBits,
+				BlockDifficulty:   full.JobFeed.BlockDifficulty,
 			},
 			VardiffUp:        full.VardiffUp,
 			VardiffDown:      full.VardiffDown,
@@ -2243,6 +2276,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		fs := s.jobMgr.FeedStatus()
 		jobFeed.Ready = fs.Ready
 		jobFeed.ZMQHealthy = fs.ZMQHealthy
+		payload := fs.Payload
 		if !fs.LastSuccess.IsZero() {
 			jobFeed.LastSuccess = fs.LastSuccess.UTC().Format("2006-01-02 15:04:05 MST")
 		}
@@ -2254,6 +2288,40 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 		jobFeed.ZMQDisconnects = fs.ZMQDisconnects
 		jobFeed.ZMQReconnects = fs.ZMQReconnects
+		blockTip := payload.BlockTip
+		if blockTip.Hash != "" {
+			jobFeed.BlockHash = blockTip.Hash
+		}
+		if blockTip.Height > 0 {
+			jobFeed.BlockHeight = blockTip.Height
+		}
+		if !blockTip.Time.IsZero() {
+			jobFeed.BlockTime = blockTip.Time.UTC().Format("2006-01-02 15:04:05 MST")
+		}
+		if blockTip.Bits != "" {
+			jobFeed.BlockBits = blockTip.Bits
+		}
+		if blockTip.Difficulty > 0 {
+			jobFeed.BlockDifficulty = blockTip.Difficulty
+		}
+		if !payload.LastRawBlockAt.IsZero() {
+			jobFeed.LastRawBlockAt = payload.LastRawBlockAt.UTC().Format("2006-01-02 15:04:05 MST")
+		}
+		if payload.LastRawBlockBytes > 0 {
+			jobFeed.LastRawBlockBytes = payload.LastRawBlockBytes
+		}
+		if payload.LastHashTx != "" {
+			jobFeed.LastHashTx = payload.LastHashTx
+		}
+		if !payload.LastHashTxAt.IsZero() {
+			jobFeed.LastHashTxAt = payload.LastHashTxAt.UTC().Format("2006-01-02 15:04:05 MST")
+		}
+		if !payload.LastRawTxAt.IsZero() {
+			jobFeed.LastRawTxAt = payload.LastRawTxAt.UTC().Format("2006-01-02 15:04:05 MST")
+		}
+		if payload.LastRawTxBytes > 0 {
+			jobFeed.LastRawTxBytes = payload.LastRawTxBytes
+		}
 	}
 
 	brandName := strings.TrimSpace(s.cfg.StatusBrandName)

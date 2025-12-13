@@ -1,9 +1,7 @@
-# Generated base config example (copy to a real config and edit as needed)
-
 
 [branding]
   discord_url = ""
-  donation_address = ""
+  donation_address = "OPTIONAL_DONATION_WALLET_ADDRESS"
   fiat_currency = "usd"
   status_brand_domain = ""
   status_brand_name = ""
@@ -11,7 +9,7 @@
 
 [mining]
   coinbase_message = "goPool"
-  coinbase_pool_tag = "yzCE"
+  coinbase_pool_tag = "BISB"
   coinbase_scriptsig_max_bytes = 100
   coinbase_suffix_bytes = 4
   extranonce2_size = 4
@@ -20,7 +18,7 @@
 
 [node]
   data_dir = "data"
-  payout_address = ""
+  payout_address = "YOUR_POOL_WALLET_ADDRESS_HERE"
   rpc_url = "http://127.0.0.1:8332"
   zmq_block_addr = "tcp://127.0.0.1:28332"
 

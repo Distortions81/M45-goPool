@@ -423,7 +423,6 @@ func loadConfig(configPath, secretsPath string) Config {
 	}
 
 	var configFileExisted bool
-	var exampleDir string
 	if bc, ok, err := loadBaseConfigFile(configPath); err != nil {
 		fatal("config file", err, "path", configPath)
 	} else if ok {
@@ -434,11 +433,10 @@ func loadConfig(configPath, secretsPath string) Config {
 		if err := rewriteConfigFile(configPath, cfg); err != nil {
 			fatal("write default config", err, "path", configPath)
 		}
-		exampleDir = filepath.Join(cfg.DataDir, "state")
-		logger.Info("created default config file; edit it or copy the example", "path", configPath, "example", filepath.Join(exampleDir, "config.toml.example"))
-	}
-	if exampleDir == "" {
-		exampleDir = filepath.Join(cfg.DataDir, "state")
+		examplePath := filepath.Join(filepath.Dir(configPath), "config.toml.example")
+		logger.Info("created default config file; edit it or copy the example",
+			"path", configPath,
+			"example", examplePath)
 	}
 	ensureExampleFiles(cfg.DataDir)
 
@@ -465,6 +463,8 @@ func loadConfig(configPath, secretsPath string) Config {
 			secretsPath = filepath.Join(cfg.DataDir, "secrets.toml")
 		}
 	}
+	secretsExamplePath := filepath.Join(filepath.Dir(secretsPath), "secrets.toml.example")
+	ensureExampleFile(secretsExamplePath, secretsConfigExample)
 	if sc, ok, err := loadSecretsFile(secretsPath); err != nil {
 		fatal("secrets file", err, "path", secretsPath)
 	} else if ok {
@@ -472,7 +472,7 @@ func loadConfig(configPath, secretsPath string) Config {
 	} else {
 		logger.Info("secrets file missing; copy secrets.toml.example and provide RPC credentials",
 			"path", secretsPath,
-			"example", filepath.Join(cfg.DataDir, "state", "secrets.toml.example"))
+			"example", secretsExamplePath)
 	}
 
 	// Optional advanced/tuning overlay: if data_dir/state/tuning.toml (or the
@@ -550,9 +550,7 @@ func ensureExampleFiles(dataDir string) {
 		logger.Warn("create state directory for example configs failed", "dir", stateDir, "error", err)
 		return
 	}
-	ensureExampleFile(filepath.Join(stateDir, "config.toml.example"), exampleBaseConfigBytes())
 	ensureExampleFile(filepath.Join(stateDir, "tuning.toml.example"), exampleTuningConfigBytes())
-	ensureExampleFile(filepath.Join(stateDir, "secrets.toml.example"), secretsConfigExample)
 }
 
 func ensureExampleFile(path string, contents []byte) {
