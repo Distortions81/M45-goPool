@@ -266,6 +266,7 @@ func main() {
 	testnetFlag := flag.Bool("testnet", false, "force testnet defaults for RPC/ZMQ ports")
 	signetFlag := flag.Bool("signet", false, "force signet defaults for RPC/ZMQ ports")
 	regtestFlag := flag.Bool("regtest", false, "force regtest defaults for RPC/ZMQ ports")
+	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW)")
 	sha256NoAVXFlag := flag.Bool("sha256-no-avx", false, "disable the AVX-accelerated sha256-simd backend and fall back to crypto/sha256")
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config file with effective settings on startup")
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
@@ -430,6 +431,12 @@ func main() {
 		if *mainnetFlag || *testnetFlag || *signetFlag || *regtestFlag {
 			cfg.ZMQBlockAddr = "tcp://127.0.0.1:28332"
 		}
+	}
+
+	if *noZMQFlag {
+		cfg.ZMQBlockAddr = ""
+	} else if cfg.ZMQBlockAddr == "" {
+		fatal("config", fmt.Errorf("missing zmq_block_addr; set it in config.toml or use -no-zmq to disable ZMQ"))
 	}
 
 	// Select btcd network params for local address validation based on the
@@ -760,10 +767,6 @@ func main() {
 		fatal("payout address", err)
 	}
 	payoutScript = script
-	// Before we accept any workers, perform a one-shot RPC sanity check on
-	// the pool payout address so we only run with a node that agrees the
-	// address is valid for the selected network.
-	sanityCheckPoolAddressRPC(ctx, rpcClient, cfg.PayoutAddress)
 	// Once the node is reachable, derive a network-appropriate version mask
 	// from bitcoind instead of relying on a manual version_mask setting.
 	autoConfigureVersionMaskFromNode(ctx, rpcClient, &cfg)
@@ -1003,34 +1006,3 @@ func initErrorLogOutput(cfg Config, networkLabel string) (string, error) {
 // boot-time sanity check: if the call fails or the node reports the address
 // as invalid, the pool exits with a clear error instead of retrying. A short
 // timeout is used so startup is not blocked indefinitely on RPC issues.
-func sanityCheckPoolAddressRPC(ctx context.Context, rpcClient *RPCClient, addr string) {
-	if rpcClient == nil || strings.TrimSpace(addr) == "" {
-		return
-	}
-	// Detect obviously unconfigured BTC node RPC credentials that are still
-	// using the compiled-in placeholders. In this case we fail fast with a
-	// clearer operator-facing error instead of attempting RPC calls that are
-	// guaranteed to fail.
-	if strings.TrimSpace(rpcClient.url) == "http://127.0.0.1:8332" &&
-		strings.TrimSpace(rpcClient.user) == "bitcoinrpc" &&
-		strings.TrimSpace(rpcClient.pass) == "password" {
-		fatal("config", fmt.Errorf("there isn't btc node login/pass/ip data configured; please set rpc_url, rpc_user, and rpc_pass in config.toml or secrets.toml"))
-	}
-
-	parent := ctx
-	if parent == nil {
-		parent = context.Background()
-	}
-	callCtx, cancel := context.WithTimeout(parent, 5*time.Second)
-	defer cancel()
-
-	var res struct {
-		IsValid bool `json:"isvalid"`
-	}
-	if err := rpcClient.callCtx(callCtx, "validateaddress", []interface{}{addr}, &res); err != nil {
-		fatal("pool payout RPC sanity check", fmt.Errorf("validateaddress call failed for %s: %w", addr, err))
-	}
-	if !res.IsValid {
-		fatal("pool payout RPC sanity check", fmt.Errorf("node reports payout address invalid: %s", addr))
-	}
-}

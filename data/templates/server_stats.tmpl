@@ -31,6 +31,26 @@
 					<div class="mono" id="server-zmq-status">--</div>
 					<div class="text-sm" id="server-zmq-counts">disconnects: --, reconnects: --</div>
 				</div>
+				<div>
+					<div class="label">ZMQ raw block (time/bytes)</div>
+					<div class="mono" id="server-zmq-rawblock">--</div>
+				</div>
+				<div>
+					<div class="label">ZMQ last hash tx</div>
+					<div class="mono" id="server-zmq-hashtx">--</div>
+				</div>
+				<div>
+					<div class="label">ZMQ raw tx (time/bytes)</div>
+					<div class="mono" id="server-zmq-rawtx">--</div>
+				</div>
+				<div>
+					<div class="label">ZMQ block tip</div>
+					<div class="mono" id="server-zmq-block-tip">--</div>
+				</div>
+				<div>
+					<div class="label">ZMQ block difficulty</div>
+					<div class="mono" id="server-zmq-block-diff">--</div>
+				</div>
 			</div>
 		</div>
 
@@ -113,6 +133,11 @@
 		const jobFeedEl = document.getElementById('server-job-feed-error');
 		const zmqStatusEl = document.getElementById('server-zmq-status');
 		const zmqCountsEl = document.getElementById('server-zmq-counts');
+		const zmqRawBlockEl = document.getElementById('server-zmq-rawblock');
+		const zmqHashTxEl = document.getElementById('server-zmq-hashtx');
+		const zmqRawTxEl = document.getElementById('server-zmq-rawtx');
+		const zmqBlockTipEl = document.getElementById('server-zmq-block-tip');
+		const zmqBlockDiffEl = document.getElementById('server-zmq-block-diff');
 		const blockSubEl = document.getElementById('server-block-submissions');
 		const rpcGBTEl = document.getElementById('server-rpc-gbt');
 		const rpcSubmitEl = document.getElementById('server-rpc-submit');
@@ -189,6 +214,36 @@
 				const disconnects = data.job_feed?.zmq_disconnects ?? 0;
 				const reconnects = data.job_feed?.zmq_reconnects ?? 0;
 				zmqCountsEl.textContent = `disconnects: ${disconnects}, reconnects: ${reconnects}`;
+			}
+			if (zmqRawBlockEl) {
+				const rawBlockAt = data.job_feed?.last_raw_block_at || '--';
+				const rawBlockBytes = data.job_feed?.last_raw_block_bytes;
+				zmqRawBlockEl.textContent = rawBlockBytes ? `${rawBlockAt} (${rawBlockBytes} B)` : rawBlockAt;
+			}
+			if (zmqHashTxEl) {
+				const hashTx = data.job_feed?.last_hash_tx || '--';
+				const hashTxAt = data.job_feed?.last_hash_tx_at || '--';
+				zmqHashTxEl.textContent = `${hashTx} @ ${hashTxAt}`;
+			}
+			if (zmqRawTxEl) {
+				const rawTxAt = data.job_feed?.last_raw_tx_at || '--';
+				const rawTxBytes = data.job_feed?.last_raw_tx_bytes;
+				zmqRawTxEl.textContent = rawTxBytes ? `${rawTxAt} (${rawTxBytes} B)` : rawTxAt;
+			}
+			if (zmqBlockTipEl) {
+				const height = data.job_feed?.block_height ?? '--';
+				const tipTime = data.job_feed?.block_time || '--';
+				const hash = data.job_feed?.block_hash || '--';
+				zmqBlockTipEl.textContent = `${height} @ ${tipTime} (${hash})`;
+			}
+			if (zmqBlockDiffEl) {
+				const bits = data.job_feed?.block_bits || '--';
+				const diff = Number(data.job_feed?.block_difficulty);
+				if (Number.isFinite(diff) && diff > 0) {
+					zmqBlockDiffEl.textContent = `${diff.toFixed(2)} diff (bits ${bits})`;
+				} else {
+					zmqBlockDiffEl.textContent = `bits ${bits}`;
+				}
 			}
 			if (blockSubEl) {
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
