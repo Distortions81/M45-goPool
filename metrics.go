@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
+	"github.com/bytedance/sonic"
 )
 
 const defaultBestShareLimit = 12
@@ -70,7 +70,7 @@ func (m *PoolMetrics) loadBestSharesFile(path string) error {
 		return err
 	}
 	var shares []BestShare
-	if err := json.Unmarshal(data, &shares); err != nil {
+	if err := sonic.Unmarshal(data, &shares); err != nil {
 		return err
 	}
 	m.bestSharesMu.Lock()
@@ -319,7 +319,7 @@ func (m *PoolMetrics) persistBestShares(shares []BestShare) {
 	if m == nil || len(shares) == 0 || m.bestSharesFile == "" {
 		return
 	}
-	data, err := json.MarshalIndent(shares, "", "  ")
+	data, err := sonic.ConfigDefault.MarshalIndent(shares, "", "  ")
 	if err != nil {
 		logger.Warn("marshal best shares", "error", err)
 		return

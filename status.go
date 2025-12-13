@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	stdjson "encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
+	"github.com/bytedance/sonic"
 )
 
 // Shared display-shortening settings so worker IDs, hashes, and config
@@ -1069,7 +1070,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 // handleRPCResult is registered as an RPCClient result hook to opportunistically
 // warm cached node info based on normal RPC traffic. It never changes how
 // callers use the RPC client; it only updates StatusServer's own cache.
-func (s *StatusServer) handleRPCResult(method string, params interface{}, raw json.RawMessage) {
+func (s *StatusServer) handleRPCResult(method string, params interface{}, raw stdjson.RawMessage) {
 	if s == nil {
 		return
 	}
@@ -1084,7 +1085,7 @@ func (s *StatusServer) handleRPCResult(method string, params interface{}, raw js
 			Pruned               bool    `json:"pruned"`
 			SizeOnDisk           float64 `json:"size_on_disk"`
 		}
-		if err := json.Unmarshal(raw, &bc); err != nil {
+		if err := sonic.Unmarshal(raw, &bc); err != nil {
 			return
 		}
 		s.nodeInfoMu.Lock()
@@ -1122,7 +1123,7 @@ func (s *StatusServer) handleRPCResult(method string, params interface{}, raw js
 			ConnectionsIn  int    `json:"connections_in"`
 			ConnectionsOut int    `json:"connections_out"`
 		}
-		if err := json.Unmarshal(raw, &netInfo); err != nil {
+		if err := sonic.Unmarshal(raw, &netInfo); err != nil {
 			return
 		}
 		s.nodeInfoMu.Lock()
@@ -1149,7 +1150,7 @@ func (s *StatusServer) handleRPCResult(method string, params interface{}, raw js
 			return
 		}
 		var genesis string
-		if err := json.Unmarshal(raw, &genesis); err != nil {
+		if err := sonic.Unmarshal(raw, &genesis); err != nil {
 			return
 		}
 		genesis = strings.TrimSpace(genesis)
@@ -1163,7 +1164,7 @@ func (s *StatusServer) handleRPCResult(method string, params interface{}, raw js
 		s.nodeInfoMu.Unlock()
 	case "getbestblockhash":
 		var best string
-		if err := json.Unmarshal(raw, &best); err != nil {
+		if err := sonic.Unmarshal(raw, &best); err != nil {
 			return
 		}
 		best = strings.TrimSpace(best)
@@ -1389,7 +1390,7 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			WorkerDatabase:       full.WorkerDatabase,
 			Warnings:             full.Warnings,
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -1425,7 +1426,7 @@ func (s *StatusServer) handleNodeStatsJSON(w http.ResponseWriter, r *http.Reques
 			RPCSubmitCount:           full.RPCSubmitCount,
 			RPCErrors:                full.RPCErrors,
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -1574,7 +1575,7 @@ func (s *StatusServer) handleWorkersListJSON(w http.ResponseWriter, r *http.Requ
 			Total:         total,
 			PerPage:       perPage,
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -1594,7 +1595,7 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 		if len(blocks) > limit {
 			blocks = blocks[:limit]
 		}
-		return json.Marshal(blocks)
+		return sonic.Marshal(blocks)
 	})
 }
 
@@ -1652,7 +1653,7 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 			RPCErrors:        full.RPCErrors,
 			ShareErrors:      full.ShareErrors,
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -1677,7 +1678,7 @@ func (s *StatusServer) handleDiagnosticsJSON(w http.ResponseWriter, r *http.Requ
 			ShareErrors:         full.ShareErrors,
 			AccountingError:     full.AccountingError,
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -1693,7 +1694,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			PoolHashrate: s.computePoolHashrate(),
 			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
 		}
-		return json.Marshal(data)
+		return sonic.Marshal(data)
 	})
 }
 
@@ -2798,7 +2799,7 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 			continue
 		}
 		var r foundRecord
-		if err := json.Unmarshal(line, &r); err != nil {
+		if err := sonic.Unmarshal(line, &r); err != nil {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(r.Hash), "dummyhash") {

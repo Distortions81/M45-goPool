@@ -1,12 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bytedance/sonic"
 )
 
 // priceCacheTTL controls how often we refresh fiat prices from CoinGecko.
@@ -70,8 +72,14 @@ func (p *PriceService) BTCPrice(fiat string) (float64, error) {
 		return 0, p.lastErr
 	}
 
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		p.lastErr = err
+		return 0, err
+	}
+
 	var body map[string]map[string]float64
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := sonic.Unmarshal(data, &body); err != nil {
 		p.lastErr = err
 		return 0, err
 	}
