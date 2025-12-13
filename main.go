@@ -534,6 +534,7 @@ func main() {
 	}
 
 	metrics := NewPoolMetrics()
+	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "best_shares.json"))
 	startTime := time.Now()
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
@@ -884,7 +885,7 @@ func main() {
 				_ = conn.Close()
 				continue
 			}
-			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting)
+			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, label == "tls")
 			registry.Add(mc)
 
 			connWg.Add(1)
