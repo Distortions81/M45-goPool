@@ -84,6 +84,10 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 	m.mu.Lock()
 	switch method {
 	case "getblocktemplate":
+		if longPoll {
+			m.mu.Unlock()
+			return
+		}
 		m.rpcGBTLast = seconds
 		if seconds > m.rpcGBTMax {
 			m.rpcGBTMax = seconds
