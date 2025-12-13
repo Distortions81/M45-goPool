@@ -77,6 +77,7 @@ const (
 	minBackoff              = 1 * time.Second
 	maxBackoff              = 1 * time.Minute
 	zmqRecvTimeout          = 15 * time.Second
+	zmqFallbackDelay        = 5 * time.Second
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
 )
@@ -129,6 +130,8 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
+	zmqStateMu         sync.RWMutex
+	lastZMQUnhealthy   time.Time
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte) *JobManager {
@@ -790,6 +793,9 @@ func (jm *JobManager) markZMQHealthy() {
 	}
 	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
+	jm.zmqStateMu.Lock()
+	jm.lastZMQUnhealthy = time.Time{}
+	jm.zmqStateMu.Unlock()
 }
 
 func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
@@ -804,10 +810,29 @@ func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
 	if jm.zmqHealthy.Swap(false) {
 		args := append([]interface{}{"zmq watcher unhealthy; enabling longpoll fallback"}, fields...)
 		logger.Warn(args...)
+		jm.zmqStateMu.Lock()
+		jm.lastZMQUnhealthy = time.Now()
+		jm.zmqStateMu.Unlock()
 	} else if err != nil {
 		args := append([]interface{}{"zmq watcher error"}, fields...)
 		logger.Error(args...)
 	}
+}
+
+func (jm *JobManager) shouldUseLongpollFallback() bool {
+	if jm.cfg.ZMQBlockAddr == "" {
+		return true
+	}
+	if jm.zmqHealthy.Load() {
+		return false
+	}
+	jm.zmqStateMu.RLock()
+	lastUnhealthy := jm.lastZMQUnhealthy
+	jm.zmqStateMu.RUnlock()
+	if lastUnhealthy.IsZero() {
+		return true
+	}
+	return time.Since(lastUnhealthy) >= zmqFallbackDelay
 }
 
 func (jm *JobManager) longpollLoop(ctx context.Context) {
@@ -816,13 +841,6 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if jm.cfg.ZMQBlockAddr != "" && jm.zmqHealthy.Load() {
-			if err := sleepContext(ctx, time.Second); err != nil {
-				return
-			}
-			continue
-		}
-
 		job := jm.CurrentJob()
 		if job == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
@@ -861,6 +879,10 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 				return
 			}
 			backoff = nextBackoff(backoff)
+			continue
+		}
+		if !jm.shouldUseLongpollFallback() {
+			backoff = minBackoff
 			continue
 		}
 
