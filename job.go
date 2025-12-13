@@ -74,10 +74,6 @@ type Job struct {
 }
 
 const (
-	minBackoff              = 1 * time.Second
-	maxBackoff              = 1 * time.Minute
-	zmqRecvTimeout          = 15 * time.Second
-	zmqFallbackDelay        = 5 * time.Second
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
 )
@@ -242,11 +238,11 @@ func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
 
 func nextBackoff(cur time.Duration) time.Duration {
 	if cur <= 0 {
-		return minBackoff
+		return defaultLongpollMinBackoff
 	}
 	cur *= 2
-	if cur > maxBackoff {
-		return maxBackoff
+	if cur > defaultLongpollMaxBackoff {
+		return defaultLongpollMaxBackoff
 	}
 	return cur
 }
@@ -832,11 +828,11 @@ func (jm *JobManager) shouldUseLongpollFallback() bool {
 	if lastUnhealthy.IsZero() {
 		return true
 	}
-	return time.Since(lastUnhealthy) >= zmqFallbackDelay
+	return time.Since(lastUnhealthy) >= defaultZMQFallbackDelay
 }
 
 func (jm *JobManager) longpollLoop(ctx context.Context) {
-	backoff := minBackoff
+	backoff := defaultLongpollMinBackoff
 	for {
 		if ctx.Err() != nil {
 			return
@@ -851,7 +847,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 				backoff = nextBackoff(backoff)
 				continue
 			}
-			backoff = minBackoff
+			backoff = defaultLongpollMinBackoff
 			continue
 		}
 
@@ -882,7 +878,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			continue
 		}
 		if !jm.shouldUseLongpollFallback() {
-			backoff = minBackoff
+			backoff = defaultLongpollMinBackoff
 			continue
 		}
 
@@ -900,13 +896,13 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			continue
 		}
 
-		backoff = minBackoff
+		backoff = defaultLongpollMinBackoff
 	}
 }
 
 // Prefer block notifications when bitcoind is configured with -zmqpubhashblock (docs/protocols/zmq.md).
 func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
-	backoff := minBackoff
+	backoff := defaultLongpollMinBackoff
 zmqLoop:
 	for {
 		if ctx.Err() != nil {
@@ -946,7 +942,7 @@ zmqLoop:
 			}
 		}
 
-		if err := sub.SetRcvtimeo(zmqRecvTimeout); err != nil {
+		if err := sub.SetRcvtimeo(defaultZMQReceiveTimeout); err != nil {
 			jm.markZMQUnhealthy("set_rcvtimeo", err)
 			sub.Close()
 			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
@@ -968,7 +964,7 @@ zmqLoop:
 
 		jm.markZMQHealthy()
 		logger.Info("watching ZMQ block notifications", "addr", jm.cfg.ZMQBlockAddr)
-		backoff = minBackoff
+		backoff = defaultLongpollMinBackoff
 
 		for {
 			if ctx.Err() != nil {
@@ -1009,7 +1005,7 @@ zmqLoop:
 					backoff = nextBackoff(backoff)
 					continue
 				}
-				backoff = minBackoff
+				backoff = defaultLongpollMinBackoff
 			case "rawblock":
 				tip, err := parseRawBlockTip(payload)
 				if err != nil {

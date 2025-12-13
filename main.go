@@ -26,10 +26,6 @@ import (
 // for branding, coinbase messages, and certificates.
 const poolSoftwareName = "goPool"
 
-// refreshInterval controls how often the UI and status JSON should refresh.
-// This is used as the universal refresh cadence across the pool.
-const refreshInterval = 30 * time.Second
-
 // duplicateShareHistory controls how many recent submissions per job are
 // tracked for duplicate-share detection. It is implemented as a fixed-size
 // ring so memory usage is bounded and independent of share rate.

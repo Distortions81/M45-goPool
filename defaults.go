@@ -47,6 +47,11 @@ const (
 	defaultMaxDifficulty                     = 16000
 	defaultMinDifficulty                     = 512
 	defaultMinVersionBits                    = 1
+	defaultRefreshInterval                   = 10 * time.Second
+	defaultZMQReceiveTimeout                 = 15 * time.Second
+	defaultZMQFallbackDelay                  = 5 * time.Second
+	defaultLongpollMinBackoff                = 1 * time.Second
+	defaultLongpollMaxBackoff                = 1 * time.Minute
 )
 
 // defaultConfig returns a Config populated with built-in defaults that act

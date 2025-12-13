@@ -52,7 +52,7 @@ const (
 
 const hashPerShare = float64(1 << 32)
 
-const overviewRefreshInterval = refreshInterval
+const overviewRefreshInterval = defaultRefreshInterval
 const poolHashrateTTL = 5 * time.Second
 
 // apiVersion is a short, human-readable version identifier included in all
