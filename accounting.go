@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultDataDir = "data"
-	banFileName    = "bans.bin"
+	banFileName    = "bans.json"
 )
 
 // WorkerView is the subset of worker data that is exposed to the status UI.
@@ -260,12 +260,13 @@ func (d *ShareDebug) DecodeCoinbaseFields() {
 
 // BestShare tracks one of the best shares seen so far.
 type BestShare struct {
-	Worker        string    `json:"worker"`
-	DisplayWorker string    `json:"display_worker"`
-	Difficulty    float64   `json:"difficulty"`
-	Timestamp     time.Time `json:"timestamp"`
-	Hash          string    `json:"hash,omitempty"`
-	DisplayHash   string    `json:"display_hash,omitempty"`
+	Worker     string    `json:"worker"`
+	Difficulty float64   `json:"difficulty"`
+	Timestamp  time.Time `json:"timestamp"`
+	Hash       string    `json:"hash,omitempty"`
+	// Display fields are computed for UI presentation and not persisted to disk.
+	DisplayWorker string `json:"display_worker,omitempty"`
+	DisplayHash   string `json:"display_hash,omitempty"`
 }
 
 type AccountStore struct {

@@ -12,7 +12,7 @@ import (
 // permanent and still-active entries.
 func TestBanListPersistPrunesExpired(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bans.bin")
+	path := filepath.Join(dir, "bans.json")
 
 	now := time.Now()
 	expiredTime := now.Add(-time.Hour)

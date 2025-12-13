@@ -53,7 +53,7 @@ func FuzzBanListRoundTrip(f *testing.F) {
 			return
 		}
 		dir := t.TempDir()
-		path := filepath.Join(dir, "bans.bin")
+		path := filepath.Join(dir, "bans.json")
 
 		bl, err := newBanList(path)
 		if err != nil {
