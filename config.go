@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/bits"
@@ -12,7 +11,13 @@ import (
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
+	"github.com/pelletier/go-toml"
 )
+
+var secretsConfigExample = []byte(`# RPC credentials for bitcoind
+rpc_user = "bitcoinrpc"
+rpc_pass = "password"
+`)
 
 type Config struct {
 	ListenAddr        string // e.g. ":3333"
@@ -39,7 +44,7 @@ type Config struct {
 	RPCPass          string
 	PayoutAddress    string
 	// PayoutScript is reserved for future internal overrides and is not
-	// populated from or written to config.json.
+	// populated from or written to config.toml.
 	PayoutScript              string
 	PoolFeePercent            float64
 	Extranonce2Size           int
@@ -198,72 +203,216 @@ type EffectiveConfig struct {
 	ReconnectBanDurationSeconds       int     `json:"reconnect_ban_duration_seconds,omitempty"`
 }
 
-type fileConfig struct {
-	PoolListen        string `json:"pool_listen"`
-	StatusListen      string `json:"status_listen"`
-	StatusTLSListen   string `json:"status_tls_listen"`
-	StatusBrandName   string `json:"status_brand_name"`
-	StatusBrandDomain string `json:"status_brand_domain"`
-	StatusTagline     string `json:"status_tagline"`
-	FiatCurrency      string `json:"fiat_currency"`
-	DonationAddress   string `json:"donation_address"`
-	DiscordURL        string `json:"discord_url"`
-	StratumTLSListen  string `json:"stratum_tls_listen"`
-	RPCURL            string `json:"rpc_url"`
-	// RPC credentials are loaded exclusively from secrets.json and are
-	// never read from or written to config.json.
-	RPCUser                           string   `json:"-"`
-	RPCPass                           string   `json:"-"`
-	PayoutAddress                     string   `json:"payout_address"`
-	PoolFeePercent                    *float64 `json:"pool_fee_percent"`
-	Extranonce2Size                   *int     `json:"extranonce2_size"`
-	TemplateExtraNonce2Size           *int     `json:"template_extranonce2_size"`
-	CoinbaseSuffixBytes               *int     `json:"coinbase_suffix_bytes"`
-	CoinbasePoolTag                   *string  `json:"coinbase_pool_tag"`
-	CoinbaseScriptSigMaxBytes         *int     `json:"coinbase_scriptsig_max_bytes"`
-	CoinbaseMsg                       string   `json:"coinbase_message"`
-	ZMQBlockAddr                      string   `json:"zmq_block_addr"`
-	DataDir                           string   `json:"data_dir"`
-	ShareLogBufferBytes               *int     `json:"share_log_buffer_bytes"`
-	FsyncShareLog                     *bool    `json:"fsync_share_log"`
-	ShareLogReplayBytes               *int64   `json:"share_log_replay_bytes"`
-	MaxConns                          *int     `json:"max_conns"`
-	MaxAcceptsPerSecond               *int     `json:"max_accepts_per_second"`
-	MaxAcceptBurst                    *int     `json:"max_accept_burst"`
-	AutoAcceptRateLimits              *bool    `json:"auto_accept_rate_limits"`
-	AcceptReconnectWindow             *int     `json:"accept_reconnect_window"`
-	AcceptBurstWindow                 *int     `json:"accept_burst_window"`
-	AcceptSteadyStateWindow           *int     `json:"accept_steady_state_window"`
-	AcceptSteadyStateRate             *int     `json:"accept_steady_state_rate"`
-	AcceptSteadyStateReconnectPercent *float64 `json:"accept_steady_state_reconnect_percent"`
-	AcceptSteadyStateReconnectWindow  *int     `json:"accept_steady_state_reconnect_window"`
-	MaxRecentJobs                     *int     `json:"max_recent_jobs"`
-	SubscribeTimeoutSec               *int     `json:"subscribe_timeout_seconds"`
-	AuthorizeTimeoutSec               *int     `json:"authorize_timeout_seconds"`
-	StratumReadTimeoutSec             *int     `json:"stratum_read_timeout_seconds"`
-	MinVersionBits                    *int     `json:"min_version_bits"`
-	MaxDifficulty                     *float64 `json:"max_difficulty"`
-	MinDifficulty                     *float64 `json:"min_difficulty"`
-	LockSuggestedDifficulty           *bool    `json:"lock_suggested_difficulty"`
-	HashrateEMATauSeconds             *float64 `json:"hashrate_ema_tau_seconds"`
-	NTimeForwardSlackSec              *int     `json:"ntime_forward_slack_seconds"`
-	BanInvalidSubmissionsAfter        *int     `json:"ban_invalid_submissions_after"`
-	BanInvalidSubmissionsWindowSec    *int     `json:"ban_invalid_submissions_window_seconds"`
-	BanInvalidSubmissionsDurationSec  *int     `json:"ban_invalid_submissions_duration_seconds"`
-	ReconnectBanThreshold             *int     `json:"reconnect_ban_threshold"`
-	ReconnectBanWindowSeconds         *int     `json:"reconnect_ban_window_seconds"`
-	ReconnectBanDurationSeconds       *int     `json:"reconnect_ban_duration_seconds"`
+type serverConfig struct {
+	PoolListen      string `toml:"pool_listen"`
+	StatusListen    string `toml:"status_listen"`
+	StatusTLSListen string `toml:"status_tls_listen"`
+}
+
+type brandingConfig struct {
+	StatusBrandName   string `toml:"status_brand_name"`
+	StatusBrandDomain string `toml:"status_brand_domain"`
+	StatusTagline     string `toml:"status_tagline"`
+	FiatCurrency      string `toml:"fiat_currency"`
+	DonationAddress   string `toml:"donation_address"`
+	DiscordURL        string `toml:"discord_url"`
+}
+
+type stratumConfig struct {
+	StratumTLSListen string `toml:"stratum_tls_listen"`
+}
+
+type nodeConfig struct {
+	RPCURL        string `toml:"rpc_url"`
+	PayoutAddress string `toml:"payout_address"`
+	DataDir       string `toml:"data_dir"`
+	ZMQBlockAddr  string `toml:"zmq_block_addr"`
+}
+
+type miningConfig struct {
+	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
+	Extranonce2Size           *int     `toml:"extranonce2_size"`
+	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
+	CoinbaseSuffixBytes       *int     `toml:"coinbase_suffix_bytes"`
+	CoinbasePoolTag           *string  `toml:"coinbase_pool_tag"`
+	CoinbaseMsg               string   `toml:"coinbase_message"`
+	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
+}
+
+type baseFileConfig struct {
+	Server   serverConfig   `toml:"server"`
+	Branding brandingConfig `toml:"branding"`
+	Stratum  stratumConfig  `toml:"stratum"`
+	Node     nodeConfig     `toml:"node"`
+	Mining   miningConfig   `toml:"mining"`
+}
+
+func float64Ptr(v float64) *float64 { return &v }
+func intPtr(v int) *int             { return &v }
+func stringPtr(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+func boolPtr(v bool) *bool {
+	return &v
+}
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+type loggingTuning struct {
+	ShareLogBufferBytes *int   `toml:"share_log_buffer_bytes"`
+	FsyncShareLog       *bool  `toml:"fsync_share_log"`
+	ShareLogReplayBytes *int64 `toml:"share_log_replay_bytes"`
+}
+
+type rateLimitTuning struct {
+	MaxConns                          *int     `toml:"max_conns"`
+	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
+	MaxAcceptBurst                    *int     `toml:"max_accept_burst"`
+	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits"`
+	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window"`
+	AcceptBurstWindow                 *int     `toml:"accept_burst_window"`
+	AcceptSteadyStateWindow           *int     `toml:"accept_steady_state_window"`
+	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate"`
+	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent"`
+	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window"`
+}
+
+type timeoutTuning struct {
+	SubscribeTimeoutSec   *int `toml:"subscribe_timeout_seconds"`
+	AuthorizeTimeoutSec   *int `toml:"authorize_timeout_seconds"`
+	StratumReadTimeoutSec *int `toml:"stratum_read_timeout_seconds"`
+}
+
+type difficultyTuning struct {
+	MaxDifficulty           *float64 `toml:"max_difficulty"`
+	MinDifficulty           *float64 `toml:"min_difficulty"`
+	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty"`
+}
+
+type hashrateTuning struct {
+	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
+	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
+}
+
+type banTuning struct {
+	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
+	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
+	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds"`
+	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold"`
+	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds"`
+	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds"`
+}
+
+type versionTuning struct {
+	MinVersionBits *int `toml:"min_version_bits"`
+}
+
+type tuningFileConfig struct {
+	Logging    loggingTuning    `toml:"logging"`
+	RateLimits rateLimitTuning  `toml:"rate_limits"`
+	Timeouts   timeoutTuning    `toml:"timeouts"`
+	Difficulty difficultyTuning `toml:"difficulty"`
+	Hashrate   hashrateTuning   `toml:"hashrate"`
+	Bans       banTuning        `toml:"bans"`
+	Version    versionTuning    `toml:"version"`
+}
+
+func buildBaseFileConfig(cfg Config) baseFileConfig {
+	return baseFileConfig{
+		Server: serverConfig{
+			PoolListen:      cfg.ListenAddr,
+			StatusListen:    cfg.StatusAddr,
+			StatusTLSListen: cfg.StatusTLSAddr,
+		},
+		Branding: brandingConfig{
+			StatusBrandName:   cfg.StatusBrandName,
+			StatusBrandDomain: cfg.StatusBrandDomain,
+			StatusTagline:     cfg.StatusTagline,
+			FiatCurrency:      cfg.FiatCurrency,
+			DonationAddress:   cfg.DonationAddress,
+			DiscordURL:        cfg.DiscordURL,
+		},
+		Stratum: stratumConfig{
+			StratumTLSListen: cfg.StratumTLSListen,
+		},
+		Node: nodeConfig{
+			RPCURL:        cfg.RPCURL,
+			PayoutAddress: cfg.PayoutAddress,
+			DataDir:       cfg.DataDir,
+			ZMQBlockAddr:  cfg.ZMQBlockAddr,
+		},
+		Mining: miningConfig{
+			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
+			Extranonce2Size:           intPtr(cfg.Extranonce2Size),
+			TemplateExtraNonce2Size:   intPtr(cfg.TemplateExtraNonce2Size),
+			CoinbaseSuffixBytes:       intPtr(cfg.CoinbaseSuffixBytes),
+			CoinbasePoolTag:           stringPtr(cfg.CoinbasePoolTag),
+			CoinbaseMsg:               cfg.CoinbaseMsg,
+			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
+		},
+	}
+}
+
+func buildTuningFileConfig(cfg Config) tuningFileConfig {
+	return tuningFileConfig{
+		Logging: loggingTuning{
+			ShareLogBufferBytes: intPtr(cfg.ShareLogBufferBytes),
+			FsyncShareLog:       boolPtr(cfg.FsyncShareLog),
+			ShareLogReplayBytes: int64Ptr(cfg.ShareLogReplayBytes),
+		},
+		RateLimits: rateLimitTuning{
+			MaxConns:                          intPtr(cfg.MaxConns),
+			MaxAcceptsPerSecond:               intPtr(cfg.MaxAcceptsPerSecond),
+			MaxAcceptBurst:                    intPtr(cfg.MaxAcceptBurst),
+			AutoAcceptRateLimits:              boolPtr(cfg.AutoAcceptRateLimits),
+			AcceptReconnectWindow:             intPtr(cfg.AcceptReconnectWindow),
+			AcceptBurstWindow:                 intPtr(cfg.AcceptBurstWindow),
+			AcceptSteadyStateWindow:           intPtr(cfg.AcceptSteadyStateWindow),
+			AcceptSteadyStateRate:             intPtr(cfg.AcceptSteadyStateRate),
+			AcceptSteadyStateReconnectPercent: float64Ptr(cfg.AcceptSteadyStateReconnectPercent),
+			AcceptSteadyStateReconnectWindow:  intPtr(cfg.AcceptSteadyStateReconnectWindow),
+		},
+		Timeouts: timeoutTuning{
+			SubscribeTimeoutSec:   intPtr(int(cfg.SubscribeTimeout / time.Second)),
+			AuthorizeTimeoutSec:   intPtr(int(cfg.AuthorizeTimeout / time.Second)),
+			StratumReadTimeoutSec: intPtr(int(cfg.StratumReadTimeout / time.Second)),
+		},
+		Difficulty: difficultyTuning{
+			MaxDifficulty:           float64Ptr(cfg.MaxDifficulty),
+			MinDifficulty:           float64Ptr(cfg.MinDifficulty),
+			LockSuggestedDifficulty: boolPtr(cfg.LockSuggestedDifficulty),
+		},
+		Hashrate: hashrateTuning{
+			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
+			NTimeForwardSlackSeconds: intPtr(cfg.NTimeForwardSlackSeconds),
+		},
+		Bans: banTuning{
+			BanInvalidSubmissionsAfter:       intPtr(cfg.BanInvalidSubmissionsAfter),
+			BanInvalidSubmissionsWindowSec:   intPtr(int(cfg.BanInvalidSubmissionsWindow / time.Second)),
+			BanInvalidSubmissionsDurationSec: intPtr(int(cfg.BanInvalidSubmissionsDuration / time.Second)),
+			ReconnectBanThreshold:            intPtr(cfg.ReconnectBanThreshold),
+			ReconnectBanWindowSeconds:        intPtr(cfg.ReconnectBanWindowSeconds),
+			ReconnectBanDurationSeconds:      intPtr(cfg.ReconnectBanDurationSeconds),
+		},
+		Version: versionTuning{
+			MinVersionBits: intPtr(cfg.MinVersionBits),
+		},
+	}
 }
 
 // secretsConfig holds sensitive values that operators may prefer to keep out
-// of the main config.json so it can be checked into version control or shared
+// of the main config.toml so it can be checked into version control or shared
 // more freely.
 //
 // When present, these values override any corresponding fields from
-// config.json.
+// config.toml.
 type secretsConfig struct {
-	RPCUser string `json:"rpc_user"`
-	RPCPass string `json:"rpc_pass"`
+	RPCUser string `toml:"rpc_user"`
+	RPCPass string `toml:"rpc_pass"`
 }
 
 func loadConfig(configPath, secretsPath string) Config {
@@ -273,57 +422,81 @@ func loadConfig(configPath, secretsPath string) Config {
 		configPath = defaultConfigPath()
 	}
 
-	var fileConfigLoaded bool
-	if fc, ok, err := loadConfigFile(configPath); err != nil {
+	var configFileExisted bool
+	var exampleDir string
+	if bc, ok, err := loadBaseConfigFile(configPath); err != nil {
 		fatal("config file", err, "path", configPath)
 	} else if ok {
-		applyFileConfig(&cfg, *fc)
-		fileConfigLoaded = ok
+		configFileExisted = true
+		applyBaseConfig(&cfg, *bc)
 	} else {
 		// Config file doesn't exist, write out defaults
 		if err := rewriteConfigFile(configPath, cfg); err != nil {
 			fatal("write default config", err, "path", configPath)
 		}
-		logger.Info("created default config file", "path", configPath)
-		fileConfigLoaded = false
+		exampleDir = filepath.Join(cfg.DataDir, "state")
+		logger.Info("created default config file; edit it or copy the example", "path", configPath, "example", filepath.Join(exampleDir, "config.toml.example"))
+	}
+	if exampleDir == "" {
+		exampleDir = filepath.Join(cfg.DataDir, "state")
+	}
+	ensureExampleFiles(cfg.DataDir)
+
+	if cfg.CoinbasePoolTag == "" {
+		cfg.CoinbasePoolTag = generatePoolTag()
+		if configFileExisted {
+			if err := rewriteConfigFile(configPath, cfg); err != nil {
+				logger.Warn("persist coinbase_pool_tag", "path", configPath, "error", err)
+			} else {
+				logger.Info("generated coinbase_pool_tag and updated config", "path", configPath, "coinbase_pool_tag", cfg.CoinbasePoolTag)
+			}
+		}
 	}
 
-	// Optional secrets overlay: if data_dir/secrets.json exists, values
+	// Optional secrets overlay: if data_dir/secrets.toml exists, values
 	// from that file override sensitive fields like RPC credentials.
 	if secretsPath == "" {
-		// Prefer the newer data_dir/state/secrets.json, but fall back to
-		// data_dir/secrets.json for backward compatibility.
-		stateSecretsPath := filepath.Join(cfg.DataDir, "state", "secrets.json")
+		// Prefer the newer data_dir/state/secrets.toml, but fall back to
+		// data_dir/secrets.toml for backward compatibility.
+		stateSecretsPath := filepath.Join(cfg.DataDir, "state", "secrets.toml")
 		if _, err := os.Stat(stateSecretsPath); err == nil {
 			secretsPath = stateSecretsPath
 		} else {
-			secretsPath = filepath.Join(cfg.DataDir, "secrets.json")
+			secretsPath = filepath.Join(cfg.DataDir, "secrets.toml")
 		}
 	}
 	if sc, ok, err := loadSecretsFile(secretsPath); err != nil {
 		fatal("secrets file", err, "path", secretsPath)
 	} else if ok {
 		applySecretsConfig(&cfg, *sc)
+	} else {
+		logger.Info("secrets file missing; copy secrets.toml.example and provide RPC credentials",
+			"path", secretsPath,
+			"example", filepath.Join(cfg.DataDir, "state", "secrets.toml.example"))
 	}
 
-	// Optional advanced/tuning overlay: if data_dir/state/tuning.json (or the
-	// legacy data_dir/tuning.json) exists, load it as a second config file and
+	// Optional advanced/tuning overlay: if data_dir/state/tuning.toml (or the
+	// legacy data_dir/tuning.toml) exists, load it as a second config file and
 	// apply it on top of the main config. This lets operators keep advanced
 	// knobs separate and delete the file to fall back to defaults.
-	tuningPath := filepath.Join(cfg.DataDir, "state", "tuning.json")
+	tuningPath := filepath.Join(cfg.DataDir, "state", "tuning.toml")
 	if _, err := os.Stat(tuningPath); errors.Is(err, os.ErrNotExist) {
-		legacy := filepath.Join(cfg.DataDir, "tuning.json")
+		legacy := filepath.Join(cfg.DataDir, "tuning.toml")
 		if _, err2 := os.Stat(legacy); err2 == nil {
 			tuningPath = legacy
 		} else {
 			tuningPath = ""
 		}
 	}
+	var tuningOverrides tuningFileConfig
+	var tuningConfigLoaded bool
 	if tuningPath != "" {
-		if tf, ok, err := loadConfigFile(tuningPath); err != nil {
+		if tf, ok, err := loadTuningFile(tuningPath); err != nil {
 			fatal("tuning config file", err, "path", tuningPath)
 		} else if ok {
-			applyFileConfig(&cfg, *tf)
+			applyTuningConfig(&cfg, *tf)
+			tuningConfigLoaded = ok
+			tuningOverrides = *tf
 		}
 	}
 
@@ -334,12 +507,12 @@ func loadConfig(configPath, secretsPath string) Config {
 	// Auto-configure accept rate limits based on max_conns if they weren't
 	// explicitly set in the config file. This ensures miners can reconnect
 	// smoothly after pool restarts without hitting rate limits.
-	autoConfigureAcceptRateLimits(&cfg, fileConfigLoaded)
+	autoConfigureAcceptRateLimits(&cfg, tuningOverrides, tuningConfigLoaded)
 
 	return cfg
 }
 
-func loadConfigFile(path string) (*fileConfig, bool, error) {
+func loadTOMLFile[T any](path string) (*T, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -348,28 +521,79 @@ func loadConfigFile(path string) (*fileConfig, bool, error) {
 		return nil, false, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	var cfg fileConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	var cfg T
+	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, true, fmt.Errorf("parse %s: %w", path, err)
 	}
 
 	return &cfg, true, nil
 }
 
-func loadSecretsFile(path string) (*secretsConfig, bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, false, nil
-		}
-		return nil, false, fmt.Errorf("read %s: %w", path, err)
-	}
+func loadBaseConfigFile(path string) (*baseFileConfig, bool, error) {
+	return loadTOMLFile[baseFileConfig](path)
+}
 
-	var cfg secretsConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, true, fmt.Errorf("parse %s: %w", path, err)
+func loadTuningFile(path string) (*tuningFileConfig, bool, error) {
+	return loadTOMLFile[tuningFileConfig](path)
+}
+
+func loadSecretsFile(path string) (*secretsConfig, bool, error) {
+	return loadTOMLFile[secretsConfig](path)
+}
+
+func ensureExampleFiles(dataDir string) {
+	if dataDir == "" {
+		dataDir = defaultDataDir
 	}
-	return &cfg, true, nil
+	stateDir := filepath.Join(dataDir, "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		logger.Warn("create state directory for example configs failed", "dir", stateDir, "error", err)
+		return
+	}
+	ensureExampleFile(filepath.Join(stateDir, "config.toml.example"), exampleBaseConfigBytes())
+	ensureExampleFile(filepath.Join(stateDir, "tuning.toml.example"), exampleTuningConfigBytes())
+	ensureExampleFile(filepath.Join(stateDir, "secrets.toml.example"), secretsConfigExample)
+}
+
+func ensureExampleFile(path string, contents []byte) {
+	if _, err := os.Stat(path); err == nil {
+		return
+	} else if !errors.Is(err, os.ErrNotExist) {
+		logger.Warn("stat example config failed", "path", path, "error", err)
+		return
+	}
+	if len(contents) == 0 {
+		return
+	}
+	if err := os.WriteFile(path, contents, 0o644); err != nil {
+		logger.Warn("write example config failed", "path", path, "error", err)
+	}
+}
+
+func exampleHeader(text string) []byte {
+	return []byte(fmt.Sprintf("# Generated %s example (copy to a real config and edit as needed)\n\n", text))
+}
+
+func exampleBaseConfigBytes() []byte {
+	cfg := defaultConfig()
+	fc := buildBaseFileConfig(cfg)
+	data, err := toml.Marshal(fc)
+	if err != nil {
+		logger.Warn("encode base config example failed", "error", err)
+		return nil
+	}
+	return append(exampleHeader("base config"), data...)
+}
+
+func exampleTuningConfigBytes() []byte {
+	cfg := defaultConfig()
+	tf := buildTuningFileConfig(cfg)
+	data, err := toml.Marshal(tf)
+	if err != nil {
+		logger.Warn("encode tuning config example failed", "error", err)
+		return nil
+	}
+	return append(exampleHeader("tuning config"), data...)
 }
 
 func rewriteConfigFile(path string, cfg Config) error {
@@ -378,84 +602,8 @@ func rewriteConfigFile(path string, cfg Config) error {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
-	fc := fileConfig{
-		PoolListen:      cfg.ListenAddr,
-		StatusListen:    cfg.StatusAddr,
-		StatusTLSListen: cfg.StatusTLSAddr,
-		// Never write secrets back into config.json; RPC credentials
-		// belong exclusively in secrets.json.
-		StatusBrandName:   cfg.StatusBrandName,
-		StatusBrandDomain: cfg.StatusBrandDomain,
-		StatusTagline:     cfg.StatusTagline,
-		FiatCurrency:      cfg.FiatCurrency,
-		DonationAddress:   cfg.DonationAddress,
-		DiscordURL:        cfg.DiscordURL,
-		StratumTLSListen:  cfg.StratumTLSListen,
-		RPCURL:            cfg.RPCURL,
-		RPCUser:           "",
-		RPCPass:           "",
-		PayoutAddress:     cfg.PayoutAddress,
-		CoinbaseMsg:       cfg.CoinbaseMsg,
-		ZMQBlockAddr:      cfg.ZMQBlockAddr,
-		DataDir:           cfg.DataDir,
-	}
-
-	// Helper lambdas for pointers.
-	intPtr := func(v int) *int { return &v }
-	int64Ptr := func(v int64) *int64 { return &v }
-	boolPtr := func(v bool) *bool { return &v }
-	float64Ptr := func(v float64) *float64 { return &v }
-	stringPtr := func(v string) *string { return &v }
-
-	fc.Extranonce2Size = intPtr(cfg.Extranonce2Size)
-	fc.TemplateExtraNonce2Size = intPtr(cfg.TemplateExtraNonce2Size)
-	fc.ShareLogBufferBytes = intPtr(cfg.ShareLogBufferBytes)
-	fc.CoinbaseSuffixBytes = intPtr(cfg.CoinbaseSuffixBytes)
-	fc.CoinbaseScriptSigMaxBytes = intPtr(cfg.CoinbaseScriptSigMaxBytes)
-	fc.FsyncShareLog = boolPtr(cfg.FsyncShareLog)
-	fc.ShareLogReplayBytes = int64Ptr(cfg.ShareLogReplayBytes)
-	fc.MaxConns = intPtr(cfg.MaxConns)
-	fc.MaxAcceptsPerSecond = intPtr(cfg.MaxAcceptsPerSecond)
-	fc.MaxAcceptBurst = intPtr(cfg.MaxAcceptBurst)
-	fc.AutoAcceptRateLimits = boolPtr(cfg.AutoAcceptRateLimits)
-	fc.AcceptReconnectWindow = intPtr(cfg.AcceptReconnectWindow)
-	fc.AcceptBurstWindow = intPtr(cfg.AcceptBurstWindow)
-	fc.AcceptSteadyStateWindow = intPtr(cfg.AcceptSteadyStateWindow)
-	fc.AcceptSteadyStateRate = intPtr(cfg.AcceptSteadyStateRate)
-	fc.AcceptSteadyStateReconnectPercent = float64Ptr(cfg.AcceptSteadyStateReconnectPercent)
-	fc.AcceptSteadyStateReconnectWindow = intPtr(cfg.AcceptSteadyStateReconnectWindow)
-	fc.MaxRecentJobs = intPtr(cfg.MaxRecentJobs)
-	fc.SubscribeTimeoutSec = intPtr(int(cfg.SubscribeTimeout / time.Second))
-	fc.AuthorizeTimeoutSec = intPtr(int(cfg.AuthorizeTimeout / time.Second))
-	fc.StratumReadTimeoutSec = intPtr(int(cfg.StratumReadTimeout / time.Second))
-	fc.MinVersionBits = intPtr(cfg.MinVersionBits)
-	fc.MaxDifficulty = float64Ptr(cfg.MaxDifficulty)
-	fc.MinDifficulty = float64Ptr(cfg.MinDifficulty)
-	fc.PoolFeePercent = float64Ptr(cfg.PoolFeePercent)
-	fc.LockSuggestedDifficulty = boolPtr(cfg.LockSuggestedDifficulty)
-	fc.CoinbasePoolTag = stringPtr(cfg.CoinbasePoolTag)
-	fc.HashrateEMATauSeconds = float64Ptr(cfg.HashrateEMATauSeconds)
-	fc.NTimeForwardSlackSec = intPtr(cfg.NTimeForwardSlackSeconds)
-	if cfg.BanInvalidSubmissionsAfter > 0 {
-		fc.BanInvalidSubmissionsAfter = intPtr(cfg.BanInvalidSubmissionsAfter)
-	}
-	if cfg.BanInvalidSubmissionsWindow > 0 {
-		fc.BanInvalidSubmissionsWindowSec = intPtr(int(cfg.BanInvalidSubmissionsWindow / time.Second))
-	}
-	if cfg.BanInvalidSubmissionsDuration > 0 {
-		fc.BanInvalidSubmissionsDurationSec = intPtr(int(cfg.BanInvalidSubmissionsDuration / time.Second))
-	}
-	if cfg.ReconnectBanThreshold > 0 {
-		fc.ReconnectBanThreshold = intPtr(cfg.ReconnectBanThreshold)
-	}
-	if cfg.ReconnectBanWindowSeconds > 0 {
-		fc.ReconnectBanWindowSeconds = intPtr(cfg.ReconnectBanWindowSeconds)
-	}
-	if cfg.ReconnectBanDurationSeconds > 0 {
-		fc.ReconnectBanDurationSeconds = intPtr(cfg.ReconnectBanDurationSeconds)
-	}
-
-	data, err := json.MarshalIndent(fc, "", "  ")
+	fc := buildBaseFileConfig(cfg)
+	data, err := toml.Marshal(fc)
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
@@ -509,162 +657,160 @@ func rewriteConfigFile(path string, cfg Config) error {
 	return nil
 }
 
-func applyFileConfig(cfg *Config, fc fileConfig) {
-	if fc.PoolListen != "" {
-		cfg.ListenAddr = fc.PoolListen
+func applyBaseConfig(cfg *Config, fc baseFileConfig) {
+	if fc.Server.PoolListen != "" {
+		cfg.ListenAddr = fc.Server.PoolListen
 	}
-	if fc.StatusListen != "" {
-		cfg.StatusAddr = fc.StatusListen
+	if fc.Server.StatusListen != "" {
+		cfg.StatusAddr = fc.Server.StatusListen
 	}
-	if fc.StatusTLSListen != "" {
-		cfg.StatusTLSAddr = fc.StatusTLSListen
+	if fc.Server.StatusTLSListen != "" {
+		cfg.StatusTLSAddr = fc.Server.StatusTLSListen
 	}
-	if fc.StatusBrandName != "" {
-		cfg.StatusBrandName = fc.StatusBrandName
+	if fc.Branding.StatusBrandName != "" {
+		cfg.StatusBrandName = fc.Branding.StatusBrandName
 	}
-	if fc.StatusBrandDomain != "" {
-		cfg.StatusBrandDomain = fc.StatusBrandDomain
+	if fc.Branding.StatusBrandDomain != "" {
+		cfg.StatusBrandDomain = fc.Branding.StatusBrandDomain
 	}
-	if fc.StatusTagline != "" {
-		cfg.StatusTagline = fc.StatusTagline
+	if fc.Branding.StatusTagline != "" {
+		cfg.StatusTagline = fc.Branding.StatusTagline
 	}
-	if fc.FiatCurrency != "" {
-		cfg.FiatCurrency = strings.ToLower(strings.TrimSpace(fc.FiatCurrency))
+	if fc.Branding.FiatCurrency != "" {
+		cfg.FiatCurrency = strings.ToLower(strings.TrimSpace(fc.Branding.FiatCurrency))
 	}
-	if fc.DonationAddress != "" {
-		cfg.DonationAddress = strings.TrimSpace(fc.DonationAddress)
+	if fc.Branding.DonationAddress != "" {
+		cfg.DonationAddress = strings.TrimSpace(fc.Branding.DonationAddress)
 	}
-	if fc.DiscordURL != "" {
-		cfg.DiscordURL = strings.TrimSpace(fc.DiscordURL)
+	if fc.Branding.DiscordURL != "" {
+		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
 	}
-	if fc.StratumTLSListen != "" {
-		addr := strings.TrimSpace(fc.StratumTLSListen)
-		// Be forgiving: if the operator specified only a port like "4333",
-		// treat it as ":4333" so net.Listen/tls.Listen accept it.
+	if fc.Stratum.StratumTLSListen != "" {
+		addr := strings.TrimSpace(fc.Stratum.StratumTLSListen)
 		if addr != "" && !strings.Contains(addr, ":") {
 			addr = ":" + addr
 		}
 		cfg.StratumTLSListen = addr
 	}
-	if fc.RPCURL != "" {
-		cfg.RPCURL = fc.RPCURL
+	if fc.Node.RPCURL != "" {
+		cfg.RPCURL = fc.Node.RPCURL
 	}
-	if fc.PayoutAddress != "" {
-		cfg.PayoutAddress = fc.PayoutAddress
+	if fc.Node.PayoutAddress != "" {
+		cfg.PayoutAddress = fc.Node.PayoutAddress
 	}
-	if fc.PoolFeePercent != nil {
-		cfg.PoolFeePercent = *fc.PoolFeePercent
+	if fc.Node.DataDir != "" {
+		cfg.DataDir = fc.Node.DataDir
 	}
-	if fc.Extranonce2Size != nil {
-		cfg.Extranonce2Size = *fc.Extranonce2Size
+	if fc.Node.ZMQBlockAddr != "" {
+		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
 	}
-	if fc.TemplateExtraNonce2Size != nil {
-		cfg.TemplateExtraNonce2Size = *fc.TemplateExtraNonce2Size
+	if fc.Mining.PoolFeePercent != nil {
+		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
 	}
-	if fc.CoinbaseMsg != "" {
-		cfg.CoinbaseMsg = fc.CoinbaseMsg
+	if fc.Mining.Extranonce2Size != nil {
+		cfg.Extranonce2Size = *fc.Mining.Extranonce2Size
 	}
-	if fc.CoinbasePoolTag != nil {
-		cfg.CoinbasePoolTag = *fc.CoinbasePoolTag
+	if fc.Mining.TemplateExtraNonce2Size != nil {
+		cfg.TemplateExtraNonce2Size = *fc.Mining.TemplateExtraNonce2Size
 	}
-	if fc.ZMQBlockAddr != "" {
-		cfg.ZMQBlockAddr = fc.ZMQBlockAddr
+	if fc.Mining.CoinbaseMsg != "" {
+		cfg.CoinbaseMsg = fc.Mining.CoinbaseMsg
 	}
-	if fc.DataDir != "" {
-		cfg.DataDir = fc.DataDir
+	if fc.Mining.CoinbasePoolTag != nil {
+		cfg.CoinbasePoolTag = *fc.Mining.CoinbasePoolTag
 	}
-	if fc.ShareLogBufferBytes != nil {
-		cfg.ShareLogBufferBytes = *fc.ShareLogBufferBytes
+	if fc.Mining.CoinbaseSuffixBytes != nil {
+		cfg.CoinbaseSuffixBytes = *fc.Mining.CoinbaseSuffixBytes
 	}
-	if fc.CoinbaseSuffixBytes != nil {
-		cfg.CoinbaseSuffixBytes = *fc.CoinbaseSuffixBytes
+	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
+		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
 	}
-	if fc.CoinbaseScriptSigMaxBytes != nil {
-		cfg.CoinbaseScriptSigMaxBytes = *fc.CoinbaseScriptSigMaxBytes
+}
+
+func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
+	if fc.Logging.ShareLogBufferBytes != nil {
+		cfg.ShareLogBufferBytes = *fc.Logging.ShareLogBufferBytes
 	}
-	if fc.FsyncShareLog != nil {
-		cfg.FsyncShareLog = *fc.FsyncShareLog
+	if fc.Logging.FsyncShareLog != nil {
+		cfg.FsyncShareLog = *fc.Logging.FsyncShareLog
 	}
-	if fc.ShareLogReplayBytes != nil {
-		cfg.ShareLogReplayBytes = *fc.ShareLogReplayBytes
+	if fc.Logging.ShareLogReplayBytes != nil {
+		cfg.ShareLogReplayBytes = *fc.Logging.ShareLogReplayBytes
 	}
-	if fc.MaxConns != nil {
-		cfg.MaxConns = *fc.MaxConns
+	if fc.RateLimits.MaxConns != nil {
+		cfg.MaxConns = *fc.RateLimits.MaxConns
 	}
-	if fc.MaxAcceptsPerSecond != nil {
-		cfg.MaxAcceptsPerSecond = *fc.MaxAcceptsPerSecond
+	if fc.RateLimits.MaxAcceptsPerSecond != nil {
+		cfg.MaxAcceptsPerSecond = *fc.RateLimits.MaxAcceptsPerSecond
 	}
-	if fc.MaxAcceptBurst != nil {
-		cfg.MaxAcceptBurst = *fc.MaxAcceptBurst
+	if fc.RateLimits.MaxAcceptBurst != nil {
+		cfg.MaxAcceptBurst = *fc.RateLimits.MaxAcceptBurst
 	}
-	if fc.AutoAcceptRateLimits != nil {
-		cfg.AutoAcceptRateLimits = *fc.AutoAcceptRateLimits
+	if fc.RateLimits.AutoAcceptRateLimits != nil {
+		cfg.AutoAcceptRateLimits = *fc.RateLimits.AutoAcceptRateLimits
 	}
-	if fc.AcceptReconnectWindow != nil {
-		cfg.AcceptReconnectWindow = *fc.AcceptReconnectWindow
+	if fc.RateLimits.AcceptReconnectWindow != nil {
+		cfg.AcceptReconnectWindow = *fc.RateLimits.AcceptReconnectWindow
 	}
-	if fc.AcceptBurstWindow != nil {
-		cfg.AcceptBurstWindow = *fc.AcceptBurstWindow
+	if fc.RateLimits.AcceptBurstWindow != nil {
+		cfg.AcceptBurstWindow = *fc.RateLimits.AcceptBurstWindow
 	}
-	if fc.AcceptSteadyStateWindow != nil {
-		cfg.AcceptSteadyStateWindow = *fc.AcceptSteadyStateWindow
+	if fc.RateLimits.AcceptSteadyStateWindow != nil {
+		cfg.AcceptSteadyStateWindow = *fc.RateLimits.AcceptSteadyStateWindow
 	}
-	if fc.AcceptSteadyStateRate != nil {
-		cfg.AcceptSteadyStateRate = *fc.AcceptSteadyStateRate
+	if fc.RateLimits.AcceptSteadyStateRate != nil {
+		cfg.AcceptSteadyStateRate = *fc.RateLimits.AcceptSteadyStateRate
 	}
-	if fc.AcceptSteadyStateReconnectPercent != nil {
-		cfg.AcceptSteadyStateReconnectPercent = *fc.AcceptSteadyStateReconnectPercent
+	if fc.RateLimits.AcceptSteadyStateReconnectPercent != nil {
+		cfg.AcceptSteadyStateReconnectPercent = *fc.RateLimits.AcceptSteadyStateReconnectPercent
 	}
-	if fc.AcceptSteadyStateReconnectWindow != nil {
-		cfg.AcceptSteadyStateReconnectWindow = *fc.AcceptSteadyStateReconnectWindow
+	if fc.RateLimits.AcceptSteadyStateReconnectWindow != nil {
+		cfg.AcceptSteadyStateReconnectWindow = *fc.RateLimits.AcceptSteadyStateReconnectWindow
 	}
-	if fc.MaxRecentJobs != nil {
-		cfg.MaxRecentJobs = *fc.MaxRecentJobs
+	if fc.Timeouts.SubscribeTimeoutSec != nil {
+		cfg.SubscribeTimeout = time.Duration(*fc.Timeouts.SubscribeTimeoutSec) * time.Second
 	}
-	if fc.SubscribeTimeoutSec != nil {
-		cfg.SubscribeTimeout = time.Duration(*fc.SubscribeTimeoutSec) * time.Second
+	if fc.Timeouts.AuthorizeTimeoutSec != nil {
+		cfg.AuthorizeTimeout = time.Duration(*fc.Timeouts.AuthorizeTimeoutSec) * time.Second
 	}
-	if fc.AuthorizeTimeoutSec != nil {
-		cfg.AuthorizeTimeout = time.Duration(*fc.AuthorizeTimeoutSec) * time.Second
+	if fc.Timeouts.StratumReadTimeoutSec != nil {
+		cfg.StratumReadTimeout = time.Duration(*fc.Timeouts.StratumReadTimeoutSec) * time.Second
 	}
-	if fc.StratumReadTimeoutSec != nil {
-		cfg.StratumReadTimeout = time.Duration(*fc.StratumReadTimeoutSec) * time.Second
+	if fc.Difficulty.MaxDifficulty != nil {
+		cfg.MaxDifficulty = *fc.Difficulty.MaxDifficulty
 	}
-	if fc.MinVersionBits != nil {
-		cfg.MinVersionBits = *fc.MinVersionBits
+	if fc.Difficulty.MinDifficulty != nil {
+		cfg.MinDifficulty = *fc.Difficulty.MinDifficulty
 	}
-	if fc.MaxDifficulty != nil {
-		cfg.MaxDifficulty = *fc.MaxDifficulty
+	if fc.Difficulty.LockSuggestedDifficulty != nil {
+		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty
 	}
-	if fc.MinDifficulty != nil {
-		cfg.MinDifficulty = *fc.MinDifficulty
+	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
+		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
 	}
-	if fc.LockSuggestedDifficulty != nil {
-		cfg.LockSuggestedDifficulty = *fc.LockSuggestedDifficulty
+	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
+		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds
 	}
-	if fc.HashrateEMATauSeconds != nil && *fc.HashrateEMATauSeconds > 0 {
-		cfg.HashrateEMATauSeconds = *fc.HashrateEMATauSeconds
+	if fc.Bans.BanInvalidSubmissionsAfter != nil && *fc.Bans.BanInvalidSubmissionsAfter >= 0 {
+		cfg.BanInvalidSubmissionsAfter = *fc.Bans.BanInvalidSubmissionsAfter
 	}
-	if fc.NTimeForwardSlackSec != nil && *fc.NTimeForwardSlackSec > 0 {
-		cfg.NTimeForwardSlackSeconds = *fc.NTimeForwardSlackSec
+	if fc.Bans.BanInvalidSubmissionsWindowSec != nil && *fc.Bans.BanInvalidSubmissionsWindowSec > 0 {
+		cfg.BanInvalidSubmissionsWindow = time.Duration(*fc.Bans.BanInvalidSubmissionsWindowSec) * time.Second
 	}
-	if fc.BanInvalidSubmissionsAfter != nil && *fc.BanInvalidSubmissionsAfter >= 0 {
-		cfg.BanInvalidSubmissionsAfter = *fc.BanInvalidSubmissionsAfter
+	if fc.Bans.BanInvalidSubmissionsDurationSec != nil && *fc.Bans.BanInvalidSubmissionsDurationSec > 0 {
+		cfg.BanInvalidSubmissionsDuration = time.Duration(*fc.Bans.BanInvalidSubmissionsDurationSec) * time.Second
 	}
-	if fc.BanInvalidSubmissionsWindowSec != nil && *fc.BanInvalidSubmissionsWindowSec > 0 {
-		cfg.BanInvalidSubmissionsWindow = time.Duration(*fc.BanInvalidSubmissionsWindowSec) * time.Second
+	if fc.Bans.ReconnectBanThreshold != nil && *fc.Bans.ReconnectBanThreshold >= 0 {
+		cfg.ReconnectBanThreshold = *fc.Bans.ReconnectBanThreshold
 	}
-	if fc.BanInvalidSubmissionsDurationSec != nil && *fc.BanInvalidSubmissionsDurationSec > 0 {
-		cfg.BanInvalidSubmissionsDuration = time.Duration(*fc.BanInvalidSubmissionsDurationSec) * time.Second
+	if fc.Bans.ReconnectBanWindowSeconds != nil && *fc.Bans.ReconnectBanWindowSeconds > 0 {
+		cfg.ReconnectBanWindowSeconds = *fc.Bans.ReconnectBanWindowSeconds
 	}
-	if fc.ReconnectBanThreshold != nil && *fc.ReconnectBanThreshold >= 0 {
-		cfg.ReconnectBanThreshold = *fc.ReconnectBanThreshold
+	if fc.Bans.ReconnectBanDurationSeconds != nil && *fc.Bans.ReconnectBanDurationSeconds > 0 {
+		cfg.ReconnectBanDurationSeconds = *fc.Bans.ReconnectBanDurationSeconds
 	}
-	if fc.ReconnectBanWindowSeconds != nil && *fc.ReconnectBanWindowSeconds > 0 {
-		cfg.ReconnectBanWindowSeconds = *fc.ReconnectBanWindowSeconds
-	}
-	if fc.ReconnectBanDurationSeconds != nil && *fc.ReconnectBanDurationSeconds > 0 {
-		cfg.ReconnectBanDurationSeconds = *fc.ReconnectBanDurationSeconds
+	if fc.Version.MinVersionBits != nil {
+		cfg.MinVersionBits = *fc.Version.MinVersionBits
 	}
 }
 
@@ -771,6 +917,14 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.CoinbaseSuffixBytes > maxCoinbaseSuffixBytes {
 		return fmt.Errorf("coinbase_suffix_bytes cannot exceed %d", maxCoinbaseSuffixBytes)
+	}
+	if cfg.CoinbasePoolTag != "" {
+		if len(cfg.CoinbasePoolTag) != poolTagLength {
+			return fmt.Errorf("coinbase_pool_tag must be %d characters", poolTagLength)
+		}
+		if normalizePoolTag(cfg.CoinbasePoolTag) != cfg.CoinbasePoolTag {
+			return fmt.Errorf("coinbase_pool_tag must only contain alphanumeric characters")
+		}
 	}
 	if cfg.CoinbaseScriptSigMaxBytes < 0 {
 		return fmt.Errorf("coinbase_scriptsig_max_bytes cannot be negative")
@@ -957,7 +1111,7 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 // Combined, this allows all max_conns miners to reconnect within accept_reconnect_window
 // seconds of a pool restart without being rate-limited, while still protecting against
 // sustained connection floods during normal operation.
-func autoConfigureAcceptRateLimits(cfg *Config, fileConfigLoaded bool) {
+func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuningConfigLoaded bool) {
 	if cfg == nil || cfg.MaxConns <= 0 {
 		return
 	}
@@ -979,16 +1133,10 @@ func autoConfigureAcceptRateLimits(cfg *Config, fileConfigLoaded bool) {
 		}
 	}
 
-	// Read the config file to check if rate limits were explicitly set
-	var explicitMaxAccepts, explicitMaxBurst, explicitSteadyStateRate bool
-	if fileConfigLoaded {
-		configPath := defaultConfigPath()
-		if fc, ok, err := loadConfigFile(configPath); err == nil && ok {
-			explicitMaxAccepts = fc.MaxAcceptsPerSecond != nil
-			explicitMaxBurst = fc.MaxAcceptBurst != nil
-			explicitSteadyStateRate = fc.AcceptSteadyStateRate != nil
-		}
-	}
+	// Detect whether the tuning file explicitly set the rate limits.
+	explicitMaxAccepts := tuningConfigLoaded && overrides.RateLimits.MaxAcceptsPerSecond != nil
+	explicitMaxBurst := tuningConfigLoaded && overrides.RateLimits.MaxAcceptBurst != nil
+	explicitSteadyStateRate := tuningConfigLoaded && overrides.RateLimits.AcceptSteadyStateRate != nil
 
 	// Auto-configure max_accept_burst if:
 	// 1. auto_accept_rate_limits is enabled (always override), OR

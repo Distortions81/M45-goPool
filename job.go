@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -289,7 +288,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	scriptTime := time.Now().Unix()
 	coinbaseMsg := jm.cfg.CoinbaseMsg
 	if jm.cfg.CoinbaseSuffixBytes > 0 {
-		msg, err := buildCoinbaseMsgWithSuffix(coinbaseMsg, jm.cfg.CoinbaseSuffixBytes)
+		msg, err := buildCoinbaseMsgWithSuffix(coinbaseMsg, jm.cfg.CoinbasePoolTag, jm.cfg.CoinbaseSuffixBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -366,16 +365,36 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	return job, nil
 }
 
-func buildCoinbaseMsgWithSuffix(base string, suffixBytes int) (string, error) {
-	buf := make([]byte, suffixBytes)
-	if _, err := rand.Read(buf); err != nil {
+func buildCoinbaseMsgWithSuffix(base, poolTag string, suffixChars int) (string, error) {
+	suffix, err := buildPoolSuffix(poolTag, suffixChars)
+	if err != nil {
 		return "", fmt.Errorf("coinbase suffix: %w", err)
 	}
-	suffix := hex.EncodeToString(buf)
 	if base == "" {
 		return suffix, nil
 	}
+	if suffix == "" {
+		return base, nil
+	}
 	return fmt.Sprintf("%s-%s", base, suffix), nil
+}
+
+func buildPoolSuffix(poolTag string, suffixChars int) (string, error) {
+	if suffixChars < 0 {
+		suffixChars = 0
+	}
+	randomPart := ""
+	if suffixChars > 0 {
+		part, err := randomAlnumString(suffixChars)
+		if err != nil {
+			return "", err
+		}
+		randomPart = part
+	}
+	if poolTag == "" {
+		return randomPart, nil
+	}
+	return poolTag + randomPart, nil
 }
 
 func computePoolMask(tpl GetBlockTemplateResult, cfg Config) uint32 {

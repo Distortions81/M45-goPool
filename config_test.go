@@ -209,7 +209,7 @@ func TestAutoConfigureAcceptRateLimits_DisabledWhenMaxConnsZero(t *testing.T) {
 		MaxAcceptsPerSecond: defaultMaxAcceptsPerSecond,
 		MaxAcceptBurst:      defaultMaxAcceptBurst,
 	}
-	autoConfigureAcceptRateLimits(cfg, true)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, true)
 	// Should remain unchanged when MaxConns is 0
 	if cfg.MaxAcceptsPerSecond != defaultMaxAcceptsPerSecond {
 		t.Fatalf("MaxAcceptsPerSecond changed: got %d, want %d", cfg.MaxAcceptsPerSecond, defaultMaxAcceptsPerSecond)
@@ -227,7 +227,7 @@ func TestAutoConfigureAcceptRateLimits_SmallPool(t *testing.T) {
 		AcceptReconnectWindow: 15, // 15 second total window
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 50 miners with 15s window:
 	// - Burst fraction: 5/15 = 0.33
 	// - Burst: 50 * 0.33 = 16, minimum is 20
@@ -249,7 +249,7 @@ func TestAutoConfigureAcceptRateLimits_MediumPool(t *testing.T) {
 		AcceptReconnectWindow: 15, // 15 second total window
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 1000 miners with 15s window:
 	// - Burst fraction: 5/15 = 0.33
 	// - Burst: 1000 * 0.33 = 333
@@ -271,7 +271,7 @@ func TestAutoConfigureAcceptRateLimits_LargePool(t *testing.T) {
 		AcceptReconnectWindow: 15, // 15 second total window
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 10000 miners with 15s window:
 	// - Burst fraction: 5/15 = 0.33
 	// - Burst: 10000 * 0.33 = 3333
@@ -293,7 +293,7 @@ func TestAutoConfigureAcceptRateLimits_VeryLargePoolCapped(t *testing.T) {
 		AcceptReconnectWindow: 15, // 15 second total window
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 150000 miners with 15s window:
 	// - Burst fraction: 5/15 = 0.33
 	// - Burst: 150000 * 0.33 = 50000, but capped at 25000
@@ -317,13 +317,13 @@ func TestAutoConfigureAcceptRateLimits_RespectsExplicitConfig(t *testing.T) {
 
 	// Simulate that config was loaded from file - the function should
 	// not change explicitly configured values
-	// Note: In reality this would be handled by checking the fileConfig,
+	// Note: In reality this would be handled by checking the tuning config,
 	// but here we're testing that non-default values are preserved
 	originalAccepts := cfg.MaxAcceptsPerSecond
 	originalBurst := cfg.MaxAcceptBurst
 
 	// This won't change values that are different from defaults
-	autoConfigureAcceptRateLimits(cfg, true)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, true)
 
 	// Values should remain as they were since they're not at default
 	if cfg.MaxAcceptsPerSecond != originalAccepts {
@@ -347,7 +347,7 @@ func TestAutoConfigureAcceptRateLimits_AutoModeEnabled(t *testing.T) {
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
 
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 
 	// For 1000 miners with auto mode and 15s window:
 	// - Burst: 1000 * 0.33 = 333
@@ -398,7 +398,7 @@ func TestAutoConfigureAcceptRateLimits_AutoModeScaling(t *testing.T) {
 				AcceptBurstWindow:     5,  // 5 second burst window
 			}
 
-			autoConfigureAcceptRateLimits(cfg, false)
+			autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 
 			if cfg.MaxAcceptsPerSecond != tt.wantAcceptRate {
 				t.Fatalf("MaxAcceptsPerSecond = %d, want %d", cfg.MaxAcceptsPerSecond, tt.wantAcceptRate)
@@ -421,7 +421,7 @@ func TestAutoConfigureAcceptRateLimits_CustomWindows(t *testing.T) {
 		AcceptBurstWindow:     10, // 10 second burst window
 	}
 
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 
 	// For 1000 miners with 30s window, 10s burst:
 	// - Burst fraction: 10/30 = 0.33
@@ -447,7 +447,7 @@ func TestAutoConfigureAcceptRateLimits_FastReconnectWindow(t *testing.T) {
 		AcceptBurstWindow:     2, // 2 second burst window
 	}
 
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 
 	// For 1000 miners with 5s window, 2s burst:
 	// - Burst fraction: 2/5 = 0.4
@@ -473,7 +473,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateSmallPool(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 100 miners × 5% = 5 expected reconnects over 60s = 0.08/sec
 	// But minimum is 5/sec
 	if cfg.AcceptSteadyStateRate != 5 {
@@ -492,7 +492,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateMediumPool(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 10000 miners × 5% = 500 expected reconnects over 60s = 8.33/sec
 	if cfg.AcceptSteadyStateRate != 8 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 8", cfg.AcceptSteadyStateRate)
@@ -510,7 +510,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateLargePool(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 50000 miners × 5% = 2500 expected reconnects over 60s = 41.66/sec
 	if cfg.AcceptSteadyStateRate != 41 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 41", cfg.AcceptSteadyStateRate)
@@ -528,7 +528,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateVeryLargePoolCapped(t *testing
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 200000 miners × 5% = 10000 expected reconnects over 60s = 166.66/sec
 	if cfg.AcceptSteadyStateRate != 166 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 166", cfg.AcceptSteadyStateRate)
@@ -546,7 +546,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateHighPercent(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 10000 miners × 10% = 1000 expected reconnects over 60s = 16.66/sec
 	if cfg.AcceptSteadyStateRate != 16 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 16", cfg.AcceptSteadyStateRate)
@@ -564,7 +564,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateShortWindow(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 10000 miners × 5% = 500 expected reconnects over 30s = 16.66/sec
 	if cfg.AcceptSteadyStateRate != 16 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 16", cfg.AcceptSteadyStateRate)
@@ -583,7 +583,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateAutoMode(t *testing.T) {
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// Auto mode should override explicit value
 	// For 10000 miners × 5% = 500 expected reconnects over 60s = 8.33/sec
 	if cfg.AcceptSteadyStateRate != 8 {
@@ -603,7 +603,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateRespectsExplicit(t *testing.T)
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// Should not change because it's not the default value and auto mode is off
 	if cfg.AcceptSteadyStateRate != 75 {
 		t.Fatalf("AcceptSteadyStateRate = %d, want 75 (should not change)", cfg.AcceptSteadyStateRate)
@@ -621,7 +621,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateAbove1000Capped(t *testing.T) 
 		AcceptReconnectWindow:             15,
 		AcceptBurstWindow:                 5,
 	}
-	autoConfigureAcceptRateLimits(cfg, false)
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
 	// For 500000 miners × 10% = 50000 expected reconnects over 30s = 1666/sec
 	// Should be capped at 1000
 	if cfg.AcceptSteadyStateRate != 1000 {
@@ -631,7 +631,7 @@ func TestAutoConfigureAcceptRateLimits_SteadyStateAbove1000Capped(t *testing.T) 
 
 func TestRewriteConfigFile_BackupAndAtomic(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := filepath.Join(tmpDir, "config.json")
+	cfgPath := filepath.Join(tmpDir, "config.toml")
 
 	initial := []byte("initial config data")
 	if err := os.WriteFile(cfgPath, initial, 0o644); err != nil {
@@ -646,7 +646,7 @@ func TestRewriteConfigFile_BackupAndAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !bytes.Contains(data, []byte(`"pool_fee_percent"`)) {
+	if !bytes.Contains(data, []byte("pool_fee_percent")) {
 		t.Fatalf("config missing expected field")
 	}
 
@@ -675,7 +675,7 @@ func TestRewriteConfigFile_BackupAndAtomic(t *testing.T) {
 	if bytes.Contains(secondBak, []byte("stale backup")) {
 		t.Fatalf("stale backup persisted: %q", secondBak)
 	}
-	if !bytes.Contains(secondBak, []byte(`"payout_address": ""`)) {
+	if !bytes.Contains(secondBak, []byte(`payout_address = ""`)) {
 		t.Fatalf(".bak missing previous config content")
 	}
 }

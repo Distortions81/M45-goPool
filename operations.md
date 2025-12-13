@@ -2,15 +2,15 @@
 
 ## Configuration files
 
-- `data/state/config.json` (or legacy `data/config.json`): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings.
-- `data/state/secrets.json` (or legacy `data/secrets.json`): sensitive values like `rpc_user` / `rpc_pass`. These are never written back into `config.json`.
-- `data/state/tuning.json` (or legacy `data/tuning.json`, optional): advanced tuning and limits that are merged on top of `config.json`. Deleting this file reverts to the sane built-in defaults plus the base config.
+- `data/state/config.toml` (or legacy `data/config.toml`): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings; advanced tuning fields now belong in `tuning.toml`.
+- `data/state/secrets.toml` (or legacy `data/secrets.toml`): sensitive values like `rpc_user` / `rpc_pass`. These are never written back into `config.toml`.
+- `data/state/tuning.toml` (or legacy `data/tuning.toml`, optional): advanced tuning and limits that are merged on top of `config.toml`. Deleting this file reverts to the sane built-in defaults plus the base config. See `data/state/tuning.toml.example` for the current list of advanced knobs.
 
 ## Tuning highlights
 
 - `hashrate_ema_tau_seconds` – time constant (seconds) for the per-connection hashrate EMA used in worker stats. Larger values smooth the reports but react more slowly; default `600` (~10 minutes).
 - `ntime_forward_slack_seconds` – how far miners may roll `ntime` beyond the template’s `curtime` / `mintime`; default `7000`.
-- Any other field in `tuning.json` uses the same schema as `config.json`, so you can override advanced limits (e.g. `max_accepts_per_second`, `max_conns`) without cluttering the main config.
+- Any other field in `tuning.toml` uses the same schema as `config.toml`, so you can override advanced limits (e.g. `max_accepts_per_second`, `max_conns`) without cluttering the main config.
 
 ## Launch flags
 

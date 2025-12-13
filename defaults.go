@@ -68,6 +68,7 @@ func defaultConfig() Config {
 		RPCURL:           defaultRPCURL,
 		RPCUser:          defaultRPCUser,
 		RPCPass:          defaultRPCPass,
+		CoinbasePoolTag:  generatePoolTag(),
 		PayoutAddress:    "",
 		PoolFeePercent:   defaultPoolFeePercent,
 		// Mining / Stratum defaults.
@@ -114,12 +115,12 @@ func defaultConfig() Config {
 }
 
 // defaultConfigPath returns the preferred path for the main pool config.
-// Newer deployments keep config under data/state/config.json; if that file
-// is missing, we fall back to the legacy data/config.json location.
+// Newer deployments keep config under data/state/config.toml; if that file
+// is missing, we fall back to the legacy data/config.toml location.
 func defaultConfigPath() string {
-	stateCfg := filepath.Join(defaultDataDir, "state", "config.json")
+	stateCfg := filepath.Join(defaultDataDir, "state", "config.toml")
 	if _, err := os.Stat(stateCfg); err == nil {
 		return stateCfg
 	}
-	return filepath.Join(defaultDataDir, "config.json")
+	return filepath.Join(defaultDataDir, "config.toml")
 }
