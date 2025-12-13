@@ -2,15 +2,14 @@
 
 ## Configuration files
 
-- `data/config/config.toml` (**required**): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings; advanced tuning fields now belong in `tuning.toml`.
-- `data/config/secrets.toml` (**required**): sensitive values like `rpc_user` / `rpc_pass` needed to connect to bitcoind. These are never written back into `config.toml`.
-- `data/config/tuning.toml` (optional): advanced tuning and limits that are merged on top of `config.toml`. Deleting this file reverts to the sane built-in defaults plus the base config. See `data/config/examples/tuning.toml.example` for the current list of advanced knobs.
+- `data/config/config.toml` (**required**): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings.
+- `data/config/secrets.toml` (**required**): sensitive values like `rpc_user` / `rpc_pass` needed to connect to bitcoind.
+- `data/config/tuning.toml` (optional): advanced tuning and limits. Deleting this file reverts to the built-in defaults. See `data/config/examples/tuning.toml.example` for the current list.
 
 ## Tuning highlights
 
 - `hashrate_ema_tau_seconds` – time constant (seconds) for the per-connection hashrate EMA used in worker stats. Larger values smooth the reports but react more slowly; default `600` (~10 minutes).
 - `ntime_forward_slack_seconds` – how far miners may roll `ntime` beyond the template’s `curtime` / `mintime`; default `7000`.
-- Any other field in `tuning.toml` uses the same schema as `config.toml`, so you can override advanced limits (e.g. `max_accepts_per_second`, `max_conns`) without cluttering the main config.
 
 ## Launch flags
 
@@ -18,7 +17,7 @@
 
 ## Status pages & API
 
-- HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/www`. Missing templates cause the pool to exit, so keep them alongside the binary.
+- HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/www`.
   - `status.tmpl` – dashboard
   - `worker_status.tmpl` – per-worker view
   - `server_stats.tmpl` – server stats page

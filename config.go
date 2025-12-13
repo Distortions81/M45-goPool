@@ -546,13 +546,8 @@ func ensureExampleFiles(dataDir string) {
 	}
 
 	// Create config.toml.example
-	configExample := defaultConfig()
-	configExample.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
-	configExample.DonationAddress = "OPTIONAL_DONATION_WALLET_ADDRESS"
 	configExamplePath := filepath.Join(examplesDir, "config.toml.example")
-	if err := rewriteConfigFile(configExamplePath, configExample); err != nil {
-		logger.Warn("write config example", "path", configExamplePath, "error", err)
-	}
+	ensureExampleFile(configExamplePath, exampleConfigBytes())
 
 	// Create secrets.toml.example
 	ensureExampleFile(filepath.Join(examplesDir, "secrets.toml.example"), secretsConfigExample)
@@ -578,6 +573,19 @@ func ensureExampleFile(path string, contents []byte) {
 
 func exampleHeader(text string) []byte {
 	return []byte(fmt.Sprintf("# Generated %s example (copy to a real config and edit as needed)\n\n", text))
+}
+
+func exampleConfigBytes() []byte {
+	cfg := defaultConfig()
+	cfg.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
+	cfg.DonationAddress = "OPTIONAL_DONATION_WALLET_ADDRESS"
+	fc := buildBaseFileConfig(cfg)
+	data, err := toml.Marshal(fc)
+	if err != nil {
+		logger.Warn("encode config example failed", "error", err)
+		return nil
+	}
+	return append(exampleHeader("base config"), data...)
 }
 
 func exampleBaseConfigBytes() []byte {
