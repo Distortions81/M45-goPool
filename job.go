@@ -785,11 +785,11 @@ func (jm *JobManager) markZMQHealthy() {
 	if jm.cfg.ZMQBlockAddr == "" {
 		return
 	}
-	if !jm.zmqHealthy.Load() {
-		logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
+	if jm.zmqHealthy.Swap(true) {
+		return
 	}
+	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
-	jm.zmqHealthy.Store(true)
 }
 
 func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
