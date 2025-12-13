@@ -63,7 +63,7 @@
 			<canvas id="hashrateChart" style="width:100%;height:200px;"></canvas>
 		</div>
 
-		<h2 id="workers">Recent work <span class="text-sm" style="font-weight:400;">&mdash; <a href="/workers">view all</a></span></h2>
+		<h2 id="workers">Recent work</h2>
 		<div class="card">
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-workers-table">
@@ -139,7 +139,7 @@
 		<h2>Banned workers</h2>
 		<div class="card">
 			<p class="text-sm" style="margin-top:0;margin-bottom:8px;color:#f88d8d;" id="status-banned-placeholder-text">
-				Red worker names indicate invalid wallet-style worker IDs. Loading banned worker data…
+				Loading banned worker data…
 			</p>
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-banned-workers-table">
@@ -499,8 +499,7 @@
 				return;
 			}
 			if (warning) {
-				warning.style.display = '';
-				warning.textContent = 'Red worker names indicate invalid wallet-style worker IDs.';
+				warning.style.display = 'none';
 			}
 			const rows = bannedWorkers.map(worker => {
 				const name = worker.display_name || worker.name || '—';
