@@ -48,7 +48,6 @@ const (
 	defaultMinVersionBits                    = 1
 	defaultRefreshInterval                   = 10 * time.Second
 	defaultZMQReceiveTimeout                 = 15 * time.Second
-	defaultZMQFallbackDelay                  = 5 * time.Second
 	defaultLongpollMinBackoff                = 1 * time.Second
 	defaultLongpollMaxBackoff                = 1 * time.Minute
 )

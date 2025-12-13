@@ -340,10 +340,7 @@ func withJitter(base time.Duration) time.Duration {
 
 	// Use crypto/rand for unpredictable jitter to avoid timing-based patterns
 	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		// Fallback to time-based jitter if crypto/rand fails (should be rare)
-		return base + time.Duration(time.Now().UnixNano()%int64(jitter))
-	}
+	rand.Read(buf[:])
 	randVal := binary.BigEndian.Uint64(buf[:])
 	return base + time.Duration(randVal%uint64(jitter))
 }

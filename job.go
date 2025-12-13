@@ -129,8 +129,6 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
-	zmqStateMu         sync.RWMutex
-	lastZMQUnhealthy   time.Time
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte) *JobManager {
@@ -810,9 +808,6 @@ func (jm *JobManager) markZMQHealthy() {
 	}
 	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
-	jm.zmqStateMu.Lock()
-	jm.lastZMQUnhealthy = time.Time{}
-	jm.zmqStateMu.Unlock()
 }
 
 func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
@@ -825,11 +820,8 @@ func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
 		fields = append(fields, "error", err)
 	}
 	if jm.zmqHealthy.Swap(false) {
-		args := append([]interface{}{"zmq watcher unhealthy; enabling longpoll fallback"}, fields...)
+		args := append([]interface{}{"zmq watcher unhealthy"}, fields...)
 		logger.Warn(args...)
-		jm.zmqStateMu.Lock()
-		jm.lastZMQUnhealthy = time.Now()
-		jm.zmqStateMu.Unlock()
 	} else if err != nil {
 		args := append([]interface{}{"zmq watcher error"}, fields...)
 		logger.Error(args...)
@@ -837,19 +829,7 @@ func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
 }
 
 func (jm *JobManager) shouldUseLongpollFallback() bool {
-	if jm.cfg.ZMQBlockAddr == "" {
-		return true
-	}
-	if jm.zmqHealthy.Load() {
-		return false
-	}
-	jm.zmqStateMu.RLock()
-	lastUnhealthy := jm.lastZMQUnhealthy
-	jm.zmqStateMu.RUnlock()
-	if lastUnhealthy.IsZero() {
-		return true
-	}
-	return time.Since(lastUnhealthy) >= defaultZMQFallbackDelay
+	return jm.cfg.ZMQBlockAddr == ""
 }
 
 func (jm *JobManager) longpollLoop(ctx context.Context) {
