@@ -175,7 +175,7 @@ case "${NETWORK}" in
     echo "Start regtest node (with wallet 'testwallet' auto-selected):"
     echo "  \"${BITCOIND}\" -daemon -regtest -datadir=\"${NODE_DATA}\""
     echo
-    echo "Example pool config (matches config.json.example in this repo):"
+    echo "Example pool config (matches config.toml.example in this repo):"
     echo "  rpc_url:  \"http://127.0.0.1:18443\""
     echo "  rpc_user: \"${RPC_USER}\""
     echo "  rpc_pass: \"${RPC_PASS}\""

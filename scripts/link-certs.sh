@@ -175,7 +175,7 @@ echo "3. goPool's certReloader checks for changes every hour"
 echo "4. New certificates are loaded automatically (no restart needed)"
 echo
 echo -e "${BLUE}Next steps:${NC}"
-echo "1. Ensure goPool config has status_tls_addr set (e.g., \":443\")"
+echo "1. Ensure goPool config.toml has status_tls_listen set (e.g., \":443\")"
 echo "2. Start or restart goPool to load the certificates"
 echo "3. Test your HTTPS endpoint: https://$DOMAIN"
 echo

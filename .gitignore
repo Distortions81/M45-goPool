@@ -1,10 +1,10 @@
 goPool
 data/*.pem
-data/state/*.json
-data/state/*.json.bak
-data/state/secrets.json
-data/mainnet_state/*.json
-data/mainnet_state/*.json.bak
+data/state/*.toml
+data/state/*.toml.bak
+data/state/secrets.toml
+data/mainnet_state/*.toml
+data/mainnet_state/*.toml.bak
 data/mainnet_logs/
 data/mainnet_state/*.bin
 data/mainnet_state/*.bin.bak

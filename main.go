@@ -260,7 +260,7 @@ func main() {
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL (e.g. http://127.0.0.1:8332)")
 	rpcUserFlag := flag.String("rpc-user", "", "override RPC username")
 	rpcPassFlag := flag.String("rpc-pass", "", "override RPC password")
-	secretsPathFlag := flag.String("secrets", "", "path to secrets.json (overrides default under data_dir/state)")
+	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/state)")
 	floodFlag := flag.Bool("flood", false, "enable flood-test mode (force min/max difficulty to 0.01)")
 	mainnetFlag := flag.Bool("mainnet", false, "force mainnet defaults for RPC/ZMQ ports")
 	testnetFlag := flag.Bool("testnet", false, "force testnet defaults for RPC/ZMQ ports")
@@ -318,10 +318,10 @@ func main() {
 
 	cfgPath := defaultConfigPath()
 	cfg := loadConfig(cfgPath, *secretsPathFlag)
-	// Ensure a config.json.example exists alongside the active config so
+	// Ensure a config.toml.example exists alongside the active config so
 	// operators can see all available fields and defaults. Only create it
 	// when missing to avoid overwriting local edits.
-	examplePath := filepath.Join(filepath.Dir(cfgPath), "config.json.example")
+	examplePath := filepath.Join(filepath.Dir(cfgPath), "config.toml.example")
 	if _, err := os.Stat(examplePath); errors.Is(err, os.ErrNotExist) {
 		ex := defaultConfig()
 		// Insert helpful placeholders for addresses so example configs
@@ -1014,7 +1014,7 @@ func sanityCheckPoolAddressRPC(ctx context.Context, rpcClient *RPCClient, addr s
 	if strings.TrimSpace(rpcClient.url) == "http://127.0.0.1:8332" &&
 		strings.TrimSpace(rpcClient.user) == "bitcoinrpc" &&
 		strings.TrimSpace(rpcClient.pass) == "password" {
-		fatal("config", fmt.Errorf("there isn't btc node login/pass/ip data configured; please set rpc_url, rpc_user, and rpc_pass in config.json or secrets.json"))
+		fatal("config", fmt.Errorf("there isn't btc node login/pass/ip data configured; please set rpc_url, rpc_user, and rpc_pass in config.toml or secrets.toml"))
 	}
 
 	parent := ctx
