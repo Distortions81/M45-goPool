@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
@@ -515,8 +514,6 @@ type StatusData struct {
 	GoMemAllocBytes     uint64  `json:"go_mem_alloc_bytes"`
 	GoMemSysBytes       uint64  `json:"go_mem_sys_bytes"`
 	ProcessRSSBytes     uint64  `json:"process_rss_bytes"`
-	DiskTotalBytes      uint64  `json:"disk_total_bytes"`
-	DiskFreeBytes       uint64  `json:"disk_free_bytes"`
 	SystemMemTotalBytes uint64  `json:"system_mem_total_bytes"`
 	SystemMemFreeBytes  uint64  `json:"system_mem_free_bytes"`
 	SystemMemUsedBytes  uint64  `json:"system_mem_used_bytes"`
@@ -1260,8 +1257,6 @@ type DiagnosticsData struct {
 	GoMemAllocBytes     uint64  `json:"go_mem_alloc_bytes"`
 	GoMemSysBytes       uint64  `json:"go_mem_sys_bytes"`
 	ProcessRSSBytes     uint64  `json:"process_rss_bytes"`
-	DiskTotalBytes      uint64  `json:"disk_total_bytes"`
-	DiskFreeBytes       uint64  `json:"disk_free_bytes"`
 	SystemMemTotalBytes uint64  `json:"system_mem_total_bytes"`
 	SystemMemFreeBytes  uint64  `json:"system_mem_free_bytes"`
 	SystemMemUsedBytes  uint64  `json:"system_mem_used_bytes"`
@@ -1623,8 +1618,6 @@ func (s *StatusServer) handleDiagnosticsJSON(w http.ResponseWriter, r *http.Requ
 			GoMemAllocBytes:     full.GoMemAllocBytes,
 			GoMemSysBytes:       full.GoMemSysBytes,
 			ProcessRSSBytes:     full.ProcessRSSBytes,
-			DiskTotalBytes:      full.DiskTotalBytes,
-			DiskFreeBytes:       full.DiskFreeBytes,
 			SystemMemTotalBytes: full.SystemMemTotalBytes,
 			SystemMemFreeBytes:  full.SystemMemFreeBytes,
 			SystemMemUsedBytes:  full.SystemMemUsedBytes,
@@ -1998,7 +1991,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	procRSS := readProcessRSS()
-	diskTotal, diskFree := statDiskUsage(s.cfg.DataDir)
 	cpuPercent := s.sampleCPUPercent()
 	sysMemTotal, sysMemFree := readSystemMemory()
 	var sysMemUsed uint64
@@ -2385,8 +2377,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		GoMemAllocBytes:          ms.Alloc,
 		GoMemSysBytes:            ms.Sys,
 		ProcessRSSBytes:          procRSS,
-		DiskTotalBytes:           diskTotal,
-		DiskFreeBytes:            diskFree,
 		SystemMemTotalBytes:      sysMemTotal,
 		SystemMemFreeBytes:       sysMemFree,
 		SystemMemUsedBytes:       sysMemUsed,
@@ -2712,6 +2702,9 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 		if err := json.Unmarshal(line, &r); err != nil {
 			continue
 		}
+		if strings.EqualFold(strings.TrimSpace(r.Hash), "dummyhash") {
+			continue
+		}
 		recs = append(recs, FoundBlockView{
 			Height:             r.Height,
 			Hash:               r.Hash,
@@ -2736,21 +2729,6 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 		recs = recs[:limit]
 	}
 	return recs
-}
-
-// statDiskUsage returns total and available bytes for the filesystem
-// containing the given path. On error it returns zero values.
-func statDiskUsage(path string) (total, free uint64) {
-	if path == "" {
-		path = defaultDataDir
-	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
-		return 0, 0
-	}
-	total = st.Blocks * uint64(st.Bsize)
-	free = st.Bavail * uint64(st.Bsize)
-	return total, free
 }
 
 // readProcessRSS returns the current process resident set size (RSS) in bytes.

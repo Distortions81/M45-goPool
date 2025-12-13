@@ -54,10 +54,6 @@
 					<div class="mono" id="server-pool-cpu">--</div>
 				</div>
 				<div>
-					<div class="label">Storage (free/total)</div>
-					<div class="mono" id="server-storage">-- / --</div>
-				</div>
-				<div>
 					<div class="label">System RAM (used/total)</div>
 					<div class="mono" id="server-ram">-- / --</div>
 				</div>
@@ -71,10 +67,6 @@
 		<div class="card">
 			<div class="label">Pool metrics (since start)</div>
 			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
-				<div>
-					<div class="label">VarDiff adjustments</div>
-					<div class="mono" id="server-vardiff">--</div>
-				</div>
 				<div>
 					<div class="label">Block submissions</div>
 					<div class="mono" id="server-block-submissions">--</div>
@@ -121,7 +113,6 @@
 		const jobFeedEl = document.getElementById('server-job-feed-error');
 		const zmqStatusEl = document.getElementById('server-zmq-status');
 		const zmqCountsEl = document.getElementById('server-zmq-counts');
-		const vardiffEl = document.getElementById('server-vardiff');
 		const blockSubEl = document.getElementById('server-block-submissions');
 		const rpcGBTEl = document.getElementById('server-rpc-gbt');
 		const rpcSubmitEl = document.getElementById('server-rpc-submit');
@@ -131,7 +122,6 @@
 		const goHeapEl = document.getElementById('server-go-heap');
 		const processRSSEl = document.getElementById('server-process-rss');
 		const poolCPUEl = document.getElementById('server-pool-cpu');
-		const storageEl = document.getElementById('server-storage');
 		const ramEl = document.getElementById('server-ram');
 		const loadEl = document.getElementById('server-load');
 
@@ -200,9 +190,6 @@
 				const reconnects = data.job_feed?.zmq_reconnects ?? 0;
 				zmqCountsEl.textContent = `disconnects: ${disconnects}, reconnects: ${reconnects}`;
 			}
-			if (vardiffEl) {
-				vardiffEl.textContent = `up: ${data.vardiff_up || 0}   down: ${data.vardiff_down || 0}`;
-			}
 			if (blockSubEl) {
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
 			}
@@ -230,9 +217,6 @@
 			}
 			if (poolCPUEl) {
 				poolCPUEl.textContent = formatPercent(data.process_cpu_percent);
-			}
-			if (storageEl) {
-				storageEl.textContent = `${formatBytes(data.disk_free_bytes)} / ${formatBytes(data.disk_total_bytes)}`;
 			}
 			if (ramEl) {
 				ramEl.textContent = `${formatBytes(data.system_mem_used_bytes)} / ${formatBytes(data.system_mem_total_bytes)}`;
