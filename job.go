@@ -76,6 +76,7 @@ type Job struct {
 const (
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
+	jobRetryDelay           = 100 * time.Millisecond
 )
 
 var errStaleTemplate = errors.New("stale template")
@@ -255,16 +256,6 @@ func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
 	return jm.zmqPayload
 }
 
-func nextBackoff(cur time.Duration) time.Duration {
-	if cur <= 0 {
-		return defaultLongpollMinBackoff
-	}
-	cur *= 2
-	if cur > defaultLongpollMaxBackoff {
-		return defaultLongpollMaxBackoff
-	}
-	return cur
-}
 
 func (jm *JobManager) Start(ctx context.Context) {
 	if ctx == nil {
@@ -833,7 +824,6 @@ func (jm *JobManager) shouldUseLongpollFallback() bool {
 }
 
 func (jm *JobManager) longpollLoop(ctx context.Context) {
-	backoff := defaultLongpollMinBackoff
 	for {
 		if ctx.Err() != nil {
 			return
@@ -842,13 +832,11 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if job == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("longpoll refresh (no job) error", "error", err)
-				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+				if err := sleepContext(ctx, jobRetryDelay); err != nil {
 					return
 				}
-				backoff = nextBackoff(backoff)
 				continue
 			}
-			backoff = defaultLongpollMinBackoff
 			continue
 		}
 
@@ -857,10 +845,9 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("job refresh error", "error", err)
 			}
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
 
@@ -872,14 +859,12 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if err != nil {
 			jm.recordJobError(err)
 			logger.Error("longpoll gbt error", "error", err)
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
 		if !jm.shouldUseLongpollFallback() {
-			backoff = defaultLongpollMinBackoff
 			continue
 		}
 
@@ -890,20 +875,16 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 					logger.Error("fallback refresh after stale template", "error", err)
 				}
 			}
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
-
-		backoff = defaultLongpollMinBackoff
 	}
 }
 
 // Prefer block notifications when bitcoind is configured with -zmqpubhashblock (docs/protocols/zmq.md).
 func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
-	backoff := defaultLongpollMinBackoff
 zmqLoop:
 	for {
 		if ctx.Err() != nil {
@@ -912,10 +893,9 @@ zmqLoop:
 		if jm.CurrentJob() == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("zmq loop refresh (no job) error", "error", err)
-				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+				if err := sleepContext(ctx, jobRetryDelay); err != nil {
 					return
 				}
-				backoff = nextBackoff(backoff)
 				continue
 			}
 		}
@@ -923,10 +903,9 @@ zmqLoop:
 		sub, err := zmq4.NewSocket(zmq4.SUB)
 		if err != nil {
 			jm.markZMQUnhealthy("socket", err)
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
 
@@ -935,10 +914,9 @@ zmqLoop:
 			if err := sub.SetSubscribe(topic); err != nil {
 				jm.markZMQUnhealthy("subscribe", err)
 				sub.Close()
-				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+				if err := sleepContext(ctx, jobRetryDelay); err != nil {
 					return
 				}
-				backoff = nextBackoff(backoff)
 				continue zmqLoop
 			}
 		}
@@ -946,26 +924,23 @@ zmqLoop:
 		if err := sub.SetRcvtimeo(defaultZMQReceiveTimeout); err != nil {
 			jm.markZMQUnhealthy("set_rcvtimeo", err)
 			sub.Close()
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
 
 		if err := sub.Connect(jm.cfg.ZMQBlockAddr); err != nil {
 			jm.markZMQUnhealthy("connect", err)
 			sub.Close()
-			if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			backoff = nextBackoff(backoff)
 			continue
 		}
 
 		jm.markZMQHealthy()
 		logger.Info("watching ZMQ block notifications", "addr", jm.cfg.ZMQBlockAddr)
-		backoff = defaultLongpollMinBackoff
 
 		for {
 			if ctx.Err() != nil {
@@ -980,10 +955,9 @@ zmqLoop:
 				}
 				jm.markZMQUnhealthy("receive", err)
 				sub.Close()
-				if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+				if err := sleepContext(ctx, jobRetryDelay); err != nil {
 					return
 				}
-				backoff = nextBackoff(backoff)
 				break
 			}
 			if len(frames) < 2 {
@@ -1000,13 +974,11 @@ zmqLoop:
 				jm.markZMQHealthy()
 				if err := jm.refreshJobCtx(ctx); err != nil {
 					logger.Error("refresh after zmq block error", "error", err)
-					if err := sleepContext(ctx, withJitter(backoff)); err != nil {
+					if err := sleepContext(ctx, jobRetryDelay); err != nil {
 						return
 					}
-					backoff = nextBackoff(backoff)
 					continue
 				}
-				backoff = defaultLongpollMinBackoff
 			case "rawblock":
 				tip, err := parseRawBlockTip(payload)
 				if err != nil {
