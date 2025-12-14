@@ -559,6 +559,7 @@ type statusPageJobFeed struct {
 
 type statusPageJSON struct {
 	APIVersion           string            `json:"api_version"`
+	Uptime               time.Duration     `json:"uptime"`
 	ActiveMiners         int               `json:"active_miners"`
 	ActiveTLSMiners      int               `json:"active_tls_miners"`
 	SharesPerSecond      float64           `json:"shares_per_second"`
@@ -1607,6 +1608,7 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 		full := s.buildCensoredStatusData()
 		data := statusPageJSON{
 			APIVersion:           apiVersion,
+			Uptime:               full.Uptime,
 			ActiveMiners:         full.ActiveMiners,
 			ActiveTLSMiners:      full.ActiveTLSMiners,
 			SharesPerSecond:      full.SharesPerSecond,

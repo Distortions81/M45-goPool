@@ -58,6 +58,10 @@
 			<div class="label">Process stats</div>
 			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:8px;">
 				<div>
+					<div class="label">Server uptime</div>
+					<div class="mono" id="server-uptime">--</div>
+				</div>
+				<div>
 					<div class="label">Goroutines</div>
 					<div class="mono" id="server-goroutines">--</div>
 				</div>
@@ -106,6 +110,7 @@
 	(function () {
 		const REFRESH_INTERVAL = 10000;
 
+		const uptimeEl = document.getElementById('server-uptime');
 		const rpcStatusEl = document.getElementById('server-rpc-status');
 		const accountingEl = document.getElementById('server-accounting-status');
 		const jobFeedEl = document.getElementById('server-job-feed-error');
@@ -127,6 +132,19 @@
 		const poolCPUEl = document.getElementById('server-pool-cpu');
 		const ramEl = document.getElementById('server-ram');
 		const loadEl = document.getElementById('server-load');
+
+		function formatDuration(ns) {
+			if (!ns) return '—';
+			const seconds = Math.floor(ns / 1e9);
+			const days = Math.floor(seconds / 86400);
+			const hours = Math.floor((seconds % 86400) / 3600);
+			const mins = Math.floor((seconds % 3600) / 60);
+			const secs = seconds % 60;
+			if (days > 0) return `${days}d ${hours}h ${mins}m`;
+			if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+			if (mins > 0) return `${mins}m ${secs}s`;
+			return `${secs}s`;
+		}
 
 		function formatBytes(bytes) {
 			if (bytes === undefined || bytes === null) {
@@ -166,6 +184,9 @@
 
 		function updateStatusPage(data) {
 			if (!data) return;
+			if (uptimeEl && data.uptime) {
+				uptimeEl.textContent = formatDuration(data.uptime);
+			}
 			if (rpcStatusEl) {
 				rpcStatusEl.textContent = data.rpc_error ? 'Not connected' : 'OK';
 			}
