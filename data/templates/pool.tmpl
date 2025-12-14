@@ -44,18 +44,6 @@
 			<div class="label">Connection limits</div>
 			<div class="grid">
 				<div>
-					<div class="label">Listen address</div>
-					<div class="value mono">{{.ListenAddr}}</div>
-					<p class="text-sm">TCP address miners connect to.</p>
-				</div>
-				<div>
-					<div class="label">TLS listen address</div>
-					<div class="value mono">
-						{{if .StratumTLSListen}}{{.StratumTLSListen}}{{else}}(disabled){{end}}
-					</div>
-					<p class="text-sm">Optional TLS endpoint for miners that support <span class="mono">stratum+tls</span>.</p>
-				</div>
-				<div>
 					<div class="label">Max connections</div>
 					<div class="value mono">
 						{{if gt .MaxConns 0}}{{.MaxConns}}{{else}}(unlimited){{end}}
@@ -94,17 +82,11 @@
 					</div>
 					<p class="text-sm">Whether miners can pin their own difficulty via <span class="mono">mining.suggest_difficulty</span>.</p>
 				</div>
-			</div>
-		</div>
-
-		<div class="card">
-			<div class="label">Pool fee</div>
-			<div class="grid">
 				<div>
-					<div class="label">Pool fee percent</div>
+					<div class="label">Pool fee</div>
 					<div class="value mono">{{printf "%.3f" .PoolFeePercent}}%</div>
 					<p class="text-sm">
-						Fee charged on block rewards. Coinbase transactions automatically split rewards between the pool and worker unless the worker wallet matches the pool wallet.
+						Fee charged on block rewards. Coinbase splits rewards between pool and worker.
 					</p>
 				</div>
 			</div>

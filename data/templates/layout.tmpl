@@ -20,6 +20,9 @@
 			</div>
 		</div>
 		<nav class="header-links">
+			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
+				<span class="theme-toggle-icon">🌙</span>
+			</button>
 			<a class="header-link" href="/">Overview</a>
 			<a class="header-link" href="/pool">Pool</a>
 			<a class="header-link" href="/node">Node</a>
@@ -56,4 +59,56 @@
 		render: <span class="mono">{{formatRenderDuration .RenderDuration}}</span>
 	</div>
 </div>
+<script>
+// Theme switcher - maintains theme preference across page loads
+(function() {
+	const themeToggle = document.getElementById('themeToggle');
+	const themeIcon = document.querySelector('.theme-toggle-icon');
+
+	// Get saved theme or default to dark
+	const savedTheme = localStorage.getItem('theme') || 'dark';
+
+	// Apply theme on load
+	function applyTheme(theme) {
+		if (theme === 'light') {
+			document.documentElement.setAttribute('data-theme', 'light');
+			if (themeIcon) themeIcon.textContent = '☀️';
+		} else {
+			document.documentElement.removeAttribute('data-theme');
+			if (themeIcon) themeIcon.textContent = '🌙';
+		}
+	}
+
+	// Initialize theme
+	applyTheme(savedTheme);
+
+	// Toggle theme on button click
+	if (themeToggle) {
+		themeToggle.addEventListener('click', function() {
+			const currentTheme = document.documentElement.getAttribute('data-theme');
+			const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+			applyTheme(newTheme);
+			localStorage.setItem('theme', newTheme);
+		});
+	}
+})();
+
+// Copy-to-clipboard functionality for code boxes
+document.addEventListener('click', function(e) {
+	const copyable = e.target.closest('.copyable');
+	if (!copyable) return;
+
+	const text = copyable.dataset.copy || copyable.textContent;
+	navigator.clipboard.writeText(text).then(function() {
+		const original = copyable.style.background;
+		copyable.style.background = 'var(--accent-soft)';
+		setTimeout(function() {
+			copyable.style.background = original;
+		}, 200);
+	}).catch(function(err) {
+		console.error('Failed to copy:', err);
+	});
+});
+</script>
 {{end}}

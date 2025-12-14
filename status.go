@@ -994,14 +994,14 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
-	tmpl := template.New("status").Funcs(funcs)
+	tmpl := template.New("overview").Funcs(funcs)
 	layoutPath := filepath.Join(cfg.DataDir, "templates", "layout.tmpl")
-	statusPath := filepath.Join(cfg.DataDir, "templates", "status.tmpl")
-	serverInfoPath := filepath.Join(cfg.DataDir, "templates", "server_stats.tmpl")
+	statusPath := filepath.Join(cfg.DataDir, "templates", "overview.tmpl")
+	serverInfoPath := filepath.Join(cfg.DataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(cfg.DataDir, "templates", "worker_login.tmpl")
 	workerStatusPath := filepath.Join(cfg.DataDir, "templates", "worker_status.tmpl")
-	nodeInfoPath := filepath.Join(cfg.DataDir, "templates", "node_info.tmpl")
-	poolInfoPath := filepath.Join(cfg.DataDir, "templates", "pool_info.tmpl")
+	nodeInfoPath := filepath.Join(cfg.DataDir, "templates", "node.tmpl")
+	poolInfoPath := filepath.Join(cfg.DataDir, "templates", "pool.tmpl")
 	errorPath := filepath.Join(cfg.DataDir, "templates", "error.tmpl")
 
 	layoutHTML, err := os.ReadFile(layoutPath)
@@ -1038,12 +1038,12 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	}
 
 	template.Must(tmpl.Parse(string(layoutHTML)))
-	tmpl = template.Must(tmpl.New("status").Parse(string(statusHTML)))
-	template.Must(tmpl.New("server_stats").Parse(string(serverInfoHTML)))
+	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
+	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
-	template.Must(tmpl.New("node_info").Parse(string(nodeInfoHTML)))
-	template.Must(tmpl.New("pool_info").Parse(string(poolInfoHTML)))
+	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
+	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
 	template.Must(tmpl.New("error").Parse(string(errorHTML)))
 
 	if ctx == nil {
@@ -1189,7 +1189,7 @@ func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		data := s.baseTemplateData(start)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.tmpl.ExecuteTemplate(w, "status", data); err != nil {
+		if err := s.tmpl.ExecuteTemplate(w, "overview", data); err != nil {
 			logger.Error("status template error", "error", err)
 			s.renderErrorPage(w, r, http.StatusInternalServerError,
 				"Status page error",
@@ -1993,7 +1993,7 @@ func (s *StatusServer) handleServerInfoPage(w http.ResponseWriter, r *http.Reque
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "server_stats", data); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "server", data); err != nil {
 		logger.Error("server info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Server info page error",
@@ -2008,7 +2008,7 @@ func (s *StatusServer) handlePoolInfo(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "pool_info", data); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "pool", data); err != nil {
 		logger.Error("pool info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Pool info error",
@@ -2758,7 +2758,7 @@ func (s *StatusServer) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "node_info", data); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "node", data); err != nil {
 		logger.Error("node info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Node info error",

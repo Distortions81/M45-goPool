@@ -1,14 +1,57 @@
 :root {
 	--accent: #2cf1c2;
 	--accent-soft: rgba(44, 241, 194, 0.14);
+	/* Dark mode colors (default) */
+	--bg-gradient-start: #161b2e;
+	--bg-gradient-mid: #050712;
+	--bg-gradient-end: #020308;
+	--text-primary: #e8eaed;
+	--text-secondary: #9aa1c0;
+	--text-muted: #6b7086;
+	--card-bg-start: rgba(44, 241, 194, 0.1);
+	--card-bg-mid: #101321;
+	--card-bg-end: #0b0e18;
+	--card-border: #272c3f;
+	--header-bg: rgba(5, 7, 14, 0.96);
+	--header-border: #1b2030;
+	--input-bg: #101320;
+	--input-border: #2b3243;
+	--table-hover: rgba(23, 200, 160, 0.06);
+	--code-bg: #101320;
+	--code-border: #2b3243;
+}
+
+/* Light mode - warm, slightly dimmed palette with blue-ink accent */
+[data-theme="light"] {
+	--accent: #2e5c8a;
+	--accent-soft: rgba(46, 92, 138, 0.12);
+	--bg-gradient-start: #ebe8e3;
+	--bg-gradient-mid: #e2ddd6;
+	--bg-gradient-end: #d9d3cc;
+	--text-primary: #2d2a26;
+	--text-secondary: #5a5248;
+	--text-muted: #7a746a;
+	--card-bg-start: rgba(46, 92, 138, 0.06);
+	--card-bg-mid: #f5f2ed;
+	--card-bg-end: #ede9e3;
+	--card-border: #c9c2b8;
+	--header-bg: rgba(245, 242, 237, 0.96);
+	--header-border: #d9d3cc;
+	--input-bg: #f9f7f4;
+	--input-border: #ccc5bb;
+	--table-hover: rgba(46, 92, 138, 0.08);
+	--code-bg: #ebe8e3;
+	--code-border: #c9c2b8;
 }
 
 body {
 	font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-	background: radial-gradient(circle at top, #161b2e 0, #050712 55%, #020308 100%);
-	color: #e8eaed;
+	background: radial-gradient(circle at top, var(--bg-gradient-start) 0, var(--bg-gradient-mid) 55%, var(--bg-gradient-end) 100%);
+	color: var(--text-primary);
 	margin: 0;
 	padding: 0;
+	font-size: 16px;
+	transition: background 0.3s ease, color 0.3s ease;
 }
 
 .page {
@@ -23,13 +66,14 @@ header {
 	left: 0;
 	right: 0;
 	height: 64px;
-	background: rgba(5, 7, 14, 0.96);
-	border-bottom: 1px solid #1b2030;
+	background: var(--header-bg);
+	border-bottom: 1px solid var(--header-border);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	z-index: 10;
 	backdrop-filter: blur(12px);
+	transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .warning-banner {
@@ -153,15 +197,15 @@ header {
 }
 
 .brand-title {
-	font-size: 22px;
+	font-size: 24px;
 	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 }
 
 .brand-sub {
-	font-size: 12px;
-	color: #8f94aa;
+	font-size: 13px;
+	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.18em;
 }
@@ -181,14 +225,14 @@ header {
 }
 
 .header-link {
-	font-size: 14px;
+	font-size: 15px;
 	font-weight: 500;
-	color: #d4d8e8;
+	color: var(--text-primary);
 	text-decoration: none;
-	padding: 7px 14px;
+	padding: 8px 16px;
 	border-radius: 6px;
-	border: 1px solid #2a3144;
-	background: linear-gradient(to bottom, #1a1f30, #131822);
+	border: 1px solid var(--card-border);
+	background: var(--card-bg-mid);
 	transition: all 0.2s ease;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -231,6 +275,21 @@ header {
 	box-shadow: 0 6px 16px rgba(88, 101, 242, 0.6);
 }
 
+/* Discord link - blue/teal for light mode */
+[data-theme="light"] .header-link.discord-link {
+	background: linear-gradient(135deg, #4a8fb3 0%, #3d7a9a 100%);
+	border-color: #3d7a9a;
+	color: #ffffff;
+	box-shadow: 0 4px 12px rgba(74, 143, 179, 0.35);
+}
+
+[data-theme="light"] .header-link.discord-link:hover {
+	background: linear-gradient(135deg, #5ba1c4 0%, #4a8fb3 100%);
+	border-color: #4a8fb3;
+	transform: translateY(-1px);
+	box-shadow: 0 6px 16px rgba(74, 143, 179, 0.5);
+}
+
 h1 {
 	margin: 0 0 18px 0;
 	font-weight: 600;
@@ -242,18 +301,19 @@ h2 {
 	margin-bottom: 8px;
 	font-weight: 600;
 	letter-spacing: 0.03em;
-	font-size: 18px;
-	color: #c4c9dd;
+	font-size: 20px;
+	color: var(--text-secondary);
 }
 
 .card {
-	background: radial-gradient(circle at top left, var(--accent-soft) 0, #101321 55%, #0b0e18 100%);
-	border: 1px solid #272c3f;
+	background: radial-gradient(circle at top left, var(--card-bg-start) 0, var(--card-bg-mid) 55%, var(--card-bg-end) 100%);
+	border: 1px solid var(--card-border);
 	border-top: 3px solid var(--accent);
 	border-radius: 10px;
 	padding: 16px 18px;
 	margin-bottom: 14px;
 	box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+	transition: all 0.3s ease;
 }
 
 .card:hover {
@@ -262,9 +322,15 @@ h2 {
 	box-shadow: 0 20px 35px rgba(18, 229, 175, 0.18);
 }
 
+/* Card hover for light mode - subtle shadow instead of glow */
+[data-theme="light"] .card:hover {
+	border-color: var(--accent);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
 .label {
-	color: #9aa1c0;
-	font-size: 13px;
+	color: var(--text-secondary);
+	font-size: 14px;
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
 	position: relative;
@@ -284,14 +350,14 @@ h2 {
 }
 
 .value {
-	font-size: 18px;
+	font-size: 20px;
 	font-weight: 500;
-	color: #eaf5ff;
+	color: var(--text-primary);
 }
 
 .mono {
 	font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-	font-size: 14px;
+	font-size: 15px;
 	word-break: break-all;
 }
 
@@ -300,15 +366,16 @@ h2 {
 	padding: 4px 6px;
 	margin-top: 4px;
 	border-radius: 4px;
-	background: #101320;
-	border: 1px solid #2b3243;
+	background: var(--code-bg);
+	border: 1px solid var(--code-border);
 	font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-	font-size: 13px;
+	font-size: 14px;
 	white-space: normal;
 	word-break: break-all;
 	overflow: visible;
 	box-sizing: border-box;
 	cursor: pointer;
+	transition: all 0.2s ease;
 }
 
 .code-box:hover {
@@ -324,8 +391,8 @@ h2 {
 }
 
 .text-sm {
-	font-size: 13px;
-	color: #858aa0;
+	font-size: 14px;
+	color: var(--text-muted);
 }
 
 .card-context {
@@ -372,20 +439,20 @@ a:hover {
 }
 
 .table th {
-	color: #9ea3b5;
-	font-size: 14px;
+	color: var(--text-secondary);
+	font-size: 15px;
 	font-weight: 600;
-	background: rgba(12, 16, 30, 0.9);
+	background: var(--card-bg-mid);
 	position: sticky;
 	top: 0;
 }
 
 .table td {
-	font-size: 15px;
+	font-size: 16px;
 }
 
 .table tr:hover td {
-	background: rgba(23, 200, 160, 0.06);
+	background: var(--table-hover);
 }
 
 .badge {
@@ -393,7 +460,7 @@ a:hover {
 	background: rgba(246, 179, 74, 0.15);
 	padding: 2px 8px;
 	border-radius: 999px;
-	font-size: 13px;
+	font-size: 14px;
 	color: #f6b34a;
 	border: 1px solid rgba(246, 179, 74, 0.6);
 }
@@ -409,14 +476,15 @@ a:hover {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: 6px 10px;
+	padding: 8px 12px;
 	border-radius: 999px;
-	border: 1px solid #30384a;
-	background: #131722;
-	color: #e8eaed;
-	font-size: 14px;
+	border: 1px solid var(--card-border);
+	background: var(--card-bg-mid);
+	color: var(--text-primary);
+	font-size: 15px;
 	cursor: pointer;
 	text-decoration: none;
+	transition: all 0.2s ease;
 }
 
 .btn:hover {
@@ -435,15 +503,16 @@ a:hover {
 }
 
 .input {
-	background: #101320;
-	border: 1px solid #2b3243;
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
 	border-radius: 6px;
-	padding: 6px 8px;
-	color: #e8eaed;
+	padding: 8px 10px;
+	color: var(--text-primary);
 	font-family: inherit;
-	font-size: 14px;
+	font-size: 15px;
 	width: 100%;
 	box-sizing: border-box;
+	transition: all 0.2s ease;
 }
 
 .input::placeholder {
@@ -469,6 +538,38 @@ a:hover {
 	margin-top: 16px;
 }
 
+/* Theme toggle button */
+.theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--card-border);
+	background: var(--card-bg-mid);
+	color: var(--text-primary);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	font-size: 20px;
+	min-width: 44px;
+}
+
+.theme-toggle:hover {
+	background: var(--card-bg-start);
+	border-color: var(--accent);
+	transform: translateY(-1px);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.theme-toggle-icon {
+	display: inline-block;
+	transition: transform 0.3s ease;
+}
+
+.theme-toggle:active .theme-toggle-icon {
+	transform: rotate(180deg);
+}
+
 @media (max-width: 768px) {
 	.page {
 		padding-top: 80px;
@@ -480,5 +581,20 @@ a:hover {
 
 	.header-inner {
 		padding: 0 16px;
+	}
+
+	.header-links {
+		gap: 4px;
+	}
+
+	.header-link {
+		font-size: 13px;
+		padding: 6px 10px;
+	}
+
+	.theme-toggle {
+		padding: 6px 8px;
+		font-size: 18px;
+		min-width: 38px;
 	}
 }
