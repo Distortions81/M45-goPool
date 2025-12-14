@@ -124,10 +124,15 @@ func scriptForBase58Address(addr string, params *chaincfg.Params) ([]byte, error
 	}
 }
 
-// ----- Bech32 / Segwit decoding -----
+// ----- Bech32 / Bech32m / Segwit decoding -----
 
 const (
 	bech32Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+	// bech32Const is the constant used in bech32 checksum (BIP 173)
+	bech32Const = 1
+	// bech32mConst is the constant used in bech32m checksum (BIP 350)
+	// for witness version 1+ (taproot) addresses
+	bech32mConst = 0x2bc830a3
 )
 
 var bech32CharsetRev [128]int8
@@ -185,9 +190,9 @@ func bech32HrpExpand(hrp string) []byte {
 	return out
 }
 
-func bech32VerifyChecksum(hrp string, data []byte) bool {
+func bech32VerifyChecksum(hrp string, data []byte, encoding uint32) bool {
 	values := append(bech32HrpExpand(hrp), data...)
-	return bech32Polymod(values) == 1
+	return bech32Polymod(values) == encoding
 }
 
 func bech32Decode(s string) (hrp string, data []byte, err error) {
@@ -201,7 +206,7 @@ func bech32Decode(s string) (hrp string, data []byte, err error) {
 	}
 	hrp = s[:pos]
 	dataPart := s[pos+1:]
-	data = make([]byte, len(dataPart))
+	dataWithChecksum := make([]byte, len(dataPart))
 	for i := 0; i < len(dataPart); i++ {
 		c := dataPart[i]
 		if c < 33 || c >= 128 {
@@ -211,12 +216,35 @@ func bech32Decode(s string) (hrp string, data []byte, err error) {
 		if v == -1 {
 			return "", nil, fmt.Errorf("invalid bech32 character %q", c)
 		}
-		data[i] = byte(v)
+		dataWithChecksum[i] = byte(v)
 	}
-	if !bech32VerifyChecksum(hrp, data) {
-		return "", nil, errors.New("invalid bech32 checksum")
+
+	// According to BIP 350, we must use the correct encoding based on witness version:
+	// - witness version 0: bech32
+	// - witness version 1+: bech32m
+	// First, check both to see which one validates
+	validBech32 := bech32VerifyChecksum(hrp, dataWithChecksum, bech32Const)
+	validBech32m := bech32VerifyChecksum(hrp, dataWithChecksum, bech32mConst)
+
+	if !validBech32 && !validBech32m {
+		return "", nil, errors.New("invalid bech32/bech32m checksum")
 	}
-	return hrp, data[:len(data)-6], nil
+
+	// Extract data without checksum
+	data = dataWithChecksum[:len(dataWithChecksum)-6]
+
+	// For segwit addresses, verify the correct encoding was used based on witness version
+	if len(data) > 0 {
+		witnessVer := data[0]
+		if witnessVer == 0 && !validBech32 {
+			return "", nil, errors.New("witness version 0 must use bech32 encoding")
+		}
+		if witnessVer >= 1 && witnessVer <= 16 && !validBech32m {
+			return "", nil, errors.New("witness version 1+ must use bech32m encoding")
+		}
+	}
+
+	return hrp, data, nil
 }
 
 // convertBits converts data between bit groups, used for segwit programs.
@@ -307,11 +335,9 @@ func base58CheckEncode(version byte, payload []byte) (string, error) {
 	full := append(data, check[:4]...)
 
 	// Convert to big.Int for base58 encoding.
+	// The input bytes are in base-256, not base-58!
 	num := big.NewInt(0)
-	for _, b := range full {
-		num.Mul(num, big.NewInt(58))
-		num.Add(num, big.NewInt(int64(b)))
-	}
+	num.SetBytes(full)
 
 	// Encode base58.
 	var out []byte
@@ -334,10 +360,11 @@ func base58CheckEncode(version byte, payload []byte) (string, error) {
 	return string(out), nil
 }
 
-// bech32CreateChecksum computes the checksum for bech32 encoding.
-func bech32CreateChecksum(hrp string, data []byte) []byte {
+// bech32CreateChecksum computes the checksum for bech32 or bech32m encoding.
+// The encoding parameter should be bech32Const (1) for bech32 or bech32mConst (0x2bc830a3) for bech32m.
+func bech32CreateChecksum(hrp string, data []byte, encoding uint32) []byte {
 	values := append(bech32HrpExpand(hrp), data...)
-	polymod := bech32Polymod(append(values, []byte{0, 0, 0, 0, 0, 0}...))
+	polymod := bech32Polymod(append(values, []byte{0, 0, 0, 0, 0, 0}...)) ^ encoding
 	var checksum [6]byte
 	for i := 0; i < 6; i++ {
 		checksum[i] = byte((polymod >> uint(5*(5-i))) & 31)
@@ -345,12 +372,13 @@ func bech32CreateChecksum(hrp string, data []byte) []byte {
 	return checksum[:]
 }
 
-// bech32Encode builds a bech32 string from HRP and data.
-func bech32Encode(hrp string, data []byte) (string, error) {
+// bech32Encode builds a bech32 or bech32m string from HRP and data.
+// The encoding parameter should be bech32Const (1) for bech32 or bech32mConst (0x2bc830a3) for bech32m.
+func bech32Encode(hrp string, data []byte, encoding uint32) (string, error) {
 	if hrp == "" {
 		return "", errors.New("empty hrp")
 	}
-	checksum := bech32CreateChecksum(hrp, data)
+	checksum := bech32CreateChecksum(hrp, data, encoding)
 	combined := append(data, checksum...)
 	var out strings.Builder
 	out.WriteString(strings.ToLower(hrp))
@@ -409,11 +437,19 @@ func scriptToAddress(script []byte, params *chaincfg.Params) string {
 			return ""
 		}
 		prog := script[2 : 2+progLen]
-		data, err := convertBits(append([]byte{ver}, prog...), 8, 5, true)
+		// Convert witness program from 8-bit to 5-bit
+		progData, err := convertBits(prog, 8, 5, true)
 		if err != nil {
 			return ""
 		}
-		addr, err := bech32Encode(params.Bech32HRPSegwit, data)
+		// Prepend witness version (already a 5-bit value, 0-16)
+		data := append([]byte{ver}, progData...)
+		// BIP 350: Use bech32 for witness version 0, bech32m for version 1+
+		var encoding uint32 = bech32Const
+		if ver >= 1 {
+			encoding = bech32mConst
+		}
+		addr, err := bech32Encode(params.Bech32HRPSegwit, data, encoding)
 		if err != nil {
 			return ""
 		}
