@@ -161,66 +161,32 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 	pendingLogMu.Lock()
 	defer pendingLogMu.Unlock()
 
-	// Read existing file contents (if any) so we can atomically rewrite the
-	// whole JSONL file with the new line appended. Pending submissions are
-	// rare, so rewriting is acceptable and avoids partial-line corruption.
-	var existing []byte
-	if b, err := os.ReadFile(path); err == nil {
-		existing = b
-	} else if !errors.Is(err, os.ErrNotExist) {
-		logger.Warn("pending block status read", "error", err)
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		logger.Warn("pending block status mkdir", "error", err)
 		return
 	}
 
-	var buf bytes.Buffer
-	if len(existing) > 0 {
-		buf.Write(bytes.TrimRight(existing, "\n"))
-		buf.WriteByte('\n')
-	}
-	buf.Write(data)
-	buf.WriteByte('\n')
-
-	if err := atomicReplaceFile(path, buf.Bytes(), true); err != nil {
-		logger.Warn("pending block status atomic write", "error", err)
-	}
-}
-
-// atomicReplaceFile writes data to path using a temporary file and atomic
-// rename. When sync is true, it also fsyncs the file and containing
-// directory to reduce the risk of losing the last write on crash.
-func atomicReplaceFile(path string, data []byte, sync bool) error {
-	tmpPath := path + ".tmp"
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	// Open file in append mode with O_CREATE flag
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return err
+		logger.Warn("pending block status open", "error", err)
+		return
 	}
+	defer f.Close()
+
+	// Write the JSON record followed by a newline
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		_ = os.Remove(tmpPath)
-		return err
+		logger.Warn("pending block status write", "error", err)
+		return
 	}
-	if sync {
-		if err := f.Sync(); err != nil {
-			f.Close()
-			_ = os.Remove(tmpPath)
-			return err
-		}
+	if _, err := f.Write([]byte("\n")); err != nil {
+		logger.Warn("pending block status write newline", "error", err)
+		return
 	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
+
+	// Sync to ensure the data is persisted
+	if err := f.Sync(); err != nil {
+		logger.Warn("pending block status sync", "error", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if sync {
-		if err := syncDir(filepath.Dir(path)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
