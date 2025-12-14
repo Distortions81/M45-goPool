@@ -87,6 +87,12 @@ const (
 	// previous-difficulty grace logic. This caps vardiff moves for a given
 	// miner so we don't thrash difficulty on every small fluctuation.
 	minDiffChangeInterval = 60 * time.Second
+
+	// Input validation limits for miner-provided fields
+	maxMinerClientIDLen = 256   // mining.subscribe client identifier
+	maxWorkerNameLen    = 256   // mining.authorize and submit worker name
+	maxJobIDLen         = 128   // submit job_id parameter
+	maxVersionHexLen    = 8     // submit version_bits parameter (4-byte hex)
 )
 
 var defaultVarDiff = VarDiffConfig{
@@ -1629,15 +1635,28 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	// first subscribe parameter. Capture it so we can summarize miner types
 	// on the status page.
 	if len(req.Params) > 0 {
-		if id, ok := req.Params[0].(string); ok && id != "" {
-			mc.minerType = id
-			// Best-effort split into name/version for nicer aggregation.
-			name, ver := parseMinerID(id)
-			if name != "" {
-				mc.minerClientName = name
+		if id, ok := req.Params[0].(string); ok {
+			// Validate client ID length to prevent abuse
+			if len(id) > maxMinerClientIDLen {
+				logger.Warn("subscribe rejected: client identifier too long", "remote", mc.id, "len", len(id))
+				mc.writeResponse(StratumResponse{
+					ID:     req.ID,
+					Result: nil,
+					Error:  newStratumError(20, "client identifier too long"),
+				})
+				mc.Close("client identifier too long")
+				return
 			}
-			if ver != "" {
-				mc.minerClientVersion = ver
+			if id != "" {
+				mc.minerType = id
+				// Best-effort split into name/version for nicer aggregation.
+				name, ver := parseMinerID(id)
+				if name != "" {
+					mc.minerClientName = name
+				}
+				if ver != "" {
+					mc.minerClientVersion = ver
+				}
 			}
 		}
 	}
@@ -1709,6 +1728,28 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	worker := ""
 	if len(req.Params) > 0 {
 		worker, _ = req.Params[0].(string)
+	}
+
+	// Validate worker name length to prevent abuse
+	if len(worker) == 0 {
+		logger.Warn("authorize rejected: empty worker name", "remote", mc.id)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(20, "worker name required"),
+		})
+		mc.Close("empty worker name")
+		return
+	}
+	if len(worker) > maxWorkerNameLen {
+		logger.Warn("authorize rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(20, "worker name too long"),
+		})
+		mc.Close("worker name too long")
+		return
 	}
 
 	workerName := mc.updateWorker(worker)
@@ -2061,10 +2102,35 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid worker")})
 		return out, false
 	}
+	// Validate worker name length
+	if len(worker) == 0 {
+		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "worker name required")})
+		return out, false
+	}
+	if len(worker) > maxWorkerNameLen {
+		logger.Warn("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		mc.recordShare("", false, 0, 0, "worker name too long", "", nil, now)
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "worker name too long")})
+		return out, false
+	}
+
 	jobID, ok := req.Params[1].(string)
 	if !ok {
 		mc.recordShare(worker, false, 0, 0, "invalid job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid job id")})
+		return out, false
+	}
+	// Validate job ID length
+	if len(jobID) == 0 {
+		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id required")})
+		return out, false
+	}
+	if len(jobID) > maxJobIDLen {
+		logger.Warn("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
+		mc.recordShare(worker, false, 0, 0, "job id too long", "", nil, now)
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id too long")})
 		return out, false
 	}
 	extranonce2, ok := req.Params[2].(string)
@@ -2092,6 +2158,18 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		if !ok {
 			mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid version")})
+			return out, false
+		}
+		// Validate version string length (should be 8-char hex for 4-byte value)
+		if len(verStr) == 0 {
+			mc.recordShare(worker, false, 0, 0, "empty version", "", nil, now)
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "version required")})
+			return out, false
+		}
+		if len(verStr) > maxVersionHexLen {
+			logger.Warn("submit rejected: version too long", "remote", mc.id, "len", len(verStr))
+			mc.recordShare(worker, false, 0, 0, "version too long", "", nil, now)
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "version too long")})
 			return out, false
 		}
 		// Stratum submit version is encoded as big-endian hex.
