@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +14,7 @@ import (
 )
 
 const (
-	rpcRetryMinBackoff = 250 * time.Millisecond
-	rpcRetryMaxBackoff = 5 * time.Second
-	rpcMaxAttempts     = 3
-
-	rpcCircuitTrip    = 5
-	rpcCircuitOpenFor = 30 * time.Second
+	rpcRetryDelay = 100 * time.Millisecond
 )
 
 type rpcRequest struct {
@@ -69,16 +62,10 @@ type RPCClient struct {
 	nextID  int
 	metrics *PoolMetrics
 
-	cbMu                sync.Mutex
-	consecutiveFailures int
-	circuitOpenUntil    time.Time
-
 	lastErrMu sync.RWMutex
 	lastErr   error
 
-	// Optional hook invoked on successful RPC responses so other components
-	// (e.g., the status server) can opportunistically warm caches based on
-	// normal RPC traffic without changing how calls are issued.
+	hookMu     sync.RWMutex
 	resultHook func(method string, params interface{}, raw json.RawMessage)
 }
 
@@ -122,9 +109,9 @@ func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
 // RPC call, with the method name, request params, and raw JSON result.
 // It is safe to call on a running client; subsequent calls replace the hook.
 func (c *RPCClient) SetResultHook(hook func(method string, params interface{}, raw json.RawMessage)) {
-	c.cbMu.Lock()
+	c.hookMu.Lock()
 	c.resultHook = hook
-	c.cbMu.Unlock()
+	c.hookMu.Unlock()
 }
 
 func (c *RPCClient) call(method string, params interface{}, out interface{}) error {
@@ -144,45 +131,29 @@ func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params i
 }
 
 func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
-	if wait := c.circuitWait(); wait > 0 {
-		err := fmt.Errorf("rpc circuit open for %s", wait.Round(time.Second))
-		c.recordLastError(err)
-		return err
-	}
-
-	var lastErr error
-	backoff := rpcRetryMinBackoff
-	for attempt := 0; attempt < rpcMaxAttempts; attempt++ {
+	for {
 		if ctx.Err() != nil {
 			c.recordLastError(ctx.Err())
 			return ctx.Err()
 		}
-		lastErr = c.performCall(ctx, client, method, params, out)
-		if lastErr == nil {
+		err := c.performCall(ctx, client, method, params, out)
+		if err == nil {
 			c.recordRPCCallSuccess()
 			return nil
 		}
-		c.recordLastError(lastErr)
+		c.recordLastError(err)
 		if c.metrics != nil {
 			c.metrics.mu.Lock()
 			c.metrics.rpcErrorCount++
 			c.metrics.mu.Unlock()
 		}
-		if attempt == rpcMaxAttempts-1 || !c.shouldRetry(lastErr) {
-			c.recordRPCCallFailure()
-			return lastErr
-		}
-
-		sleep := withJitter(backoff)
-		if err := sleepContext(ctx, sleep); err != nil {
-			c.recordLastError(err)
-			c.recordRPCCallFailure()
+		if !c.shouldRetry(err) {
 			return err
 		}
-		backoff = nextRetryBackoff(backoff)
+		if err := sleepContext(ctx, rpcRetryDelay); err != nil {
+			return err
+		}
 	}
-	c.recordRPCCallFailure()
-	return lastErr
 }
 
 func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
@@ -253,9 +224,9 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 
 	// Publish the raw result to any registered hook so other components
 	// can opportunistically warm caches.
-	c.cbMu.Lock()
+	c.hookMu.RLock()
 	hook := c.resultHook
-	c.cbMu.Unlock()
+	c.hookMu.RUnlock()
 	if hook != nil {
 		hook(method, params, rpcResp.Result)
 	}
@@ -266,38 +237,10 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 	return fastJSONUnmarshal(rpcResp.Result, out)
 }
 
-func (c *RPCClient) circuitWait() time.Duration {
-	c.cbMu.Lock()
-	defer c.cbMu.Unlock()
-	if c.circuitOpenUntil.IsZero() {
-		return 0
-	}
-	if time.Now().After(c.circuitOpenUntil) {
-		c.circuitOpenUntil = time.Time{}
-		return 0
-	}
-	return time.Until(c.circuitOpenUntil)
-}
-
 func (c *RPCClient) recordRPCCallSuccess() {
 	c.lastErrMu.Lock()
 	c.lastErr = nil
 	c.lastErrMu.Unlock()
-
-	c.cbMu.Lock()
-	c.consecutiveFailures = 0
-	c.circuitOpenUntil = time.Time{}
-	c.cbMu.Unlock()
-}
-
-func (c *RPCClient) recordRPCCallFailure() {
-	c.cbMu.Lock()
-	c.consecutiveFailures++
-	if c.consecutiveFailures >= rpcCircuitTrip {
-		c.circuitOpenUntil = time.Now().Add(rpcCircuitOpenFor)
-		c.consecutiveFailures = 0
-	}
-	c.cbMu.Unlock()
 }
 
 func (c *RPCClient) shouldRetry(err error) bool {
@@ -316,33 +259,6 @@ func (c *RPCClient) shouldRetry(err error) bool {
 		return statusErr.StatusCode >= 500
 	}
 	return false
-}
-
-func nextRetryBackoff(cur time.Duration) time.Duration {
-	if cur <= 0 {
-		return rpcRetryMinBackoff
-	}
-	cur *= 2
-	if cur > rpcRetryMaxBackoff {
-		return rpcRetryMaxBackoff
-	}
-	return cur
-}
-
-func withJitter(base time.Duration) time.Duration {
-	if base <= 0 {
-		return 0
-	}
-	jitter := base / 2
-	if jitter <= 0 {
-		return base
-	}
-
-	// Use crypto/rand for unpredictable jitter to avoid timing-based patterns
-	var buf [8]byte
-	rand.Read(buf[:])
-	randVal := binary.BigEndian.Uint64(buf[:])
-	return base + time.Duration(randVal%uint64(jitter))
 }
 
 func (c *RPCClient) recordLastError(err error) {
