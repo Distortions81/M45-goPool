@@ -736,11 +736,21 @@ func main() {
 		fatal("payout address", err)
 	}
 	payoutScript = script
+
+	// If donation is configured, derive the donation payout script.
+	var donationScript []byte
+	if cfg.DonationFeePercent > 0 && cfg.DonationPayoutAddress != "" {
+		donationScript, err = fetchPayoutScript(nil, cfg.DonationPayoutAddress)
+		if err != nil {
+			fatal("donation payout address", err)
+		}
+	}
+
 	// Once the node is reachable, derive a network-appropriate version mask
 	// from bitcoind instead of relying on a manual version_mask setting.
 	autoConfigureVersionMaskFromNode(ctx, rpcClient, &cfg)
 
-	jobMgr := NewJobManager(rpcClient, cfg, payoutScript)
+	jobMgr := NewJobManager(rpcClient, cfg, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
 	if cfg.ZMQBlockAddr != "" {
 		logger.Info("block updates via zmq", "addr", cfg.ZMQBlockAddr)

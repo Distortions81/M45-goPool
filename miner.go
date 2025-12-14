@@ -1944,20 +1944,40 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 		err    error
 	)
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
-		coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
-			job.Template.Height,
-			mc.extranonce1,
-			job.Extranonce2Size,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.WitnessCommitment,
-			job.Template.CoinbaseAux.Flags,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		// Check if donation is enabled and we should use triple payout
+		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
+				job.Template.Height,
+				mc.extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.DonationFeePercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
+				job.Template.Height,
+				mc.extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 	}
 	// Fallback to single-output coinbase if any required dual-payout parameter is missing.
 	if coinb1 == "" || coinb2 == "" || err != nil {
@@ -2357,20 +2377,40 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// most rejects without constructing a full block. This avoids per-share
 	// hex decode/encode of all transactions when the share is not a block.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
-			job.Template.Height,
-			mc.extranonce1,
-			en2,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.witnessCommitScript,
-			job.coinbaseFlagsBytes,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		// Check if donation is enabled and we should use triple payout
+		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.DonationFeePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 		if err == nil && len(cbTxid) == 32 {
 			merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 			header, err = job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
@@ -2572,20 +2612,42 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 	// Only construct the full block (including all non-coinbase transactions)
 	// when the share actually satisfies the network target.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		cbTx, cbTxid, err := serializeDualCoinbaseTxPredecoded(
-			job.Template.Height,
-			mc.extranonce1,
-			en2,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.witnessCommitScript,
-			job.coinbaseFlagsBytes,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		var cbTx, cbTxid []byte
+		var err error
+		// Check if donation is enabled and we should use triple payout
+		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.DonationFeePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 		if err == nil && len(cbTxid) == 32 {
 			merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 			header, err := job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))

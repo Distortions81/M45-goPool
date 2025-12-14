@@ -47,6 +47,18 @@ type Config struct {
 	// populated from or written to config.toml.
 	PayoutScript              string
 	PoolFeePercent            float64
+	// DonationFeePercent is the percentage of the pool fee to donate to
+	// another wallet. This is a percentage of the pool fee, not the total
+	// block reward. For example, if pool_fee_percent is 2% and
+	// donation_fee_percent is 10%, then 10% of the 2% pool fee (0.2% of
+	// the total reward) goes to the donation address.
+	DonationFeePercent float64
+	// DonationPayoutAddress is the wallet address to send donations to.
+	// This must be set if donation_fee_percent is greater than 0.
+	DonationPayoutAddress string
+	// DonationPayoutName is an optional display name for the donation
+	// recipient shown in the UI when viewing coinbase outputs.
+	DonationPayoutName string
 	Extranonce2Size           int
 	TemplateExtraNonce2Size   int
 	CoinbaseSuffixBytes       int
@@ -163,6 +175,9 @@ type EffectiveConfig struct {
 	RPCPassSet                        bool    `json:"rpc_pass_set"`
 	PayoutAddress                     string  `json:"payout_address"`
 	PoolFeePercent                    float64 `json:"pool_fee_percent,omitempty"`
+	DonationFeePercent                float64 `json:"donation_fee_percent,omitempty"`
+	DonationPayoutAddress             string  `json:"donation_payout_address,omitempty"`
+	DonationPayoutName                string  `json:"donation_payout_name,omitempty"`
 	Extranonce2Size                   int     `json:"extranonce2_size"`
 	TemplateExtraNonce2Size           int     `json:"template_extranonce2_size,omitempty"`
 	CoinbaseSuffixBytes               int     `json:"coinbase_suffix_bytes"`
@@ -231,6 +246,9 @@ type nodeConfig struct {
 
 type miningConfig struct {
 	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
+	DonationFeePercent        *float64 `toml:"donation_fee_percent"`
+	DonationPayoutAddress     string   `toml:"donation_payout_address"`
+	DonationPayoutName        string   `toml:"donation_payout_name"`
 	Extranonce2Size           *int     `toml:"extranonce2_size"`
 	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
 	CoinbaseSuffixBytes       *int     `toml:"coinbase_suffix_bytes"`
@@ -347,6 +365,9 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
+			DonationFeePercent:        float64Ptr(cfg.DonationFeePercent),
+			DonationPayoutAddress:     cfg.DonationPayoutAddress,
+			DonationPayoutName:        cfg.DonationPayoutName,
 			Extranonce2Size:           intPtr(cfg.Extranonce2Size),
 			TemplateExtraNonce2Size:   intPtr(cfg.TemplateExtraNonce2Size),
 			CoinbaseSuffixBytes:       intPtr(cfg.CoinbaseSuffixBytes),
@@ -721,6 +742,15 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Mining.PoolFeePercent != nil {
 		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
 	}
+	if fc.Mining.DonationFeePercent != nil {
+		cfg.DonationFeePercent = *fc.Mining.DonationFeePercent
+	}
+	if fc.Mining.DonationPayoutAddress != "" {
+		cfg.DonationPayoutAddress = strings.TrimSpace(fc.Mining.DonationPayoutAddress)
+	}
+	if fc.Mining.DonationPayoutName != "" {
+		cfg.DonationPayoutName = strings.TrimSpace(fc.Mining.DonationPayoutName)
+	}
 	if fc.Mining.Extranonce2Size != nil {
 		cfg.Extranonce2Size = *fc.Mining.Extranonce2Size
 	}
@@ -853,6 +883,9 @@ func (cfg Config) Effective() EffectiveConfig {
 		RPCPassSet:                        strings.TrimSpace(cfg.RPCPass) != "",
 		PayoutAddress:                     cfg.PayoutAddress,
 		PoolFeePercent:                    cfg.PoolFeePercent,
+		DonationFeePercent:                cfg.DonationFeePercent,
+		DonationPayoutAddress:             cfg.DonationPayoutAddress,
+		DonationPayoutName:                cfg.DonationPayoutName,
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
 		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
@@ -970,6 +1003,12 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.PoolFeePercent < 0 || cfg.PoolFeePercent >= 100 {
 		return fmt.Errorf("pool_fee_percent must be >= 0 and < 100, got %v", cfg.PoolFeePercent)
+	}
+	if cfg.DonationFeePercent < 0 || cfg.DonationFeePercent > 100 {
+		return fmt.Errorf("donation_fee_percent must be >= 0 and <= 100, got %v", cfg.DonationFeePercent)
+	}
+	if cfg.DonationFeePercent > 0 && strings.TrimSpace(cfg.DonationPayoutAddress) == "" {
+		return fmt.Errorf("donation_payout_address is required when donation_fee_percent > 0")
 	}
 	if cfg.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0, got %v", cfg.HashrateEMATauSeconds)
