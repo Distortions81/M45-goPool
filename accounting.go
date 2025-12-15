@@ -76,10 +76,12 @@ type ShareDebug struct {
 	CoinbaseHeight   int64                 `json:"coinbase_height,omitempty"`
 	CoinbaseOutputs  []CoinbaseOutputDebug `json:"coinbase_outputs,omitempty"`
 	// Aggregated payout split (computed at view time on the worker page).
-	WorkerValueSats int64   `json:"worker_value_sats,omitempty"`
-	PoolValueSats   int64   `json:"pool_value_sats,omitempty"`
-	WorkerPercent   float64 `json:"worker_percent,omitempty"`
-	PoolPercent     float64 `json:"pool_percent,omitempty"`
+	WorkerValueSats   int64   `json:"worker_value_sats,omitempty"`
+	PoolValueSats     int64   `json:"pool_value_sats,omitempty"`
+	DonationValueSats int64   `json:"donation_value_sats,omitempty"`
+	WorkerPercent     float64 `json:"worker_percent,omitempty"`
+	PoolPercent       float64 `json:"pool_percent,omitempty"`
+	DonationPercent   float64 `json:"donation_percent,omitempty"`
 }
 
 // CoinbaseOutputDebug is a minimal decoded view of a coinbase output.
@@ -220,7 +222,7 @@ func (d *ShareDebug) DecodeCoinbaseFields() {
 		addr := scriptToAddress(script, ChainParams())
 		outs = append(outs, CoinbaseOutputDebug{
 			ValueSats: value,
-			ScriptHex: hex.EncodeToString(script),
+			ScriptHex: strings.ToLower(hex.EncodeToString(script)),
 			Address:   addr,
 		})
 	}

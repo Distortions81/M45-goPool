@@ -1773,6 +1773,15 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 	// Remaining pool fee after donation
 	poolFee := totalPoolFee - donationValue
 
+	logger.Info("triple coinbase split",
+		"total_sats", totalValue,
+		"pool_fee_pct", poolFeePercent,
+		"total_pool_fee_sats", totalPoolFee,
+		"donation_pct", donationFeePercent,
+		"donation_sats", donationValue,
+		"pool_keeps_sats", poolFee,
+		"worker_sats", totalValue - totalPoolFee)
+
 	// Worker gets the rest
 	workerValue := totalValue - totalPoolFee
 	if workerValue <= 0 {
