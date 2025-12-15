@@ -119,10 +119,10 @@
 					<div class="mono" id="pool-error-counters">--</div>
 				</div>
 			</div>
-			<div style="margin-top:12px;padding-top:12px;border-top:1px solid #333;">
-				<div class="label" style="font-size:0.85em;color:#888;">Data refreshed at</div>
-				<div class="mono" id="pool-data-refreshed" style="font-size:0.85em;color:#888;">--</div>
-			</div>
+		</div>
+
+		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
+			<div class="mono" id="pool-data-refreshed">Data loading...</div>
 		</div>
 
 	{{template "footer" .}}
@@ -148,12 +148,12 @@
 		}
 
 		function formatUTCTimestamp(isoString) {
-			if (!isoString) return '--';
+			if (!isoString) return 'Loading...';
 			try {
 				const date = new Date(isoString);
-				return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+				return 'Data refreshed at ' + date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 			} catch (e) {
-				return '--';
+				return 'Loading...';
 			}
 		}
 
@@ -173,7 +173,7 @@
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;
 			}
 			if (errorCountersEl) {
-				errorCountersEl.textContent = `RPC errors: ${data.rpc_errors || 0}   Share errors: ${data.share_errors || 0}`;
+				errorCountersEl.innerHTML = `RPC errors: ${data.rpc_errors || 0}<br>Share errors: ${data.share_errors || 0}`;
 			}
 			if (dataRefreshedEl && updatedAt) {
 				dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
