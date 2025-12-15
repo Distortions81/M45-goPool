@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -742,10 +743,14 @@ func main() {
 	// If donation is configured, derive the donation payout script.
 	var donationScript []byte
 	if cfg.OperatorDonationPercent > 0 && cfg.OperatorDonationAddress != "" {
+		logger.Info("configuring donation payout", "address", cfg.OperatorDonationAddress, "percent", cfg.OperatorDonationPercent)
 		donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
 		if err != nil {
 			fatal("donation payout address", err)
 		}
+		logger.Info("donation script derived", "script_len", len(donationScript), "script_hex", hex.EncodeToString(donationScript))
+	} else {
+		logger.Info("donation not configured", "percent", cfg.OperatorDonationPercent, "address", cfg.OperatorDonationAddress)
 	}
 
 	// Once the node is reachable, derive a network-appropriate version mask

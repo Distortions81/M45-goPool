@@ -1945,7 +1945,9 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 	)
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
 		// Check if donation is enabled and we should use triple payout
+		logger.Debug("payout check", "donation_percent", job.OperatorDonationPercent, "donation_script_len", len(job.DonationScript))
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			logger.Info("using triple payout", "worker", worker, "donation_percent", job.OperatorDonationPercent)
 			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
 				job.Template.Height,
 				mc.extranonce1,

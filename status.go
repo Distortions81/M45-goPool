@@ -313,10 +313,11 @@ type WorkerStatusData struct {
 	QueriedWorkerHash string // SHA256 hash used by the UI refresh logic
 	Worker            *WorkerView
 	Error             string
-	// Hex-encoded scriptPubKey for pool payout and worker wallet so the
+	// Hex-encoded scriptPubKey for pool payout, donation, and worker wallet so the
 	// UI can label coinbase outputs without re-parsing addresses.
-	PoolScriptHex   string
-	WorkerScriptHex string
+	PoolScriptHex     string
+	DonationScriptHex string
+	WorkerScriptHex   string
 	// FiatNote is an optional human-readable summary of approximate
 	// fiat values for the worker's pending balance and last coinbase
 	// split, computed using the current BTC price when available.
@@ -355,11 +356,11 @@ type ErrorPageData struct {
 	Path       string
 }
 
-func aggregateCoinbaseSplit(poolScriptHex, workerScriptHex string, dbg *ShareDebug) {
+func aggregateCoinbaseSplit(poolScriptHex, donationScriptHex, workerScriptHex string, dbg *ShareDebug) {
 	if dbg == nil || len(dbg.CoinbaseOutputs) == 0 {
 		return
 	}
-	var poolVal, workerVal int64
+	var poolVal, donationVal, workerVal int64
 	for _, o := range dbg.CoinbaseOutputs {
 		if o.ValueSats <= 0 {
 			continue
@@ -370,15 +371,20 @@ func aggregateCoinbaseSplit(poolScriptHex, workerScriptHex string, dbg *ShareDeb
 		if poolScriptHex != "" && strings.EqualFold(o.ScriptHex, poolScriptHex) {
 			poolVal += o.ValueSats
 		}
+		if donationScriptHex != "" && strings.EqualFold(o.ScriptHex, donationScriptHex) {
+			donationVal += o.ValueSats
+		}
 	}
-	total := poolVal + workerVal
+	total := poolVal + donationVal + workerVal
 	if total <= 0 {
 		return
 	}
 	dbg.WorkerValueSats = workerVal
 	dbg.PoolValueSats = poolVal
+	dbg.DonationValueSats = donationVal
 	dbg.WorkerPercent = float64(workerVal) * 100 / float64(total)
 	dbg.PoolPercent = float64(poolVal) * 100 / float64(total)
+	dbg.DonationPercent = float64(donationVal) * 100 / float64(total)
 }
 
 func redactWorkerViewForPrivacy(w WorkerView) WorkerView {
@@ -422,19 +428,12 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView, privacyMode bool
 		workerScriptHex = strings.ToLower(strings.TrimSpace(wv.WalletScript))
 	}
 
-	if !privacyMode {
-		data.WorkerScriptHex = workerScriptHex
-	}
-	aggregateCoinbaseSplit(data.PoolScriptHex, workerScriptHex, wv.LastShareDebug)
+	// Always set script hex values for template matching
+	data.WorkerScriptHex = workerScriptHex
+	aggregateCoinbaseSplit(data.PoolScriptHex, data.DonationScriptHex, workerScriptHex, wv.LastShareDebug)
 
-	displayWorker := wv
-	if privacyMode {
-		displayWorker = redactWorkerViewForPrivacy(displayWorker)
-		if data.PayoutAddress != "" {
-			data.PayoutAddress = privacyDisplay(data.PayoutAddress, 8, 8)
-		}
-	}
-	data.Worker = &displayWorker
+	// Privacy mode is handled client-side, so always send real data
+	data.Worker = &wv
 }
 
 type StatusData struct {
@@ -1855,7 +1854,16 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	addr := strings.TrimSpace(s.cfg.PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
-			poolScriptHex = hex.EncodeToString(script)
+			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
+		}
+	}
+
+	// Best-effort derivation of the donation script for 3-way payout display.
+	var donationScriptHex string
+	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
+	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
+			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
 	}
 
@@ -1873,9 +1881,10 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 	privacyMode := workerPrivacyModeFromRequest(r)
 	data := WorkerStatusData{
-		StatusData:    base,
-		PoolScriptHex: poolScriptHex,
-		PrivacyMode:   privacyMode,
+		StatusData:        base,
+		PoolScriptHex:     poolScriptHex,
+		DonationScriptHex: donationScriptHex,
+		PrivacyMode:       privacyMode,
 	}
 	data.BTCPriceFiat = btcPrice
 	data.BTCPriceUpdatedAt = btcPriceUpdated
@@ -2038,15 +2047,25 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	addr := strings.TrimSpace(s.cfg.PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
-			poolScriptHex = hex.EncodeToString(script)
+			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
+		}
+	}
+
+	// Best-effort derivation of the donation script for 3-way payout display.
+	var donationScriptHex string
+	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
+	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
+			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
 	}
 
 	privacyMode := workerPrivacyModeFromRequest(r)
 	data := WorkerStatusData{
-		StatusData:    base,
-		PoolScriptHex: poolScriptHex,
-		PrivacyMode:   privacyMode,
+		StatusData:        base,
+		PoolScriptHex:     poolScriptHex,
+		DonationScriptHex: donationScriptHex,
+		PrivacyMode:       privacyMode,
 	}
 
 	// Extract worker ID from path after the prefix

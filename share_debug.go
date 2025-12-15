@@ -36,22 +36,45 @@ func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, has
 
 	var cbTx []byte
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
-		cbTx, _, err = serializeDualCoinbaseTx(
-			job.Template.Height,
-			mc.extranonce1,
-			en2,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.WitnessCommitment,
-			job.Template.CoinbaseAux.Flags,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
-		if err != nil {
-			logger.Warn("share debug dual-payout coinbase", "error", err)
+		// Check if donation is enabled and we should use triple payout
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			cbTx, _, err = serializeTripleCoinbaseTx(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.OperatorDonationPercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+			if err != nil {
+				logger.Warn("share debug triple-payout coinbase", "error", err)
+			}
+		} else {
+			cbTx, _, err = serializeDualCoinbaseTx(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+			if err != nil {
+				logger.Warn("share debug dual-payout coinbase", "error", err)
+			}
 		}
 	}
 	if len(cbTx) == 0 {
