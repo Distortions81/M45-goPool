@@ -2277,13 +2277,6 @@ func buildMerkleBranches(txids [][]byte) []string {
 	return steps
 }
 
-func appendMust(dst []byte, more ...[]byte) []byte {
-	for _, m := range more {
-		dst = append(dst, m...)
-	}
-	return dst
-}
-
 // computeMerkleRootFromBranches mirrors NOMP merkleTree.withFirst: start with the
 // coinbase txid (BE) and apply each branch (LE) in order, returning a BE root.
 func computeMerkleRootFromBranches(coinbaseHash []byte, branches []string) []byte {

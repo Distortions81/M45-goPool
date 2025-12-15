@@ -935,8 +935,6 @@ func main() {
 		}
 	}
 	logger.Info("shutdown complete", "uptime", time.Since(startTime))
-
-	return
 }
 
 func initLogOutput(cfg Config) (string, error) {
