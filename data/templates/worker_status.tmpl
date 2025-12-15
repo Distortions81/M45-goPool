@@ -234,6 +234,14 @@
 								<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
 									This is the exact coinbase transaction the pool will send to the node if this share becomes a block. Each row below is a coinbase output: "Pool payout" is the pool's fee, "Donation" is the operator's donation (if configured), "Worker payout" is the miner's reward, and a 0-value output in position 0 is the SegWit witness commitment (no payout).
 								</p>
+								{{if .TotalCoinbaseValue}}
+									<p class="text-sm" style="margin-top:12px;">
+										<strong>Total coinbase value:</strong> {{formatBTCShort .TotalCoinbaseValue}}{{if gt $root.BTCPriceFiat 0.0}} ({{formatFiat .TotalCoinbaseValue $root.BTCPriceFiat $root.FiatCurrency}}){{end}}
+										{{if and .BlockSubsidy (gt .BlockSubsidy 0)}}
+											<br><span style="color:#b3bbd4;">Block subsidy: {{formatBTCShort .BlockSubsidy}}{{if .TransactionFees}} + Transaction fees: {{formatBTCShort .TransactionFees}}{{end}}</span>
+										{{end}}
+									</p>
+								{{end}}
 								{{if .CoinbaseOutputs}}
 									<div style="overflow-x:auto;margin-top:8px;">
 										<table class="table">
