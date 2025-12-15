@@ -38,7 +38,7 @@ type WorkerView struct {
 	DisplayLastShare    string      `json:"display_last_share,omitempty"`
 	LastShareAccepted   bool        `json:"last_share_accepted,omitempty"`
 	LastShareDifficulty float64     `json:"last_share_difficulty,omitempty"`
-	LastShareDebug      *ShareDebug `json:"last_share_debug,omitempty"`
+	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
 	LastSeen            time.Time   `json:"last_seen"`
 	Difficulty          float64     `json:"difficulty"`
 	RollingHashrate     float64     `json:"rolling_hashrate"`
@@ -61,8 +61,8 @@ type WorkerDatabaseStats struct {
 	EstimatedSizeKB int64
 }
 
-// ShareDebug holds debug data emitted for each share.
-type ShareDebug struct {
+// ShareDetail holds detailed data for each share, including coinbase transaction details.
+type ShareDetail struct {
 	Header         string   `json:"header,omitempty"`
 	ShareHash      string   `json:"share_hash,omitempty"`
 	Target         string   `json:"target,omitempty"`
@@ -73,13 +73,18 @@ type ShareDebug struct {
 	// Decoded coinbase transaction fields for easier inspection.
 	CoinbaseVersion  int32                 `json:"coinbase_version,omitempty"`
 	CoinbaseLockTime uint32                `json:"coinbase_locktime,omitempty"`
-	CoinbaseHeight   int64                 `json:"coinbase_height,omitempty"`
-	CoinbaseOutputs  []CoinbaseOutputDebug `json:"coinbase_outputs,omitempty"`
+	CoinbaseHeight      int64                 `json:"coinbase_height,omitempty"`
+	CoinbaseOutputs     []CoinbaseOutputDebug `json:"coinbase_outputs,omitempty"`
+	TotalCoinbaseValue  int64                 `json:"total_coinbase_value,omitempty"`
+	BlockSubsidy        int64                 `json:"block_subsidy,omitempty"`
+	TransactionFees     int64                 `json:"transaction_fees,omitempty"`
 	// Aggregated payout split (computed at view time on the worker page).
-	WorkerValueSats int64   `json:"worker_value_sats,omitempty"`
-	PoolValueSats   int64   `json:"pool_value_sats,omitempty"`
-	WorkerPercent   float64 `json:"worker_percent,omitempty"`
-	PoolPercent     float64 `json:"pool_percent,omitempty"`
+	WorkerValueSats   int64   `json:"worker_value_sats,omitempty"`
+	PoolValueSats     int64   `json:"pool_value_sats,omitempty"`
+	DonationValueSats int64   `json:"donation_value_sats,omitempty"`
+	WorkerPercent     float64 `json:"worker_percent,omitempty"`
+	PoolPercent       float64 `json:"pool_percent,omitempty"`
+	DonationPercent   float64 `json:"donation_percent,omitempty"`
 }
 
 // CoinbaseOutputDebug is a minimal decoded view of a coinbase output.
@@ -141,7 +146,22 @@ func decodeCoinbaseHeight(script []byte) int64 {
 	return height
 }
 
-func (d *ShareDebug) DecodeCoinbaseFields() {
+// calculateBlockSubsidy returns the block subsidy (base reward) for a given height.
+// Bitcoin halves every 210,000 blocks.
+func calculateBlockSubsidy(height int64) int64 {
+	if height < 0 {
+		return 0
+	}
+	initialSubsidy := int64(50 * 1e8) // 50 BTC in satoshis
+	halvings := height / 210000
+	if halvings >= 64 {
+		return 0 // After 64 halvings, subsidy is 0
+	}
+	subsidy := initialSubsidy >> uint(halvings)
+	return subsidy
+}
+
+func (d *ShareDetail) DecodeCoinbaseFields() {
 	if d == nil || d.Coinbase == "" {
 		return
 	}
@@ -220,7 +240,7 @@ func (d *ShareDebug) DecodeCoinbaseFields() {
 		addr := scriptToAddress(script, ChainParams())
 		outs = append(outs, CoinbaseOutputDebug{
 			ValueSats: value,
-			ScriptHex: hex.EncodeToString(script),
+			ScriptHex: strings.ToLower(hex.EncodeToString(script)),
 			Address:   addr,
 		})
 	}
@@ -250,6 +270,18 @@ func (d *ShareDebug) DecodeCoinbaseFields() {
 		return
 	}
 	d.CoinbaseLockTime = binary.LittleEndian.Uint32(raw[pos : pos+4])
+
+	// Set total coinbase value
+	d.TotalCoinbaseValue = totalValue
+
+	// Calculate block subsidy and transaction fees if we have height
+	if height > 0 {
+		d.BlockSubsidy = calculateBlockSubsidy(height)
+		if totalValue >= d.BlockSubsidy {
+			d.TransactionFees = totalValue - d.BlockSubsidy
+		}
+	}
+
 	if totalValue > 0 {
 		for i := range outs {
 			outs[i].Percent = (float64(outs[i].ValueSats) * 100) / float64(totalValue)

@@ -61,7 +61,7 @@ func defaultConfig() Config {
 		StatusBrandDomain: "",
 		StatusTagline:     defaultStatusTagline,
 		FiatCurrency:      defaultFiatCurrency,
-		DonationAddress:   "",
+		PoolDonationAddress: "",
 		DiscordURL:        "",
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
@@ -69,9 +69,13 @@ func defaultConfig() Config {
 		RPCURL:           defaultRPCURL,
 		RPCUser:          defaultRPCUser,
 		RPCPass:          defaultRPCPass,
-		CoinbasePoolTag:  generatePoolTag(),
-		PayoutAddress:    "",
-		PoolFeePercent:   defaultPoolFeePercent,
+		CoinbasePoolTag:       generatePoolTag(),
+		PayoutAddress:         "",
+		PoolFeePercent:        defaultPoolFeePercent,
+		OperatorDonationPercent: 0.0,
+		OperatorDonationAddress: "",
+		OperatorDonationName:    "",
+		OperatorDonationURL:     "",
 		// Mining / Stratum defaults.
 		Extranonce2Size:                   defaultExtranonce2Size,
 		TemplateExtraNonce2Size:           defaultTemplateExtraNonce2Size,

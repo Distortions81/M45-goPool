@@ -224,7 +224,7 @@ type MinerConn struct {
 	lastShareHash       string
 	lastShareAccepted   bool
 	lastShareDifficulty float64
-	lastShareDebug      *ShareDebug
+	lastShareDetail      *ShareDetail
 	lastRejectReason    string
 	walletMu            sync.Mutex
 	workerWallets       map[string]workerWalletState
@@ -248,7 +248,7 @@ type MinerConn struct {
 	minerClientName    string
 	minerClientVersion string
 	// connectedAt is the time this miner connection was established,
-	// used as the zero point for per-share timing in debug logs.
+	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
@@ -775,9 +775,9 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 // recordShare updates accounting for a submitted share. creditedDiff is the
 // target difficulty we assigned for this share (used for hashrate), while
 // shareDiff is the difficulty implied by the submitted hash (used for
-// display/debug). They may differ when vardiff changed between notify and
+// display/detail). They may differ when vardiff changed between notify and
 // submit; we always want hashrate to use the assigned target.
-func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, debug *ShareDebug, now time.Time) {
+func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, detail *ShareDetail, now time.Time) {
 	mc.statsMu.Lock()
 	mc.ensureWindowLocked(now)
 	if worker != "" {
@@ -801,7 +801,7 @@ func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff floa
 	mc.lastShareHash = shareHash
 	mc.lastShareAccepted = accepted
 	mc.lastShareDifficulty = shareDiff
-	mc.lastShareDebug = debug
+	mc.lastShareDetail = detail
 	if !accepted && reason != "" {
 		mc.lastRejectReason = reason
 	}
@@ -831,7 +831,7 @@ type minerShareSnapshot struct {
 	LastShareHash       string
 	LastShareAccepted   bool
 	LastShareDifficulty float64
-	LastShareDebug      *ShareDebug
+	LastShareDetail      *ShareDetail
 	LastReject          string
 }
 
@@ -844,7 +844,7 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 		LastShareHash:       mc.lastShareHash,
 		LastShareAccepted:   mc.lastShareAccepted,
 		LastShareDifficulty: mc.lastShareDifficulty,
-		LastShareDebug:      mc.lastShareDebug,
+		LastShareDetail:      mc.lastShareDetail,
 		LastReject:          mc.lastRejectReason,
 	}
 }
@@ -1242,18 +1242,15 @@ func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
 func (mc *MinerConn) assignedDifficulty(jobID string) float64 {
 	curDiff := mc.currentDifficulty()
 	if jobID == "" {
-		//fmt.Printf("no job id, diff %v\n", curDiff)
 		return curDiff
 	}
 	mc.jobMu.Lock()
 	diff, ok := mc.jobDifficulty[jobID]
 	mc.jobMu.Unlock()
 	if ok && diff > 0 {
-		//fmt.Printf("job diff found: %v\n", diff)
 		return diff
 	}
 
-	//fmt.Printf("no job diff found, diff  %v\n", curDiff)
 	return curDiff
 }
 
@@ -1944,20 +1941,42 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 		err    error
 	)
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
-		coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
-			job.Template.Height,
-			mc.extranonce1,
-			job.Extranonce2Size,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.WitnessCommitment,
-			job.Template.CoinbaseAux.Flags,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		// Check if donation is enabled and we should use triple payout
+		logger.Debug("payout check", "donation_percent", job.OperatorDonationPercent, "donation_script_len", len(job.DonationScript))
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			logger.Info("using triple payout", "worker", worker, "donation_percent", job.OperatorDonationPercent)
+			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
+				job.Template.Height,
+				mc.extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.OperatorDonationPercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
+				job.Template.Height,
+				mc.extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 	}
 	// Fallback to single-output coinbase if any required dual-payout parameter is missing.
 	if coinb1 == "" || coinb2 == "" || err != nil {
@@ -2357,20 +2376,40 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// most rejects without constructing a full block. This avoids per-share
 	// hex decode/encode of all transactions when the share is not a block.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
-			job.Template.Height,
-			mc.extranonce1,
-			en2,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.witnessCommitScript,
-			job.coinbaseFlagsBytes,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		// Check if donation is enabled and we should use triple payout
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.OperatorDonationPercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 		if err == nil && len(cbTxid) == 32 {
 			merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 			header, err = job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
@@ -2429,19 +2468,16 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	expectedMerkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 	if merkleRoot == nil || expectedMerkle == nil || !bytes.Equal(merkleRoot, expectedMerkle) {
 		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
-		var debug *ShareDebug
-		if debugLogging || verboseLogging {
-			debug = &ShareDebug{
-				Header:         hex.EncodeToString(header),
-				ShareHash:      hex.EncodeToString(reverseBytes(headerHash)),
-				MerkleBranches: append([]string{}, job.MerkleBranches...),
-				MerkleRootBE:   hex.EncodeToString(expectedMerkle),
-				MerkleRootLE:   hex.EncodeToString(reverseBytes(expectedMerkle)),
-				Coinbase:       hex.EncodeToString(cbTx),
-			}
-			debug.DecodeCoinbaseFields()
+		detail := &ShareDetail{
+			Header:         hex.EncodeToString(header),
+			ShareHash:      hex.EncodeToString(reverseBytes(headerHash)),
+			MerkleBranches: append([]string{}, job.MerkleBranches...),
+			MerkleRootBE:   hex.EncodeToString(expectedMerkle),
+			MerkleRootLE:   hex.EncodeToString(reverseBytes(expectedMerkle)),
+			Coinbase:       hex.EncodeToString(cbTx),
 		}
-		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", debug, now)
+		detail.DecodeCoinbaseFields()
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
 			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
@@ -2516,9 +2552,9 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 				"hash", hashHex,
 			)
 		}
-		debug := mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
+		detail := mc.buildShareDetail(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
 		acceptedForStats := false
-		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
+		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, detail, now)
 
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
 			mc.logBan(rejectLowDiff.String(), workerName, invalids)
@@ -2534,8 +2570,8 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	}
 
 	shareHash := hashHex
-	debug := mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
-	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, debug, now)
+	detail := mc.buildShareDetail(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, shareDiff, now)
 
 	if !isBlock {
@@ -2572,20 +2608,42 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 	// Only construct the full block (including all non-coinbase transactions)
 	// when the share actually satisfies the network target.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		cbTx, cbTxid, err := serializeDualCoinbaseTxPredecoded(
-			job.Template.Height,
-			mc.extranonce1,
-			en2,
-			job.TemplateExtraNonce2Size,
-			poolScript,
-			workerScript,
-			totalValue,
-			feePercent,
-			job.witnessCommitScript,
-			job.coinbaseFlagsBytes,
-			job.CoinbaseMsg,
-			job.ScriptTime,
-		)
+		var cbTx, cbTxid []byte
+		var err error
+		// Check if donation is enabled and we should use triple payout
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.OperatorDonationPercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		} else {
+			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				job.ScriptTime,
+			)
+		}
 		if err == nil && len(cbTxid) == 32 {
 			merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 			header, err := job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
@@ -2615,10 +2673,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		// Fallback to single-output block build if dual-payout params are
 		// unavailable or any step fails. This reuses the existing helper that
 		// constructs a canonical block for submission.
-		var headerHashTmp []byte
-		var headerTmp []byte
-		var merkleRootTmp []byte
-		blockHex, headerHashTmp, headerTmp, merkleRootTmp, err = buildBlock(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion))
+		blockHex, _, _, _, err = buildBlock(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion))
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")
@@ -2627,9 +2682,6 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
 			return
 		}
-		_ = headerHashTmp
-		_ = headerTmp
-		_ = merkleRootTmp
 	}
 
 	// Submit the block via RPC using an aggressive, no-backoff retry loop

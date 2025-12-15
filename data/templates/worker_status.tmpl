@@ -6,7 +6,7 @@
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Worker Info</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body{{if .PrivacyMode}} class="privacy-mode"{{end}}>
 	{{template "header" .}}
 	<div class="page">
 		{{if .Error}}
@@ -22,7 +22,7 @@
 					<div style="flex:1;min-width:220px;">
 						<p class="text-sm" style="margin:0 0 4px 0;">
 							<strong>Privacy mode</strong>
-							{{if .PrivacyMode}}is enabled and hides wallet addresses, hashes, and coinbase details by default.{{else}}is disabled and the full worker info is visible right now.{{end}}
+							<span class="privacy-description">{{if .PrivacyMode}}is enabled and hides wallet addresses, hashes, and coinbase details by default.{{else}}is disabled and the full worker info is visible right now.{{end}}</span>
 						</p>
 						<p class="text-sm" style="color:#b3bbd4;margin:0;">
 							This setting only applies to the current view and is not saved.
@@ -73,7 +73,7 @@
 						<div class="label">Wallet address</div>
 						<div class="value">
 							{{if .Worker.WalletAddress}}
-								<span class="code-box copyable" title="Click to copy wallet address" data-copy="{{.Worker.WalletAddress}}">{{.Worker.WalletAddress}}</span>
+								<span class="code-box copyable sensitive-data" title="Click to copy wallet address" data-copy="{{.Worker.WalletAddress}}">{{.Worker.WalletAddress}}</span>
 							{{else}}
 								—
 							{{end}}
@@ -113,9 +113,9 @@
 						<div class="label">Last share hash</div>
 						<div class="value">
 							{{if .Worker.LastShareHash}}
-								<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
+								<span class="code-box copyable sensitive-data" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
 							{{else if .Worker.DisplayLastShare}}
-								<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
+								<span class="code-box copyable sensitive-data" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
 							{{else}}
 								—
 							{{end}}
@@ -170,15 +170,15 @@
 						{{end}}<br>
 						Hash:
 						{{if .Worker.LastShareHash}}
-							<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
+							<span class="code-box copyable sensitive-data" title="Click to copy last share hash" data-copy="{{.Worker.LastShareHash}}">{{.Worker.LastShareHash}}</span>
 						{{else if .Worker.DisplayLastShare}}
-							<span class="code-box copyable" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
+							<span class="code-box copyable sensitive-data" title="Click to copy last share hash" data-copy="{{.Worker.DisplayLastShare}}">{{.Worker.DisplayLastShare}}</span>
 						{{else}}
 							unknown
 						{{end}}
 					</p>
 					{{$root := .}}
-					{{with .Worker.LastShareDebug}}
+					{{with .Worker.LastShareDetail}}
 						<div class="mt-3">
 							<div class="label">Template / debug payload</div>
 							<p class="text-sm" style="margin-top:8px;">
@@ -187,31 +187,31 @@
 							{{if .Header}}
 								<p class="text-sm">
 									<span class="mono">block_header (hex):</span><br>
-									<span class="code-box copyable" title="Click to copy block header" data-copy="{{.Header}}">{{.Header}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy block header" data-copy="{{.Header}}">{{.Header}}</span>
 								</p>
 							{{end}}
 							{{if .ShareHash}}
 								<p class="text-sm">
 									<span class="mono">share_hash_le (hex):</span><br>
-									<span class="code-box copyable" title="Click to copy share hash" data-copy="{{.ShareHash}}">{{.ShareHash}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy share hash" data-copy="{{.ShareHash}}">{{.ShareHash}}</span>
 								</p>
 							{{end}}
 							{{if .Target}}
 								<p class="text-sm">
 									<span class="mono">target (hex):</span><br>
-									<span class="code-box copyable" title="Click to copy target" data-copy="{{.Target}}">{{.Target}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy target" data-copy="{{.Target}}">{{.Target}}</span>
 								</p>
 							{{end}}
 							{{if .MerkleRootBE}}
 								<p class="text-sm">
 									<span class="mono">merkle_root_be (hex):</span><br>
-									<span class="code-box copyable" title="Click to copy merkle root (BE)" data-copy="{{.MerkleRootBE}}">{{.MerkleRootBE}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy merkle root (BE)" data-copy="{{.MerkleRootBE}}">{{.MerkleRootBE}}</span>
 								</p>
 							{{end}}
 							{{if .MerkleRootLE}}
 								<p class="text-sm">
 									<span class="mono">merkle_root_le (hex):</span><br>
-									<span class="code-box copyable" title="Click to copy merkle root (LE)" data-copy="{{.MerkleRootLE}}">{{.MerkleRootLE}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy merkle root (LE)" data-copy="{{.MerkleRootLE}}">{{.MerkleRootLE}}</span>
 								</p>
 							{{end}}
 							{{if .Coinbase}}
@@ -221,7 +221,7 @@
 											coinbase_tx (hex):
 										</a>
 									</span><br>
-									<span class="code-box copyable" title="Click to copy coinbase hex" data-copy="{{.Coinbase}}">{{.Coinbase}}</span>
+									<span class="code-box copyable sensitive-data" title="Click to copy coinbase hex" data-copy="{{.Coinbase}}">{{.Coinbase}}</span>
 								</p>
 							{{end}}
 							{{if or .CoinbaseVersion .CoinbaseLockTime .CoinbaseHeight .CoinbaseOutputs}}
@@ -232,8 +232,16 @@
 									Block height (BIP34): {{if .CoinbaseHeight}}{{.CoinbaseHeight}}{{else}}unknown{{end}}
 								</p>
 								<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
-									This is the exact coinbase transaction the pool will send to the node if this share becomes a block. Each row below is a coinbase output: "Pool payout" is the pool's fee output, "Worker payout" is the miner's reward, and a 0-value output in position 0 is the SegWit witness commitment (no payout).
+									This is the exact coinbase transaction the pool will send to the node if this share becomes a block. Each row below is a coinbase output: "Pool payout" is the pool's fee, "Donation" is the operator's donation (if configured), "Worker payout" is the miner's reward, and a 0-value output in position 0 is the SegWit witness commitment (no payout).
 								</p>
+								{{if .TotalCoinbaseValue}}
+									<p class="text-sm" style="margin-top:12px;">
+										<strong>Total coinbase value:</strong> {{formatBTCShort .TotalCoinbaseValue}}{{if gt $root.BTCPriceFiat 0.0}} ({{formatFiat .TotalCoinbaseValue $root.BTCPriceFiat $root.FiatCurrency}}){{end}}
+										{{if and .BlockSubsidy (gt .BlockSubsidy 0)}}
+											<br><span style="color:#b3bbd4;">Block subsidy: {{formatBTCShort .BlockSubsidy}}{{if .TransactionFees}} + Transaction fees: {{formatBTCShort .TransactionFees}}{{end}}</span>
+										{{end}}
+									</p>
+								{{end}}
 								{{if .CoinbaseOutputs}}
 									<div style="overflow-x:auto;margin-top:8px;">
 										<table class="table">
@@ -254,11 +262,19 @@
 														<td>{{$i}}</td>
 														<td>
 															{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex)}}
-																Worker payout (miner reward)
+																Miner reward
 															{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex)}}
-																Pool payout (operator fee)
+																Pool fee
+															{{else if and $root.DonationScriptHex (eq $o.ScriptHex $root.DonationScriptHex)}}
+																{{if $root.OperatorDonationName}}
+																	Pool donation to {{$root.OperatorDonationName}}
+																{{else}}
+																	Pool donation
+																{{end}}
 															{{else if and (eq $i 0) (eq $o.ValueSats 0)}}
-																Witness commitment (no payout)
+																Witness commitment
+															{{else if $o.Address}}
+																Coinbase output ({{$o.Address}})
 															{{else}}
 																Other coinbase output
 															{{end}}
@@ -273,24 +289,10 @@
 														</td>
 														<td>{{printf "%.4f%%" $o.Percent}}</td>
 														<td>
-															{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex) $root.Worker.WalletAddress}}
-																<span class="mono">
-																	<a href="https://mempool.space/address/{{$root.Worker.WalletAddress}}" target="_blank" rel="noreferrer" title="View {{$root.Worker.WalletAddress}} on mempool.space">
-																		{{$root.Worker.WalletAddress}}
-																	</a>
-																</span>
-															{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex) $root.PayoutAddress}}
-																<span class="mono">
-																	<a href="https://mempool.space/address/{{$root.PayoutAddress}}" target="_blank" rel="noreferrer" title="View {{$root.PayoutAddress}} on mempool.space">
-																		{{$root.PayoutAddress}}
-																	</a>
-																</span>
-															{{else}}
-																—
-															{{end}}
+															{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex) $root.Worker.WalletAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.Worker.WalletAddress}}" target="_blank" rel="noreferrer" title="View {{$root.Worker.WalletAddress}} on mempool.space">{{$root.Worker.WalletAddress}}</a></span>{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex) $root.PayoutAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.PayoutAddress}}" target="_blank" rel="noreferrer" title="View {{$root.PayoutAddress}} on mempool.space">{{$root.PayoutAddress}}</a></span>{{else if and $root.DonationScriptHex (eq $o.ScriptHex $root.DonationScriptHex) $root.OperatorDonationAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.OperatorDonationAddress}}" target="_blank" rel="noreferrer" title="View {{$root.OperatorDonationAddress}} on mempool.space">{{$root.OperatorDonationAddress}}</a></span>{{else if $o.Address}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$o.Address}}" target="_blank" rel="noreferrer" title="View {{$o.Address}} on mempool.space">{{$o.Address}}</a></span>{{else}}—{{end}}
 														</td>
 														<td>
-															<span class="code-box copyable" title="Click to copy scriptPubKey hex" data-copy="{{$o.ScriptHex}}">{{$o.ScriptHex}}</span>
+															<span class="code-box copyable sensitive-data" title="Click to copy scriptPubKey hex" data-copy="{{$o.ScriptHex}}">{{$o.ScriptHex}}</span>
 														</td>
 													</tr>
 												{{end}}
@@ -320,128 +322,104 @@
 		{{template "footer" .}}
 	</div>
 	<script>
-	(function() {
+	document.addEventListener('DOMContentLoaded', function() {
 		const toggle = document.getElementById('privacyToggle');
 		if (!toggle) {
 			return;
 		}
-		toggle.addEventListener('click', () => {
-			const params = new URLSearchParams(window.location.search);
-			if (toggle.dataset.privacyMode === 'on') {
-				params.set('privacy', 'off');
-			} else {
-				params.delete('privacy');
+
+		// Censor a string by keeping first 8 and last 8 chars with ".." in between
+		function censorString(s) {
+			if (!s || s.length <= 16) return s;
+			// Handle already-censored strings that start with ".."
+			if (s.startsWith('..')) {
+				s = s.substring(2).trim();
 			}
-			const query = params.toString();
-			window.location.search = query ? '?' + query : '';
-		});
-	})();
-	</script>
-	<script>
-	(function() {
-		const REFRESH_INTERVAL = 10000; // fallback when headers are missing
-		let refreshTimer;
-		const workerHash = "{{js .QueriedWorkerHash}}";
+			return s.substring(0, 8) + '..' + s.substring(s.length - 8);
+		}
 
-		if (!workerHash) return; // No worker to refresh
+		// Store original values for each sensitive element
+		const sensitiveElements = document.querySelectorAll('.sensitive-data');
+		const originalValues = new Map();
 
-		function updateWorkerInfo(data) {
-			// Find the worker in the workers array by SHA256
-			const worker = data.workers.find(w => w.worker_sha256 === workerHash);
-			if (!worker) return; // Worker not found
-
-			// Update dynamic fields
-			const updateField = (selector, value) => {
-				const el = document.querySelector(selector);
-				if (el) el.textContent = value || '—';
-			};
-
-			// Format hashrate
-			const formatHashrate = (h) => {
-				if (!h) return '---';
-				const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
-				let val = h, idx = 0;
-				while (val >= 1000 && idx < units.length - 1) {
-					val /= 1000;
-					idx++;
+		sensitiveElements.forEach(el => {
+			// Store original text content
+			let originalText = '';
+			const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+			if (textNode) {
+				originalText = textNode.textContent.trim();
+			} else {
+				// Handle case where text is in a child element (like <a>)
+				const link = el.querySelector('a');
+				if (link) {
+					originalText = link.textContent.trim();
+				} else {
+					originalText = el.textContent.trim();
 				}
-				return val.toFixed(2) + ' ' + units[idx];
-			};
+			}
 
-			// Format difficulty
-			const formatDiff = (d) => {
-				if (!d) return '—';
-				if (d < 1000000) return d.toFixed(0);
-				return (d / 1000000).toFixed(2) + 'M';
-			};
+			// Clean up server-side censored values that might be cached (starts with "..")
+			if (originalText.startsWith('..')) {
+				originalText = originalText.substring(2).trim();
+			}
 
-			// Update stats (find cards by their labels)
-			document.querySelectorAll('.card').forEach(card => {
-				const label = card.querySelector('.label');
-				if (!label) return;
+			originalValues.set(el, originalText);
+		});
 
-				const labelText = label.textContent.trim();
-				const valueEl = card.querySelector('.value');
-				if (!valueEl) return;
-
-				if (labelText === 'Accepted / Rejected') {
-					valueEl.textContent = `${worker.accepted} / ${worker.rejected}`;
-				} else if (labelText === 'Current difficulty') {
-					valueEl.textContent = formatDiff(worker.difficulty);
-				} else if (labelText === 'Rolling hashrate') {
-					valueEl.textContent = formatHashrate(worker.rolling_hashrate);
-				} else if (labelText === 'Last share' && worker.last_share) {
-					const lastShare = new Date(worker.last_share);
-					const now = new Date();
-					const diffSec = Math.floor((now - lastShare) / 1000);
-					if (diffSec < 60) {
-						valueEl.textContent = `${diffSec}s ago`;
-					} else if (diffSec < 3600) {
-						valueEl.textContent = `${Math.floor(diffSec / 60)}m ago`;
+		// Apply initial privacy state
+		if (document.body.classList.contains('privacy-mode')) {
+			sensitiveElements.forEach(el => {
+				const original = originalValues.get(el);
+				if (original) {
+					const censored = censorString(original);
+					const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+					if (textNode) {
+						textNode.textContent = censored;
 					} else {
-						valueEl.textContent = lastShare.toLocaleString();
+						const link = el.querySelector('a');
+						if (link) {
+							link.textContent = censored;
+						} else {
+							el.textContent = censored;
+						}
 					}
 				}
 			});
 		}
 
-		function scheduleNextFetch(delay) {
-			if (refreshTimer) {
-				clearTimeout(refreshTimer);
-			}
-			refreshTimer = setTimeout(fetchUpdate, Math.max(0, delay));
-		}
+		toggle.addEventListener('click', () => {
+			const isPrivate = document.body.classList.toggle('privacy-mode');
+			toggle.dataset.privacyMode = isPrivate ? 'on' : 'off';
+			toggle.textContent = isPrivate ? 'Show wallet/hash details' : 'Hide wallet/hash details';
 
-		function scheduleFromHeader(nextHeader) {
-			let delay = REFRESH_INTERVAL;
-			if (nextHeader) {
-				const nextDate = new Date(nextHeader);
-				if (!Number.isNaN(nextDate.getTime())) {
-					delay = Math.max(0, nextDate.getTime() - Date.now() + 1000);
+			// Update privacy mode description
+			const desc = document.querySelector('.privacy-description');
+			if (desc) {
+				desc.textContent = isPrivate
+					? 'is enabled and hides wallet addresses, hashes, and coinbase details by default.'
+					: 'is disabled and the full worker info is visible right now.';
+			}
+
+			// Toggle censoring on all sensitive elements
+			sensitiveElements.forEach(el => {
+				const original = originalValues.get(el);
+				if (original) {
+					const newText = isPrivate ? censorString(original) : original;
+					const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+					if (textNode) {
+						textNode.textContent = newText;
+					} else {
+						const link = el.querySelector('a');
+						if (link) {
+							link.textContent = newText;
+						} else {
+							el.textContent = newText;
+						}
+					}
 				}
-			}
-			scheduleNextFetch(delay);
-		}
-
-		function fetchUpdate() {
-			fetch('/api/workers?per_page=1000') // Fetch enough to find our worker
-				.then(response => {
-					if (!response.ok) throw new Error('Network response was not ok');
-					const nextHeader = response.headers.get('X-JSON-Next-Update-At');
-					return response.json().then(data => {
-						updateWorkerInfo(data);
-						scheduleFromHeader(nextHeader);
-					});
-				})
-				.catch(error => {
-					console.error('Error fetching worker info update:', error);
-					scheduleFromHeader(undefined);
-				});
-		}
-
-		// Start periodic updates
-		scheduleNextFetch(0);
-	})();
+			});
+		});
+	});
 	</script>
 </body>
 </html>

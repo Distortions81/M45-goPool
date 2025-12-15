@@ -26,10 +26,17 @@
 					<div class="value mono">
 						{{if .DisplayPayoutAddress}}{{.DisplayPayoutAddress}}{{else}}(not configured){{end}}
 					</div>
+					<p class="text-sm">Pool operator's payout address for block rewards.</p>
+				</div>
+				{{if and (gt .OperatorDonationPercent 0.0) .DisplayOperatorDonationAddress}}
+				<div>
+					<div class="label">Operator fee donation{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</div>
+					<div class="value mono">{{.DisplayOperatorDonationAddress}}</div>
 					<p class="text-sm">
-						Pool fee wallet: the operator's share of each block is sent here. When dual payout is enabled, worker rewards go directly to their own wallets.
+						Pool operator donates {{printf "%.1f" .OperatorDonationPercent}}% of their pool fee to this address. Miner rewards are not affected.
 					</p>
 				</div>
+				{{end}}
 				<div>
 					<div class="label">Coinbase message</div>
 					<div class="value mono">
@@ -86,7 +93,7 @@
 					<div class="label">Pool fee</div>
 					<div class="value mono">{{printf "%.3f" .PoolFeePercent}}%</div>
 					<p class="text-sm">
-						Fee charged on block rewards. Coinbase splits rewards between pool and worker.
+						Fee charged on block rewards. Coinbase splits rewards between pool operator and worker.
 					</p>
 				</div>
 			</div>
@@ -152,7 +159,7 @@
 		}
 
 		function fetchPoolMetrics() {
-			fetch('/api/status-page')
+			fetch('/api/pool-page')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					return response.json();

@@ -30,9 +30,9 @@ type Config struct {
 	// when displaying approximate BTC prices on the status UI. It is
 	// only used for display and never affects payouts or accounting.
 	FiatCurrency string
-	// DonationAddress is an optional pool donation wallet shown in the
-	// UI footer. It is never used for payouts.
-	DonationAddress string
+	// PoolDonationAddress is an optional wallet where users can donate TO
+	// the pool operator. It is shown in the UI footer and never used for payouts.
+	PoolDonationAddress string
 	// DiscordURL is an optional Discord invite link shown in the header.
 	DiscordURL string
 	// StratumTLSListen is an optional TCP address for a TLS-enabled
@@ -47,7 +47,22 @@ type Config struct {
 	// populated from or written to config.toml.
 	PayoutScript              string
 	PoolFeePercent            float64
-	Extranonce2Size           int
+	// OperatorDonationPercent is the percentage of the pool operator's fee
+	// to donate to another wallet. This is a percentage of the pool fee, not
+	// the total block reward. For example, if pool_fee_percent is 2% and
+	// operator_donation_percent is 10%, then 10% of the 2% pool fee (0.2% of
+	// the total reward) goes to the operator's chosen donation address.
+	OperatorDonationPercent float64
+	// OperatorDonationAddress is the wallet address where the pool operator
+	// donates a portion of their fee. This must be set if operator_donation_percent > 0.
+	OperatorDonationAddress string
+	// OperatorDonationName is an optional display name for the operator's
+	// donation recipient shown in the UI when viewing coinbase outputs.
+	OperatorDonationName string
+	// OperatorDonationURL is an optional hyperlink for the donation recipient.
+	// When set, the OperatorDonationName becomes a clickable link in the UI.
+	OperatorDonationURL string
+	Extranonce2Size     int
 	TemplateExtraNonce2Size   int
 	CoinbaseSuffixBytes       int
 	CoinbaseMsg               string
@@ -155,7 +170,7 @@ type EffectiveConfig struct {
 	StatusBrandDomain                 string  `json:"status_brand_domain,omitempty"`
 	StatusTagline                     string  `json:"status_tagline,omitempty"`
 	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
-	DonationAddress                   string  `json:"donation_address,omitempty"`
+	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
 	DiscordURL                        string  `json:"discord_url,omitempty"`
 	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
 	RPCURL                            string  `json:"rpc_url"`
@@ -163,6 +178,10 @@ type EffectiveConfig struct {
 	RPCPassSet                        bool    `json:"rpc_pass_set"`
 	PayoutAddress                     string  `json:"payout_address"`
 	PoolFeePercent                    float64 `json:"pool_fee_percent,omitempty"`
+	OperatorDonationPercent           float64 `json:"operator_donation_percent,omitempty"`
+	OperatorDonationAddress           string  `json:"operator_donation_address,omitempty"`
+	OperatorDonationName              string  `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL               string  `json:"operator_donation_url,omitempty"`
 	Extranonce2Size                   int     `json:"extranonce2_size"`
 	TemplateExtraNonce2Size           int     `json:"template_extranonce2_size,omitempty"`
 	CoinbaseSuffixBytes               int     `json:"coinbase_suffix_bytes"`
@@ -214,7 +233,7 @@ type brandingConfig struct {
 	StatusBrandDomain string `toml:"status_brand_domain"`
 	StatusTagline     string `toml:"status_tagline"`
 	FiatCurrency      string `toml:"fiat_currency"`
-	DonationAddress   string `toml:"donation_address"`
+	PoolDonationAddress string `toml:"pool_donation_address"`
 	DiscordURL        string `toml:"discord_url"`
 }
 
@@ -231,7 +250,11 @@ type nodeConfig struct {
 
 type miningConfig struct {
 	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
-	Extranonce2Size           *int     `toml:"extranonce2_size"`
+	OperatorDonationPercent *float64 `toml:"operator_donation_percent"`
+	OperatorDonationAddress string   `toml:"operator_donation_address"`
+	OperatorDonationName    string   `toml:"operator_donation_name"`
+	OperatorDonationURL     string   `toml:"operator_donation_url"`
+	Extranonce2Size         *int     `toml:"extranonce2_size"`
 	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
 	CoinbaseSuffixBytes       *int     `toml:"coinbase_suffix_bytes"`
 	CoinbasePoolTag           *string  `toml:"coinbase_pool_tag"`
@@ -329,12 +352,12 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StatusTLSListen: cfg.StatusTLSAddr,
 		},
 		Branding: brandingConfig{
-			StatusBrandName:   cfg.StatusBrandName,
-			StatusBrandDomain: cfg.StatusBrandDomain,
-			StatusTagline:     cfg.StatusTagline,
-			FiatCurrency:      cfg.FiatCurrency,
-			DonationAddress:   cfg.DonationAddress,
-			DiscordURL:        cfg.DiscordURL,
+			StatusBrandName:     cfg.StatusBrandName,
+			StatusBrandDomain:   cfg.StatusBrandDomain,
+			StatusTagline:       cfg.StatusTagline,
+			FiatCurrency:        cfg.FiatCurrency,
+			PoolDonationAddress: cfg.PoolDonationAddress,
+			DiscordURL:          cfg.DiscordURL,
 		},
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
@@ -346,8 +369,12 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ZMQBlockAddr:  cfg.ZMQBlockAddr,
 		},
 		Mining: miningConfig{
-			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
-			Extranonce2Size:           intPtr(cfg.Extranonce2Size),
+			PoolFeePercent:          float64Ptr(cfg.PoolFeePercent),
+			OperatorDonationPercent: float64Ptr(cfg.OperatorDonationPercent),
+			OperatorDonationAddress: cfg.OperatorDonationAddress,
+			OperatorDonationName:    cfg.OperatorDonationName,
+			OperatorDonationURL:     cfg.OperatorDonationURL,
+			Extranonce2Size:         intPtr(cfg.Extranonce2Size),
 			TemplateExtraNonce2Size:   intPtr(cfg.TemplateExtraNonce2Size),
 			CoinbaseSuffixBytes:       intPtr(cfg.CoinbaseSuffixBytes),
 			CoinbasePoolTag:           stringPtr(cfg.CoinbasePoolTag),
@@ -578,22 +605,11 @@ func exampleHeader(text string) []byte {
 func exampleConfigBytes() []byte {
 	cfg := defaultConfig()
 	cfg.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
-	cfg.DonationAddress = "OPTIONAL_DONATION_WALLET_ADDRESS"
+	cfg.PoolDonationAddress = "OPTIONAL_POOL_DONATION_WALLET"
 	fc := buildBaseFileConfig(cfg)
 	data, err := toml.Marshal(fc)
 	if err != nil {
 		logger.Warn("encode config example failed", "error", err)
-		return nil
-	}
-	return append(exampleHeader("base config"), data...)
-}
-
-func exampleBaseConfigBytes() []byte {
-	cfg := defaultConfig()
-	fc := buildBaseFileConfig(cfg)
-	data, err := toml.Marshal(fc)
-	if err != nil {
-		logger.Warn("encode base config example failed", "error", err)
 		return nil
 	}
 	return append(exampleHeader("base config"), data...)
@@ -693,8 +709,8 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Branding.FiatCurrency != "" {
 		cfg.FiatCurrency = strings.ToLower(strings.TrimSpace(fc.Branding.FiatCurrency))
 	}
-	if fc.Branding.DonationAddress != "" {
-		cfg.DonationAddress = strings.TrimSpace(fc.Branding.DonationAddress)
+	if fc.Branding.PoolDonationAddress != "" {
+		cfg.PoolDonationAddress = strings.TrimSpace(fc.Branding.PoolDonationAddress)
 	}
 	if fc.Branding.DiscordURL != "" {
 		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
@@ -720,6 +736,18 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Mining.PoolFeePercent != nil {
 		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
+	}
+	if fc.Mining.OperatorDonationPercent != nil {
+		cfg.OperatorDonationPercent = *fc.Mining.OperatorDonationPercent
+	}
+	if fc.Mining.OperatorDonationAddress != "" {
+		cfg.OperatorDonationAddress = strings.TrimSpace(fc.Mining.OperatorDonationAddress)
+	}
+	if fc.Mining.OperatorDonationName != "" {
+		cfg.OperatorDonationName = strings.TrimSpace(fc.Mining.OperatorDonationName)
+	}
+	if fc.Mining.OperatorDonationURL != "" {
+		cfg.OperatorDonationURL = strings.TrimSpace(fc.Mining.OperatorDonationURL)
 	}
 	if fc.Mining.Extranonce2Size != nil {
 		cfg.Extranonce2Size = *fc.Mining.Extranonce2Size
@@ -846,13 +874,17 @@ func (cfg Config) Effective() EffectiveConfig {
 		StatusBrandDomain:                 cfg.StatusBrandDomain,
 		StatusTagline:                     cfg.StatusTagline,
 		FiatCurrency:                      cfg.FiatCurrency,
-		DonationAddress:                   cfg.DonationAddress,
+		PoolDonationAddress:               cfg.PoolDonationAddress,
 		DiscordURL:                        cfg.DiscordURL,
 		RPCURL:                            cfg.RPCURL,
 		RPCUser:                           cfg.RPCUser,
 		RPCPassSet:                        strings.TrimSpace(cfg.RPCPass) != "",
 		PayoutAddress:                     cfg.PayoutAddress,
 		PoolFeePercent:                    cfg.PoolFeePercent,
+		OperatorDonationPercent:           cfg.OperatorDonationPercent,
+		OperatorDonationAddress:           cfg.OperatorDonationAddress,
+		OperatorDonationName:              cfg.OperatorDonationName,
+		OperatorDonationURL:               cfg.OperatorDonationURL,
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
 		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
@@ -970,6 +1002,12 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.PoolFeePercent < 0 || cfg.PoolFeePercent >= 100 {
 		return fmt.Errorf("pool_fee_percent must be >= 0 and < 100, got %v", cfg.PoolFeePercent)
+	}
+	if cfg.OperatorDonationPercent < 0 || cfg.OperatorDonationPercent > 100 {
+		return fmt.Errorf("operator_donation_percent must be >= 0 and <= 100, got %v", cfg.OperatorDonationPercent)
+	}
+	if cfg.OperatorDonationPercent > 0 && strings.TrimSpace(cfg.OperatorDonationAddress) == "" {
+		return fmt.Errorf("operator_donation_address is required when operator_donation_percent > 0")
 	}
 	if cfg.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0, got %v", cfg.HashrateEMATauSeconds)

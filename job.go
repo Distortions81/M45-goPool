@@ -63,6 +63,8 @@ type Job struct {
 	Transactions            []GBTTransaction
 	TransactionIDs          [][]byte
 	PayoutScript            []byte
+	DonationScript          []byte
+	OperatorDonationPercent      float64
 	VersionMask             uint32
 	PrevHash                string
 	prevHashBytes           [32]byte
@@ -114,6 +116,7 @@ type JobManager struct {
 	mu                sync.RWMutex
 	curJob            *Job
 	payoutScript      []byte
+	donationScript    []byte
 	extraID           uint32
 	subs              map[chan *Job]struct{}
 	subsMu            sync.Mutex
@@ -132,12 +135,13 @@ type JobManager struct {
 	zmqPayloadMu       sync.RWMutex
 }
 
-func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte) *JobManager {
+func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScript []byte) *JobManager {
 	return &JobManager{
-		rpc:          rpc,
-		cfg:          cfg,
-		payoutScript: payoutScript,
-		subs:         make(map[chan *Job]struct{}),
+		rpc:            rpc,
+		cfg:            cfg,
+		payoutScript:   payoutScript,
+		donationScript: donationScript,
+		subs:           make(map[chan *Job]struct{}),
 	}
 }
 
@@ -419,6 +423,8 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		Transactions:            tpl.Transactions,
 		TransactionIDs:          txids,
 		PayoutScript:            jm.payoutScript,
+		DonationScript:          jm.donationScript,
+		OperatorDonationPercent:      jm.cfg.OperatorDonationPercent,
 		VersionMask:             computePoolMask(tpl, jm.cfg),
 		PrevHash:                tpl.Previous,
 		prevHashBytes:           prevBytes,
@@ -1669,6 +1675,153 @@ func serializeDualCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []
 	return tx.Bytes(), txid, nil
 }
 
+// serializeTripleCoinbaseTx builds a coinbase transaction that splits the block
+// reward between a pool-fee output, a donation output, and a worker output.
+func serializeTripleCoinbaseTx(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, poolScript []byte, donationScript []byte, workerScript []byte, totalValue int64, poolFeePercent float64, donationFeePercent float64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
+	var flagsBytes []byte
+	if coinbaseFlags != "" {
+		b, err := hex.DecodeString(coinbaseFlags)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode coinbase flags: %w", err)
+		}
+		flagsBytes = b
+	}
+	var commitmentScript []byte
+	if witnessCommitment != "" {
+		b, err := hex.DecodeString(witnessCommitment)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode witness commitment: %w", err)
+		}
+		commitmentScript = b
+	}
+	return serializeTripleCoinbaseTxPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, poolScript, donationScript, workerScript, totalValue, poolFeePercent, donationFeePercent, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
+}
+
+// serializeTripleCoinbaseTxPredecoded is the hot-path variant that reuses
+// pre-decoded flags/commitment bytes.
+func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, poolScript []byte, donationScript []byte, workerScript []byte, totalValue int64, poolFeePercent float64, donationFeePercent float64, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
+	if len(poolScript) == 0 || len(donationScript) == 0 || len(workerScript) == 0 {
+		return nil, nil, fmt.Errorf("pool, donation, and worker payout scripts are all required")
+	}
+	if totalValue <= 0 {
+		return nil, nil, fmt.Errorf("total coinbase value must be positive")
+	}
+
+	padLen := templateExtraNonce2Size - len(extranonce2)
+	if padLen < 0 {
+		padLen = 0
+	}
+	placeholderLen := len(extranonce1) + len(extranonce2) + padLen
+	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, placeholderLen)
+
+	scriptSigPart1 := bytes.Join([][]byte{
+		serializeNumberScript(height),
+		flagsBytes,
+		serializeNumberScript(scriptTime),
+		{byte(len(extraNoncePlaceholder))},
+	}, nil)
+	msg := normalizeCoinbaseMessage(coinbaseMsg)
+	scriptSigPart2 := serializeStringScript(msg)
+	scriptSigLen := len(scriptSigPart1) + padLen + len(extranonce1) + len(extranonce2) + len(scriptSigPart2)
+
+	var vin bytes.Buffer
+	writeVarInt(&vin, 1)
+	vin.Write(bytes.Repeat([]byte{0x00}, 32))
+	writeUint32LE(&vin, 0xffffffff)
+	writeVarInt(&vin, uint64(scriptSigLen))
+	vin.Write(scriptSigPart1)
+	if padLen > 0 {
+		vin.Write(bytes.Repeat([]byte{0x00}, padLen))
+	}
+	vin.Write(extranonce1)
+	vin.Write(extranonce2)
+	vin.Write(scriptSigPart2)
+	writeUint32LE(&vin, 0)
+
+	// Split total value: first pool fee, then donation from pool fee, then worker
+	if poolFeePercent < 0 {
+		poolFeePercent = 0
+	}
+	if poolFeePercent > 99.99 {
+		poolFeePercent = 99.99
+	}
+	if donationFeePercent < 0 {
+		donationFeePercent = 0
+	}
+	if donationFeePercent > 100 {
+		donationFeePercent = 100
+	}
+
+	// Calculate pool fee from total value
+	totalPoolFee := int64(math.Round(float64(totalValue) * poolFeePercent / 100.0))
+	if totalPoolFee < 0 {
+		totalPoolFee = 0
+	}
+	if totalPoolFee > totalValue {
+		totalPoolFee = totalValue
+	}
+
+	// Calculate donation from pool fee
+	donationValue := int64(math.Round(float64(totalPoolFee) * donationFeePercent / 100.0))
+	if donationValue < 0 {
+		donationValue = 0
+	}
+	if donationValue > totalPoolFee {
+		donationValue = totalPoolFee
+	}
+
+	// Remaining pool fee after donation
+	poolFee := totalPoolFee - donationValue
+
+	logger.Info("triple coinbase split",
+		"total_sats", totalValue,
+		"pool_fee_pct", poolFeePercent,
+		"total_pool_fee_sats", totalPoolFee,
+		"donation_pct", donationFeePercent,
+		"donation_sats", donationValue,
+		"pool_keeps_sats", poolFee,
+		"worker_sats", totalValue - totalPoolFee)
+
+	// Worker gets the rest
+	workerValue := totalValue - totalPoolFee
+	if workerValue <= 0 {
+		return nil, nil, fmt.Errorf("worker payout must be positive after applying pool fee")
+	}
+
+	var outputs bytes.Buffer
+	outputCount := uint64(3) // pool + donation + worker
+	if len(commitmentScript) > 0 {
+		outputCount++
+	}
+	writeVarInt(&outputs, outputCount)
+	if len(commitmentScript) > 0 {
+		writeUint64LE(&outputs, 0)
+		writeVarInt(&outputs, uint64(len(commitmentScript)))
+		outputs.Write(commitmentScript)
+	}
+	// Pool fee output (after donation).
+	writeUint64LE(&outputs, uint64(poolFee))
+	writeVarInt(&outputs, uint64(len(poolScript)))
+	outputs.Write(poolScript)
+	// Donation output.
+	writeUint64LE(&outputs, uint64(donationValue))
+	writeVarInt(&outputs, uint64(len(donationScript)))
+	outputs.Write(donationScript)
+	// Worker payout output.
+	writeUint64LE(&outputs, uint64(workerValue))
+	writeVarInt(&outputs, uint64(len(workerScript)))
+	outputs.Write(workerScript)
+
+	var tx bytes.Buffer
+	writeUint32LE(&tx, 1)
+	tx.Write(vin.Bytes())
+	tx.Write(outputs.Bytes())
+	writeUint32LE(&tx, 0)
+
+	txid := doubleSHA256(tx.Bytes())
+	return tx.Bytes(), txid, nil
+}
+
 // serializeNumberScript matches node-stratum-pool util.serializeNumber.
 func serializeNumberScript(n int64) []byte {
 	if n >= 1 && n <= 16 {
@@ -1962,6 +2115,140 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 	return coinb1, coinb2, nil
 }
 
+// buildTriplePayoutCoinbaseParts constructs coinbase parts for a triple-payout
+// layout where the block reward is split between a pool-fee output, a donation
+// output, and a worker output. This is used when both dual-payout parameters
+// and donation parameters are available.
+func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, templateExtraNonce2Size int, poolScript []byte, donationScript []byte, workerScript []byte, totalValue int64, poolFeePercent float64, donationFeePercent float64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) (string, string, error) {
+	if len(poolScript) == 0 || len(donationScript) == 0 || len(workerScript) == 0 {
+		return "", "", fmt.Errorf("pool, donation, and worker payout scripts are all required")
+	}
+	if extranonce2Size <= 0 {
+		extranonce2Size = 4
+	}
+	if templateExtraNonce2Size < extranonce2Size {
+		templateExtraNonce2Size = extranonce2Size
+	}
+	templatePlaceholderLen := len(extranonce1) + templateExtraNonce2Size
+	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
+	padLen := templateExtraNonce2Size - extranonce2Size
+
+	// Decode coinbase aux flags from bitcoind (per BIP34 and node-stratum-pool).
+	var flagsBytes []byte
+	if coinbaseFlags != "" {
+		var err error
+		flagsBytes, err = hex.DecodeString(coinbaseFlags)
+		if err != nil {
+			return "", "", fmt.Errorf("decode coinbase flags: %w", err)
+		}
+	}
+
+	scriptSigPart1 := bytes.Join([][]byte{
+		serializeNumberScript(height),
+		flagsBytes, // coinbaseaux.flags from bitcoind
+		serializeNumberScript(scriptTime),
+		{byte(len(extraNoncePlaceholder))},
+	}, nil)
+	msg := normalizeCoinbaseMessage(coinbaseMsg)
+	scriptSigPart2 := serializeStringScript(msg)
+
+	// p1: version || input count || prevout || scriptsig length || scriptsig_part1
+	var p1 bytes.Buffer
+	writeUint32LE(&p1, 1) // tx version
+	writeVarInt(&p1, 1)
+	p1.Write(bytes.Repeat([]byte{0x00}, 32)) // prev hash
+	writeUint32LE(&p1, 0xffffffff)           // prev index
+	writeVarInt(&p1, uint64(len(scriptSigPart1)+len(extraNoncePlaceholder)+len(scriptSigPart2)))
+	p1.Write(scriptSigPart1)
+
+	// Split total value: first pool fee, then donation from pool fee, then worker
+	if totalValue <= 0 {
+		return "", "", fmt.Errorf("total coinbase value must be positive")
+	}
+	if poolFeePercent < 0 {
+		poolFeePercent = 0
+	}
+	if poolFeePercent > 99.99 {
+		poolFeePercent = 99.99
+	}
+	if donationFeePercent < 0 {
+		donationFeePercent = 0
+	}
+	if donationFeePercent > 100 {
+		donationFeePercent = 100
+	}
+
+	// Calculate pool fee from total value
+	totalPoolFee := int64(math.Round(float64(totalValue) * poolFeePercent / 100.0))
+	if totalPoolFee < 0 {
+		totalPoolFee = 0
+	}
+	if totalPoolFee > totalValue {
+		totalPoolFee = totalValue
+	}
+
+	// Calculate donation from pool fee
+	donationValue := int64(math.Round(float64(totalPoolFee) * donationFeePercent / 100.0))
+	if donationValue < 0 {
+		donationValue = 0
+	}
+	if donationValue > totalPoolFee {
+		donationValue = totalPoolFee
+	}
+
+	// Remaining pool fee after donation
+	poolFee := totalPoolFee - donationValue
+
+	// Worker gets the rest
+	workerValue := totalValue - totalPoolFee
+	if workerValue <= 0 {
+		return "", "", fmt.Errorf("worker payout must be positive after applying pool fee")
+	}
+
+	// Outputs: optional witness commitment, then pool-fee output, then donation output, then worker output.
+	var outputs bytes.Buffer
+	outputCount := uint64(3) // pool + donation + worker
+	if witnessCommitment != "" {
+		outputCount++
+	}
+	writeVarInt(&outputs, outputCount)
+	if witnessCommitment != "" {
+		commitmentScript, err := hex.DecodeString(witnessCommitment)
+		if err != nil {
+			return "", "", fmt.Errorf("decode witness commitment: %w", err)
+		}
+		writeUint64LE(&outputs, 0)
+		writeVarInt(&outputs, uint64(len(commitmentScript)))
+		outputs.Write(commitmentScript)
+	}
+	// Pool fee output (after donation).
+	writeUint64LE(&outputs, uint64(poolFee))
+	writeVarInt(&outputs, uint64(len(poolScript)))
+	outputs.Write(poolScript)
+	// Donation output.
+	writeUint64LE(&outputs, uint64(donationValue))
+	writeVarInt(&outputs, uint64(len(donationScript)))
+	outputs.Write(donationScript)
+	// Worker payout output.
+	writeUint64LE(&outputs, uint64(workerValue))
+	writeVarInt(&outputs, uint64(len(workerScript)))
+	outputs.Write(workerScript)
+
+	// p2: scriptSig_part2 || sequence || outputs || locktime
+	var p2 bytes.Buffer
+	p2.Write(scriptSigPart2)
+	writeUint32LE(&p2, 0) // sequence
+	p2.Write(outputs.Bytes())
+	writeUint32LE(&p2, 0) // locktime
+
+	coinb1 := hex.EncodeToString(p1.Bytes())
+	if padLen > 0 {
+		coinb1 += strings.Repeat("00", padLen)
+	}
+	coinb2 := hex.EncodeToString(p2.Bytes())
+	return coinb1, coinb2, nil
+}
+
 func buildMerkleBranches(txids [][]byte) []string {
 	if len(txids) == 0 {
 		return []string{}
@@ -1988,13 +2275,6 @@ func buildMerkleBranches(txids [][]byte) []string {
 		L = len(layer)
 	}
 	return steps
-}
-
-func appendMust(dst []byte, more ...[]byte) []byte {
-	for _, m := range more {
-		dst = append(dst, m...)
-	}
-	return dst
 }
 
 // computeMerkleRootFromBranches mirrors NOMP merkleTree.withFirst: start with the

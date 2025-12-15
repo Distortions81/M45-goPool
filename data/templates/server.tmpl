@@ -93,7 +93,6 @@
 			<ul class="list">
 				<li><a class="mono" href="/api/status-page">/api/status-page</a> &mdash; cached overview data used by the main status UI</li>
 				<li><a class="mono" href="/api/pool">/api/pool</a> &mdash; pool configuration, uptime, and high-level stats</li>
-				<li><a class="mono" href="/api/workers">/api/workers</a> &mdash; paginated worker list with censored fields</li>
 				<li><a class="mono" href="/api/node">/api/node</a> &mdash; Bitcoin node identity and sync status</li>
 				<li><a class="mono" href="/api/blocks">/api/blocks</a> &mdash; recent found blocks (censored)</li>
 				<li><a class="mono" href="/api/diagnostics">/api/diagnostics</a> &mdash; process and system diagnostics</li>
@@ -305,33 +304,23 @@
 			}
 		}
 
-		function fetchStatusPage() {
-			fetch('/api/status-page')
+		function fetchServerData() {
+			fetch('/api/server')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					return response.json();
 				})
-				.then(updateStatusPage)
-				.catch(error => {
-					console.error('Error fetching server status:', error);
-				});
-		}
-
-		function fetchDiagnostics() {
-			fetch('/api/diagnostics')
-				.then(response => {
-					if (!response.ok) throw new Error('Network response was not ok');
-					return response.json();
+				.then(data => {
+					updateStatusPage(data);
+					updateDiagnostics(data);
 				})
-				.then(updateDiagnostics)
 				.catch(error => {
-					console.error('Error fetching diagnostics:', error);
+					console.error('Error fetching server data:', error);
 				});
 		}
 
 		function refresh() {
-			fetchStatusPage();
-			fetchDiagnostics();
+			fetchServerData();
 		}
 
 		refresh();

@@ -49,13 +49,13 @@
 	&mdash; build: <span class="mono">{{.BuildTime}}</span>
 </p>
 <div class="text-sm" style="margin-top:4px;color:#646b86;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-	{{if .DonationAddress}}
+	{{if .PoolDonationAddress}}
 	<div>
-		Pool donations:
-		<span class="code-box copyable" title="Click to copy pool wallet address" data-copy="{{.DonationAddress}}">{{.DonationAddress}}</span>
+		Donate to this pool:
+		<a href="bitcoin:{{.PoolDonationAddress}}" class="code-box copyable" title="Click to copy or open in wallet" data-copy="{{.PoolDonationAddress}}" style="text-decoration:none;color:inherit;">{{.PoolDonationAddress}}</a>
 	</div>
 	{{end}}
-	<div style="{{if not .DonationAddress}}margin-left:auto;{{end}}">
+	<div style="{{if not .PoolDonationAddress}}margin-left:auto;{{end}}">
 		render: <span class="mono">{{formatRenderDuration .RenderDuration}}</span>
 	</div>
 </div>

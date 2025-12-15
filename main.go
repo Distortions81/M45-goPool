@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -550,14 +551,16 @@ func main() {
 	mux := http.NewServeMux()
 	// Focused API endpoints
 	if !disableJSONEndpoints {
-		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)
-		mux.HandleFunc("/api/workers", statusServer.handleWorkersListJSON)
-		mux.HandleFunc("/api/node", statusServer.handleNodeStatsJSON)
-		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
-		mux.HandleFunc("/api/diagnostics", statusServer.handleDiagnosticsJSON)
+		// Page-specific endpoints (minimal payloads)
+		mux.HandleFunc("/api/overview", statusServer.handleOverviewPageJSON)
+		mux.HandleFunc("/api/pool-page", statusServer.handlePoolPageJSON)
+		mux.HandleFunc("/api/node", statusServer.handleNodePageJSON)
+		mux.HandleFunc("/api/server", statusServer.handleServerPageJSON)
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
-		// Internal endpoint for status page auto-refresh (returns censored but complete data)
-		mux.HandleFunc("/api/status-page", statusServer.handleStatusPageJSON)
+
+		// Other endpoints
+		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)
+		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
 	}
 	// HTML endpoints
 	mux.HandleFunc("/worker", statusServer.handleWorkerStatus)
@@ -736,11 +739,25 @@ func main() {
 		fatal("payout address", err)
 	}
 	payoutScript = script
+
+	// If donation is configured, derive the donation payout script.
+	var donationScript []byte
+	if cfg.OperatorDonationPercent > 0 && cfg.OperatorDonationAddress != "" {
+		logger.Info("configuring donation payout", "address", cfg.OperatorDonationAddress, "percent", cfg.OperatorDonationPercent)
+		donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
+		if err != nil {
+			fatal("donation payout address", err)
+		}
+		logger.Info("donation script derived", "script_len", len(donationScript), "script_hex", hex.EncodeToString(donationScript))
+	} else {
+		logger.Info("donation not configured", "percent", cfg.OperatorDonationPercent, "address", cfg.OperatorDonationAddress)
+	}
+
 	// Once the node is reachable, derive a network-appropriate version mask
 	// from bitcoind instead of relying on a manual version_mask setting.
 	autoConfigureVersionMaskFromNode(ctx, rpcClient, &cfg)
 
-	jobMgr := NewJobManager(rpcClient, cfg, payoutScript)
+	jobMgr := NewJobManager(rpcClient, cfg, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
 	if cfg.ZMQBlockAddr != "" {
 		logger.Info("block updates via zmq", "addr", cfg.ZMQBlockAddr)
@@ -918,8 +935,6 @@ func main() {
 		}
 	}
 	logger.Info("shutdown complete", "uptime", time.Since(startTime))
-
-	return
 }
 
 func initLogOutput(cfg Config) (string, error) {
