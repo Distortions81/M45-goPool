@@ -218,7 +218,7 @@
 			if (zmqCountsEl) {
 				const disconnects = data.job_feed?.zmq_disconnects ?? 0;
 				const reconnects = data.job_feed?.zmq_reconnects ?? 0;
-				zmqCountsEl.textContent = `disconnects: ${disconnects}, reconnects: ${reconnects}`;
+				zmqCountsEl.textContent = `disconnects: ${disconnects}, connects: ${reconnects}`;
 			}
 			if (zmqRawBlockEl) {
 				const rawBlockAt = data.job_feed?.last_raw_block_at;
