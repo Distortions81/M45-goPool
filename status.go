@@ -446,7 +446,7 @@ type StatusData struct {
 	FiatCurrency             string            `json:"fiat_currency,omitempty"`
 	BTCPriceFiat             float64           `json:"btc_price_fiat,omitempty"`
 	BTCPriceUpdatedAt        string            `json:"btc_price_updated_at,omitempty"`
-	DonationAddress          string            `json:"donation_address,omitempty"`
+	PoolDonationAddress      string            `json:"pool_donation_address,omitempty"`
 	DiscordURL               string            `json:"discord_url,omitempty"`
 	NodeNetwork              string            `json:"node_network,omitempty"`
 	NodeSubversion           string            `json:"node_subversion,omitempty"`
@@ -457,12 +457,13 @@ type StatusData struct {
 	NodeZMQAddr              string            `json:"node_zmq_addr,omitempty"`
 	PayoutAddress            string            `json:"payout_address,omitempty"`
 	PoolFeePercent           float64           `json:"pool_fee_percent"`
-	DonationFeePercent       float64           `json:"donation_fee_percent,omitempty"`
-	DonationPayoutAddress    string            `json:"donation_payout_address,omitempty"`
-	DonationPayoutName       string            `json:"donation_payout_name,omitempty"`
+	OperatorDonationPercent  float64           `json:"operator_donation_percent,omitempty"`
+	OperatorDonationAddress  string            `json:"operator_donation_address,omitempty"`
+	OperatorDonationName     string            `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL      string            `json:"operator_donation_url,omitempty"`
 	CoinbaseMessage          string            `json:"coinbase_message,omitempty"`
 	DisplayPayoutAddress     string            `json:"display_payout_address,omitempty"`
-	DisplayDonationAddress   string            `json:"display_donation_address,omitempty"`
+	DisplayOperatorDonationAddress string      `json:"display_operator_donation_address,omitempty"`
 	DisplayCoinbaseMessage   string            `json:"display_coinbase_message,omitempty"`
 	NodeConnections          int               `json:"node_connections"`
 	NodeConnectionsIn        int               `json:"node_connections_in"`
@@ -541,7 +542,7 @@ type StatusData struct {
 	Warnings       []string            `json:"warnings,omitempty"`
 }
 
-type statusPageJobFeed struct {
+type ServerPageJobFeed struct {
 	LastError         string   `json:"last_error,omitempty"`
 	LastErrorAt       string   `json:"last_error_at,omitempty"`
 	ErrorHistory      []string `json:"error_history,omitempty"`
@@ -561,7 +562,43 @@ type statusPageJobFeed struct {
 	BlockDifficulty   float64  `json:"block_difficulty,omitempty"`
 }
 
-type statusPageJSON struct {
+// OverviewPageData contains data for the overview page (minimal payload)
+type OverviewPageData struct {
+	APIVersion       string           `json:"api_version"`
+	ActiveMiners     int              `json:"active_miners"`
+	ActiveTLSMiners  int              `json:"active_tls_miners"`
+	SharesPerMinute  float64          `json:"shares_per_minute,omitempty"`
+	PoolHashrate     float64          `json:"pool_hashrate,omitempty"`
+	RenderDuration   time.Duration    `json:"render_duration"`
+	Workers          []WorkerView     `json:"workers"`
+	BannedWorkers    []WorkerView     `json:"banned_workers"`
+	BestShares       []BestShare      `json:"best_shares"`
+	FoundBlocks      []FoundBlockView `json:"found_blocks,omitempty"`
+	MinerTypes       []MinerTypeView  `json:"miner_types,omitempty"`
+}
+
+// PoolPageData contains data for the pool info page
+type PoolPageData struct {
+	APIVersion       string  `json:"api_version"`
+	BrandName        string  `json:"brand_name"`
+	BrandDomain      string  `json:"brand_domain"`
+	PoolFeePercent   float64 `json:"pool_fee_percent"`
+	OperatorDonationPercent float64 `json:"operator_donation_percent,omitempty"`
+	OperatorDonationName    string  `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL     string  `json:"operator_donation_url,omitempty"`
+	DisplayPayoutAddress    string  `json:"display_payout_address,omitempty"`
+	DisplayOperatorDonationAddress string `json:"display_operator_donation_address,omitempty"`
+	DisplayCoinbaseMessage   string `json:"display_coinbase_message,omitempty"`
+	MinDifficulty            float64 `json:"min_difficulty"`
+	MaxDifficulty            float64 `json:"max_difficulty"`
+	LockSuggestedDifficulty  bool    `json:"lock_suggested_difficulty"`
+	MaxConns                 int     `json:"max_conns"`
+	MaxAcceptsPerSecond      int     `json:"max_accepts_per_second"`
+	MaxAcceptBurst           int     `json:"max_accept_burst"`
+}
+
+// ServerPageData contains data for the server diagnostics page
+type ServerPageData struct {
 	APIVersion           string            `json:"api_version"`
 	Uptime               time.Duration     `json:"uptime"`
 	ActiveMiners         int               `json:"active_miners"`
@@ -578,7 +615,7 @@ type statusPageJSON struct {
 	MinerTypes           []MinerTypeView   `json:"miner_types,omitempty"`
 	RPCError             string            `json:"rpc_error,omitempty"`
 	AccountingError      string            `json:"accounting_error,omitempty"`
-	JobFeed              statusPageJobFeed `json:"job_feed"`
+	JobFeed              ServerPageJobFeed `json:"job_feed"`
 	VardiffUp            uint64            `json:"vardiff_up"`
 	VardiffDown          uint64            `json:"vardiff_down"`
 	BlocksAccepted       uint64            `json:"blocks_accepted"`
@@ -591,6 +628,17 @@ type statusPageJSON struct {
 	RPCSubmitCount       uint64            `json:"rpc_submit_count"`
 	RPCErrors            uint64            `json:"rpc_errors"`
 	ShareErrors          uint64            `json:"share_errors"`
+	ProcessGoroutines    int               `json:"process_goroutines"`
+	ProcessCPUPercent    float64           `json:"process_cpu_percent"`
+	GoMemAllocBytes      uint64            `json:"go_mem_alloc_bytes"`
+	GoMemSysBytes        uint64            `json:"go_mem_sys_bytes"`
+	ProcessRSSBytes      uint64            `json:"process_rss_bytes"`
+	SystemMemTotalBytes  uint64            `json:"system_mem_total_bytes"`
+	SystemMemFreeBytes   uint64            `json:"system_mem_free_bytes"`
+	SystemMemUsedBytes   uint64            `json:"system_mem_used_bytes"`
+	SystemLoad1          float64           `json:"system_load1"`
+	SystemLoad5          float64           `json:"system_load5"`
+	SystemLoad15         float64           `json:"system_load15"`
 }
 
 func (s *StatusServer) statusData() StatusData {
@@ -1237,9 +1285,10 @@ type PoolStatsData struct {
 	MinDifficulty        float64             `json:"min_difficulty"`
 	MaxDifficulty        float64             `json:"max_difficulty"`
 	PoolFeePercent       float64             `json:"pool_fee_percent"`
-	DonationFeePercent   float64             `json:"donation_fee_percent,omitempty"`
-	DonationPayoutName   string              `json:"donation_payout_name,omitempty"`
-	DualPayoutEnabled    bool                `json:"dual_payout_enabled"`
+	OperatorDonationPercent float64          `json:"operator_donation_percent,omitempty"`
+	OperatorDonationName    string           `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL     string           `json:"operator_donation_url,omitempty"`
+	DualPayoutEnabled       bool             `json:"dual_payout_enabled"`
 	CurrentJob           *Job                `json:"current_job,omitempty"`
 	JobCreated           string              `json:"job_created"`
 	TemplateTime         string              `json:"template_time"`
@@ -1251,9 +1300,12 @@ type PoolStatsData struct {
 	Warnings             []string            `json:"warnings,omitempty"`
 }
 
-// NodeStatsData contains Bitcoin node information
-type NodeStatsData struct {
+// NodePageData contains Bitcoin node information for the node page
+type NodePageData struct {
 	APIVersion               string  `json:"api_version"`
+	BrandName                string  `json:"brand_name"`
+	BrandDomain              string  `json:"brand_domain"`
+	PoolSoftware             string  `json:"pool_software"`
 	NodeNetwork              string  `json:"node_network,omitempty"`
 	NodeSubversion           string  `json:"node_subversion,omitempty"`
 	NodeBlocks               int64   `json:"node_blocks"`
@@ -1385,11 +1437,12 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			BlocksAccepted:       full.BlocksAccepted,
 			BlocksErrored:        full.BlocksErrored,
 			MinDifficulty:        full.MinDifficulty,
-			MaxDifficulty:        full.MaxDifficulty,
-			PoolFeePercent:       full.PoolFeePercent,
-			DonationFeePercent:   full.DonationFeePercent,
-			DonationPayoutName:   full.DonationPayoutName,
-			CurrentJob:           nil, // Excluded for security
+			MaxDifficulty:           full.MaxDifficulty,
+			PoolFeePercent:          full.PoolFeePercent,
+			OperatorDonationPercent: full.OperatorDonationPercent,
+			OperatorDonationName:    full.OperatorDonationName,
+			OperatorDonationURL:     full.OperatorDonationURL,
+			CurrentJob:              nil, // Excluded for security
 			JobCreated:           full.JobCreated,
 			TemplateTime:         full.TemplateTime,
 			JobFeed:              full.JobFeed,
@@ -1404,12 +1457,15 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 }
 
 // handleNodeStatsJSON returns Bitcoin node information
-func (s *StatusServer) handleNodeStatsJSON(w http.ResponseWriter, r *http.Request) {
-	key := "node_stats"
+func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request) {
+	key := "node_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
-		data := NodeStatsData{
+		data := NodePageData{
 			APIVersion:               apiVersion,
+			BrandName:                full.BrandName,
+			BrandDomain:              full.BrandDomain,
+			PoolSoftware:             full.PoolSoftware,
 			NodeNetwork:              full.NodeNetwork,
 			NodeSubversion:           full.NodeSubversion,
 			NodeBlocks:               full.NodeBlocks,
@@ -1608,13 +1664,61 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// handleStatusPageJSON returns all data needed for the status page UI
-// This is a special endpoint for the frontend that returns censored but complete data
-func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Request) {
-	key := "status_page"
+// handleOverviewPageJSON returns minimal data for the overview page
+func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Request) {
+	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
-		data := statusPageJSON{
+		data := OverviewPageData{
+			APIVersion:      apiVersion,
+			ActiveMiners:    full.ActiveMiners,
+			ActiveTLSMiners: full.ActiveTLSMiners,
+			SharesPerMinute: full.SharesPerMinute,
+			PoolHashrate:    full.PoolHashrate,
+			RenderDuration:  full.RenderDuration,
+			Workers:         full.Workers,
+			BannedWorkers:   full.BannedWorkers,
+			BestShares:      full.BestShares,
+			FoundBlocks:     full.FoundBlocks,
+			MinerTypes:      full.MinerTypes,
+		}
+		return sonic.Marshal(data)
+	})
+}
+
+// handlePoolPageJSON returns pool configuration data for the pool info page
+func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request) {
+	key := "pool_page"
+	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
+		full := s.buildCensoredStatusData()
+		data := PoolPageData{
+			APIVersion:              apiVersion,
+			BrandName:               full.BrandName,
+			BrandDomain:                    full.BrandDomain,
+			PoolFeePercent:                 full.PoolFeePercent,
+			OperatorDonationPercent:        full.OperatorDonationPercent,
+			OperatorDonationName:           full.OperatorDonationName,
+			OperatorDonationURL:            full.OperatorDonationURL,
+			DisplayPayoutAddress:           full.DisplayPayoutAddress,
+			DisplayOperatorDonationAddress:  full.DisplayOperatorDonationAddress,
+			DisplayCoinbaseMessage:  full.DisplayCoinbaseMessage,
+			MinDifficulty:           full.MinDifficulty,
+			MaxDifficulty:           full.MaxDifficulty,
+			LockSuggestedDifficulty: full.LockSuggestedDifficulty,
+			MaxConns:                full.MaxConns,
+			MaxAcceptsPerSecond:     full.MaxAcceptsPerSecond,
+			MaxAcceptBurst:          full.MaxAcceptBurst,
+		}
+		return sonic.Marshal(data)
+	})
+}
+
+// handleServerPageJSON returns combined status and diagnostics for the server page
+func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Request) {
+	key := "server_page"
+	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
+		full := s.buildCensoredStatusData()
+		data := ServerPageData{
 			APIVersion:           apiVersion,
 			Uptime:               full.Uptime,
 			ActiveMiners:         full.ActiveMiners,
@@ -1631,7 +1735,7 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 			MinerTypes:           full.MinerTypes,
 			RPCError:             full.RPCError,
 			AccountingError:      full.AccountingError,
-			JobFeed: statusPageJobFeed{
+			JobFeed: ServerPageJobFeed{
 				LastError:         full.JobFeed.LastError,
 				LastErrorAt:       full.JobFeed.LastErrorAt,
 				ErrorHistory:      full.JobFeed.ErrorHistory,
@@ -1650,18 +1754,29 @@ func (s *StatusServer) handleStatusPageJSON(w http.ResponseWriter, r *http.Reque
 				BlockBits:         full.JobFeed.BlockBits,
 				BlockDifficulty:   full.JobFeed.BlockDifficulty,
 			},
-			VardiffUp:        full.VardiffUp,
-			VardiffDown:      full.VardiffDown,
-			BlocksAccepted:   full.BlocksAccepted,
-			BlocksErrored:    full.BlocksErrored,
-			RPCGBTLastSec:    full.RPCGBTLastSec,
-			RPCGBTMaxSec:     full.RPCGBTMaxSec,
-			RPCGBTCount:      full.RPCGBTCount,
-			RPCSubmitLastSec: full.RPCSubmitLastSec,
-			RPCSubmitMaxSec:  full.RPCSubmitMaxSec,
-			RPCSubmitCount:   full.RPCSubmitCount,
-			RPCErrors:        full.RPCErrors,
-			ShareErrors:      full.ShareErrors,
+			VardiffUp:           full.VardiffUp,
+			VardiffDown:         full.VardiffDown,
+			BlocksAccepted:      full.BlocksAccepted,
+			BlocksErrored:       full.BlocksErrored,
+			RPCGBTLastSec:       full.RPCGBTLastSec,
+			RPCGBTMaxSec:        full.RPCGBTMaxSec,
+			RPCGBTCount:         full.RPCGBTCount,
+			RPCSubmitLastSec:    full.RPCSubmitLastSec,
+			RPCSubmitMaxSec:     full.RPCSubmitMaxSec,
+			RPCSubmitCount:      full.RPCSubmitCount,
+			RPCErrors:           full.RPCErrors,
+			ShareErrors:         full.ShareErrors,
+			ProcessGoroutines:   full.ProcessGoroutines,
+			ProcessCPUPercent:   full.ProcessCPUPercent,
+			GoMemAllocBytes:     full.GoMemAllocBytes,
+			GoMemSysBytes:       full.GoMemSysBytes,
+			ProcessRSSBytes:     full.ProcessRSSBytes,
+			SystemMemTotalBytes: full.SystemMemTotalBytes,
+			SystemMemFreeBytes:  full.SystemMemFreeBytes,
+			SystemMemUsedBytes:  full.SystemMemUsedBytes,
+			SystemLoad1:         full.SystemLoad1,
+			SystemLoad5:         full.SystemLoad5,
+			SystemLoad15:        full.SystemLoad15,
 		}
 		return sonic.Marshal(data)
 	})
@@ -2380,7 +2495,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 
 	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.DonationPayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	expectedGenesis := ""
@@ -2420,7 +2535,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		FiatCurrency:             s.cfg.FiatCurrency,
 		BTCPriceFiat:             btcPrice,
 		BTCPriceUpdatedAt:        btcPriceUpdated,
-		DonationAddress:          s.cfg.DonationAddress,
+		PoolDonationAddress:      s.cfg.PoolDonationAddress,
 		DiscordURL:               s.cfg.DiscordURL,
 		NodeNetwork:              nodeNetwork,
 		NodeSubversion:           nodeSubversion,
@@ -2429,15 +2544,16 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodeInitialBlockDownload: nodeIBD,
 		NodeRPCURL:               s.cfg.RPCURL,
 		NodeZMQAddr:              s.cfg.ZMQBlockAddr,
-		PayoutAddress:            s.cfg.PayoutAddress,
-		PoolFeePercent:           s.cfg.PoolFeePercent,
-		DonationFeePercent:       s.cfg.DonationFeePercent,
-		DonationPayoutAddress:    s.cfg.DonationPayoutAddress,
-		DonationPayoutName:       s.cfg.DonationPayoutName,
-		CoinbaseMessage:          s.cfg.CoinbaseMsg,
-		DisplayPayoutAddress:     displayPayout,
-		DisplayDonationAddress:   displayDonation,
-		DisplayCoinbaseMessage:   displayCoinbase,
+		PayoutAddress:                  s.cfg.PayoutAddress,
+		PoolFeePercent:                 s.cfg.PoolFeePercent,
+		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
+		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
+		OperatorDonationName:           s.cfg.OperatorDonationName,
+		OperatorDonationURL:            s.cfg.OperatorDonationURL,
+		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		DisplayPayoutAddress:           displayPayout,
+		DisplayOperatorDonationAddress: displayDonation,
+		DisplayCoinbaseMessage:         displayCoinbase,
 		NodeConnections:          nodeConns,
 		NodeConnectionsIn:        nodeConnsIn,
 		NodeConnectionsOut:       nodeConnsOut,
@@ -2526,7 +2642,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	}
 
 	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.DonationPayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	var warnings []string
@@ -2544,19 +2660,20 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		BrandDomain:             brandDomain,
 		Tagline:                 s.cfg.StatusTagline,
 		FiatCurrency:            s.cfg.FiatCurrency,
-		DonationAddress:         s.cfg.DonationAddress,
+		PoolDonationAddress:     s.cfg.PoolDonationAddress,
 		DiscordURL:              s.cfg.DiscordURL,
 		NodeRPCURL:              s.cfg.RPCURL,
 		NodeZMQAddr:             s.cfg.ZMQBlockAddr,
-		PayoutAddress:           s.cfg.PayoutAddress,
-		PoolFeePercent:          s.cfg.PoolFeePercent,
-		DonationFeePercent:      s.cfg.DonationFeePercent,
-		DonationPayoutAddress:   s.cfg.DonationPayoutAddress,
-		DonationPayoutName:      s.cfg.DonationPayoutName,
-		CoinbaseMessage:         s.cfg.CoinbaseMsg,
-		DisplayPayoutAddress:    displayPayout,
-		DisplayDonationAddress:  displayDonation,
-		DisplayCoinbaseMessage:  displayCoinbase,
+		PayoutAddress:                  s.cfg.PayoutAddress,
+		PoolFeePercent:                 s.cfg.PoolFeePercent,
+		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
+		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
+		OperatorDonationName:           s.cfg.OperatorDonationName,
+		OperatorDonationURL:            s.cfg.OperatorDonationURL,
+		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		DisplayPayoutAddress:           displayPayout,
+		DisplayOperatorDonationAddress: displayDonation,
+		DisplayCoinbaseMessage:         displayCoinbase,
 		PoolSoftware:            poolSoftwareName,
 		BuildTime:               bt,
 		MaxConns:                s.cfg.MaxConns,
@@ -2615,7 +2732,7 @@ func (s *StatusServer) buildCensoredStatusData() StatusData {
 	}
 	data.PayoutAddress = shortDisplayID(data.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	data.CoinbaseMessage = shortDisplayID(data.CoinbaseMessage, coinbaseMsgPrefix, coinbaseMsgSuffix)
-	// DonationAddress is intentionally NOT censored - pools want to show this publicly
+	// PoolDonationAddress is intentionally NOT censored - pools want to show this publicly
 
 	// Censor node configuration
 	if data.NodeRPCURL != "" && !strings.Contains(data.NodeRPCURL, "127.0.0.1") && !strings.Contains(data.NodeRPCURL, "localhost") {

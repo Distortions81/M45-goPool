@@ -49,9 +49,9 @@
 					<div class="value">
 						{{printf "%.2f" .PoolFeePercent}}%
 					</div>
-					{{if gt .DonationFeePercent 0.0}}
+					{{if gt .OperatorDonationPercent 0.0}}
 						<div class="card-context">Split coinbase, pays directly to miner<br>
-						<span style="opacity: 0.8;">{{printf "%.1f" .DonationFeePercent}}% of pool fee donated{{if .DonationPayoutName}} to {{.DonationPayoutName}}{{end}}</span></div>
+						<span style="opacity: 0.8;">{{printf "%.1f" .OperatorDonationPercent}}% of pool fee donated{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</span></div>
 					{{else}}
 						<div class="card-context">Split coinbase, pays directly to miner</div>
 					{{end}}
@@ -569,7 +569,7 @@
 		}
 
 		function fetchUpdate() {
-			fetch('/api/status-page')
+			fetch('/api/overview')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					return response.json();

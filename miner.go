@@ -1945,7 +1945,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 	)
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
 		// Check if donation is enabled and we should use triple payout
-		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
 				job.Template.Height,
 				mc.extranonce1,
@@ -1956,7 +1956,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 				workerScript,
 				totalValue,
 				feePercent,
-				job.DonationFeePercent,
+				job.OperatorDonationPercent,
 				job.WitnessCommitment,
 				job.Template.CoinbaseAux.Flags,
 				job.CoinbaseMsg,
@@ -2378,7 +2378,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// hex decode/encode of all transactions when the share is not a block.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
 		// Check if donation is enabled and we should use triple payout
-		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
 				mc.extranonce1,
@@ -2389,7 +2389,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 				workerScript,
 				totalValue,
 				feePercent,
-				job.DonationFeePercent,
+				job.OperatorDonationPercent,
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,
@@ -2615,7 +2615,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		var cbTx, cbTxid []byte
 		var err error
 		// Check if donation is enabled and we should use triple payout
-		if job.DonationFeePercent > 0 && len(job.DonationScript) > 0 {
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
 				mc.extranonce1,
@@ -2626,7 +2626,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 				workerScript,
 				totalValue,
 				feePercent,
-				job.DonationFeePercent,
+				job.OperatorDonationPercent,
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,

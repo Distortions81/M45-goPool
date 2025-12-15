@@ -64,7 +64,7 @@ type Job struct {
 	TransactionIDs          [][]byte
 	PayoutScript            []byte
 	DonationScript          []byte
-	DonationFeePercent      float64
+	OperatorDonationPercent      float64
 	VersionMask             uint32
 	PrevHash                string
 	prevHashBytes           [32]byte
@@ -424,7 +424,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		TransactionIDs:          txids,
 		PayoutScript:            jm.payoutScript,
 		DonationScript:          jm.donationScript,
-		DonationFeePercent:      jm.cfg.DonationFeePercent,
+		OperatorDonationPercent:      jm.cfg.OperatorDonationPercent,
 		VersionMask:             computePoolMask(tpl, jm.cfg),
 		PrevHash:                tpl.Previous,
 		prevHashBytes:           prevBytes,
