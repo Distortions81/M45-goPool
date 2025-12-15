@@ -89,15 +89,15 @@ const (
 	minDiffChangeInterval = 60 * time.Second
 
 	// Input validation limits for miner-provided fields
-	maxMinerClientIDLen = 256   // mining.subscribe client identifier
-	maxWorkerNameLen    = 256   // mining.authorize and submit worker name
-	maxJobIDLen         = 128   // submit job_id parameter
-	maxVersionHexLen    = 8     // submit version_bits parameter (4-byte hex)
+	maxMinerClientIDLen = 256 // mining.subscribe client identifier
+	maxWorkerNameLen    = 256 // mining.authorize and submit worker name
+	maxJobIDLen         = 128 // submit job_id parameter
+	maxVersionHexLen    = 8   // submit version_bits parameter (4-byte hex)
 )
 
 var defaultVarDiff = VarDiffConfig{
-	MinDiff:            512,
-	MaxDiff:            16000,
+	MinDiff:            4096,
+	MaxDiff:            65536,
 	TargetSharesPerMin: 4, // aim for roughly one share every 12s
 	AdjustmentWindow:   90 * time.Second,
 	Step:               2,
@@ -224,7 +224,7 @@ type MinerConn struct {
 	lastShareHash       string
 	lastShareAccepted   bool
 	lastShareDifficulty float64
-	lastShareDetail      *ShareDetail
+	lastShareDetail     *ShareDetail
 	lastRejectReason    string
 	walletMu            sync.Mutex
 	workerWallets       map[string]workerWalletState
@@ -831,7 +831,7 @@ type minerShareSnapshot struct {
 	LastShareHash       string
 	LastShareAccepted   bool
 	LastShareDifficulty float64
-	LastShareDetail      *ShareDetail
+	LastShareDetail     *ShareDetail
 	LastReject          string
 }
 
@@ -844,7 +844,7 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 		LastShareHash:       mc.lastShareHash,
 		LastShareAccepted:   mc.lastShareAccepted,
 		LastShareDifficulty: mc.lastShareDifficulty,
-		LastShareDetail:      mc.lastShareDetail,
+		LastShareDetail:     mc.lastShareDetail,
 		LastReject:          mc.lastRejectReason,
 	}
 }

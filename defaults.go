@@ -43,8 +43,8 @@ const (
 	defaultReconnectBanThreshold             = 0
 	defaultReconnectBanWindowSeconds         = 60
 	defaultReconnectBanDurationSeconds       = 300
-	defaultMaxDifficulty                     = 16000
-	defaultMinDifficulty                     = 512
+	defaultMaxDifficulty                     = 65536
+	defaultMinDifficulty                     = 4096
 	defaultMinVersionBits                    = 1
 	defaultRefreshInterval                   = 10 * time.Second
 	defaultZMQReceiveTimeout                 = 15 * time.Second
@@ -54,24 +54,24 @@ const (
 // as the base for both runtime config loading and example config generation.
 func defaultConfig() Config {
 	return Config{
-		ListenAddr:        defaultListenAddr,
-		StatusAddr:        defaultStatusAddr,
-		StatusTLSAddr:     defaultStatusTLSAddr,
-		StatusBrandName:   "",
-		StatusBrandDomain: "",
-		StatusTagline:     defaultStatusTagline,
-		FiatCurrency:      defaultFiatCurrency,
+		ListenAddr:          defaultListenAddr,
+		StatusAddr:          defaultStatusAddr,
+		StatusTLSAddr:       defaultStatusTLSAddr,
+		StatusBrandName:     "",
+		StatusBrandDomain:   "",
+		StatusTagline:       defaultStatusTagline,
+		FiatCurrency:        defaultFiatCurrency,
 		PoolDonationAddress: "",
-		DiscordURL:        "",
+		DiscordURL:          "",
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
-		StratumTLSListen: defaultStratumTLSListen,
-		RPCURL:           defaultRPCURL,
-		RPCUser:          defaultRPCUser,
-		RPCPass:          defaultRPCPass,
-		CoinbasePoolTag:       generatePoolTag(),
-		PayoutAddress:         "",
-		PoolFeePercent:        defaultPoolFeePercent,
+		StratumTLSListen:        defaultStratumTLSListen,
+		RPCURL:                  defaultRPCURL,
+		RPCUser:                 defaultRPCUser,
+		RPCPass:                 defaultRPCPass,
+		CoinbasePoolTag:         generatePoolTag(),
+		PayoutAddress:           "",
+		PoolFeePercent:          defaultPoolFeePercent,
 		OperatorDonationPercent: 0.0,
 		OperatorDonationAddress: "",
 		OperatorDonationName:    "",

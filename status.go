@@ -437,84 +437,84 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView, privacyMode bool
 }
 
 type StatusData struct {
-	ListenAddr               string            `json:"listen_addr"`
-	StratumTLSListen         string            `json:"stratum_tls_listen,omitempty"`
-	BrandName                string            `json:"brand_name"`
-	BrandDomain              string            `json:"brand_domain"`
-	Tagline                  string            `json:"tagline,omitempty"`
-	FiatCurrency             string            `json:"fiat_currency,omitempty"`
-	BTCPriceFiat             float64           `json:"btc_price_fiat,omitempty"`
-	BTCPriceUpdatedAt        string            `json:"btc_price_updated_at,omitempty"`
-	PoolDonationAddress      string            `json:"pool_donation_address,omitempty"`
-	DiscordURL               string            `json:"discord_url,omitempty"`
-	NodeNetwork              string            `json:"node_network,omitempty"`
-	NodeSubversion           string            `json:"node_subversion,omitempty"`
-	NodeBlocks               int64             `json:"node_blocks"`
-	NodeHeaders              int64             `json:"node_headers"`
-	NodeInitialBlockDownload bool              `json:"node_initial_block_download"`
-	NodeRPCURL               string            `json:"node_rpc_url"`
-	NodeZMQAddr              string            `json:"node_zmq_addr,omitempty"`
-	PayoutAddress            string            `json:"payout_address,omitempty"`
-	PoolFeePercent           float64           `json:"pool_fee_percent"`
-	OperatorDonationPercent  float64           `json:"operator_donation_percent,omitempty"`
-	OperatorDonationAddress  string            `json:"operator_donation_address,omitempty"`
-	OperatorDonationName     string            `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL      string            `json:"operator_donation_url,omitempty"`
-	CoinbaseMessage          string            `json:"coinbase_message,omitempty"`
-	DisplayPayoutAddress     string            `json:"display_payout_address,omitempty"`
-	DisplayOperatorDonationAddress string      `json:"display_operator_donation_address,omitempty"`
-	DisplayCoinbaseMessage   string            `json:"display_coinbase_message,omitempty"`
-	NodeConnections          int               `json:"node_connections"`
-	NodeConnectionsIn        int               `json:"node_connections_in"`
-	NodeConnectionsOut       int               `json:"node_connections_out"`
-	NodePruned               bool              `json:"node_pruned"`
-	NodeSizeOnDiskBytes      uint64            `json:"node_size_on_disk_bytes"`
-	GenesisHash              string            `json:"genesis_hash,omitempty"`
-	GenesisExpected          string            `json:"genesis_expected,omitempty"`
-	GenesisMatch             bool              `json:"genesis_match"`
-	BestBlockHash            string            `json:"best_block_hash,omitempty"`
-	PoolSoftware             string            `json:"pool_software"`
-	BuildTime                string            `json:"build_time"`
-	RenderDuration           time.Duration     `json:"render_duration"`
-	PageCached               bool              `json:"page_cached"`
-	ActiveMiners             int               `json:"active_miners"`
-	ActiveTLSMiners          int               `json:"active_tls_miners"`
-	SharesPerSecond          float64           `json:"shares_per_second"`
-	SharesPerSecondShort     float64           `json:"shares_per_second_short,omitempty"`
-	SharesPerMinute          float64           `json:"shares_per_minute,omitempty"`
-	Accepted                 uint64            `json:"accepted"`
-	Rejected                 uint64            `json:"rejected"`
-	StaleShares              uint64            `json:"stale_shares"`
-	LowDiffShares            uint64            `json:"low_diff_shares"`
-	RejectReasons            map[string]uint64 `json:"reject_reasons,omitempty"`
-	CurrentJob               *Job              `json:"current_job,omitempty"`
-	Uptime                   time.Duration     `json:"uptime"`
-	JobCreated               string            `json:"job_created"`
-	TemplateTime             string            `json:"template_time"`
-	Workers                  []WorkerView      `json:"workers"`
-	BannedWorkers            []WorkerView      `json:"banned_workers"`
-	WindowAccepted           uint64            `json:"window_accepted"`
-	WindowSubmissions        uint64            `json:"window_submissions"`
-	WindowStart              string            `json:"window_start"`
-	RPCError                 string            `json:"rpc_error,omitempty"`
-	AccountingError          string            `json:"accounting_error,omitempty"`
-	JobFeed                  JobFeedView       `json:"job_feed"`
-	BestShares               []BestShare       `json:"best_shares"`
-	FoundBlocks              []FoundBlockView  `json:"found_blocks,omitempty"`
-	MinerTypes               []MinerTypeView   `json:"miner_types,omitempty"`
-	VardiffUp                uint64            `json:"vardiff_up"`
-	VardiffDown              uint64            `json:"vardiff_down"`
-	PoolHashrate             float64           `json:"pool_hashrate,omitempty"`
-	BlocksAccepted           uint64            `json:"blocks_accepted"`
-	BlocksErrored            uint64            `json:"blocks_errored"`
-	RPCGBTLastSec            float64           `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec             float64           `json:"rpc_gbt_max_sec"`
-	RPCGBTCount              uint64            `json:"rpc_gbt_count"`
-	RPCSubmitLastSec         float64           `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec          float64           `json:"rpc_submit_max_sec"`
-	RPCSubmitCount           uint64            `json:"rpc_submit_count"`
-	RPCErrors                uint64            `json:"rpc_errors"`
-	ShareErrors              uint64            `json:"share_errors"`
+	ListenAddr                     string            `json:"listen_addr"`
+	StratumTLSListen               string            `json:"stratum_tls_listen,omitempty"`
+	BrandName                      string            `json:"brand_name"`
+	BrandDomain                    string            `json:"brand_domain"`
+	Tagline                        string            `json:"tagline,omitempty"`
+	FiatCurrency                   string            `json:"fiat_currency,omitempty"`
+	BTCPriceFiat                   float64           `json:"btc_price_fiat,omitempty"`
+	BTCPriceUpdatedAt              string            `json:"btc_price_updated_at,omitempty"`
+	PoolDonationAddress            string            `json:"pool_donation_address,omitempty"`
+	DiscordURL                     string            `json:"discord_url,omitempty"`
+	NodeNetwork                    string            `json:"node_network,omitempty"`
+	NodeSubversion                 string            `json:"node_subversion,omitempty"`
+	NodeBlocks                     int64             `json:"node_blocks"`
+	NodeHeaders                    int64             `json:"node_headers"`
+	NodeInitialBlockDownload       bool              `json:"node_initial_block_download"`
+	NodeRPCURL                     string            `json:"node_rpc_url"`
+	NodeZMQAddr                    string            `json:"node_zmq_addr,omitempty"`
+	PayoutAddress                  string            `json:"payout_address,omitempty"`
+	PoolFeePercent                 float64           `json:"pool_fee_percent"`
+	OperatorDonationPercent        float64           `json:"operator_donation_percent,omitempty"`
+	OperatorDonationAddress        string            `json:"operator_donation_address,omitempty"`
+	OperatorDonationName           string            `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL            string            `json:"operator_donation_url,omitempty"`
+	CoinbaseMessage                string            `json:"coinbase_message,omitempty"`
+	DisplayPayoutAddress           string            `json:"display_payout_address,omitempty"`
+	DisplayOperatorDonationAddress string            `json:"display_operator_donation_address,omitempty"`
+	DisplayCoinbaseMessage         string            `json:"display_coinbase_message,omitempty"`
+	NodeConnections                int               `json:"node_connections"`
+	NodeConnectionsIn              int               `json:"node_connections_in"`
+	NodeConnectionsOut             int               `json:"node_connections_out"`
+	NodePruned                     bool              `json:"node_pruned"`
+	NodeSizeOnDiskBytes            uint64            `json:"node_size_on_disk_bytes"`
+	GenesisHash                    string            `json:"genesis_hash,omitempty"`
+	GenesisExpected                string            `json:"genesis_expected,omitempty"`
+	GenesisMatch                   bool              `json:"genesis_match"`
+	BestBlockHash                  string            `json:"best_block_hash,omitempty"`
+	PoolSoftware                   string            `json:"pool_software"`
+	BuildTime                      string            `json:"build_time"`
+	RenderDuration                 time.Duration     `json:"render_duration"`
+	PageCached                     bool              `json:"page_cached"`
+	ActiveMiners                   int               `json:"active_miners"`
+	ActiveTLSMiners                int               `json:"active_tls_miners"`
+	SharesPerSecond                float64           `json:"shares_per_second"`
+	SharesPerSecondShort           float64           `json:"shares_per_second_short,omitempty"`
+	SharesPerMinute                float64           `json:"shares_per_minute,omitempty"`
+	Accepted                       uint64            `json:"accepted"`
+	Rejected                       uint64            `json:"rejected"`
+	StaleShares                    uint64            `json:"stale_shares"`
+	LowDiffShares                  uint64            `json:"low_diff_shares"`
+	RejectReasons                  map[string]uint64 `json:"reject_reasons,omitempty"`
+	CurrentJob                     *Job              `json:"current_job,omitempty"`
+	Uptime                         time.Duration     `json:"uptime"`
+	JobCreated                     string            `json:"job_created"`
+	TemplateTime                   string            `json:"template_time"`
+	Workers                        []WorkerView      `json:"workers"`
+	BannedWorkers                  []WorkerView      `json:"banned_workers"`
+	WindowAccepted                 uint64            `json:"window_accepted"`
+	WindowSubmissions              uint64            `json:"window_submissions"`
+	WindowStart                    string            `json:"window_start"`
+	RPCError                       string            `json:"rpc_error,omitempty"`
+	AccountingError                string            `json:"accounting_error,omitempty"`
+	JobFeed                        JobFeedView       `json:"job_feed"`
+	BestShares                     []BestShare       `json:"best_shares"`
+	FoundBlocks                    []FoundBlockView  `json:"found_blocks,omitempty"`
+	MinerTypes                     []MinerTypeView   `json:"miner_types,omitempty"`
+	VardiffUp                      uint64            `json:"vardiff_up"`
+	VardiffDown                    uint64            `json:"vardiff_down"`
+	PoolHashrate                   float64           `json:"pool_hashrate,omitempty"`
+	BlocksAccepted                 uint64            `json:"blocks_accepted"`
+	BlocksErrored                  uint64            `json:"blocks_errored"`
+	RPCGBTLastSec                  float64           `json:"rpc_gbt_last_sec"`
+	RPCGBTMaxSec                   float64           `json:"rpc_gbt_max_sec"`
+	RPCGBTCount                    uint64            `json:"rpc_gbt_count"`
+	RPCSubmitLastSec               float64           `json:"rpc_submit_last_sec"`
+	RPCSubmitMaxSec                float64           `json:"rpc_submit_max_sec"`
+	RPCSubmitCount                 uint64            `json:"rpc_submit_count"`
+	RPCErrors                      uint64            `json:"rpc_errors"`
+	ShareErrors                    uint64            `json:"share_errors"`
 	// Local process / system diagnostics (server-only).
 	ProcessGoroutines   int     `json:"process_goroutines"`
 	ProcessCPUPercent   float64 `json:"process_cpu_percent"`
@@ -563,38 +563,38 @@ type ServerPageJobFeed struct {
 
 // OverviewPageData contains data for the overview page (minimal payload)
 type OverviewPageData struct {
-	APIVersion       string           `json:"api_version"`
-	ActiveMiners     int              `json:"active_miners"`
-	ActiveTLSMiners  int              `json:"active_tls_miners"`
-	SharesPerMinute  float64          `json:"shares_per_minute,omitempty"`
-	PoolHashrate     float64          `json:"pool_hashrate,omitempty"`
-	RenderDuration   time.Duration    `json:"render_duration"`
-	Workers          []WorkerView     `json:"workers"`
-	BannedWorkers    []WorkerView     `json:"banned_workers"`
-	BestShares       []BestShare      `json:"best_shares"`
-	FoundBlocks      []FoundBlockView `json:"found_blocks,omitempty"`
-	MinerTypes       []MinerTypeView  `json:"miner_types,omitempty"`
+	APIVersion      string           `json:"api_version"`
+	ActiveMiners    int              `json:"active_miners"`
+	ActiveTLSMiners int              `json:"active_tls_miners"`
+	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
+	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
+	RenderDuration  time.Duration    `json:"render_duration"`
+	Workers         []WorkerView     `json:"workers"`
+	BannedWorkers   []WorkerView     `json:"banned_workers"`
+	BestShares      []BestShare      `json:"best_shares"`
+	FoundBlocks     []FoundBlockView `json:"found_blocks,omitempty"`
+	MinerTypes      []MinerTypeView  `json:"miner_types,omitempty"`
 }
 
 // PoolPageData contains data for the pool info page
 type PoolPageData struct {
-	APIVersion       string  `json:"api_version"`
-	BrandName        string  `json:"brand_name"`
-	BrandDomain      string  `json:"brand_domain"`
-	PoolFeePercent   float64 `json:"pool_fee_percent"`
-	OperatorDonationPercent float64 `json:"operator_donation_percent,omitempty"`
-	OperatorDonationName    string  `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL     string  `json:"operator_donation_url,omitempty"`
-	DisplayPayoutAddress    string  `json:"display_payout_address,omitempty"`
-	DisplayOperatorDonationAddress string `json:"display_operator_donation_address,omitempty"`
-	DisplayCoinbaseMessage   string `json:"display_coinbase_message,omitempty"`
-	MinDifficulty            float64 `json:"min_difficulty"`
-	MaxDifficulty            float64 `json:"max_difficulty"`
-	LockSuggestedDifficulty  bool    `json:"lock_suggested_difficulty"`
-	MaxConns                 int     `json:"max_conns"`
-	MaxAcceptsPerSecond      int     `json:"max_accepts_per_second"`
-	MaxAcceptBurst           int     `json:"max_accept_burst"`
-	UsingZMQ                 bool    `json:"using_zmq"`
+	APIVersion                     string  `json:"api_version"`
+	BrandName                      string  `json:"brand_name"`
+	BrandDomain                    string  `json:"brand_domain"`
+	PoolFeePercent                 float64 `json:"pool_fee_percent"`
+	OperatorDonationPercent        float64 `json:"operator_donation_percent,omitempty"`
+	OperatorDonationName           string  `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL            string  `json:"operator_donation_url,omitempty"`
+	DisplayPayoutAddress           string  `json:"display_payout_address,omitempty"`
+	DisplayOperatorDonationAddress string  `json:"display_operator_donation_address,omitempty"`
+	DisplayCoinbaseMessage         string  `json:"display_coinbase_message,omitempty"`
+	MinDifficulty                  float64 `json:"min_difficulty"`
+	MaxDifficulty                  float64 `json:"max_difficulty"`
+	LockSuggestedDifficulty        bool    `json:"lock_suggested_difficulty"`
+	MaxConns                       int     `json:"max_conns"`
+	MaxAcceptsPerSecond            int     `json:"max_accepts_per_second"`
+	MaxAcceptBurst                 int     `json:"max_accept_burst"`
+	UsingZMQ                       bool    `json:"using_zmq"`
 }
 
 // ServerPageData contains data for the server diagnostics page
@@ -1263,46 +1263,46 @@ func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // PoolStatsData contains essential pool statistics without worker details
 type PoolStatsData struct {
-	APIVersion           string              `json:"api_version"`
-	BrandName            string              `json:"brand_name"`
-	BrandDomain          string              `json:"brand_domain"`
-	ListenAddr           string              `json:"listen_addr"`
-	StratumTLSListen     string              `json:"stratum_tls_listen,omitempty"`
-	PoolSoftware         string              `json:"pool_software"`
-	BuildTime            string              `json:"build_time"`
-	Uptime               time.Duration       `json:"uptime"`
-	ActiveMiners         int                 `json:"active_miners"`
-	PoolHashrate         float64             `json:"pool_hashrate"`
-	SharesPerSecond      float64             `json:"shares_per_second"`
-	SharesPerSecondShort float64             `json:"shares_per_second_short,omitempty"`
-	Accepted             uint64              `json:"accepted"`
-	Rejected             uint64              `json:"rejected"`
-	StaleShares          uint64              `json:"stale_shares"`
-	LowDiffShares        uint64              `json:"low_diff_shares"`
-	RejectReasons        map[string]uint64   `json:"reject_reasons,omitempty"`
-	WindowAccepted       uint64              `json:"window_accepted"`
-	WindowSubmissions    uint64              `json:"window_submissions"`
-	WindowStart          string              `json:"window_start"`
-	VardiffUp            uint64              `json:"vardiff_up"`
-	VardiffDown          uint64              `json:"vardiff_down"`
-	BlocksAccepted       uint64              `json:"blocks_accepted"`
-	BlocksErrored        uint64              `json:"blocks_errored"`
-	MinDifficulty        float64             `json:"min_difficulty"`
-	MaxDifficulty        float64             `json:"max_difficulty"`
-	PoolFeePercent       float64             `json:"pool_fee_percent"`
-	OperatorDonationPercent float64          `json:"operator_donation_percent,omitempty"`
-	OperatorDonationName    string           `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL     string           `json:"operator_donation_url,omitempty"`
-	DualPayoutEnabled       bool             `json:"dual_payout_enabled"`
-	CurrentJob           *Job                `json:"current_job,omitempty"`
-	JobCreated           string              `json:"job_created"`
-	TemplateTime         string              `json:"template_time"`
-	JobFeed              JobFeedView         `json:"job_feed"`
-	BTCPriceFiat         float64             `json:"btc_price_fiat,omitempty"`
-	BTCPriceUpdatedAt    string              `json:"btc_price_updated_at,omitempty"`
-	FiatCurrency         string              `json:"fiat_currency,omitempty"`
-	WorkerDatabase       WorkerDatabaseStats `json:"worker_database"`
-	Warnings             []string            `json:"warnings,omitempty"`
+	APIVersion              string              `json:"api_version"`
+	BrandName               string              `json:"brand_name"`
+	BrandDomain             string              `json:"brand_domain"`
+	ListenAddr              string              `json:"listen_addr"`
+	StratumTLSListen        string              `json:"stratum_tls_listen,omitempty"`
+	PoolSoftware            string              `json:"pool_software"`
+	BuildTime               string              `json:"build_time"`
+	Uptime                  time.Duration       `json:"uptime"`
+	ActiveMiners            int                 `json:"active_miners"`
+	PoolHashrate            float64             `json:"pool_hashrate"`
+	SharesPerSecond         float64             `json:"shares_per_second"`
+	SharesPerSecondShort    float64             `json:"shares_per_second_short,omitempty"`
+	Accepted                uint64              `json:"accepted"`
+	Rejected                uint64              `json:"rejected"`
+	StaleShares             uint64              `json:"stale_shares"`
+	LowDiffShares           uint64              `json:"low_diff_shares"`
+	RejectReasons           map[string]uint64   `json:"reject_reasons,omitempty"`
+	WindowAccepted          uint64              `json:"window_accepted"`
+	WindowSubmissions       uint64              `json:"window_submissions"`
+	WindowStart             string              `json:"window_start"`
+	VardiffUp               uint64              `json:"vardiff_up"`
+	VardiffDown             uint64              `json:"vardiff_down"`
+	BlocksAccepted          uint64              `json:"blocks_accepted"`
+	BlocksErrored           uint64              `json:"blocks_errored"`
+	MinDifficulty           float64             `json:"min_difficulty"`
+	MaxDifficulty           float64             `json:"max_difficulty"`
+	PoolFeePercent          float64             `json:"pool_fee_percent"`
+	OperatorDonationPercent float64             `json:"operator_donation_percent,omitempty"`
+	OperatorDonationName    string              `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL     string              `json:"operator_donation_url,omitempty"`
+	DualPayoutEnabled       bool                `json:"dual_payout_enabled"`
+	CurrentJob              *Job                `json:"current_job,omitempty"`
+	JobCreated              string              `json:"job_created"`
+	TemplateTime            string              `json:"template_time"`
+	JobFeed                 JobFeedView         `json:"job_feed"`
+	BTCPriceFiat            float64             `json:"btc_price_fiat,omitempty"`
+	BTCPriceUpdatedAt       string              `json:"btc_price_updated_at,omitempty"`
+	FiatCurrency            string              `json:"fiat_currency,omitempty"`
+	WorkerDatabase          WorkerDatabaseStats `json:"worker_database"`
+	Warnings                []string            `json:"warnings,omitempty"`
 }
 
 // NodePageData contains Bitcoin node information for the node page
@@ -1417,45 +1417,45 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
 		data := PoolStatsData{
-			APIVersion:           apiVersion,
-			BrandName:            full.BrandName,
-			BrandDomain:          full.BrandDomain,
-			ListenAddr:           full.ListenAddr,
-			StratumTLSListen:     full.StratumTLSListen,
-			PoolSoftware:         full.PoolSoftware,
-			BuildTime:            full.BuildTime,
-			Uptime:               full.Uptime,
-			ActiveMiners:         full.ActiveMiners,
-			PoolHashrate:         full.PoolHashrate,
-			SharesPerSecond:      full.SharesPerSecond,
-			SharesPerSecondShort: full.SharesPerSecondShort,
-			Accepted:             full.Accepted,
-			Rejected:             full.Rejected,
-			StaleShares:          full.StaleShares,
-			LowDiffShares:        full.LowDiffShares,
-			RejectReasons:        full.RejectReasons,
-			WindowAccepted:       full.WindowAccepted,
-			WindowSubmissions:    full.WindowSubmissions,
-			WindowStart:          full.WindowStart,
-			VardiffUp:            full.VardiffUp,
-			VardiffDown:          full.VardiffDown,
-			BlocksAccepted:       full.BlocksAccepted,
-			BlocksErrored:        full.BlocksErrored,
-			MinDifficulty:        full.MinDifficulty,
+			APIVersion:              apiVersion,
+			BrandName:               full.BrandName,
+			BrandDomain:             full.BrandDomain,
+			ListenAddr:              full.ListenAddr,
+			StratumTLSListen:        full.StratumTLSListen,
+			PoolSoftware:            full.PoolSoftware,
+			BuildTime:               full.BuildTime,
+			Uptime:                  full.Uptime,
+			ActiveMiners:            full.ActiveMiners,
+			PoolHashrate:            full.PoolHashrate,
+			SharesPerSecond:         full.SharesPerSecond,
+			SharesPerSecondShort:    full.SharesPerSecondShort,
+			Accepted:                full.Accepted,
+			Rejected:                full.Rejected,
+			StaleShares:             full.StaleShares,
+			LowDiffShares:           full.LowDiffShares,
+			RejectReasons:           full.RejectReasons,
+			WindowAccepted:          full.WindowAccepted,
+			WindowSubmissions:       full.WindowSubmissions,
+			WindowStart:             full.WindowStart,
+			VardiffUp:               full.VardiffUp,
+			VardiffDown:             full.VardiffDown,
+			BlocksAccepted:          full.BlocksAccepted,
+			BlocksErrored:           full.BlocksErrored,
+			MinDifficulty:           full.MinDifficulty,
 			MaxDifficulty:           full.MaxDifficulty,
 			PoolFeePercent:          full.PoolFeePercent,
 			OperatorDonationPercent: full.OperatorDonationPercent,
 			OperatorDonationName:    full.OperatorDonationName,
 			OperatorDonationURL:     full.OperatorDonationURL,
 			CurrentJob:              nil, // Excluded for security
-			JobCreated:           full.JobCreated,
-			TemplateTime:         full.TemplateTime,
-			JobFeed:              full.JobFeed,
-			BTCPriceFiat:         full.BTCPriceFiat,
-			BTCPriceUpdatedAt:    full.BTCPriceUpdatedAt,
-			FiatCurrency:         full.FiatCurrency,
-			WorkerDatabase:       full.WorkerDatabase,
-			Warnings:             full.Warnings,
+			JobCreated:              full.JobCreated,
+			TemplateTime:            full.TemplateTime,
+			JobFeed:                 full.JobFeed,
+			BTCPriceFiat:            full.BTCPriceFiat,
+			BTCPriceUpdatedAt:       full.BTCPriceUpdatedAt,
+			FiatCurrency:            full.FiatCurrency,
+			WorkerDatabase:          full.WorkerDatabase,
+			Warnings:                full.Warnings,
 		}
 		return sonic.Marshal(data)
 	})
@@ -1697,23 +1697,23 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
 		data := PoolPageData{
-			APIVersion:              apiVersion,
-			BrandName:               full.BrandName,
+			APIVersion:                     apiVersion,
+			BrandName:                      full.BrandName,
 			BrandDomain:                    full.BrandDomain,
 			PoolFeePercent:                 full.PoolFeePercent,
 			OperatorDonationPercent:        full.OperatorDonationPercent,
 			OperatorDonationName:           full.OperatorDonationName,
 			OperatorDonationURL:            full.OperatorDonationURL,
 			DisplayPayoutAddress:           full.DisplayPayoutAddress,
-			DisplayOperatorDonationAddress:  full.DisplayOperatorDonationAddress,
-			DisplayCoinbaseMessage:  full.DisplayCoinbaseMessage,
-			MinDifficulty:           full.MinDifficulty,
-			MaxDifficulty:           full.MaxDifficulty,
-			LockSuggestedDifficulty: full.LockSuggestedDifficulty,
-			MaxConns:                full.MaxConns,
-			MaxAcceptsPerSecond:     full.MaxAcceptsPerSecond,
-			MaxAcceptBurst:          full.MaxAcceptBurst,
-			UsingZMQ:                s.cfg.ZMQBlockAddr != "",
+			DisplayOperatorDonationAddress: full.DisplayOperatorDonationAddress,
+			DisplayCoinbaseMessage:         full.DisplayCoinbaseMessage,
+			MinDifficulty:                  full.MinDifficulty,
+			MaxDifficulty:                  full.MaxDifficulty,
+			LockSuggestedDifficulty:        full.LockSuggestedDifficulty,
+			MaxConns:                       full.MaxConns,
+			MaxAcceptsPerSecond:            full.MaxAcceptsPerSecond,
+			MaxAcceptBurst:                 full.MaxAcceptBurst,
+			UsingZMQ:                       s.cfg.ZMQBlockAddr != "",
 		}
 		return sonic.Marshal(data)
 	})
@@ -2553,23 +2553,23 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 
 	return StatusData{
-		ListenAddr:               s.cfg.ListenAddr,
-		StratumTLSListen:         s.cfg.StratumTLSListen,
-		BrandName:                brandName,
-		BrandDomain:              brandDomain,
-		Tagline:                  s.cfg.StatusTagline,
-		FiatCurrency:             s.cfg.FiatCurrency,
-		BTCPriceFiat:             btcPrice,
-		BTCPriceUpdatedAt:        btcPriceUpdated,
-		PoolDonationAddress:      s.cfg.PoolDonationAddress,
-		DiscordURL:               s.cfg.DiscordURL,
-		NodeNetwork:              nodeNetwork,
-		NodeSubversion:           nodeSubversion,
-		NodeBlocks:               nodeBlocks,
-		NodeHeaders:              nodeHeaders,
-		NodeInitialBlockDownload: nodeIBD,
-		NodeRPCURL:               s.cfg.RPCURL,
-		NodeZMQAddr:              s.cfg.ZMQBlockAddr,
+		ListenAddr:                     s.cfg.ListenAddr,
+		StratumTLSListen:               s.cfg.StratumTLSListen,
+		BrandName:                      brandName,
+		BrandDomain:                    brandDomain,
+		Tagline:                        s.cfg.StatusTagline,
+		FiatCurrency:                   s.cfg.FiatCurrency,
+		BTCPriceFiat:                   btcPrice,
+		BTCPriceUpdatedAt:              btcPriceUpdated,
+		PoolDonationAddress:            s.cfg.PoolDonationAddress,
+		DiscordURL:                     s.cfg.DiscordURL,
+		NodeNetwork:                    nodeNetwork,
+		NodeSubversion:                 nodeSubversion,
+		NodeBlocks:                     nodeBlocks,
+		NodeHeaders:                    nodeHeaders,
+		NodeInitialBlockDownload:       nodeIBD,
+		NodeRPCURL:                     s.cfg.RPCURL,
+		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
 		PayoutAddress:                  s.cfg.PayoutAddress,
 		PoolFeePercent:                 s.cfg.PoolFeePercent,
 		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
@@ -2580,74 +2580,74 @@ func (s *StatusServer) buildStatusData() StatusData {
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
-		NodeConnections:          nodeConns,
-		NodeConnectionsIn:        nodeConnsIn,
-		NodeConnectionsOut:       nodeConnsOut,
-		NodePruned:               nodePruned,
-		NodeSizeOnDiskBytes:      nodeSizeOnDisk,
-		GenesisHash:              genesisHash,
-		GenesisExpected:          expectedGenesis,
-		GenesisMatch:             genesisMatch,
-		BestBlockHash:            bestHash,
-		PoolSoftware:             poolSoftwareName,
-		BuildTime:                bt,
-		ActiveMiners:             activeMiners,
-		ActiveTLSMiners:          activeTLSMiners,
-		SharesPerSecond:          sharesPerSecond,
-		SharesPerSecondShort:     sharesPerSecond,
-		SharesPerMinute:          sharesPerMinute,
-		Accepted:                 accepted,
-		Rejected:                 nonStaleNonLowRejected,
-		StaleShares:              stale,
-		LowDiffShares:            lowDiff,
-		RejectReasons:            filteredReasons,
-		CurrentJob:               currentJob,
-		Uptime:                   time.Since(s.start),
-		JobCreated:               jobCreated,
-		TemplateTime:             templateTime,
-		Workers:                  workers,
-		BannedWorkers:            bannedWorkers,
-		WindowAccepted:           windowAccepted,
-		WindowSubmissions:        windowSubmissions,
-		WindowStart:              windowStartStr,
-		RPCError:                 rpcErr,
-		AccountingError:          acctErr,
-		JobFeed:                  jobFeed,
-		BestShares:               bestShares,
-		FoundBlocks:              foundBlocks,
-		MinerTypes:               minerTypes,
-		VardiffUp:                vardiffUp,
-		VardiffDown:              vardiffDown,
-		PoolHashrate:             poolHashrate,
-		BlocksAccepted:           blocksAccepted,
-		BlocksErrored:            blocksErrored,
-		RPCGBTLastSec:            rpcGBTLast,
-		RPCGBTMaxSec:             rpcGBTMax,
-		RPCGBTCount:              rpcGBTCount,
-		RPCSubmitLastSec:         rpcSubmitLast,
-		RPCSubmitMaxSec:          rpcSubmitMax,
-		RPCSubmitCount:           rpcSubmitCount,
-		RPCErrors:                rpcErrors,
-		ShareErrors:              shareErrors,
-		ProcessGoroutines:        procGoroutines,
-		ProcessCPUPercent:        cpuPercent,
-		GoMemAllocBytes:          ms.Alloc,
-		GoMemSysBytes:            ms.Sys,
-		ProcessRSSBytes:          procRSS,
-		SystemMemTotalBytes:      sysMemTotal,
-		SystemMemFreeBytes:       sysMemFree,
-		SystemMemUsedBytes:       sysMemUsed,
-		SystemLoad1:              load1,
-		SystemLoad5:              load5,
-		SystemLoad15:             load15,
-		MaxConns:                 s.cfg.MaxConns,
-		MaxAcceptsPerSecond:      s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:           s.cfg.MaxAcceptBurst,
-		MinDifficulty:            s.cfg.MinDifficulty,
-		MaxDifficulty:            s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty:  s.cfg.LockSuggestedDifficulty,
-		WorkerDatabase:           workerDBStats,
-		Warnings:                 warnings,
+		NodeConnections:                nodeConns,
+		NodeConnectionsIn:              nodeConnsIn,
+		NodeConnectionsOut:             nodeConnsOut,
+		NodePruned:                     nodePruned,
+		NodeSizeOnDiskBytes:            nodeSizeOnDisk,
+		GenesisHash:                    genesisHash,
+		GenesisExpected:                expectedGenesis,
+		GenesisMatch:                   genesisMatch,
+		BestBlockHash:                  bestHash,
+		PoolSoftware:                   poolSoftwareName,
+		BuildTime:                      bt,
+		ActiveMiners:                   activeMiners,
+		ActiveTLSMiners:                activeTLSMiners,
+		SharesPerSecond:                sharesPerSecond,
+		SharesPerSecondShort:           sharesPerSecond,
+		SharesPerMinute:                sharesPerMinute,
+		Accepted:                       accepted,
+		Rejected:                       nonStaleNonLowRejected,
+		StaleShares:                    stale,
+		LowDiffShares:                  lowDiff,
+		RejectReasons:                  filteredReasons,
+		CurrentJob:                     currentJob,
+		Uptime:                         time.Since(s.start),
+		JobCreated:                     jobCreated,
+		TemplateTime:                   templateTime,
+		Workers:                        workers,
+		BannedWorkers:                  bannedWorkers,
+		WindowAccepted:                 windowAccepted,
+		WindowSubmissions:              windowSubmissions,
+		WindowStart:                    windowStartStr,
+		RPCError:                       rpcErr,
+		AccountingError:                acctErr,
+		JobFeed:                        jobFeed,
+		BestShares:                     bestShares,
+		FoundBlocks:                    foundBlocks,
+		MinerTypes:                     minerTypes,
+		VardiffUp:                      vardiffUp,
+		VardiffDown:                    vardiffDown,
+		PoolHashrate:                   poolHashrate,
+		BlocksAccepted:                 blocksAccepted,
+		BlocksErrored:                  blocksErrored,
+		RPCGBTLastSec:                  rpcGBTLast,
+		RPCGBTMaxSec:                   rpcGBTMax,
+		RPCGBTCount:                    rpcGBTCount,
+		RPCSubmitLastSec:               rpcSubmitLast,
+		RPCSubmitMaxSec:                rpcSubmitMax,
+		RPCSubmitCount:                 rpcSubmitCount,
+		RPCErrors:                      rpcErrors,
+		ShareErrors:                    shareErrors,
+		ProcessGoroutines:              procGoroutines,
+		ProcessCPUPercent:              cpuPercent,
+		GoMemAllocBytes:                ms.Alloc,
+		GoMemSysBytes:                  ms.Sys,
+		ProcessRSSBytes:                procRSS,
+		SystemMemTotalBytes:            sysMemTotal,
+		SystemMemFreeBytes:             sysMemFree,
+		SystemMemUsedBytes:             sysMemUsed,
+		SystemLoad1:                    load1,
+		SystemLoad5:                    load5,
+		SystemLoad15:                   load15,
+		MaxConns:                       s.cfg.MaxConns,
+		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
+		MinDifficulty:                  s.cfg.MinDifficulty,
+		MaxDifficulty:                  s.cfg.MaxDifficulty,
+		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
+		WorkerDatabase:                 workerDBStats,
+		Warnings:                       warnings,
 	}
 }
 
@@ -2680,16 +2680,16 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	}
 
 	return StatusData{
-		ListenAddr:              s.cfg.ListenAddr,
-		StratumTLSListen:        s.cfg.StratumTLSListen,
-		BrandName:               brandName,
-		BrandDomain:             brandDomain,
-		Tagline:                 s.cfg.StatusTagline,
-		FiatCurrency:            s.cfg.FiatCurrency,
-		PoolDonationAddress:     s.cfg.PoolDonationAddress,
-		DiscordURL:              s.cfg.DiscordURL,
-		NodeRPCURL:              s.cfg.RPCURL,
-		NodeZMQAddr:             s.cfg.ZMQBlockAddr,
+		ListenAddr:                     s.cfg.ListenAddr,
+		StratumTLSListen:               s.cfg.StratumTLSListen,
+		BrandName:                      brandName,
+		BrandDomain:                    brandDomain,
+		Tagline:                        s.cfg.StatusTagline,
+		FiatCurrency:                   s.cfg.FiatCurrency,
+		PoolDonationAddress:            s.cfg.PoolDonationAddress,
+		DiscordURL:                     s.cfg.DiscordURL,
+		NodeRPCURL:                     s.cfg.RPCURL,
+		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
 		PayoutAddress:                  s.cfg.PayoutAddress,
 		PoolFeePercent:                 s.cfg.PoolFeePercent,
 		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
@@ -2700,18 +2700,18 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
-		PoolSoftware:            poolSoftwareName,
-		BuildTime:               bt,
-		MaxConns:                s.cfg.MaxConns,
-		MaxAcceptsPerSecond:     s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:          s.cfg.MaxAcceptBurst,
-		MinDifficulty:           s.cfg.MinDifficulty,
-		MaxDifficulty:           s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty: s.cfg.LockSuggestedDifficulty,
-		HashrateEMATauSeconds:   s.cfg.HashrateEMATauSeconds,
-		NTimeForwardSlackSec:    s.cfg.NTimeForwardSlackSeconds,
-		RenderDuration:          time.Since(start),
-		Warnings:                warnings,
+		PoolSoftware:                   poolSoftwareName,
+		BuildTime:                      bt,
+		MaxConns:                       s.cfg.MaxConns,
+		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
+		MinDifficulty:                  s.cfg.MinDifficulty,
+		MaxDifficulty:                  s.cfg.MaxDifficulty,
+		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
+		HashrateEMATauSeconds:          s.cfg.HashrateEMATauSeconds,
+		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,
+		RenderDuration:                 time.Since(start),
+		Warnings:                       warnings,
 	}
 }
 
