@@ -21,36 +21,36 @@ const (
 
 // WorkerView is the subset of worker data that is exposed to the status UI.
 type WorkerView struct {
-	Name                string      `json:"name"`
-	DisplayName         string      `json:"display_name"`
-	WorkerSHA256        string      `json:"worker_sha256,omitempty"`
-	Accepted            uint64      `json:"accepted"`
-	Rejected            uint64      `json:"rejected"`
-	TotalDifficulty     float64     `json:"total_difficulty"`
-	BalanceSats         int64       `json:"balance_sats"`
-	WalletAddress       string      `json:"wallet_address,omitempty"`
-	WalletScript        string      `json:"wallet_script,omitempty"`
-	MinerType           string      `json:"miner_type,omitempty"`
-	MinerName           string      `json:"miner_name,omitempty"`
-	MinerVersion        string      `json:"miner_version,omitempty"`
-	LastShare           time.Time   `json:"last_share"`
-	LastShareHash       string      `json:"last_share_hash,omitempty"`
-	DisplayLastShare    string      `json:"display_last_share,omitempty"`
-	LastShareAccepted   bool        `json:"last_share_accepted,omitempty"`
-	LastShareDifficulty float64     `json:"last_share_difficulty,omitempty"`
+	Name                string       `json:"name"`
+	DisplayName         string       `json:"display_name"`
+	WorkerSHA256        string       `json:"worker_sha256,omitempty"`
+	Accepted            uint64       `json:"accepted"`
+	Rejected            uint64       `json:"rejected"`
+	TotalDifficulty     float64      `json:"total_difficulty"`
+	BalanceSats         int64        `json:"balance_sats"`
+	WalletAddress       string       `json:"wallet_address,omitempty"`
+	WalletScript        string       `json:"wallet_script,omitempty"`
+	MinerType           string       `json:"miner_type,omitempty"`
+	MinerName           string       `json:"miner_name,omitempty"`
+	MinerVersion        string       `json:"miner_version,omitempty"`
+	LastShare           time.Time    `json:"last_share"`
+	LastShareHash       string       `json:"last_share_hash,omitempty"`
+	DisplayLastShare    string       `json:"display_last_share,omitempty"`
+	LastShareAccepted   bool         `json:"last_share_accepted,omitempty"`
+	LastShareDifficulty float64      `json:"last_share_difficulty,omitempty"`
 	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
-	LastSeen            time.Time   `json:"last_seen"`
-	Difficulty          float64     `json:"difficulty"`
-	RollingHashrate     float64     `json:"rolling_hashrate"`
-	LastReject          string      `json:"last_reject"`
-	Banned              bool        `json:"banned"`
-	BannedUntil         time.Time   `json:"banned_until,omitempty"`
-	BanReason           string      `json:"ban_reason,omitempty"`
-	WindowStart         time.Time   `json:"window_start"`
-	WindowAccepted      int         `json:"window_accepted"`
-	WindowSubmissions   int         `json:"window_submissions"`
-	ShareRate           float64     `json:"share_rate"`
-	WalletValidated     bool        `json:"wallet_validated,omitempty"`
+	LastSeen            time.Time    `json:"last_seen"`
+	Difficulty          float64      `json:"difficulty"`
+	RollingHashrate     float64      `json:"rolling_hashrate"`
+	LastReject          string       `json:"last_reject"`
+	Banned              bool         `json:"banned"`
+	BannedUntil         time.Time    `json:"banned_until,omitempty"`
+	BanReason           string       `json:"ban_reason,omitempty"`
+	WindowStart         time.Time    `json:"window_start"`
+	WindowAccepted      int          `json:"window_accepted"`
+	WindowSubmissions   int          `json:"window_submissions"`
+	ShareRate           float64      `json:"share_rate"`
+	WalletValidated     bool         `json:"wallet_validated,omitempty"`
 }
 
 // WorkerDatabaseStats summarizes high-level worker database metrics exposed
@@ -71,13 +71,13 @@ type ShareDetail struct {
 	MerkleRootBE   string   `json:"merkle_root_be,omitempty"`
 	MerkleRootLE   string   `json:"merkle_root_le,omitempty"`
 	// Decoded coinbase transaction fields for easier inspection.
-	CoinbaseVersion  int32                 `json:"coinbase_version,omitempty"`
-	CoinbaseLockTime uint32                `json:"coinbase_locktime,omitempty"`
-	CoinbaseHeight      int64                 `json:"coinbase_height,omitempty"`
-	CoinbaseOutputs     []CoinbaseOutputDebug `json:"coinbase_outputs,omitempty"`
-	TotalCoinbaseValue  int64                 `json:"total_coinbase_value,omitempty"`
-	BlockSubsidy        int64                 `json:"block_subsidy,omitempty"`
-	TransactionFees     int64                 `json:"transaction_fees,omitempty"`
+	CoinbaseVersion    int32                 `json:"coinbase_version,omitempty"`
+	CoinbaseLockTime   uint32                `json:"coinbase_locktime,omitempty"`
+	CoinbaseHeight     int64                 `json:"coinbase_height,omitempty"`
+	CoinbaseOutputs    []CoinbaseOutputDebug `json:"coinbase_outputs,omitempty"`
+	TotalCoinbaseValue int64                 `json:"total_coinbase_value,omitempty"`
+	BlockSubsidy       int64                 `json:"block_subsidy,omitempty"`
+	TransactionFees    int64                 `json:"transaction_fees,omitempty"`
 	// Aggregated payout split (computed at view time on the worker page).
 	WorkerValueSats   int64   `json:"worker_value_sats,omitempty"`
 	PoolValueSats     int64   `json:"pool_value_sats,omitempty"`
@@ -346,14 +346,23 @@ func (b *banList) load() error {
 	now := time.Now()
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	hasActiveBans := false
 	for _, entry := range entries {
 		if entry.Worker == "" {
 			continue
 		}
 		if entry.Until.IsZero() || now.Before(entry.Until) {
 			b.entries[entry.Worker] = entry
+			hasActiveBans = true
 		}
 	}
+
+	// If no active bans exist, delete the file
+	if !hasActiveBans && len(entries) > 0 {
+		_ = os.Remove(b.path)
+	}
+
 	return nil
 }
 
@@ -365,14 +374,52 @@ func (b *banList) markBan(worker string, until time.Time, reason string) error {
 	defer b.mu.Unlock()
 	if until.IsZero() {
 		delete(b.entries, worker)
-	} else {
-		b.entries[worker] = banEntry{
-			Worker: worker,
-			Until:  until,
-			Reason: reason,
+		// When unbanning, we need to rewrite the file
+		return b.persistLocked()
+	}
+
+	// Add to in-memory map
+	entry := banEntry{
+		Worker: worker,
+		Until:  until,
+		Reason: reason,
+	}
+	b.entries[worker] = entry
+
+	// Append to file
+	return b.appendBanLocked(entry)
+}
+
+func (b *banList) appendBanLocked(entry banEntry) error {
+	if b.path == "" {
+		return nil
+	}
+
+	// Read existing entries to build a complete list
+	var entries []banEntry
+	data, err := os.ReadFile(b.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if len(data) > 0 {
+		entries, err = decodeBanEntries(data)
+		if err != nil {
+			return err
 		}
 	}
-	return b.persistLocked()
+
+	// Append the new entry
+	entries = append(entries, entry)
+
+	// Write all entries back
+	newData, err := encodeBanEntries(entries)
+	if err != nil {
+		return err
+	}
+	if err := writeFileAtomically(b.path, newData, 0, false); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b *banList) persist() error {
