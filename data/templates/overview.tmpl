@@ -51,9 +51,11 @@
 					</div>
 					{{if gt .OperatorDonationPercent 0.0}}
 						<div class="card-context">Split coinbase, pays directly to miner<br>
-						<span style="opacity: 0.8;">{{printf "%.1f" .OperatorDonationPercent}}% of pool fee donated{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</span></div>
+						<span style="opacity: 0.8;">{{printf "%.1f" .OperatorDonationPercent}}% of pool fee donated{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</span><br>
+						<span style="opacity: 0.7; font-size: 0.9em;">See exact payout under worker login</span></div>
 					{{else}}
-						<div class="card-context">Split coinbase, pays directly to miner</div>
+						<div class="card-context">Split coinbase, pays directly to miner<br>
+						<span style="opacity: 0.7; font-size: 0.9em;">See exact payout under worker login</span></div>
 					{{end}}
 				{{else}}
 					<div class="value">None</div>
