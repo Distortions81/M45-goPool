@@ -615,17 +615,6 @@ func exampleConfigBytes() []byte {
 	return append(exampleHeader("base config"), data...)
 }
 
-func exampleBaseConfigBytes() []byte {
-	cfg := defaultConfig()
-	fc := buildBaseFileConfig(cfg)
-	data, err := toml.Marshal(fc)
-	if err != nil {
-		logger.Warn("encode base config example failed", "error", err)
-		return nil
-	}
-	return append(exampleHeader("base config"), data...)
-}
-
 func exampleTuningConfigBytes() []byte {
 	cfg := defaultConfig()
 	tf := buildTuningFileConfig(cfg)

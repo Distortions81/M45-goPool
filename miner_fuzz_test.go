@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"testing"
 	"time"
 )
@@ -85,9 +84,9 @@ func FuzzNoteInvalidSubmitThresholds(f *testing.F) {
 		if bannedCount > 0 && lastInvalids < effectiveThreshold {
 			t.Fatalf("banned with invalidSubs=%d below effective threshold=%d", lastInvalids, effectiveThreshold)
 		}
-		// Invalid counter must never go negative or NaN.
-		if lastInvalids < 0 || math.IsNaN(float64(lastInvalids)) {
-			t.Fatalf("invalidSubs went negative or NaN: %d", lastInvalids)
+		// Invalid counter must never go negative.
+		if lastInvalids < 0 {
+			t.Fatalf("invalidSubs went negative: %d", lastInvalids)
 		}
 	})
 }

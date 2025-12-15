@@ -1242,18 +1242,15 @@ func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
 func (mc *MinerConn) assignedDifficulty(jobID string) float64 {
 	curDiff := mc.currentDifficulty()
 	if jobID == "" {
-		//fmt.Printf("no job id, diff %v\n", curDiff)
 		return curDiff
 	}
 	mc.jobMu.Lock()
 	diff, ok := mc.jobDifficulty[jobID]
 	mc.jobMu.Unlock()
 	if ok && diff > 0 {
-		//fmt.Printf("job diff found: %v\n", diff)
 		return diff
 	}
 
-	//fmt.Printf("no job diff found, diff  %v\n", curDiff)
 	return curDiff
 }
 
@@ -2558,7 +2555,10 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 				"hash", hashHex,
 			)
 		}
-		debug := mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
+		var debug *ShareDebug
+		if debugLogging || verboseLogging {
+			debug = mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
+		}
 		acceptedForStats := false
 		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
 
@@ -2576,7 +2576,10 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	}
 
 	shareHash := hashHex
-	debug := mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+	var debug *ShareDebug
+	if debugLogging || verboseLogging {
+		debug = mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+	}
 	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, debug, now)
 	mc.trackBestShare(workerName, shareHash, shareDiff, now)
 
@@ -2679,10 +2682,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		// Fallback to single-output block build if dual-payout params are
 		// unavailable or any step fails. This reuses the existing helper that
 		// constructs a canonical block for submission.
-		var headerHashTmp []byte
-		var headerTmp []byte
-		var merkleRootTmp []byte
-		blockHex, headerHashTmp, headerTmp, merkleRootTmp, err = buildBlock(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion))
+		blockHex, _, _, _, err = buildBlock(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion))
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")
@@ -2691,9 +2691,6 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
 			return
 		}
-		_ = headerHashTmp
-		_ = headerTmp
-		_ = merkleRootTmp
 	}
 
 	// Submit the block via RPC using an aggressive, no-backoff retry loop
