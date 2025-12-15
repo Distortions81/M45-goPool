@@ -81,7 +81,7 @@ func newTestAccountStore(t *testing.T) *AccountStore {
 	return s
 }
 
-func TestShareDebugCoinbaseMatchesBlockCoinbase(t *testing.T) {
+func TestShareDetailCoinbaseMatchesBlockCoinbase(t *testing.T) {
 	const (
 		workerName = "bc1qagc0l2cvx0c0mx23rkjpwhe7klelynj98h82tj.bitaxe"
 		workerAddr = "bc1qagc0l2cvx0c0mx23rkjpwhe7klelynj98h82tj"
@@ -158,9 +158,9 @@ func TestShareDebugCoinbaseMatchesBlockCoinbase(t *testing.T) {
 			header := []byte("header")
 			hash := []byte("hash")
 			extraHex := hex.EncodeToString(en2)
-			debug := mc.buildShareDebug(job, workerName, header, hash, nil, extraHex, nil)
+			debug := mc.buildShareDetail(job, workerName, header, hash, nil, extraHex, nil)
 			if debug == nil || debug.Coinbase == "" {
-				t.Fatalf("buildShareDebug returned nil or empty coinbase")
+				t.Fatalf("buildShareDetail returned nil or empty coinbase")
 			}
 			cbPanel, err := hex.DecodeString(debug.Coinbase)
 			if err != nil {

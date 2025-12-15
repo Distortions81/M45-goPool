@@ -356,7 +356,7 @@ type ErrorPageData struct {
 	Path       string
 }
 
-func aggregateCoinbaseSplit(poolScriptHex, donationScriptHex, workerScriptHex string, dbg *ShareDebug) {
+func aggregateCoinbaseSplit(poolScriptHex, donationScriptHex, workerScriptHex string, dbg *ShareDetail) {
 	if dbg == nil || len(dbg.CoinbaseOutputs) == 0 {
 		return
 	}
@@ -395,8 +395,8 @@ func redactWorkerViewForPrivacy(w WorkerView) WorkerView {
 	w.MinerName = privacyDisplay(w.MinerName, 8, 8)
 	w.Name = privacyDisplay(w.Name, 8, 8)
 	w.DisplayName = privacyDisplay(w.DisplayName, 8, 8)
-	if w.LastShareDebug != nil {
-		c := *w.LastShareDebug
+	if w.LastShareDetail != nil {
+		c := *w.LastShareDetail
 		c.Header = privacyDisplay(c.Header, 8, 8)
 		c.ShareHash = privacyDisplay(c.ShareHash, 8, 8)
 		c.Target = privacyDisplay(c.Target, 8, 8)
@@ -411,7 +411,7 @@ func redactWorkerViewForPrivacy(w WorkerView) WorkerView {
 			}
 			c.CoinbaseOutputs = outs
 		}
-		w.LastShareDebug = &c
+		w.LastShareDetail = &c
 	}
 	return w
 }
@@ -430,7 +430,7 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView, privacyMode bool
 
 	// Always set script hex values for template matching
 	data.WorkerScriptHex = workerScriptHex
-	aggregateCoinbaseSplit(data.PoolScriptHex, data.DonationScriptHex, workerScriptHex, wv.LastShareDebug)
+	aggregateCoinbaseSplit(data.PoolScriptHex, data.DonationScriptHex, workerScriptHex, wv.LastShareDetail)
 
 	// Privacy mode is handled client-side, so always send real data
 	data.Worker = &wv
@@ -854,7 +854,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		DisplayLastShare:    displayHash,
 		LastShareAccepted:   snap.LastShareAccepted,
 		LastShareDifficulty: snap.LastShareDifficulty,
-		LastShareDebug:      snap.LastShareDebug,
+		LastShareDetail:      snap.LastShareDetail,
 		LastSeen:            stats.LastShare,
 		Difficulty:          diff,
 		RollingHashrate:     hashRate,
@@ -1519,7 +1519,7 @@ func censorWorkerView(w WorkerView) WorkerView {
 		w.DisplayLastShare = shortDisplayID(w.DisplayLastShare, hashPrefix, hashSuffix)
 	}
 	// Remove detailed share debug info from public endpoints
-	w.LastShareDebug = nil
+	w.LastShareDetail = nil
 	return w
 }
 

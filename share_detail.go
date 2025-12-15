@@ -7,31 +7,35 @@ import (
 	"github.com/bytedance/gopkg/util/logger"
 )
 
-// buildShareDebug constructs a ShareDebug payload for a share, including the
+// buildShareDetail constructs a ShareDetail payload for a share, including the
 // decoded coinbase transaction so the worker info page can always show it.
-func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, hash []byte, target *big.Int, extranonce2 string, merkleRoot []byte) *ShareDebug {
+// When not in detail/verbose mode, only the coinbase transaction and outputs are populated.
+func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, hash []byte, target *big.Int, extranonce2 string, merkleRoot []byte) *ShareDetail {
 	if job == nil {
 		return nil
 	}
 
-	debug := &ShareDebug{
-		Header:         hex.EncodeToString(header),
-		ShareHash:      hex.EncodeToString(hash),
-		MerkleBranches: append([]string{}, job.MerkleBranches...),
-	}
+	detail := &ShareDetail{}
 
-	if target != nil {
-		debug.Target = hex.EncodeToString(target.FillBytes(make([]byte, 32)))
-	}
-	if len(merkleRoot) == 32 {
-		debug.MerkleRootBE = hex.EncodeToString(merkleRoot)
-		debug.MerkleRootLE = hex.EncodeToString(reverseBytes(merkleRoot))
+	// Only populate detail-specific fields when in detail or verbose mode
+	if debugLogging || verboseLogging {
+		detail.Header = hex.EncodeToString(header)
+		detail.ShareHash = hex.EncodeToString(hash)
+		detail.MerkleBranches = append([]string{}, job.MerkleBranches...)
+
+		if target != nil {
+			detail.Target = hex.EncodeToString(target.FillBytes(make([]byte, 32)))
+		}
+		if len(merkleRoot) == 32 {
+			detail.MerkleRootBE = hex.EncodeToString(merkleRoot)
+			detail.MerkleRootLE = hex.EncodeToString(reverseBytes(merkleRoot))
+		}
 	}
 
 	en2, err := hex.DecodeString(extranonce2)
 	if err != nil {
-		logger.Warn("share debug extranonce2 decode", "error", err)
-		return debug
+		logger.Warn("share detail extranonce2 decode", "error", err)
+		return detail
 	}
 
 	var cbTx []byte
@@ -55,7 +59,7 @@ func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, has
 				job.ScriptTime,
 			)
 			if err != nil {
-				logger.Warn("share debug triple-payout coinbase", "error", err)
+				logger.Warn("share detail triple-payout coinbase", "error", err)
 			}
 		} else {
 			cbTx, _, err = serializeDualCoinbaseTx(
@@ -73,7 +77,7 @@ func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, has
 				job.ScriptTime,
 			)
 			if err != nil {
-				logger.Warn("share debug dual-payout coinbase", "error", err)
+				logger.Warn("share detail dual-payout coinbase", "error", err)
 			}
 		}
 	}
@@ -91,11 +95,11 @@ func (mc *MinerConn) buildShareDebug(job *Job, worker string, header []byte, has
 			job.ScriptTime,
 		)
 		if err != nil {
-			logger.Warn("share debug single-output coinbase", "error", err)
-			return debug
+			logger.Warn("share detail single-output coinbase", "error", err)
+			return detail
 		}
 	}
-	debug.Coinbase = hex.EncodeToString(cbTx)
-	debug.DecodeCoinbaseFields()
-	return debug
+	detail.Coinbase = hex.EncodeToString(cbTx)
+	detail.DecodeCoinbaseFields()
+	return detail
 }

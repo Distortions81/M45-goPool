@@ -224,7 +224,7 @@ type MinerConn struct {
 	lastShareHash       string
 	lastShareAccepted   bool
 	lastShareDifficulty float64
-	lastShareDebug      *ShareDebug
+	lastShareDetail      *ShareDetail
 	lastRejectReason    string
 	walletMu            sync.Mutex
 	workerWallets       map[string]workerWalletState
@@ -248,7 +248,7 @@ type MinerConn struct {
 	minerClientName    string
 	minerClientVersion string
 	// connectedAt is the time this miner connection was established,
-	// used as the zero point for per-share timing in debug logs.
+	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
@@ -775,9 +775,9 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 // recordShare updates accounting for a submitted share. creditedDiff is the
 // target difficulty we assigned for this share (used for hashrate), while
 // shareDiff is the difficulty implied by the submitted hash (used for
-// display/debug). They may differ when vardiff changed between notify and
+// display/detail). They may differ when vardiff changed between notify and
 // submit; we always want hashrate to use the assigned target.
-func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, debug *ShareDebug, now time.Time) {
+func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, detail *ShareDetail, now time.Time) {
 	mc.statsMu.Lock()
 	mc.ensureWindowLocked(now)
 	if worker != "" {
@@ -801,7 +801,7 @@ func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff floa
 	mc.lastShareHash = shareHash
 	mc.lastShareAccepted = accepted
 	mc.lastShareDifficulty = shareDiff
-	mc.lastShareDebug = debug
+	mc.lastShareDetail = detail
 	if !accepted && reason != "" {
 		mc.lastRejectReason = reason
 	}
@@ -831,7 +831,7 @@ type minerShareSnapshot struct {
 	LastShareHash       string
 	LastShareAccepted   bool
 	LastShareDifficulty float64
-	LastShareDebug      *ShareDebug
+	LastShareDetail      *ShareDetail
 	LastReject          string
 }
 
@@ -844,7 +844,7 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 		LastShareHash:       mc.lastShareHash,
 		LastShareAccepted:   mc.lastShareAccepted,
 		LastShareDifficulty: mc.lastShareDifficulty,
-		LastShareDebug:      mc.lastShareDebug,
+		LastShareDetail:      mc.lastShareDetail,
 		LastReject:          mc.lastRejectReason,
 	}
 }
@@ -2468,19 +2468,16 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	expectedMerkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 	if merkleRoot == nil || expectedMerkle == nil || !bytes.Equal(merkleRoot, expectedMerkle) {
 		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
-		var debug *ShareDebug
-		if debugLogging || verboseLogging {
-			debug = &ShareDebug{
-				Header:         hex.EncodeToString(header),
-				ShareHash:      hex.EncodeToString(reverseBytes(headerHash)),
-				MerkleBranches: append([]string{}, job.MerkleBranches...),
-				MerkleRootBE:   hex.EncodeToString(expectedMerkle),
-				MerkleRootLE:   hex.EncodeToString(reverseBytes(expectedMerkle)),
-				Coinbase:       hex.EncodeToString(cbTx),
-			}
-			debug.DecodeCoinbaseFields()
+		detail := &ShareDetail{
+			Header:         hex.EncodeToString(header),
+			ShareHash:      hex.EncodeToString(reverseBytes(headerHash)),
+			MerkleBranches: append([]string{}, job.MerkleBranches...),
+			MerkleRootBE:   hex.EncodeToString(expectedMerkle),
+			MerkleRootLE:   hex.EncodeToString(reverseBytes(expectedMerkle)),
+			Coinbase:       hex.EncodeToString(cbTx),
 		}
-		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", debug, now)
+		detail.DecodeCoinbaseFields()
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
 			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
@@ -2555,12 +2552,9 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 				"hash", hashHex,
 			)
 		}
-		var debug *ShareDebug
-		if debugLogging || verboseLogging {
-			debug = mc.buildShareDebug(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
-		}
+		detail := mc.buildShareDetail(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
 		acceptedForStats := false
-		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, debug, now)
+		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, detail, now)
 
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
 			mc.logBan(rejectLowDiff.String(), workerName, invalids)
@@ -2576,11 +2570,8 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	}
 
 	shareHash := hashHex
-	var debug *ShareDebug
-	if debugLogging || verboseLogging {
-		debug = mc.buildShareDebug(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
-	}
-	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, debug, now)
+	detail := mc.buildShareDetail(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, shareDiff, now)
 
 	if !isBlock {

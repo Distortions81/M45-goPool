@@ -10,7 +10,7 @@ func TestAggregateCoinbaseSplitMatchesOutputs(t *testing.T) {
 	donationScript := strings.Repeat("cc", 10)
 	workerScript := strings.Repeat("bb", 10)
 
-	dbg := &ShareDebug{
+	dbg := &ShareDetail{
 		CoinbaseOutputs: []CoinbaseOutputDebug{
 			{ValueSats: 1_000_000, ScriptHex: poolScript},
 			{ValueSats: 500_000, ScriptHex: donationScript},

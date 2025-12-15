@@ -13,7 +13,7 @@ var logLevel = slog.LevelInfo
 
 // debugLogging and verboseLogging mirror the build-time debug/verbose
 // configuration so other parts of the program can cheaply skip expensive
-// debug/verbose-only work (like constructing large ShareDebug payloads)
+// debug/verbose-only work (like constructing large ShareDetail payloads)
 // when those modes are disabled.
 var debugLogging bool
 var verboseLogging bool

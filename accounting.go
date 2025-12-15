@@ -38,7 +38,7 @@ type WorkerView struct {
 	DisplayLastShare    string      `json:"display_last_share,omitempty"`
 	LastShareAccepted   bool        `json:"last_share_accepted,omitempty"`
 	LastShareDifficulty float64     `json:"last_share_difficulty,omitempty"`
-	LastShareDebug      *ShareDebug `json:"last_share_debug,omitempty"`
+	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
 	LastSeen            time.Time   `json:"last_seen"`
 	Difficulty          float64     `json:"difficulty"`
 	RollingHashrate     float64     `json:"rolling_hashrate"`
@@ -61,8 +61,8 @@ type WorkerDatabaseStats struct {
 	EstimatedSizeKB int64
 }
 
-// ShareDebug holds debug data emitted for each share.
-type ShareDebug struct {
+// ShareDetail holds detailed data for each share, including coinbase transaction details.
+type ShareDetail struct {
 	Header         string   `json:"header,omitempty"`
 	ShareHash      string   `json:"share_hash,omitempty"`
 	Target         string   `json:"target,omitempty"`
@@ -161,7 +161,7 @@ func calculateBlockSubsidy(height int64) int64 {
 	return subsidy
 }
 
-func (d *ShareDebug) DecodeCoinbaseFields() {
+func (d *ShareDetail) DecodeCoinbaseFields() {
 	if d == nil || d.Coinbase == "" {
 		return
 	}
