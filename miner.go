@@ -53,6 +53,14 @@ type VarDiffConfig struct {
 	Step               float64
 	MaxBurstShares     int
 	BurstWindow        time.Duration
+	// DampingFactor controls how aggressively vardiff moves toward target.
+	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
+	// Lower values reduce overshoot. Typical range: 0.6-0.85.
+	DampingFactor float64
+	// UndershootBias slightly favors lower difficulty to prevent overshooting.
+	// 1.0 = no bias, 0.95 = aim for 5% undershoot, 0.9 = 10% undershoot.
+	// Only applied when increasing difficulty (to avoid making it too hard).
+	UndershootBias float64
 }
 
 type MinerStats struct {
@@ -103,6 +111,8 @@ var defaultVarDiff = VarDiffConfig{
 	Step:               2,
 	MaxBurstShares:     60, // throttle spammy submitters
 	BurstWindow:        60 * time.Second,
+	DampingFactor:      0.75, // move 75% toward target to reduce overshoot
+	UndershootBias:     0.95, // aim 5% under when increasing difficulty
 }
 
 // duplicateShareKey is a compact, comparable representation of a share
@@ -1360,7 +1370,21 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		return
 	}
 
-	adjustRatio := ratio
+	// Apply damping to reduce overshoot: instead of moving all the way
+	// to the ideal difficulty, move only a fraction of the distance.
+	// This prevents oscillation and allows the system to converge smoothly.
+	dampingFactor := mc.vardiff.DampingFactor
+	if dampingFactor <= 0 || dampingFactor > 1 {
+		dampingFactor = 0.75 // default: move 75% toward target
+	}
+
+	// Calculate damped adjustment ratio:
+	// adjustRatio = 1 + dampingFactor * (ratio - 1)
+	// Examples with dampingFactor=0.75:
+	//   ratio=2.0 (too fast) → adjustRatio=1.75 (increase diff by 75% instead of 100%)
+	//   ratio=0.5 (too slow) → adjustRatio=0.625 (decrease diff by 37.5% instead of 50%)
+	adjustRatio := 1.0 + dampingFactor*(ratio-1.0)
+
 	if !bootstrapDone {
 		// For the initial move, allow a larger jump but cap to sane
 		// limits so we do not explode difficulty on noisy starts.
@@ -1397,6 +1421,16 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		}
 	}
 	newDiff = currentDiff * factor
+
+	// Apply undershoot bias when increasing difficulty to prevent making
+	// the target too hard. This ensures we err on the side of slightly
+	// easier rather than harder, improving miner experience.
+	if newDiff > currentDiff {
+		undershootBias := mc.vardiff.UndershootBias
+		if undershootBias > 0 && undershootBias < 1 {
+			newDiff = newDiff * undershootBias
+		}
+	}
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return
