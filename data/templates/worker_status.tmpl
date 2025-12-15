@@ -107,7 +107,7 @@
 					</div>
 					<div>
 						<div class="label">Last share</div>
-						<div class="value">{{formatTime .Worker.LastShare}}</div>
+						<div class="value">{{formatTimeUTC .Worker.LastShare}}</div>
 					</div>
 					<div>
 						<div class="label">Last share hash</div>
@@ -151,7 +151,7 @@
 					<p class="text-sm" style="margin-top:8px;">No shares recorded yet for this worker.</p>
 				{{else}}
 					<p class="text-sm" style="margin-top:8px;">
-						Time: {{formatTime .Worker.LastShare}}<br>
+						Time: {{formatTimeUTC .Worker.LastShare}}<br>
 						Status:
 						{{if .Worker.LastShareAccepted}}
 							Accepted
