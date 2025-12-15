@@ -119,6 +119,10 @@
 					<div class="mono" id="pool-error-counters">--</div>
 				</div>
 			</div>
+			<div style="margin-top:12px;padding-top:12px;border-top:1px solid #333;">
+				<div class="label" style="font-size:0.85em;color:#888;">Data refreshed at</div>
+				<div class="mono" id="pool-data-refreshed" style="font-size:0.85em;color:#888;">--</div>
+			</div>
 		</div>
 
 	{{template "footer" .}}
@@ -130,6 +134,7 @@
 		const rpcGBTEl = document.getElementById('pool-rpc-gbt');
 		const rpcSubmitEl = document.getElementById('pool-rpc-submit');
 		const errorCountersEl = document.getElementById('pool-error-counters');
+		const dataRefreshedEl = document.getElementById('pool-data-refreshed');
 
 		function formatMilliseconds(value) {
 			if (value === undefined || value === null) {
@@ -142,13 +147,27 @@
 			return `${ms.toFixed(3)} ms`;
 		}
 
-		function updatePoolMetrics(data) {
+		function formatUTCTimestamp(isoString) {
+			if (!isoString) return '--';
+			try {
+				const date = new Date(isoString);
+				return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+			} catch (e) {
+				return '--';
+			}
+		}
+
+		function updatePoolMetrics(data, updatedAt) {
 			if (!data) return;
 			if (blockSubEl) {
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
 			}
 			if (rpcGBTEl) {
-				rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
+				if (data.using_zmq) {
+					rpcGBTEl.textContent = '(Using ZMQ)';
+				} else {
+					rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
+				}
 			}
 			if (rpcSubmitEl) {
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;
@@ -156,15 +175,19 @@
 			if (errorCountersEl) {
 				errorCountersEl.textContent = `RPC errors: ${data.rpc_errors || 0}   Share errors: ${data.share_errors || 0}`;
 			}
+			if (dataRefreshedEl && updatedAt) {
+				dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
+			}
 		}
 
 		function fetchPoolMetrics() {
 			fetch('/api/pool-page')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
-					return response.json();
+					const updatedAt = response.headers.get('X-JSON-Updated-At');
+					return response.json().then(data => ({ data, updatedAt }));
 				})
-				.then(updatePoolMetrics)
+				.then(({ data, updatedAt }) => updatePoolMetrics(data, updatedAt))
 				.catch(error => {
 					console.error('Error fetching pool metrics:', error);
 				});

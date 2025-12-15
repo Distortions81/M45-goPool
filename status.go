@@ -594,6 +594,7 @@ type PoolPageData struct {
 	MaxConns                 int     `json:"max_conns"`
 	MaxAcceptsPerSecond      int     `json:"max_accepts_per_second"`
 	MaxAcceptBurst           int     `json:"max_accept_burst"`
+	UsingZMQ                 bool    `json:"using_zmq"`
 }
 
 // ServerPageData contains data for the server diagnostics page
@@ -966,6 +967,12 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 				return s
 			}
 			return s + " ago"
+		},
+		"formatTimeUTC": func(t time.Time) string {
+			if t.IsZero() {
+				return "—"
+			}
+			return t.UTC().Format("2006-01-02 15:04:05 UTC")
 		},
 		"addrPort": func(addr string) string {
 			if addr == "" {
@@ -1706,6 +1713,7 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 			MaxConns:                full.MaxConns,
 			MaxAcceptsPerSecond:     full.MaxAcceptsPerSecond,
 			MaxAcceptBurst:          full.MaxAcceptBurst,
+			UsingZMQ:                s.cfg.ZMQBlockAddr != "",
 		}
 		return sonic.Marshal(data)
 	})

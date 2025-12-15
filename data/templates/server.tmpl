@@ -103,6 +103,10 @@
 			</p>
 		</div>
 
+		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
+			<div class="mono" id="server-data-refreshed">Data loading...</div>
+		</div>
+
 	{{template "footer" .}}
 </div>
 <script>
@@ -304,10 +308,25 @@
 			}
 		}
 
+		function formatUTCTimestamp(isoString) {
+			if (!isoString) return 'Loading...';
+			try {
+				const date = new Date(isoString);
+				return 'Data refreshed at ' + date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+			} catch (e) {
+				return 'Loading...';
+			}
+		}
+
 		function fetchServerData() {
 			fetch('/api/server')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
+					const updatedAt = response.headers.get('X-JSON-Updated-At');
+					const dataRefreshedEl = document.getElementById('server-data-refreshed');
+					if (dataRefreshedEl && updatedAt) {
+						dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
+					}
 					return response.json();
 				})
 				.then(data => {
