@@ -457,8 +457,12 @@ type StatusData struct {
 	NodeZMQAddr              string            `json:"node_zmq_addr,omitempty"`
 	PayoutAddress            string            `json:"payout_address,omitempty"`
 	PoolFeePercent           float64           `json:"pool_fee_percent"`
+	DonationFeePercent       float64           `json:"donation_fee_percent,omitempty"`
+	DonationPayoutAddress    string            `json:"donation_payout_address,omitempty"`
+	DonationPayoutName       string            `json:"donation_payout_name,omitempty"`
 	CoinbaseMessage          string            `json:"coinbase_message,omitempty"`
 	DisplayPayoutAddress     string            `json:"display_payout_address,omitempty"`
+	DisplayDonationAddress   string            `json:"display_donation_address,omitempty"`
 	DisplayCoinbaseMessage   string            `json:"display_coinbase_message,omitempty"`
 	NodeConnections          int               `json:"node_connections"`
 	NodeConnectionsIn        int               `json:"node_connections_in"`
@@ -1233,6 +1237,8 @@ type PoolStatsData struct {
 	MinDifficulty        float64             `json:"min_difficulty"`
 	MaxDifficulty        float64             `json:"max_difficulty"`
 	PoolFeePercent       float64             `json:"pool_fee_percent"`
+	DonationFeePercent   float64             `json:"donation_fee_percent,omitempty"`
+	DonationPayoutName   string              `json:"donation_payout_name,omitempty"`
 	DualPayoutEnabled    bool                `json:"dual_payout_enabled"`
 	CurrentJob           *Job                `json:"current_job,omitempty"`
 	JobCreated           string              `json:"job_created"`
@@ -1381,6 +1387,8 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			MinDifficulty:        full.MinDifficulty,
 			MaxDifficulty:        full.MaxDifficulty,
 			PoolFeePercent:       full.PoolFeePercent,
+			DonationFeePercent:   full.DonationFeePercent,
+			DonationPayoutName:   full.DonationPayoutName,
 			CurrentJob:           nil, // Excluded for security
 			JobCreated:           full.JobCreated,
 			TemplateTime:         full.TemplateTime,
@@ -2372,6 +2380,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 
 	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.cfg.DonationPayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	expectedGenesis := ""
@@ -2422,8 +2431,12 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodeZMQAddr:              s.cfg.ZMQBlockAddr,
 		PayoutAddress:            s.cfg.PayoutAddress,
 		PoolFeePercent:           s.cfg.PoolFeePercent,
+		DonationFeePercent:       s.cfg.DonationFeePercent,
+		DonationPayoutAddress:    s.cfg.DonationPayoutAddress,
+		DonationPayoutName:       s.cfg.DonationPayoutName,
 		CoinbaseMessage:          s.cfg.CoinbaseMsg,
 		DisplayPayoutAddress:     displayPayout,
+		DisplayDonationAddress:   displayDonation,
 		DisplayCoinbaseMessage:   displayCoinbase,
 		NodeConnections:          nodeConns,
 		NodeConnectionsIn:        nodeConnsIn,
@@ -2513,6 +2526,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	}
 
 	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.cfg.DonationPayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	var warnings []string
@@ -2536,8 +2550,12 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		NodeZMQAddr:             s.cfg.ZMQBlockAddr,
 		PayoutAddress:           s.cfg.PayoutAddress,
 		PoolFeePercent:          s.cfg.PoolFeePercent,
+		DonationFeePercent:      s.cfg.DonationFeePercent,
+		DonationPayoutAddress:   s.cfg.DonationPayoutAddress,
+		DonationPayoutName:      s.cfg.DonationPayoutName,
 		CoinbaseMessage:         s.cfg.CoinbaseMsg,
 		DisplayPayoutAddress:    displayPayout,
+		DisplayDonationAddress:  displayDonation,
 		DisplayCoinbaseMessage:  displayCoinbase,
 		PoolSoftware:            poolSoftwareName,
 		BuildTime:               bt,

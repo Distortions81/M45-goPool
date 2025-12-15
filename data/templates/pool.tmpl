@@ -28,6 +28,9 @@
 					</div>
 					<p class="text-sm">
 						Pool fee wallet: the operator's share of each block is sent here. When dual payout is enabled, worker rewards go directly to their own wallets.
+						{{if and (gt .DonationFeePercent 0.0) .DisplayDonationAddress}}
+						<br><span style="opacity: 0.8;">Donation wallet: {{.DisplayDonationAddress}}</span>
+						{{end}}
 					</p>
 				</div>
 				<div>
@@ -87,6 +90,9 @@
 					<div class="value mono">{{printf "%.3f" .PoolFeePercent}}%</div>
 					<p class="text-sm">
 						Fee charged on block rewards. Coinbase splits rewards between pool and worker.
+						{{if gt .DonationFeePercent 0.0}}
+						<br><span style="opacity: 0.8;">{{printf "%.1f" .DonationFeePercent}}% of pool fee donated{{if .DonationPayoutName}} to {{.DonationPayoutName}}{{end}}.</span>
+						{{end}}
 					</p>
 				</div>
 			</div>
