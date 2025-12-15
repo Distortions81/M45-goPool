@@ -26,7 +26,6 @@ type WorkerView struct {
 	WorkerSHA256        string       `json:"worker_sha256,omitempty"`
 	Accepted            uint64       `json:"accepted"`
 	Rejected            uint64       `json:"rejected"`
-	TotalDifficulty     float64      `json:"total_difficulty"`
 	BalanceSats         int64        `json:"balance_sats"`
 	WalletAddress       string       `json:"wallet_address,omitempty"`
 	WalletScript        string       `json:"wallet_script,omitempty"`
@@ -39,7 +38,6 @@ type WorkerView struct {
 	LastShareAccepted   bool         `json:"last_share_accepted,omitempty"`
 	LastShareDifficulty float64      `json:"last_share_difficulty,omitempty"`
 	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
-	LastSeen            time.Time    `json:"last_seen"`
 	Difficulty          float64      `json:"difficulty"`
 	RollingHashrate     float64      `json:"rolling_hashrate"`
 	LastReject          string       `json:"last_reject"`
