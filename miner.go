@@ -106,13 +106,13 @@ const (
 var defaultVarDiff = VarDiffConfig{
 	MinDiff:            4096,
 	MaxDiff:            65536,
-	TargetSharesPerMin: 4, // aim for roughly one share every 12s
+	TargetSharesPerMin: 5, // aim for roughly one share every 12s
 	AdjustmentWindow:   90 * time.Second,
 	Step:               2,
 	MaxBurstShares:     60, // throttle spammy submitters
 	BurstWindow:        60 * time.Second,
-	DampingFactor:      0.75, // move 75% toward target to reduce overshoot
-	UndershootBias:     0.95, // aim 5% under when increasing difficulty
+	DampingFactor:      0.5, // move 50% toward target to reduce overshoot
+	UndershootBias:     0.85, // aim 15% under when increasing difficulty
 }
 
 // duplicateShareKey is a compact, comparable representation of a share
@@ -1304,27 +1304,10 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		return
 	}
 
-	// Bootstrap: once we have a handful of shares, allow an initial
-	// adjustment. After bootstrap, we only adjust once per full vardiff
-	// window so difficulty changes are infrequent and predictable.
-	const (
-		bootstrapShares        = 10
-		bootstrapMaxUpFactor   = 16.0
-		bootstrapMaxDownFactor = 0.0625
-	)
+	// Require a full adjustment window before making a difficulty change.
+	// This prevents rapid oscillation and gives stable measurements.
 	elapsed := now.Sub(windowStart)
-	mc.diffMu.Lock()
-	bootstrapDone := mc.bootstrapDone
-	restored := mc.restoredRecentDiff
-	mc.diffMu.Unlock()
-	if !bootstrapDone && !restored {
-		if windowAccepted < bootstrapShares {
-			// Not enough data yet for the one-shot bootstrap move.
-			return
-		}
-	} else if elapsed < mc.vardiff.AdjustmentWindow {
-		// After bootstrap, require a full adjustment window before
-		// making another move so we don't bounce difficulty around.
+	if elapsed < mc.vardiff.AdjustmentWindow {
 		return
 	}
 
@@ -1335,9 +1318,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	lastChange := mc.lastDiffChange
 	currentDiff := mc.difficulty
 	mc.diffMu.Unlock()
-	// Respect minDiffChangeInterval only after the bootstrap move; allow
-	// the first adjustment to occur soon after a suggested difficulty.
-	if bootstrapDone && !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
+	if !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
 		return
 	}
 	if windowAccepted == 0 {
@@ -1385,40 +1366,26 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	//   ratio=0.5 (too slow) → adjustRatio=0.625 (decrease diff by 37.5% instead of 50%)
 	adjustRatio := 1.0 + dampingFactor*(ratio-1.0)
 
-	if !bootstrapDone {
-		// For the initial move, allow a larger jump but cap to sane
-		// limits so we do not explode difficulty on noisy starts.
-		if adjustRatio > bootstrapMaxUpFactor {
-			adjustRatio = bootstrapMaxUpFactor
-		}
-		if adjustRatio < bootstrapMaxDownFactor {
-			adjustRatio = bootstrapMaxDownFactor
-		}
-	}
-
 	newDiff := currentDiff * adjustRatio
 	if newDiff <= 0 || math.IsNaN(newDiff) || math.IsInf(newDiff, 0) {
 		return
 	}
 
-	// Respect the configured step as the maximum factor of change per
-	// adjustment, except for the first "bootstrap" move where we allow a
-	// larger jump to get close to the target quickly.
-	// bootstrapDone already loaded above.
+	// Respect the configured step as the maximum factor of change per adjustment.
+	// This limits how much difficulty can change in a single adjustment to prevent
+	// overshooting and ensure gradual, stable convergence to the target share rate.
 	factor := newDiff / currentDiff
-	if bootstrapDone {
-		step := mc.vardiff.Step
-		if step <= 1 {
-			step = 2
-		}
-		maxFactor := step
-		minFactor := 1 / step
-		if factor > maxFactor {
-			factor = maxFactor
-		}
-		if factor < minFactor {
-			factor = minFactor
-		}
+	step := mc.vardiff.Step
+	if step <= 1 {
+		step = 2
+	}
+	maxFactor := step
+	minFactor := 1 / step
+	if factor > maxFactor {
+		factor = maxFactor
+	}
+	if factor < minFactor {
+		factor = minFactor
 	}
 	newDiff = currentDiff * factor
 
@@ -1464,19 +1431,12 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		}
 		mc.metrics.RecordVardiffMove(dir)
 	}
-	// Mark bootstrap as done after the first successful adjustment so
-	// subsequent moves are step-limited.
-	mc.diffMu.Lock()
-	if !mc.bootstrapDone && windowSubmissions >= bootstrapShares {
-		mc.bootstrapDone = true
-	}
-	mc.diffMu.Unlock()
 	mc.setDifficulty(newDiff)
 }
 
 // quantizeDifficultyToPowerOfTwo snaps a difficulty value to a power-of-two
 // level within [min, max] (if max > 0). This keeps stratum difficulty levels
-// on clean power-of-two boundaries, including bootstrap adjustments.
+// on clean power-of-two boundaries.
 func quantizeDifficultyToPowerOfTwo(diff, min, max float64) float64 {
 	if diff <= 0 {
 		diff = min
@@ -1968,6 +1928,11 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 }
 
 func (mc *MinerConn) sendNotifyFor(job *Job) {
+	// Adjust difficulty when sending new jobs (new blocks), not on every share.
+	// This gives miners stable difficulty for the duration of a job and prevents
+	// mid-job difficulty changes that can cause confusion.
+	mc.maybeAdjustDifficulty(time.Now())
+
 	maskChanged := mc.updateVersionMask(job.VersionMask)
 	if maskChanged && mc.versionRoll {
 		mc.sendVersionMask()
@@ -2626,7 +2591,6 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			"accept_rate_per_min", accRate,
 			"submit_rate_per_min", subRate,
 		)
-		mc.maybeAdjustDifficulty(now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
 		return
 	}
@@ -2788,7 +2752,6 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		"rejected_total", stats.Rejected,
 		"worker_difficulty", stats.TotalDifficulty,
 	)
-	mc.maybeAdjustDifficulty(now)
 	mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
 }
 
