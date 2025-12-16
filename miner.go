@@ -55,12 +55,8 @@ type VarDiffConfig struct {
 	BurstWindow        time.Duration
 	// DampingFactor controls how aggressively vardiff moves toward target.
 	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
-	// Lower values reduce overshoot. Typical range: 0.6-0.85.
+	// Lower values reduce overshoot. Typical range: 0.5-0.85.
 	DampingFactor float64
-	// UndershootBias slightly favors lower difficulty to prevent overshooting.
-	// 1.0 = no bias, 0.95 = aim for 5% undershoot, 0.9 = 10% undershoot.
-	// Only applied when increasing difficulty (to avoid making it too hard).
-	UndershootBias float64
 }
 
 type MinerStats struct {
@@ -112,7 +108,6 @@ var defaultVarDiff = VarDiffConfig{
 	MaxBurstShares:     60, // throttle spammy submitters
 	BurstWindow:        60 * time.Second,
 	DampingFactor:      0.5, // move 50% toward target to reduce overshoot
-	UndershootBias:     0.85, // aim 15% under when increasing difficulty
 }
 
 // duplicateShareKey is a compact, comparable representation of a share
@@ -1388,21 +1383,6 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		factor = minFactor
 	}
 	newDiff = currentDiff * factor
-
-	// Apply undershoot bias in both directions to prevent overshooting.
-	// When increasing difficulty: bias makes it easier (multiply by <1).
-	// When decreasing difficulty: bias makes it harder (divide by <1, i.e., multiply by >1).
-	// This ensures we err on the side of caution in both directions.
-	undershootBias := mc.vardiff.UndershootBias
-	if undershootBias > 0 && undershootBias < 1 {
-		if newDiff > currentDiff {
-			// Increasing difficulty: apply bias to make it easier
-			newDiff = newDiff * undershootBias
-		} else if newDiff < currentDiff {
-			// Decreasing difficulty: apply inverse bias to make it harder
-			newDiff = newDiff / undershootBias
-		}
-	}
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return
