@@ -12,48 +12,41 @@
 		<h1>About This Pool</h1>
 
 		<div class="card">
-			<h2>Server Infrastructure</h2>
-			<p>Our main server is located in Detroit, Michigan USA at a major peering location with direct connections to three tier 1 network carriers: Cogent, Hurricane Electric, and GTT. The server runs on dual-socket Xeon E5-2680 v4 processors with 64GB RAM, SSD storage, and a dedicated gigabit fiber link.</p>
-			<p><strong>Important note on latency:</strong> While low ping to the stratum server improves your mining efficiency, what actually matters for winning blocks is the complete path: miner to stratum server, stratum server to Bitcoin node, and Bitcoin node to the network. A pool could have great stratum latency but if the connection between their stratum server and Bitcoin node is slow, or if their node has poor network connectivity, your winning block could get orphaned. Our infrastructure prioritizes the entire chain: responsive stratum connections, local high-speed connection to our Bitcoin node, AND well-peered node connectivity with multiple tier 1 network paths for rapid block propagation.</p>
-			<p><strong>Maintenance schedule:</strong> We plan approximately monthly reboots for kernel updates to keep the pool secure and maintain system integrity. These brief maintenance windows help ensure we're running the latest security patches.</p>
+			<h2>Overview</h2>
+			<p>We're a solo mining pool running open-source software with split-coinbase payouts and transparent operations. This is true solo mining: if your miner finds a block, you get the block reward. We don't split rewards among miners--the miner who finds it gets paid.</p>
+			<p><strong>Reality check:</strong> Solo mining is probabilistic. Small miners can go months or years without finding a block. We don't know when--or if--you'll find one. The 2028 halving will cut block rewards from 3.125 BTC to 1.5625 BTC, making operations even more challenging. We run this because we believe in decentralization.</p>
 		</div>
 
 		<div class="card">
 			<h2>Payment System</h2>
-			<p>We use a split-coinbase payout system, which means you get paid directly from block rewards rather than through a pool wallet. Your Bitcoin wallet address is verified at connection time before any work is sent to your miner. You can verify all coinbase outputs on your worker page to confirm the payout structure.</p>
+			<p>We use <strong>split-coinbase payouts</strong>, meaning you get paid directly from block rewards. Your Bitcoin address is written into the coinbase transaction itself--there's no pool wallet involved. This makes it mathematically impossible for us to keep your share. Your address is verified before any work is accepted, and you can verify all coinbase outputs on your worker page.</p>
 		</div>
 
 		<div class="card">
-			<h2>Technical Details</h2>
-			<p>Our pool software is custom-built using Go, chosen for its reliability and performance. We run a Bitcoin Core node and use both RPC and ZMQ for low-latency block template updates. Each miner connection operates independently on its own goroutine, ensuring responsive communication even under load.</p>
-			<p>The pool software is open source and available on our <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub repository</a> under the AGPL license. We believe in transparency and welcome code review, security audits, and contributions.</p>
+			<h2>Infrastructure</h2>
+			<p>Our server is located in Detroit, Michigan at a major peering location with direct connections to three tier 1 carriers: Cogent, Hurricane Electric, and GTT. Hardware includes dual-socket Xeon E5-2680 v4 processors, 64GB RAM, SSD storage, and a dedicated gigabit fiber link.</p>
+			<p><strong>Why infrastructure matters:</strong> A fast path from your miner to our stratum server is good, but what really matters is the complete chain: miner → stratum → Bitcoin node → network. We prioritize the entire path with local high-speed node connectivity and multiple tier 1 network paths for rapid block propagation to reduce orphan risk.</p>
+			<p>We perform approximately monthly maintenance reboots for kernel security updates.</p>
 		</div>
 
 		<div class="card">
-			<h2>Pool Fee Structure & Reality Check</h2>
-			<p>We charge a 2% pool fee. Running quality infrastructure with proper peering, reliable hardware, and dedicated bandwidth has real costs. Solo mining pools don't find blocks frequently, so a sustainable fee structure is essential for long-term reliability.</p>
-			<p><strong>Being honest:</strong> We'll struggle just to cover costs, and we don't know when--or even if--we'll find a block. Solo mining is a lottery where small pools can go months or years without finding anything. We're running this infrastructure because we believe in decentralization, but there are no guarantees.</p>
-			<p>And it gets harder: <strong>In 2028, the block reward halves from 3.125 BTC to 1.5625 BTC.</strong> When that happens, everyone's share of each block gets cut in half, making it even more challenging to sustain operations. This is the reality of solo mining economics that every small pool faces.</p>
+			<h2>Technical Stack</h2>
+			<p>Custom-built pool software written in Go, running a Bitcoin Core node with RPC and ZMQ for low-latency block template updates. Each miner connection runs independently on its own goroutine for responsive communication under load.</p>
+			<p>Our code is open source on <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub</a> under the AGPL license. We welcome code review, security audits, and contributions.</p>
 		</div>
 
 		<div class="card">
-			<h2>Choosing a Trustworthy Pool</h2>
-			<p>The mining pool landscape includes operators with varying levels of transparency and integrity. Some pools have been found to have coinbase transactions that don't reward miners at all. The work you submit may not even be contributing to your potential payout. This is why verifying on-chain payouts is critical.</p>
-			<p><strong>Be extra skeptical of pools that don't use split coinbases.</strong> Without split coinbase payouts, you're trusting the pool operator to pay you from their wallet after they receive the block reward. There's no cryptographic guarantee you'll be paid--only the operator's promise. With split coinbase, your payout address is written directly into the block's coinbase transaction, making it mathematically impossible for the operator to keep your share.</p>
-			<p>When evaluating any pool, consider these red flags:</p>
+			<h2>Choosing a Pool</h2>
+			<p><strong>Be skeptical of every pool.</strong> Some pools have coinbase transactions that don't reward miners at all, meaning your work earns nothing. Always verify on-chain payouts.</p>
+			<p><strong>Split coinbase vs. pool wallets:</strong> Without split coinbase, you're trusting the operator to pay you from their wallet after receiving the block reward. With split coinbase, your address is in the coinbase transaction itself--cryptographically guaranteed.</p>
+			<p>Red flags to watch for:</p>
 			<ul>
-				<li><strong>No miner payouts</strong> -- Coinbase outputs that don't include miner addresses at all, meaning your work earns nothing</li>
-				<li><strong>No split coinbase</strong> -- Pools that collect rewards into their own wallet and promise to pay you later, requiring complete trust in the operator</li>
-				<li><strong>Insufficient infrastructure</strong> -- Cutting costs through unreliable hardware, poor network connectivity, or shared hosting that can't handle load</li>
+				<li><strong>No miner payouts</strong> -- Coinbase doesn't include miner addresses</li>
+				<li><strong>No split coinbase</strong> -- Requires trusting the operator to pay you later</li>
+				<li><strong>Insufficient infrastructure</strong> -- Unreliable hardware, poor connectivity, or shared hosting</li>
+				<li><strong>Claims that don't align with economics</strong> -- If it seems too good to be true, investigate</li>
 			</ul>
-			<p><strong>A word of caution:</strong> When evaluating pools, consider whether their claims and infrastructure align with the economics of solo mining. The solo mining community is relatively small and finds blocks infrequently. If something seems too good to be true or doesn't add up, trust your instincts and investigate further.</p>
-			<p>We believe transparency is essential. Our code is open source, our payout structure is verifiable on-chain, and our fee structure reflects actual operational costs. <strong>Be skeptical and investigate every pool before committing your hashrate.</strong></p>
-			<p>To help verify pool behavior, check out the <a href="https://github.com/WantClue/pool-investigator" target="_blank" rel="noopener noreferrer">Pool Investigator</a> tool by WantClue, which analyzes on-chain data to verify whether pools are actually paying miners as claimed.</p>
-		</div>
-
-		<div class="card">
-			<h2>Future Plans</h2>
-			<p>We're committed to providing reliable mining infrastructure. We would love to add a west coast server and a European location to offer miners more geographic diversity and lower latency options. However, the cost of quality peering and dedicated hardware is substantial, and expansion will depend on whether the pool can sustain itself financially.</p>
+			<p>Use tools like <a href="https://github.com/WantClue/pool-investigator" target="_blank" rel="noopener noreferrer">Pool Investigator</a> by WantClue to verify on-chain behavior. Our code is open source, our payouts are verifiable on-chain, and our fees reflect actual costs. Trust, but verify.</p>
 		</div>
 
 		{{template "footer" .}}
