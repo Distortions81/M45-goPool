@@ -512,6 +512,7 @@ func main() {
 	}
 
 	registry := NewMinerRegistry()
+	workerRegistry := newWorkerConnectionRegistry()
 
 	var reconnectLimiter *reconnectTracker
 	if cfg.ReconnectBanThreshold > 0 && cfg.ReconnectBanWindowSeconds > 0 && cfg.ReconnectBanDurationSeconds > 0 {
@@ -882,7 +883,7 @@ func main() {
 				_ = conn.Close()
 				continue
 			}
-			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, label == "tls")
+			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, workerRegistry, label == "tls")
 			registry.Add(mc)
 
 			connWg.Add(1)

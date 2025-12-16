@@ -204,6 +204,8 @@ type MinerConn struct {
 	vardiff             VarDiffConfig
 	metrics             *PoolMetrics
 	accounting          *AccountStore
+	workerRegistry      *workerConnectionRegistry
+	registeredWorker    string
 	jobMu               sync.Mutex
 	activeJobs          map[string]*Job
 	jobOrder            []string
@@ -343,6 +345,7 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 
 func (mc *MinerConn) cleanup() {
 	mc.cleanupOnce.Do(func() {
+		mc.unregisterRegisteredWorker()
 		mc.statsMu.Lock()
 		mc.stats.WindowStart = time.Time{}
 		mc.stats.WindowAccepted = 0
@@ -450,6 +453,29 @@ func (mc *MinerConn) ensureWorkerWallet(worker string) (string, []byte, bool) {
 	return base, cloneBytes(script), true
 }
 
+func (mc *MinerConn) registerWorker(worker string) *MinerConn {
+	if worker == "" || mc.workerRegistry == nil {
+		return nil
+	}
+	if mc.registeredWorker == worker {
+		return nil
+	}
+	if mc.registeredWorker != "" {
+		mc.workerRegistry.unregister(mc.registeredWorker, mc)
+	}
+	prev := mc.workerRegistry.register(worker, mc)
+	mc.registeredWorker = worker
+	return prev
+}
+
+func (mc *MinerConn) unregisterRegisteredWorker() {
+	if mc.workerRegistry == nil || mc.registeredWorker == "" {
+		return
+	}
+	mc.workerRegistry.unregister(mc.registeredWorker, mc)
+	mc.registeredWorker = ""
+}
+
 // dualPayoutParams returns the pool and worker payout scripts and fee
 // parameters for a job, if all required pieces are available. It does not
 // mutate the Job; callers use the returned values with
@@ -492,7 +518,7 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	return job.PayoutScript, ws, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
 }
 
-func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, isTLS bool) *MinerConn {
+func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, isTLS bool) *MinerConn {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -562,6 +588,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		vardiff:           vdiff,
 		metrics:           metrics,
 		accounting:        accounting,
+		workerRegistry:    workerRegistry,
 		activeJobs:        make(map[string]*Job),
 		connectedAt:       now,
 		jobDifficulty:     make(map[string]float64),
@@ -1741,6 +1768,10 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 			mc.writeResponse(resp)
 			mc.Close("wallet validation failed")
 			return
+		}
+		if prev := mc.registerWorker(workerName); prev != nil && prev != mc {
+			logger.Info("closing previous connection for worker", "worker", workerName, "remote", prev.id)
+			prev.Close("duplicate worker connection")
 		}
 	}
 
