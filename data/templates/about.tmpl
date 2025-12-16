@@ -38,17 +38,15 @@
 
 		<div class="card">
 			<h2>Choosing a Trustworthy Pool</h2>
-			<p>The mining pool landscape includes operators with varying levels of transparency and integrity. When evaluating pools, consider the economics: quality infrastructure, bandwidth, and reliable servers cost money. Pools advertising extremely low fees face a fundamental question--how do they sustain operations?</p>
-			<p><strong>More concerning:</strong> Some pools have been found to have coinbase transactions that don't reward miners at all. The work you submit may not even be contributing to your potential payout. This is why verifying on-chain payouts is critical.</p>
+			<p>The mining pool landscape includes operators with varying levels of transparency and integrity. Some pools have been found to have coinbase transactions that don't reward miners at all. The work you submit may not even be contributing to your potential payout. This is why verifying on-chain payouts is critical.</p>
 			<p><strong>Be extra skeptical of pools that don't use split coinbases.</strong> Without split coinbase payouts, you're trusting the pool operator to pay you from their wallet after they receive the block reward. There's no cryptographic guarantee you'll be paid--only the operator's promise. With split coinbase, your payout address is written directly into the block's coinbase transaction, making it mathematically impossible for the operator to keep your share.</p>
 			<p>When evaluating any pool, consider these red flags:</p>
 			<ul>
 				<li><strong>No miner payouts</strong> -- Coinbase outputs that don't include miner addresses at all, meaning your work earns nothing</li>
 				<li><strong>No split coinbase</strong> -- Pools that collect rewards into their own wallet and promise to pay you later, requiring complete trust in the operator</li>
 				<li><strong>Insufficient infrastructure</strong> -- Cutting costs through unreliable hardware, poor network connectivity, or shared hosting that can't handle load</li>
-				<li><strong>Subsidized operations</strong> -- Running at a loss temporarily to build market share, with no guarantee of long-term sustainability</li>
 			</ul>
-			<p><strong>A word of caution:</strong> If you encounter solo mining pools with massive infrastructure--multiple global data centers, extensive server networks--approach with skepticism. The solo mining community is not that large and only finds blocks infrequently. Ask yourself: how can they afford all that infrastructure? What are they really getting out of running the pool? Oversized infrastructure that doesn't match the economics of solo mining should raise red flags.</p>
+			<p><strong>A word of caution:</strong> When evaluating pools, consider whether their claims and infrastructure align with the economics of solo mining. The solo mining community is relatively small and finds blocks infrequently. If something seems too good to be true or doesn't add up, trust your instincts and investigate further.</p>
 			<p>We believe transparency is essential. Our code is open source, our payout structure is verifiable on-chain, and our fee structure reflects actual operational costs. <strong>Be skeptical and investigate every pool before committing your hashrate.</strong></p>
 			<p>To help verify pool behavior, check out the <a href="https://github.com/WantClue/pool-investigator" target="_blank" rel="noopener noreferrer">Pool Investigator</a> tool by WantClue, which analyzes on-chain data to verify whether pools are actually paying miners as claimed.</p>
 		</div>
