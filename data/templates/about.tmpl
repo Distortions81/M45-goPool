@@ -1,0 +1,44 @@
+{{/* About page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - About</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>About This Pool</h1>
+
+		<div class="card">
+			<h2>Server Infrastructure</h2>
+			<p>Our main server is located in Detroit, Michigan USA at a major peering location with direct connections to three tier 1 network carriers: Cogent, Hurricane Electric, and GTT. The server runs on dual-socket Xeon E5-2680 v4 processors with 64GB RAM, SSD storage, and a dedicated gigabit fiber link.</p>
+		</div>
+
+		<div class="card">
+			<h2>Payment System</h2>
+			<p>We use a split-coinbase payout system, which means you get paid directly from block rewards rather than through a pool wallet. Your Bitcoin wallet address is verified at connection time before any work is sent to your miner. You can verify all coinbase outputs on your worker page to confirm the payout structure.</p>
+		</div>
+
+		<div class="card">
+			<h2>Technical Details</h2>
+			<p>Our pool software is custom-built using Go, chosen for its reliability and performance. We run a Bitcoin Core node and use both RPC and ZMQ for low-latency block template updates. Each miner connection operates independently on its own goroutine, ensuring responsive communication even under load.</p>
+			<p>The pool software is open source and available on our <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub repository</a> under the AGPL license. We believe in transparency and welcome code review and contributions.</p>
+		</div>
+
+		<div class="card">
+			<h2>Pool Fee Structure</h2>
+			<p>We charge a 2% pool fee. Running quality infrastructure with proper peering, reliable hardware, and dedicated bandwidth has real costs. Solo mining pools don't find blocks frequently, so covering operational expenses with a sustainable fee structure is essential for long-term reliability.</p>
+			<p>We're transparent about this: before the next Bitcoin halving in 2028, we'll be working hard just to cover our costs with solo mining volume. If you see pools advertising unrealistically low fees, consider what corners might be cut to make that sustainable.</p>
+		</div>
+
+		<div class="card">
+			<h2>Future Plans</h2>
+			<p>We're committed to providing reliable mining infrastructure. As the pool grows, we hope to expand with additional server locations within the United States and potentially Europe, offering miners more geographic diversity and lower latency options.</p>
+		</div>
+
+		{{template "footer" .}}
+	</div>
+</body>
+</html>

@@ -9,6 +9,9 @@
 				{{if .BrandDomain}}
 				<div class="brand-title">{{.BrandDomain}}</div>
 				{{end}}
+				{{if .ServerLocation}}
+				<div class="brand-sub" style="font-weight: 600; color: var(--accent);">{{.ServerLocation}}</div>
+				{{end}}
 				{{if .ListenAddr}}
 				<div class="brand-sub">
 					stratum:{{addrPort .ListenAddr}}{{if .StratumTLSListen}} / tls:{{addrPort .StratumTLSListen}}{{end}}
@@ -20,18 +23,19 @@
 			</div>
 		</div>
 		<nav class="header-links">
-			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
-				<span class="theme-toggle-icon">🌙</span>
-			</button>
-			<a class="header-link" href="/">Overview</a>
-			<a class="header-link" href="/pool">Pool</a>
-			<a class="header-link" href="/node">Node</a>
-			<a class="header-link" href="/server">Server</a>
-			<a class="header-link worker-login-link" href="/worker">Worker login</a>
-			<a class="header-link" href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub</a>
+			<a class="header-link about-link" href="/about">ℹ️ About</a>
+			<a class="header-link" href="/">🏠 Overview</a>
+			<a class="header-link" href="/pool">💎 Pool</a>
+			<a class="header-link" href="/node">🔗 Node</a>
+			<a class="header-link" href="/server">🖥️ Server</a>
+			<a class="header-link worker-login-link" href="/worker">👤 Login</a>
+			<a class="header-link github-link" href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub</a>
 			{{if .DiscordURL}}
 			<a class="header-link discord-link" href="{{.DiscordURL}}" target="_blank" rel="noopener noreferrer">Discord</a>
 			{{end}}
+			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
+				<span class="theme-toggle-icon">🌙</span>
+			</button>
 		</nav>
 	</div>
 </header>

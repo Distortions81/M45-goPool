@@ -442,6 +442,7 @@ type StatusData struct {
 	BrandName                      string            `json:"brand_name"`
 	BrandDomain                    string            `json:"brand_domain"`
 	Tagline                        string            `json:"tagline,omitempty"`
+	ServerLocation                 string            `json:"server_location,omitempty"`
 	FiatCurrency                   string            `json:"fiat_currency,omitempty"`
 	BTCPriceFiat                   float64           `json:"btc_price_fiat,omitempty"`
 	BTCPriceUpdatedAt              string            `json:"btc_price_updated_at,omitempty"`
@@ -1059,6 +1060,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	workerStatusPath := filepath.Join(cfg.DataDir, "templates", "worker_status.tmpl")
 	nodeInfoPath := filepath.Join(cfg.DataDir, "templates", "node.tmpl")
 	poolInfoPath := filepath.Join(cfg.DataDir, "templates", "pool.tmpl")
+	aboutPath := filepath.Join(cfg.DataDir, "templates", "about.tmpl")
 	errorPath := filepath.Join(cfg.DataDir, "templates", "error.tmpl")
 
 	layoutHTML, err := os.ReadFile(layoutPath)
@@ -1089,6 +1091,10 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	if err != nil {
 		fatal("load pool info template", err, "path", poolInfoPath)
 	}
+	aboutHTML, err := os.ReadFile(aboutPath)
+	if err != nil {
+		fatal("load about template", err, "path", aboutPath)
+	}
 	errorHTML, err := os.ReadFile(errorPath)
 	if err != nil {
 		fatal("load error template", err, "path", errorPath)
@@ -1101,6 +1107,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
 	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
 	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
+	template.Must(tmpl.New("about").Parse(string(aboutHTML)))
 	template.Must(tmpl.New("error").Parse(string(errorHTML)))
 
 	if ctx == nil {
@@ -2166,6 +2173,19 @@ func (s *StatusServer) handlePoolInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *StatusServer) handleAboutPage(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	data := s.baseTemplateData(start)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "about", data); err != nil {
+		logger.Error("about page template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"About page error",
+			"We couldn't render the about page.",
+			"Template error while rendering the about page view.")
+	}
+}
+
 func (s *StatusServer) buildStatusData() StatusData {
 	var currentJob *Job
 	if s.jobMgr != nil {
@@ -2685,6 +2705,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
 		Tagline:                        s.cfg.StatusTagline,
+		ServerLocation:                 s.cfg.ServerLocation,
 		FiatCurrency:                   s.cfg.FiatCurrency,
 		PoolDonationAddress:            s.cfg.PoolDonationAddress,
 		DiscordURL:                     s.cfg.DiscordURL,

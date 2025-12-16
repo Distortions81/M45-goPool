@@ -35,6 +35,8 @@ type Config struct {
 	PoolDonationAddress string
 	// DiscordURL is an optional Discord invite link shown in the header.
 	DiscordURL string
+	// ServerLocation is an optional server location string shown in the header.
+	ServerLocation string
 	// StratumTLSListen is an optional TCP address for a TLS-enabled
 	// Stratum listener (e.g. ":3443"). When empty, TLS for Stratum is
 	// disabled and only the plain TCP listener is used.
@@ -172,6 +174,7 @@ type EffectiveConfig struct {
 	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
 	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
 	DiscordURL                        string  `json:"discord_url,omitempty"`
+	ServerLocation                    string  `json:"server_location,omitempty"`
 	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
 	RPCURL                            string  `json:"rpc_url"`
 	RPCUser                           string  `json:"rpc_user"`
@@ -235,6 +238,7 @@ type brandingConfig struct {
 	FiatCurrency      string `toml:"fiat_currency"`
 	PoolDonationAddress string `toml:"pool_donation_address"`
 	DiscordURL        string `toml:"discord_url"`
+	ServerLocation    string `toml:"server_location"`
 }
 
 type stratumConfig struct {
@@ -358,6 +362,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			FiatCurrency:        cfg.FiatCurrency,
 			PoolDonationAddress: cfg.PoolDonationAddress,
 			DiscordURL:          cfg.DiscordURL,
+			ServerLocation:      cfg.ServerLocation,
 		},
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
@@ -715,6 +720,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Branding.DiscordURL != "" {
 		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
 	}
+	if fc.Branding.ServerLocation != "" {
+		cfg.ServerLocation = strings.TrimSpace(fc.Branding.ServerLocation)
+	}
 	if fc.Stratum.StratumTLSListen != "" {
 		addr := strings.TrimSpace(fc.Stratum.StratumTLSListen)
 		if addr != "" && !strings.Contains(addr, ":") {
@@ -876,6 +884,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		FiatCurrency:                      cfg.FiatCurrency,
 		PoolDonationAddress:               cfg.PoolDonationAddress,
 		DiscordURL:                        cfg.DiscordURL,
+		ServerLocation:                    cfg.ServerLocation,
 		RPCURL:                            cfg.RPCURL,
 		RPCUser:                           cfg.RPCUser,
 		RPCPassSet:                        strings.TrimSpace(cfg.RPCPass) != "",

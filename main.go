@@ -568,6 +568,7 @@ func main() {
 	mux.HandleFunc("/node", statusServer.handleNodeInfo)
 	mux.HandleFunc("/pool", statusServer.handlePoolInfo)
 	mux.HandleFunc("/server", statusServer.handleServerInfoPage)
+	mux.HandleFunc("/about", statusServer.handleAboutPage)
 	// Alternative worker lookup URLs (SHA256-based)
 	mux.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/user")
