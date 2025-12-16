@@ -1132,6 +1132,164 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	return server
 }
 
+// ReloadTemplates reloads all HTML templates from disk. This allows operators
+// to update templates without restarting the pool server. It's designed to be
+// called in response to SIGUSR1 or other reload triggers.
+func (s *StatusServer) ReloadTemplates() error {
+	if s == nil {
+		return fmt.Errorf("status server is nil")
+	}
+
+	// Use the same template function map as initialization
+	funcs := template.FuncMap{
+		"humanDuration": func(d time.Duration) string {
+			if d < 0 {
+				return "0s"
+			}
+			if d < time.Second {
+				return fmt.Sprintf("%dms", d.Milliseconds())
+			}
+			if d < time.Minute {
+				return fmt.Sprintf("%.1fs", d.Seconds())
+			}
+			if d < time.Hour {
+				return fmt.Sprintf("%.1fm", d.Minutes())
+			}
+			if d < 24*time.Hour {
+				return fmt.Sprintf("%.1fh", d.Hours())
+			}
+			return fmt.Sprintf("%.1fd", d.Hours()/24)
+		},
+		"humanInt": func(v int64) string {
+			if v < 1000 {
+				return fmt.Sprintf("%d", v)
+			}
+			if v < 1000000 {
+				return fmt.Sprintf("%.1fK", float64(v)/1000)
+			}
+			if v < 1000000000 {
+				return fmt.Sprintf("%.1fM", float64(v)/1000000)
+			}
+			return fmt.Sprintf("%.2fB", float64(v)/1000000000)
+		},
+		"shortenWorkerName": func(name string) string {
+			if len(name) <= workerNamePrefix+workerNameSuffix+3 {
+				return name
+			}
+			return name[:workerNamePrefix] + "..." + name[len(name)-workerNameSuffix:]
+		},
+		"shortenHash": func(hash string) string {
+			if len(hash) <= hashPrefix+hashSuffix+3 {
+				return hash
+			}
+			if hashPrefix == 0 {
+				return "..." + hash[len(hash)-hashSuffix:]
+			}
+			return hash[:hashPrefix] + "..." + hash[len(hash)-hashSuffix:]
+		},
+		"shortenPayoutAddr": func(addr string) string {
+			if len(addr) <= payoutAddrPrefix+payoutAddrSuffix+3 {
+				return addr
+			}
+			return addr[:payoutAddrPrefix] + "..." + addr[len(addr)-payoutAddrSuffix:]
+		},
+		"shortenCoinbaseMsg": func(msg string) string {
+			if len(msg) <= coinbaseMsgPrefix+coinbaseMsgSuffix+3 {
+				return msg
+			}
+			return msg[:coinbaseMsgPrefix] + "..." + msg[len(msg)-coinbaseMsgSuffix:]
+		},
+		"formatFloat": func(v float64) string {
+			return fmt.Sprintf("%.2f", v)
+		},
+		"unixToTime": func(u int64) time.Time {
+			if u == 0 {
+				return time.Time{}
+			}
+			return time.Unix(u, 0)
+		},
+		"timeNow": func() time.Time {
+			return time.Now()
+		},
+		"formatRenderDuration": func(d time.Duration) string {
+			if d <= 0 {
+				return "0s"
+			}
+			if d < time.Millisecond {
+				return "<1ms"
+			}
+			ms := float64(d) / float64(time.Millisecond)
+			return fmt.Sprintf("%.0fms", ms)
+		},
+	}
+
+	// Build template paths
+	layoutPath := filepath.Join(s.cfg.DataDir, "templates", "layout.tmpl")
+	statusPath := filepath.Join(s.cfg.DataDir, "templates", "overview.tmpl")
+	serverInfoPath := filepath.Join(s.cfg.DataDir, "templates", "server.tmpl")
+	workerLoginPath := filepath.Join(s.cfg.DataDir, "templates", "worker_login.tmpl")
+	workerStatusPath := filepath.Join(s.cfg.DataDir, "templates", "worker_status.tmpl")
+	nodeInfoPath := filepath.Join(s.cfg.DataDir, "templates", "node.tmpl")
+	poolInfoPath := filepath.Join(s.cfg.DataDir, "templates", "pool.tmpl")
+	aboutPath := filepath.Join(s.cfg.DataDir, "templates", "about.tmpl")
+	errorPath := filepath.Join(s.cfg.DataDir, "templates", "error.tmpl")
+
+	// Load template files
+	layoutHTML, err := os.ReadFile(layoutPath)
+	if err != nil {
+		return fmt.Errorf("load layout template: %w", err)
+	}
+	statusHTML, err := os.ReadFile(statusPath)
+	if err != nil {
+		return fmt.Errorf("load status template: %w", err)
+	}
+	serverInfoHTML, err := os.ReadFile(serverInfoPath)
+	if err != nil {
+		return fmt.Errorf("load server info template: %w", err)
+	}
+	workerLoginHTML, err := os.ReadFile(workerLoginPath)
+	if err != nil {
+		return fmt.Errorf("load worker login template: %w", err)
+	}
+	workerStatusHTML, err := os.ReadFile(workerStatusPath)
+	if err != nil {
+		return fmt.Errorf("load worker status template: %w", err)
+	}
+	nodeInfoHTML, err := os.ReadFile(nodeInfoPath)
+	if err != nil {
+		return fmt.Errorf("load node info template: %w", err)
+	}
+	poolInfoHTML, err := os.ReadFile(poolInfoPath)
+	if err != nil {
+		return fmt.Errorf("load pool info template: %w", err)
+	}
+	aboutHTML, err := os.ReadFile(aboutPath)
+	if err != nil {
+		return fmt.Errorf("load about template: %w", err)
+	}
+	errorHTML, err := os.ReadFile(errorPath)
+	if err != nil {
+		return fmt.Errorf("load error template: %w", err)
+	}
+
+	// Parse templates
+	tmpl := template.New("overview").Funcs(funcs)
+	template.Must(tmpl.Parse(string(layoutHTML)))
+	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
+	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
+	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
+	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
+	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
+	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
+	template.Must(tmpl.New("about").Parse(string(aboutHTML)))
+	template.Must(tmpl.New("error").Parse(string(errorHTML)))
+
+	// Atomically replace the template
+	s.tmpl = tmpl
+	logger.Info("templates reloaded successfully")
+	return nil
+}
+
 // handleRPCResult is registered as an RPCClient result hook to opportunistically
 // warm cached node info based on normal RPC traffic. It never changes how
 // callers use the RPC client; it only updates StatusServer's own cache.

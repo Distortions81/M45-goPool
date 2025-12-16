@@ -312,6 +312,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Set up SIGUSR1 handler for template reloading (will be connected to statusServer later)
+	reloadChan := make(chan os.Signal, 1)
+	signal.Notify(reloadChan, syscall.SIGUSR1)
+
 	cfgPath := defaultConfigPath()
 	cfg := loadConfig(cfgPath, *secretsPathFlag)
 	if *floodFlag {
@@ -536,6 +540,21 @@ func main() {
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
+
+	// Start SIGUSR1 handler for live template reloading
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reloadChan:
+				logger.Info("SIGUSR1 received, reloading templates")
+				if err := statusServer.ReloadTemplates(); err != nil {
+					logger.Error("template reload failed", "error", err)
+				}
+			}
+		}
+	}()
 
 	// Prepare www directory for static files (certbot .well-known, logo.png, style.css, etc.)
 	wwwDir := filepath.Join(cfg.DataDir, "www")

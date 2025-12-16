@@ -17,12 +17,33 @@
 
 ## Status pages & API
 
-- HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/www`.
-  - `status.tmpl` – dashboard
+- HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/templates/`.
+  - `overview.tmpl` – dashboard
   - `worker_status.tmpl` – per-worker view
-  - `server_stats.tmpl` – server stats page
+  - `server.tmpl` – server stats page
+  - `about.tmpl` – about page
+  - `pool.tmpl` – pool info page
+  - `node.tmpl` – node info page
+  - `layout.tmpl` – shared layout
 - The main status page exposes per-worker statistics (rolling hashrate, recent share window, ban status) and a pool-wide hashrate graph based on the EMA, which is smoothed client-side for a stable curve.
-- APIs such as `/api/status-page` and `/api/pool-hashrate` return JSON suitable for monitoring or dashboards.
+- APIs such as `/api/overview` and `/api/pool-hashrate` return JSON suitable for monitoring or dashboards.
+
+### Live template reloading
+
+Templates can be reloaded without restarting the pool by sending a `SIGUSR1` signal to the process:
+
+```bash
+# Find the pool process ID
+ps aux | grep goPool
+
+# Send SIGUSR1 to reload templates
+kill -SIGUSR1 <pid>
+
+# Or if using systemd
+systemctl kill -s SIGUSR1 gopool.service
+```
+
+This is useful for updating the UI while the pool is running. If template parsing fails, the error is logged and the old templates remain active.
 
 ## Logging
 
