@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 // Validates ALL test addresses used in the test suite against BTCD
@@ -53,7 +54,7 @@ func main() {
 
 		// Invalid addresses that should fail
 		{"cross_impl_sanity_test.go", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb", false}, // Wrong checksum
-		{"cross_impl_sanity_test.go", "", false},                                    // Empty
+		{"cross_impl_sanity_test.go", "", false},                                   // Empty
 
 		// Testnet addresses
 		{"cross_impl_sanity_test.go [testnet]", "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", true},

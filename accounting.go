@@ -368,7 +368,6 @@ func (b *banList) load() error {
 		}
 	}
 
-	// If no active bans exist, delete the file
 	if !hasActiveBans && len(entries) > 0 {
 		_ = os.Remove(b.path)
 	}

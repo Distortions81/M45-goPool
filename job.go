@@ -64,7 +64,7 @@ type Job struct {
 	TransactionIDs          [][]byte
 	PayoutScript            []byte
 	DonationScript          []byte
-	OperatorDonationPercent      float64
+	OperatorDonationPercent float64
 	VersionMask             uint32
 	PrevHash                string
 	prevHashBytes           [32]byte
@@ -260,7 +260,6 @@ func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
 	return jm.zmqPayload
 }
 
-
 func (jm *JobManager) Start(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -276,18 +275,14 @@ func (jm *JobManager) Start(ctx context.Context) {
 }
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
-	// Debounce rapid refresh attempts from multiple sources (ZMQ + longpoll).
-	// If a refresh happened in the last 100ms, skip to avoid duplicate work.
 	jm.refreshMu.Lock()
 	if time.Since(jm.lastRefreshAttempt) < 100*time.Millisecond {
 		jm.refreshMu.Unlock()
-		return nil // Recent refresh already in progress or completed
+		return nil
 	}
 	jm.lastRefreshAttempt = time.Now()
 	jm.refreshMu.Unlock()
 
-	// Match NOMP daemon.js: request segwit rules and coinbase capabilities so
-	// coinbasetxn/append/workid are allowed by bitcoind.
 	params := map[string]interface{}{
 		"rules":        []string{"segwit"},
 		"capabilities": []string{"coinbasetxn", "workid", "coinbase/append"},
@@ -424,7 +419,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		TransactionIDs:          txids,
 		PayoutScript:            jm.payoutScript,
 		DonationScript:          jm.donationScript,
-		OperatorDonationPercent:      jm.cfg.OperatorDonationPercent,
+		OperatorDonationPercent: jm.cfg.OperatorDonationPercent,
 		VersionMask:             computePoolMask(tpl, jm.cfg),
 		PrevHash:                tpl.Previous,
 		prevHashBytes:           prevBytes,
@@ -553,8 +548,7 @@ func hexToLEHex(src string) string {
 	if err != nil || len(b) == 0 {
 		return src
 	}
-	// Match foundation-stratum/node-stratum-pool utils.reverseByteOrder:
-	// treat input as 8 big-endian uint32 words, rewrite each as little-endian,
+	// Treat input as 8 big-endian uint32 words, rewrite each as little-endian,
 	// then reverse the full buffer.
 	if len(b) != 32 {
 		return hex.EncodeToString(reverseBytes(b))
@@ -672,7 +666,6 @@ func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
 			}
 		}
 
-		// Store txids in little-endian form for merkle building (match node-stratum-pool).
 		txids = append(txids, reverseBytes(computedRaw))
 	}
 	return txids, nil
@@ -1037,7 +1030,6 @@ func targetFromDifficulty(diff float64) *big.Int {
 		// Lowest difficulty means the largest possible target.
 		return new(big.Int).Set(maxUint256)
 	}
-	// Compute target = diff1Target / diff using rational math to match node-stratum-pool.
 	diffStr := strconv.FormatFloat(diff, 'g', -1, 64)
 	r, ok := new(big.Rat).SetString(diffStr)
 	if !ok || r.Sign() <= 0 {
@@ -1264,9 +1256,8 @@ func readVarInt(raw []byte) (uint64, int, error) {
 
 // parseMinerID makes a best-effort attempt to split a miner client
 // identifier into a name and version. Common formats include:
-//
-//	"cgminer/4.11.0"     -> ("cgminer", "4.11.0")
-//	"BraiinsOS-stratum"  -> ("BraiinsOS-stratum", "")
+//	"SomeMiner/4.11.0"   -> ("SomeMiner", "4.11.0")
+//	"MinerName-variant"  -> ("MinerName-variant", "")
 //	"Some Miner 1.2.3"   -> ("Some Miner", "1.2.3")
 func parseMinerID(id string) (string, string) {
 	s := strings.TrimSpace(id)
@@ -1525,7 +1516,7 @@ func serializeCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte
 	var vin bytes.Buffer
 	writeVarInt(&vin, 1)
 	vin.Write(bytes.Repeat([]byte{0x00}, 32))
-	writeUint32LE(&vin, 0xffffffff) // NOMP prevout index (-1)
+	writeUint32LE(&vin, 0xffffffff)
 	writeVarInt(&vin, uint64(scriptSigLen))
 	vin.Write(scriptSigPart1)
 	if padLen > 0 {
@@ -1543,7 +1534,6 @@ func serializeCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte
 	}
 	writeVarInt(&outputs, outputCount)
 	if len(commitmentScript) > 0 {
-		// NOMP writes the witness commitment output first.
 		writeUint64LE(&outputs, 0)
 		writeVarInt(&outputs, uint64(len(commitmentScript)))
 		outputs.Write(commitmentScript)
@@ -1780,7 +1770,7 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 		"donation_pct", donationFeePercent,
 		"donation_sats", donationValue,
 		"pool_keeps_sats", poolFee,
-		"worker_sats", totalValue - totalPoolFee)
+		"worker_sats", totalValue-totalPoolFee)
 
 	// Worker gets the rest
 	workerValue := totalValue - totalPoolFee
@@ -1822,7 +1812,6 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 	return tx.Bytes(), txid, nil
 }
 
-// serializeNumberScript matches node-stratum-pool util.serializeNumber.
 func serializeNumberScript(n int64) []byte {
 	if n >= 1 && n <= 16 {
 		return []byte{byte(0x50 + n)}
@@ -1854,7 +1843,6 @@ func normalizeCoinbaseMessage(msg string) string {
 	return "/" + msg + "/"
 }
 
-// serializeStringScript matches node-stratum-pool util.serializeString.
 func serializeStringScript(s string) []byte {
 	b := []byte(s)
 	if len(b) < 253 {
@@ -1929,9 +1917,8 @@ func clampCoinbaseMessage(message string, limit int, height int64, scriptTime in
 	return "", true, nil
 }
 
-// buildCoinbaseParts constructs coinb1/coinb2 using the node-stratum-pool layout.
-// The trailing string in the scriptSig is the pool's coinbase message; if
-// empty, a legacy "/nodeStratum/" tag is used for compatibility.
+// buildCoinbaseParts constructs coinb1/coinb2 for the stratum protocol.
+// The trailing string in the scriptSig is the pool's coinbase message.
 func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) (string, string, error) {
 	if extranonce2Size <= 0 {
 		extranonce2Size = 4
@@ -1943,8 +1930,7 @@ func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, t
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-	// Decode coinbase aux flags from bitcoind (per BIP34 and node-stratum-pool).
-	var flagsBytes []byte
+		var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2025,8 +2011,7 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-	// Decode coinbase aux flags from bitcoind (per BIP34 and node-stratum-pool).
-	var flagsBytes []byte
+		var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2133,8 +2118,7 @@ func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-	// Decode coinbase aux flags from bitcoind (per BIP34 and node-stratum-pool).
-	var flagsBytes []byte
+		var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2253,7 +2237,6 @@ func buildMerkleBranches(txids [][]byte) []string {
 	if len(txids) == 0 {
 		return []string{}
 	}
-	// Emulate NOMP merkleTree.calculateSteps: data = [nil] + txids (LE).
 	layer := make([][]byte, 0, len(txids)+1)
 	layer = append(layer, nil)
 	layer = append(layer, txids...)
@@ -2277,8 +2260,8 @@ func buildMerkleBranches(txids [][]byte) []string {
 	return steps
 }
 
-// computeMerkleRootFromBranches mirrors NOMP merkleTree.withFirst: start with the
-// coinbase txid (BE) and apply each branch (LE) in order, returning a BE root.
+// computeMerkleRootFromBranches computes the merkle root by starting with the
+// coinbase txid (BE) and applying each branch (LE) in order, returning a BE root.
 func computeMerkleRootFromBranches(coinbaseHash []byte, branches []string) []byte {
 	root := coinbaseHash
 	var hashBuf [32]byte
@@ -2298,20 +2281,15 @@ func computeMerkleRootFromBranches(coinbaseHash []byte, branches []string) []byt
 	return root
 }
 
-// buildBlockHeaderFromHex constructs the block header bytes for SHA256d jobs
-// using the same layout as foundation-stratum's Template.serializeHeader
-// default branch. This differs from the canonical Bitcoin header layout but
-// matches what miners expect from the reference pool:
-//
+// buildBlockHeaderFromHex constructs the block header bytes for SHA256d jobs.
+// This differs from the canonical Bitcoin header layout:
 //	header[0:4]   = nonce (BE hex from miner)
 //	header[4:8]   = bits  (BE hex from template)
 //	header[8:12]  = ntime (BE hex from miner)
 //	header[12:44] = merkleRoot (LE bytes)
 //	header[44:76] = previousblockhash (BE bytes from template)
 //	header[76:80] = version (big-endian uint32)
-//
 // The entire 80-byte header is then reversed before hashing.
-//
 // This helper is intended for test and block-construction paths where the
 // previous block hash and bits fields are available only as hex strings. For
 // hot share-validation paths that already have a Job, prefer Job.buildBlockHeader,

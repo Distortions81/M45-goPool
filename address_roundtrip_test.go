@@ -93,8 +93,8 @@ func TestCoinbaseOutputAddressRecovery(t *testing.T) {
 	params := &chaincfg.MainNetParams
 
 	testCases := []struct {
-		name      string
-		poolAddr  string
+		name       string
+		poolAddr   string
 		workerAddr string
 	}{
 		{

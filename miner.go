@@ -20,7 +20,6 @@ import (
 	"github.com/bytedance/gopkg/util/logger"
 )
 
-// Object pools for frequently allocated objects in hot paths
 var (
 	bigIntPool = sync.Pool{
 		New: func() interface{} {
@@ -127,7 +126,6 @@ type duplicateShareRing struct {
 }
 
 func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, versionHex string) {
-	// Reset dst to a zero value so equality comparisons are reliable.
 	*dst = duplicateShareKey{}
 	write := func(s string) {
 		for i := 0; i < len(s) && int(dst.n) < maxDuplicateShareKeyBytes; i++ {
@@ -165,7 +163,6 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, ve
 // records it if not. It maintains up to duplicateShareHistory entries and
 // overwrites the oldest when full.
 func (r *duplicateShareRing) seenOrAdd(key duplicateShareKey) bool {
-	// Linear scan is acceptable for this small, fixed-size ring.
 	for i := 0; i < r.count; i++ {
 		if r.keys[i] == key {
 			return true
@@ -176,7 +173,6 @@ func (r *duplicateShareRing) seenOrAdd(key duplicateShareKey) bool {
 		r.count++
 		return false
 	}
-	// Overwrite oldest entry.
 	r.keys[r.idx] = key
 	r.idx++
 	if r.idx >= duplicateShareHistory {
@@ -347,8 +343,6 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 
 func (mc *MinerConn) cleanup() {
 	mc.cleanupOnce.Do(func() {
-		// On disconnect, zero out the rolling share window so the status
-		// page reflects 0 shares/min for this connection.
 		mc.statsMu.Lock()
 		mc.stats.WindowStart = time.Time{}
 		mc.stats.WindowAccepted = 0
@@ -461,7 +455,6 @@ func (mc *MinerConn) ensureWorkerWallet(worker string) (string, []byte, bool) {
 // mutate the Job; callers use the returned values with
 // buildDualPayoutCoinbaseParts when constructing coinbase data in the
 // dual-payout path.
-//
 // Returns false (single-payout) when:
 // - Pool fee is 0% (entire reward goes to worker)
 // - Worker wallet matches pool wallet (same beneficiary)
@@ -1607,9 +1600,8 @@ func (mc *MinerConn) handleExtranonceSubscribe(req *StratumRequest) {
 // Handle mining.subscribe request.
 // Very minimal: return fake subscription and extranonce1/size per docs/protocols/stratum-v1.mediawiki.
 func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
-	// Many miners send a client identifier (e.g., "cgminer/4.11.0") as the
-	// first subscribe parameter. Capture it so we can summarize miner types
-	// on the status page.
+	// Many miners send a client identifier as the first subscribe parameter.
+	// Capture it so we can summarize miner types on the status page.
 	if len(req.Params) > 0 {
 		if id, ok := req.Params[0].(string); ok {
 			// Validate client ID length to prevent abuse
@@ -1667,7 +1659,6 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 		go mc.listenJobs()
 	}
 
-	// NOMP sends only the subscription response here; it defers set_difficulty until after subscribe.
 	mc.writeResponse(StratumResponse{
 		ID: req.ID,
 		Result: []interface{}{
@@ -1683,7 +1674,6 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	if initialJob != nil {
 		mc.updateVersionMask(initialJob.VersionMask)
 	}
-	// NOMP replies with set_extranonce after subscribe when extranonce1 is known; send it unconditionally.
 	mc.sendSetExtranonce(ex1, en2Size)
 	if initialJob == nil {
 		status := mc.jobMgr.FeedStatus()
@@ -1755,8 +1745,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	}
 
 	// Force difficulty to the configured min on authorize so new connections
-	// always start at the lowest target we allow. (We already send
-	// set_difficulty on subscribe to mirror NOMP.)
+	// always start at the lowest target we allow.
 
 	mc.authorized = true
 	mc.authorizeDeadline = time.Time{}
@@ -1988,8 +1977,6 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 		return
 	}
 
-	// Foundation/node-stratum-pool send previousblockhash in little-endian form
-	// in mining.notify; miners reverse it back when constructing the header.
 	prevhashLE := hexToLEHex(job.PrevHash)
 	shareTarget := mc.shareTargetOrDefault()
 
@@ -2267,7 +2254,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	}
 	// Tight ntime bounds: require ntime to be >= the template's curtime
 	// (or mintime when provided) and allow it to roll forward only a short
-	// distance from the template, similar to ckpool's behaviour.
+	// distance from the template.
 	minNTime := job.Template.CurTime
 	if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
 		minNTime = job.Template.Mintime

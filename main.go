@@ -131,7 +131,6 @@ func (h *fileServerWithFallback) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.fileServer.ServeHTTP(w, r)
 		return
 	}
-	// Fall back to status server
 	h.fallback.ServeHTTP(w, r)
 }
 
@@ -166,7 +165,6 @@ func (l *acceptRateLimiter) updateRate(newRate, newBurst int) {
 
 	l.rate = float64(newRate)
 	l.burst = float64(newBurst)
-	// Clamp tokens to new burst if it's lower
 	if l.tokens > l.burst {
 		l.tokens = l.burst
 	}
@@ -190,7 +188,6 @@ func (l *acceptRateLimiter) wait(ctx context.Context) bool {
 	if l.last.IsZero() {
 		l.last = now
 	}
-	// Refill tokens based on elapsed time.
 	elapsed := now.Sub(l.last).Seconds()
 	if elapsed > 0 {
 		l.tokens += elapsed * l.rate
@@ -206,7 +203,6 @@ func (l *acceptRateLimiter) wait(ctx context.Context) bool {
 		return true
 	}
 
-	// Not enough tokens: wait until a new token should arrive.
 	need := 1 - l.tokens
 	rate := l.rate
 	l.mu.Unlock()
@@ -223,7 +219,6 @@ func (l *acceptRateLimiter) wait(ctx context.Context) bool {
 	case <-timer.C:
 	}
 
-	// After waiting, consume the newly available token.
 	l.mu.Lock()
 	l.last = time.Now()
 	if l.tokens < 1 {
@@ -247,7 +242,6 @@ func main() {
 				fmt.Fprintf(f, "[%s] panic: %v\nbuild_time=%s\n%s\n\n",
 					ts, r, buildTime, debugpkg.Stack())
 			}
-			// Signal failure to the caller.
 		}
 	}()
 
@@ -269,8 +263,6 @@ func main() {
 	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
 	flag.Parse()
 
-	// Select the base log level based on build-time debug/verbose settings.
-	// In non-debug builds we default to error-only logging to keep noise low.
 	level := slog.LevelError
 	if verboseEnabled() {
 		level = slog.LevelInfo
@@ -362,18 +354,14 @@ func main() {
 		}
 	}
 
-	// Apply bind IP override if specified
 	if *bindFlag != "" {
-		// Apply to stratum ListenAddr
 		_, port, err := net.SplitHostPort(cfg.ListenAddr)
 		if err != nil {
-			// If parsing fails, assume it's just a port (e.g., ":3333")
 			cfg.ListenAddr = net.JoinHostPort(*bindFlag, strings.TrimPrefix(cfg.ListenAddr, ":"))
 		} else {
 			cfg.ListenAddr = net.JoinHostPort(*bindFlag, port)
 		}
 
-		// Apply to status HTTP address
 		if cfg.StatusAddr != "" {
 			_, port, err = net.SplitHostPort(cfg.StatusAddr)
 			if err != nil {

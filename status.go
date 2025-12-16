@@ -164,7 +164,6 @@ func remoteHostFromRequest(r *http.Request) string {
 }
 
 // buildTime can be overridden at build time with:
-//
 //	go build -ldflags="-X main.buildTime=2025-01-02T15:04:05Z"
 var buildTime = ""
 
@@ -266,11 +265,9 @@ func shortDisplayID(s string, prefix, suffix int) string {
 	}
 	rs := cleaned
 	n := len(rs)
-	// If it's already short, return it as-is.
 	if n <= prefix+suffix+3 {
 		return string(rs)
 	}
-	// Ensure prefix/suffix are sane.
 	if prefix < 0 {
 		prefix = 0
 	}
@@ -733,15 +730,15 @@ type MinerTypeVersionView struct {
 }
 
 type FoundBlockView struct {
-	Height             int64     `json:"height"`
-	Hash               string    `json:"hash"`
-	DisplayHash        string    `json:"display_hash"`
-	Worker             string    `json:"worker"`
-	DisplayWorker      string    `json:"display_worker"`
-	Timestamp          time.Time `json:"timestamp"`
-	ShareDiff          float64   `json:"share_diff"`
-	PoolFeeSats        int64     `json:"pool_fee_sats,omitempty"`
-	WorkerPayoutSats   int64     `json:"worker_payout_sats,omitempty"`
+	Height           int64     `json:"height"`
+	Hash             string    `json:"hash"`
+	DisplayHash      string    `json:"display_hash"`
+	Worker           string    `json:"worker"`
+	DisplayWorker    string    `json:"display_worker"`
+	Timestamp        time.Time `json:"timestamp"`
+	ShareDiff        float64   `json:"share_diff"`
+	PoolFeeSats      int64     `json:"pool_fee_sats,omitempty"`
+	WorkerPayoutSats int64     `json:"worker_payout_sats,omitempty"`
 }
 
 func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
@@ -2923,13 +2920,13 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 	defer f.Close()
 
 	type foundRecord struct {
-		Timestamp          time.Time `json:"timestamp"`
-		Height             int64     `json:"height"`
-		Hash               string    `json:"hash"`
-		Worker             string    `json:"worker"`
-		ShareDiff          float64   `json:"share_diff"`
-		PoolFeeSats        int64     `json:"pool_fee_sats"`
-		WorkerPayoutSats   int64     `json:"worker_payout_sats"`
+		Timestamp        time.Time `json:"timestamp"`
+		Height           int64     `json:"height"`
+		Hash             string    `json:"hash"`
+		Worker           string    `json:"worker"`
+		ShareDiff        float64   `json:"share_diff"`
+		PoolFeeSats      int64     `json:"pool_fee_sats"`
+		WorkerPayoutSats int64     `json:"worker_payout_sats"`
 	}
 
 	var recs []FoundBlockView
@@ -2947,15 +2944,15 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 			continue
 		}
 		recs = append(recs, FoundBlockView{
-			Height:             r.Height,
-			Hash:               r.Hash,
-			DisplayHash:        shortDisplayID(r.Hash, hashPrefix, hashSuffix),
-			Worker:             r.Worker,
-			DisplayWorker:      shortWorkerName(r.Worker, 12, 6),
-			Timestamp:          r.Timestamp,
-			ShareDiff:          r.ShareDiff,
-			PoolFeeSats:        r.PoolFeeSats,
-			WorkerPayoutSats:   r.WorkerPayoutSats,
+			Height:           r.Height,
+			Hash:             r.Hash,
+			DisplayHash:      shortDisplayID(r.Hash, hashPrefix, hashSuffix),
+			Worker:           r.Worker,
+			DisplayWorker:    shortWorkerName(r.Worker, 12, 6),
+			Timestamp:        r.Timestamp,
+			ShareDiff:        r.ShareDiff,
+			PoolFeeSats:      r.PoolFeeSats,
+			WorkerPayoutSats: r.WorkerPayoutSats,
 		})
 	}
 	if len(recs) == 0 {

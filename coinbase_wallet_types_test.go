@@ -18,8 +18,8 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 
 	// Define test wallet addresses for each type
 	wallets := []struct {
-		name    string
-		address string
+		name     string
+		address  string
 		addrType string
 	}{
 		{
@@ -247,12 +247,12 @@ func TestScriptCompatibilityWithBtcd(t *testing.T) {
 	params := &chaincfg.MainNetParams
 
 	addresses := []string{
-		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",                                        // P2PKH
-		"3Ai1JZ8pdJb2ksieUV8FsxSNVJCpoPi8W6",                                        // P2SH
-		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",                               // P2WPKH
-		"bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3",          // P2WSH
-		"bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",          // P2TR (taproot)
-		"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",          // P2TR (taproot)
+		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",                             // P2PKH
+		"3Ai1JZ8pdJb2ksieUV8FsxSNVJCpoPi8W6",                             // P2SH
+		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",                     // P2WPKH
+		"bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3", // P2WSH
+		"bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr", // P2TR (taproot)
+		"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", // P2TR (taproot)
 	}
 
 	for _, addrStr := range addresses {
@@ -292,34 +292,34 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 	params := &chaincfg.MainNetParams
 
 	testCases := []struct {
-		name         string
-		poolAddr     string
-		workerAddr   string
-		description  string
+		name        string
+		poolAddr    string
+		workerAddr  string
+		description string
 	}{
 		{
-			name:         "taproot_pool_legacy_worker",
-			poolAddr:     "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-			description:  "Taproot pool receiving fees, legacy P2PKH worker",
+			name:        "taproot_pool_legacy_worker",
+			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+			workerAddr:  "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+			description: "Taproot pool receiving fees, legacy P2PKH worker",
 		},
 		{
-			name:         "legacy_pool_taproot_worker",
-			poolAddr:     "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-			workerAddr:   "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			description:  "Legacy pool, taproot worker getting reward",
+			name:        "legacy_pool_taproot_worker",
+			poolAddr:    "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+			workerAddr:  "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+			description: "Legacy pool, taproot worker getting reward",
 		},
 		{
-			name:         "both_taproot",
-			poolAddr:     "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:   "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
-			description:  "Both pool and worker using taproot",
+			name:        "both_taproot",
+			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+			workerAddr:  "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+			description: "Both pool and worker using taproot",
 		},
 		{
-			name:         "taproot_pool_segwit_worker",
-			poolAddr:     "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:   "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
-			description:  "Taproot pool, segwit v0 worker",
+			name:        "taproot_pool_segwit_worker",
+			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+			workerAddr:  "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+			description: "Taproot pool, segwit v0 worker",
 		},
 	}
 
