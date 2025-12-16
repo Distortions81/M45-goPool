@@ -1422,13 +1422,18 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	}
 	newDiff = currentDiff * factor
 
-	// Apply undershoot bias when increasing difficulty to prevent making
-	// the target too hard. This ensures we err on the side of slightly
-	// easier rather than harder, improving miner experience.
-	if newDiff > currentDiff {
-		undershootBias := mc.vardiff.UndershootBias
-		if undershootBias > 0 && undershootBias < 1 {
+	// Apply undershoot bias in both directions to prevent overshooting.
+	// When increasing difficulty: bias makes it easier (multiply by <1).
+	// When decreasing difficulty: bias makes it harder (divide by <1, i.e., multiply by >1).
+	// This ensures we err on the side of caution in both directions.
+	undershootBias := mc.vardiff.UndershootBias
+	if undershootBias > 0 && undershootBias < 1 {
+		if newDiff > currentDiff {
+			// Increasing difficulty: apply bias to make it easier
 			newDiff = newDiff * undershootBias
+		} else if newDiff < currentDiff {
+			// Decreasing difficulty: apply inverse bias to make it harder
+			newDiff = newDiff / undershootBias
 		}
 	}
 
