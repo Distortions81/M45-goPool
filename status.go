@@ -569,7 +569,7 @@ type OverviewPageData struct {
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
 	RenderDuration  time.Duration    `json:"render_duration"`
-	Workers         []WorkerView     `json:"workers"`
+	Workers         []RecentWorkView `json:"workers"`
 	BannedWorkers   []WorkerView     `json:"banned_workers"`
 	BestShares      []BestShare      `json:"best_shares"`
 	FoundBlocks     []FoundBlockView `json:"found_blocks,omitempty"`
@@ -1657,6 +1657,20 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
+
+		// Convert full WorkerView to minimal RecentWorkView for the overview page
+		recentWork := make([]RecentWorkView, len(full.Workers))
+		for i, w := range full.Workers {
+			recentWork[i] = RecentWorkView{
+				Name:            w.Name,
+				DisplayName:     w.DisplayName,
+				RollingHashrate: w.RollingHashrate,
+				Difficulty:      w.Difficulty,
+				ShareRate:       w.ShareRate,
+				Accepted:        w.Accepted,
+			}
+		}
+
 		data := OverviewPageData{
 			APIVersion:      apiVersion,
 			ActiveMiners:    full.ActiveMiners,
@@ -1664,7 +1678,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			SharesPerMinute: full.SharesPerMinute,
 			PoolHashrate:    full.PoolHashrate,
 			RenderDuration:  full.RenderDuration,
-			Workers:         full.Workers,
+			Workers:         recentWork,
 			BannedWorkers:   full.BannedWorkers,
 			BestShares:      full.BestShares,
 			FoundBlocks:     full.FoundBlocks,

@@ -51,6 +51,18 @@ type WorkerView struct {
 	WalletValidated     bool         `json:"wallet_validated,omitempty"`
 }
 
+// RecentWorkView is a minimal view of worker data for the overview page's
+// "Recent work" table. It only includes fields that are actually displayed
+// to avoid exposing unnecessary worker information.
+type RecentWorkView struct {
+	Name            string  `json:"name"`
+	DisplayName     string  `json:"display_name"`
+	RollingHashrate float64 `json:"rolling_hashrate"`
+	Difficulty      float64 `json:"difficulty"`
+	ShareRate       float64 `json:"share_rate"`
+	Accepted        uint64  `json:"accepted"`
+}
+
 // WorkerDatabaseStats summarizes high-level worker database metrics exposed
 // via status and diagnostics views.
 type WorkerDatabaseStats struct {
