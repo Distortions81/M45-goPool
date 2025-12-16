@@ -47,8 +47,8 @@ type Config struct {
 	PayoutAddress    string
 	// PayoutScript is reserved for future internal overrides and is not
 	// populated from or written to config.toml.
-	PayoutScript              string
-	PoolFeePercent            float64
+	PayoutScript   string
+	PoolFeePercent float64
 	// OperatorDonationPercent is the percentage of the pool operator's fee
 	// to donate to another wallet. This is a percentage of the pool fee, not
 	// the total block reward. For example, if pool_fee_percent is 2% and
@@ -63,8 +63,8 @@ type Config struct {
 	OperatorDonationName string
 	// OperatorDonationURL is an optional hyperlink for the donation recipient.
 	// When set, the OperatorDonationName becomes a clickable link in the UI.
-	OperatorDonationURL string
-	Extranonce2Size     int
+	OperatorDonationURL       string
+	Extranonce2Size           int
 	TemplateExtraNonce2Size   int
 	CoinbaseSuffixBytes       int
 	CoinbaseMsg               string
@@ -232,13 +232,13 @@ type serverConfig struct {
 }
 
 type brandingConfig struct {
-	StatusBrandName   string `toml:"status_brand_name"`
-	StatusBrandDomain string `toml:"status_brand_domain"`
-	StatusTagline     string `toml:"status_tagline"`
-	FiatCurrency      string `toml:"fiat_currency"`
+	StatusBrandName     string `toml:"status_brand_name"`
+	StatusBrandDomain   string `toml:"status_brand_domain"`
+	StatusTagline       string `toml:"status_tagline"`
+	FiatCurrency        string `toml:"fiat_currency"`
 	PoolDonationAddress string `toml:"pool_donation_address"`
-	DiscordURL        string `toml:"discord_url"`
-	ServerLocation    string `toml:"server_location"`
+	DiscordURL          string `toml:"discord_url"`
+	ServerLocation      string `toml:"server_location"`
 }
 
 type stratumConfig struct {
@@ -254,11 +254,11 @@ type nodeConfig struct {
 
 type miningConfig struct {
 	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
-	OperatorDonationPercent *float64 `toml:"operator_donation_percent"`
-	OperatorDonationAddress string   `toml:"operator_donation_address"`
-	OperatorDonationName    string   `toml:"operator_donation_name"`
-	OperatorDonationURL     string   `toml:"operator_donation_url"`
-	Extranonce2Size         *int     `toml:"extranonce2_size"`
+	OperatorDonationPercent   *float64 `toml:"operator_donation_percent"`
+	OperatorDonationAddress   string   `toml:"operator_donation_address"`
+	OperatorDonationName      string   `toml:"operator_donation_name"`
+	OperatorDonationURL       string   `toml:"operator_donation_url"`
+	Extranonce2Size           *int     `toml:"extranonce2_size"`
 	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
 	CoinbaseSuffixBytes       *int     `toml:"coinbase_suffix_bytes"`
 	CoinbasePoolTag           *string  `toml:"coinbase_pool_tag"`
@@ -374,12 +374,12 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ZMQBlockAddr:  cfg.ZMQBlockAddr,
 		},
 		Mining: miningConfig{
-			PoolFeePercent:          float64Ptr(cfg.PoolFeePercent),
-			OperatorDonationPercent: float64Ptr(cfg.OperatorDonationPercent),
-			OperatorDonationAddress: cfg.OperatorDonationAddress,
-			OperatorDonationName:    cfg.OperatorDonationName,
-			OperatorDonationURL:     cfg.OperatorDonationURL,
-			Extranonce2Size:         intPtr(cfg.Extranonce2Size),
+			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
+			OperatorDonationPercent:   float64Ptr(cfg.OperatorDonationPercent),
+			OperatorDonationAddress:   cfg.OperatorDonationAddress,
+			OperatorDonationName:      cfg.OperatorDonationName,
+			OperatorDonationURL:       cfg.OperatorDonationURL,
+			Extranonce2Size:           intPtr(cfg.Extranonce2Size),
 			TemplateExtraNonce2Size:   intPtr(cfg.TemplateExtraNonce2Size),
 			CoinbaseSuffixBytes:       intPtr(cfg.CoinbaseSuffixBytes),
 			CoinbasePoolTag:           stringPtr(cfg.CoinbasePoolTag),
@@ -440,7 +440,6 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 // These values are kept in a separate file (secrets.toml) so the main
 // config.toml can be checked into version control or shared without exposing
 // credentials.
-//
 // Both rpc_user and rpc_pass are required for the pool to communicate with
 // bitcoind and must be set in secrets.toml.
 type secretsConfig struct {
@@ -462,7 +461,6 @@ func loadConfig(configPath, secretsPath string) Config {
 		configFileExisted = true
 		applyBaseConfig(&cfg, *bc)
 	} else {
-		// Config file doesn't exist - create example and exit
 		examplePath := filepath.Join(cfg.DataDir, "config", "examples", "config.toml.example")
 		ensureExampleFiles(cfg.DataDir)
 
@@ -577,14 +575,9 @@ func ensureExampleFiles(dataDir string) {
 		return
 	}
 
-	// Create config.toml.example
 	configExamplePath := filepath.Join(examplesDir, "config.toml.example")
 	ensureExampleFile(configExamplePath, exampleConfigBytes())
-
-	// Create secrets.toml.example
 	ensureExampleFile(filepath.Join(examplesDir, "secrets.toml.example"), secretsConfigExample)
-
-	// Create tuning.toml.example
 	ensureExampleFile(filepath.Join(examplesDir, "tuning.toml.example"), exampleTuningConfigBytes())
 }
 
@@ -1063,7 +1056,6 @@ func sanitizePayoutAddress(addr string) string {
 		case r >= '0' && r <= '9':
 			cleaned = append(cleaned, r)
 		default:
-			// drop any other characters (spaces, newlines, punctuation, etc.)
 		}
 	}
 	if len(cleaned) == 0 {
@@ -1082,17 +1074,14 @@ type versionMaskRPC interface {
 // autoConfigureVersionMaskFromNode inspects the connected Bitcoin node to
 // choose a sensible base version-rolling mask for the active network, so
 // operators no longer need to set version_mask manually in config.
-//
 // - mainnet/testnet/signet: use defaultVersionMask (0x1fffe000)
 // - regtest: use a wider mask (0x3fffe000) to keep bit 29 available
-//
 // If the RPC call fails or returns an unknown chain, the existing mask is left
 // unchanged and the pool falls back to its compiled-in defaults.
 func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, cfg *Config) {
 	if rpc == nil || cfg == nil {
 		return
 	}
-	// If an explicit mask was set programmatically, don't override it.
 	if cfg.VersionMaskConfigured {
 		return
 	}
@@ -1101,7 +1090,6 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 		Chain string `json:"chain"`
 	}
 
-	// Bound the RPC call so we don't block shutdown indefinitely.
 	var (
 		callCtx context.Context
 		cancel  context.CancelFunc
@@ -1158,17 +1146,13 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 // autoConfigureAcceptRateLimits sets sensible defaults for max_accepts_per_second
 // and max_accept_burst based on max_conns if they weren't explicitly configured
 // or if auto_accept_rate_limits is enabled.
-//
 // This ensures that when the pool restarts, all miners can reconnect quickly
 // without hitting rate limits.
-//
 // The logic uses two configurable time windows:
 // 1. Initial burst (accept_burst_window seconds): handles the immediate reconnection storm
 //   - Burst capacity allows a percentage of miners to connect immediately
-//
 // 2. Sustained reconnection (remaining time): handles the rest of reconnections
 //   - Per-second rate allows remaining miners to connect over the rest of the window
-//
 // Combined, this allows all max_conns miners to reconnect within accept_reconnect_window
 // seconds of a pool restart without being rate-limited, while still protecting against
 // sustained connection floods during normal operation.
@@ -1177,7 +1161,6 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		return
 	}
 
-	// Ensure we have valid window settings
 	reconnectWindow := cfg.AcceptReconnectWindow
 	if reconnectWindow <= 0 {
 		reconnectWindow = defaultAcceptReconnectWindow
@@ -1186,7 +1169,6 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 	if burstWindow <= 0 {
 		burstWindow = defaultAcceptBurstWindow
 	}
-	// Ensure burst window doesn't exceed reconnect window
 	if burstWindow >= reconnectWindow {
 		burstWindow = reconnectWindow / 2
 		if burstWindow < 1 {
@@ -1194,7 +1176,6 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		}
 	}
 
-	// Detect whether the tuning file explicitly set the rate limits.
 	explicitMaxAccepts := tuningConfigLoaded && overrides.RateLimits.MaxAcceptsPerSecond != nil
 	explicitMaxBurst := tuningConfigLoaded && overrides.RateLimits.MaxAcceptBurst != nil
 	explicitSteadyStateRate := tuningConfigLoaded && overrides.RateLimits.AcceptSteadyStateRate != nil
@@ -1229,19 +1210,16 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 	// 2. not explicitly set in config AND currently at default value
 	shouldConfigureRate := cfg.AutoAcceptRateLimits || (!explicitMaxAccepts && cfg.MaxAcceptsPerSecond == defaultMaxAcceptsPerSecond)
 	if shouldConfigureRate {
-		// Remaining miners after burst
 		burstFraction := float64(burstWindow) / float64(reconnectWindow)
 		remainingMiners := int(float64(cfg.MaxConns) * (1.0 - burstFraction))
-		// Spread over remaining time
 		sustainedWindow := reconnectWindow - burstWindow
 		if sustainedWindow < 1 {
 			sustainedWindow = 1
 		}
 		sustainedRate := remainingMiners / sustainedWindow
 		if sustainedRate < 10 {
-			sustainedRate = 10 // minimum 10 accepts/sec
+			sustainedRate = 10
 		}
-		// Cap at a reasonable maximum to avoid overwhelming the system
 		if sustainedRate > 10000 {
 			sustainedRate = 10000
 		}
@@ -1275,11 +1253,9 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		expectedReconnects := float64(cfg.MaxConns) * (reconnectPercent / 100.0)
 		steadyStateRate := int(expectedReconnects / float64(steadyStateWindow))
 
-		// Apply minimum to ensure we don't set rate too low
 		if steadyStateRate < 5 {
-			steadyStateRate = 5 // minimum 5 accepts/sec for steady-state
+			steadyStateRate = 5
 		}
-		// Cap at reasonable maximum
 		if steadyStateRate > 1000 {
 			steadyStateRate = 1000
 		}

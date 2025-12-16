@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 // This is a helper program to generate valid Bitcoin addresses using BTCD

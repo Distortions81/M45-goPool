@@ -740,10 +740,10 @@ func TestBtcdCoinbaseScriptCompat(t *testing.T) {
 	}{
 		{
 			name:        "legacy_pool_taproot_miner",
-			poolAddress: "1Fsppk7v3icgwunnShNREk1DGYAKTs3yz5", // BTCD-generated
-			poolFee:     125000000,                            // 1.25 BTC
+			poolAddress: "1Fsppk7v3icgwunnShNREk1DGYAKTs3yz5",                             // BTCD-generated
+			poolFee:     125000000,                                                        // 1.25 BTC
 			minerAddr:   "bc1ps597k6l9nflzcewxl7gmmduem5qfg7s0e4zcrf5vdj23gdf7clps9a9z2y", // BTCD-generated
-			minerReward: 5000000000,                                                      // 50 BTC
+			minerReward: 5000000000,                                                       // 50 BTC
 		},
 		{
 			name:        "taproot_pool_legacy_miner",
@@ -761,7 +761,7 @@ func TestBtcdCoinbaseScriptCompat(t *testing.T) {
 		},
 		{
 			name:        "segwit_pool_taproot_miner",
-			poolAddress: "bc1qqd4ggl3csy6fxxfqllhukdns3h5nheh4qd5wrq",                     // BTCD-generated
+			poolAddress: "bc1qqd4ggl3csy6fxxfqllhukdns3h5nheh4qd5wrq", // BTCD-generated
 			poolFee:     125000000,
 			minerAddr:   "bc1ppnmuhyp7atfquynclw96w64nzwlp20ga0akd7ard75286d40ed4qx37wal", // BTCD-generated
 			minerReward: 5000000000,
