@@ -578,33 +578,17 @@ type OverviewPageData struct {
 
 // PoolPageData contains data for the pool info page
 type PoolPageData struct {
-	APIVersion                     string  `json:"api_version"`
-	BrandName                      string  `json:"brand_name"`
-	BrandDomain                    string  `json:"brand_domain"`
-	PoolFeePercent                 float64 `json:"pool_fee_percent"`
-	OperatorDonationPercent        float64 `json:"operator_donation_percent,omitempty"`
-	OperatorDonationName           string  `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL            string  `json:"operator_donation_url,omitempty"`
-	DisplayPayoutAddress           string  `json:"display_payout_address,omitempty"`
-	DisplayOperatorDonationAddress string  `json:"display_operator_donation_address,omitempty"`
-	DisplayCoinbaseMessage         string  `json:"display_coinbase_message,omitempty"`
-	MinDifficulty                  float64 `json:"min_difficulty"`
-	MaxDifficulty                  float64 `json:"max_difficulty"`
-	LockSuggestedDifficulty        bool    `json:"lock_suggested_difficulty"`
-	MaxConns                       int     `json:"max_conns"`
-	MaxAcceptsPerSecond            int     `json:"max_accepts_per_second"`
-	MaxAcceptBurst                 int     `json:"max_accept_burst"`
-	UsingZMQ                       bool    `json:"using_zmq"`
-	BlocksAccepted                 uint64  `json:"blocks_accepted"`
-	BlocksErrored                  uint64  `json:"blocks_errored"`
-	RPCGBTLastSec                  float64 `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec                   float64 `json:"rpc_gbt_max_sec"`
-	RPCGBTCount                    uint64  `json:"rpc_gbt_count"`
-	RPCSubmitLastSec               float64 `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec                float64 `json:"rpc_submit_max_sec"`
-	RPCSubmitCount                 uint64  `json:"rpc_submit_count"`
-	RPCErrors                      uint64  `json:"rpc_errors"`
-	ShareErrors                    uint64  `json:"share_errors"`
+	APIVersion       string  `json:"api_version"`
+	BlocksAccepted   uint64  `json:"blocks_accepted"`
+	BlocksErrored    uint64  `json:"blocks_errored"`
+	RPCGBTLastSec    float64 `json:"rpc_gbt_last_sec"`
+	RPCGBTMaxSec     float64 `json:"rpc_gbt_max_sec"`
+	RPCGBTCount      uint64  `json:"rpc_gbt_count"`
+	RPCSubmitLastSec float64 `json:"rpc_submit_last_sec"`
+	RPCSubmitMaxSec  float64 `json:"rpc_submit_max_sec"`
+	RPCSubmitCount   uint64  `json:"rpc_submit_count"`
+	RPCErrors        uint64  `json:"rpc_errors"`
+	ShareErrors      uint64  `json:"share_errors"`
 }
 
 // ServerPageData contains data for the server diagnostics page
@@ -1333,34 +1317,21 @@ type PoolStatsData struct {
 
 // NodePageData contains Bitcoin node information for the node page
 type NodePageData struct {
-	APIVersion               string  `json:"api_version"`
-	BrandName                string  `json:"brand_name"`
-	BrandDomain              string  `json:"brand_domain"`
-	PoolSoftware             string  `json:"pool_software"`
-	NodeNetwork              string  `json:"node_network,omitempty"`
-	NodeSubversion           string  `json:"node_subversion,omitempty"`
-	NodeBlocks               int64   `json:"node_blocks"`
-	NodeHeaders              int64   `json:"node_headers"`
-	NodeInitialBlockDownload bool    `json:"node_initial_block_download"`
-	NodeRPCURL               string  `json:"node_rpc_url"`
-	NodeZMQAddr              string  `json:"node_zmq_addr,omitempty"`
-	NodeConnections          int     `json:"node_connections"`
-	NodeConnectionsIn        int     `json:"node_connections_in"`
-	NodeConnectionsOut       int     `json:"node_connections_out"`
-	NodePruned               bool    `json:"node_pruned"`
-	NodeSizeOnDiskBytes      uint64  `json:"node_size_on_disk_bytes"`
-	GenesisHash              string  `json:"genesis_hash,omitempty"`
-	GenesisExpected          string  `json:"genesis_expected,omitempty"`
-	GenesisMatch             bool    `json:"genesis_match"`
-	BestBlockHash            string  `json:"best_block_hash,omitempty"`
-	RPCError                 string  `json:"rpc_error,omitempty"`
-	RPCGBTLastSec            float64 `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec             float64 `json:"rpc_gbt_max_sec"`
-	RPCGBTCount              uint64  `json:"rpc_gbt_count"`
-	RPCSubmitLastSec         float64 `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec          float64 `json:"rpc_submit_max_sec"`
-	RPCSubmitCount           uint64  `json:"rpc_submit_count"`
-	RPCErrors                uint64  `json:"rpc_errors"`
+	APIVersion               string `json:"api_version"`
+	NodeNetwork              string `json:"node_network,omitempty"`
+	NodeSubversion           string `json:"node_subversion,omitempty"`
+	NodeBlocks               int64  `json:"node_blocks"`
+	NodeHeaders              int64  `json:"node_headers"`
+	NodeInitialBlockDownload bool   `json:"node_initial_block_download"`
+	NodeConnections          int    `json:"node_connections"`
+	NodeConnectionsIn        int    `json:"node_connections_in"`
+	NodeConnectionsOut       int    `json:"node_connections_out"`
+	NodePruned               bool   `json:"node_pruned"`
+	NodeSizeOnDiskBytes      uint64 `json:"node_size_on_disk_bytes"`
+	GenesisHash              string `json:"genesis_hash,omitempty"`
+	GenesisExpected          string `json:"genesis_expected,omitempty"`
+	GenesisMatch             bool   `json:"genesis_match"`
+	BestBlockHash            string `json:"best_block_hash,omitempty"`
 }
 
 // WorkersListData contains paginated worker information
@@ -1493,16 +1464,11 @@ func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request
 		full := s.buildCensoredStatusData()
 		data := NodePageData{
 			APIVersion:               apiVersion,
-			BrandName:                full.BrandName,
-			BrandDomain:              full.BrandDomain,
-			PoolSoftware:             full.PoolSoftware,
 			NodeNetwork:              full.NodeNetwork,
 			NodeSubversion:           full.NodeSubversion,
 			NodeBlocks:               full.NodeBlocks,
 			NodeHeaders:              full.NodeHeaders,
 			NodeInitialBlockDownload: full.NodeInitialBlockDownload,
-			NodeRPCURL:               full.NodeRPCURL,
-			NodeZMQAddr:              full.NodeZMQAddr,
 			NodeConnections:          full.NodeConnections,
 			NodeConnectionsIn:        full.NodeConnectionsIn,
 			NodeConnectionsOut:       full.NodeConnectionsOut,
@@ -1512,14 +1478,6 @@ func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request
 			GenesisExpected:          full.GenesisExpected,
 			GenesisMatch:             full.GenesisMatch,
 			BestBlockHash:            full.BestBlockHash,
-			RPCError:                 full.RPCError,
-			RPCGBTLastSec:            full.RPCGBTLastSec,
-			RPCGBTMaxSec:             full.RPCGBTMaxSec,
-			RPCGBTCount:              full.RPCGBTCount,
-			RPCSubmitLastSec:         full.RPCSubmitLastSec,
-			RPCSubmitMaxSec:          full.RPCSubmitMaxSec,
-			RPCSubmitCount:           full.RPCSubmitCount,
-			RPCErrors:                full.RPCErrors,
 		}
 		return sonic.Marshal(data)
 	})
@@ -1722,33 +1680,17 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
 		data := PoolPageData{
-			APIVersion:                     apiVersion,
-			BrandName:                      full.BrandName,
-			BrandDomain:                    full.BrandDomain,
-			PoolFeePercent:                 full.PoolFeePercent,
-			OperatorDonationPercent:        full.OperatorDonationPercent,
-			OperatorDonationName:           full.OperatorDonationName,
-			OperatorDonationURL:            full.OperatorDonationURL,
-			DisplayPayoutAddress:           full.DisplayPayoutAddress,
-			DisplayOperatorDonationAddress: full.DisplayOperatorDonationAddress,
-			DisplayCoinbaseMessage:         full.DisplayCoinbaseMessage,
-			MinDifficulty:                  full.MinDifficulty,
-			MaxDifficulty:                  full.MaxDifficulty,
-			LockSuggestedDifficulty:        full.LockSuggestedDifficulty,
-			MaxConns:                       full.MaxConns,
-			MaxAcceptsPerSecond:            full.MaxAcceptsPerSecond,
-			MaxAcceptBurst:                 full.MaxAcceptBurst,
-			UsingZMQ:                       s.cfg.ZMQBlockAddr != "",
-			BlocksAccepted:                 full.BlocksAccepted,
-			BlocksErrored:                  full.BlocksErrored,
-			RPCGBTLastSec:                  full.RPCGBTLastSec,
-			RPCGBTMaxSec:                   full.RPCGBTMaxSec,
-			RPCGBTCount:                    full.RPCGBTCount,
-			RPCSubmitLastSec:               full.RPCSubmitLastSec,
-			RPCSubmitMaxSec:                full.RPCSubmitMaxSec,
-			RPCSubmitCount:                 full.RPCSubmitCount,
-			RPCErrors:                      full.RPCErrors,
-			ShareErrors:                    full.ShareErrors,
+			APIVersion:       apiVersion,
+			BlocksAccepted:   full.BlocksAccepted,
+			BlocksErrored:    full.BlocksErrored,
+			RPCGBTLastSec:    full.RPCGBTLastSec,
+			RPCGBTMaxSec:     full.RPCGBTMaxSec,
+			RPCGBTCount:      full.RPCGBTCount,
+			RPCSubmitLastSec: full.RPCSubmitLastSec,
+			RPCSubmitMaxSec:  full.RPCSubmitMaxSec,
+			RPCSubmitCount:   full.RPCSubmitCount,
+			RPCErrors:        full.RPCErrors,
+			ShareErrors:      full.ShareErrors,
 		}
 		return sonic.Marshal(data)
 	})
