@@ -163,11 +163,7 @@
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
 			}
 			if (rpcGBTEl) {
-				if (data.using_zmq) {
-					rpcGBTEl.textContent = '(Using ZMQ)';
-				} else {
-					rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
-				}
+				rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
 			}
 			if (rpcSubmitEl) {
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;

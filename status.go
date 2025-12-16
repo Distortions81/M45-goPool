@@ -481,7 +481,6 @@ type StatusData struct {
 	ActiveMiners                   int               `json:"active_miners"`
 	ActiveTLSMiners                int               `json:"active_tls_miners"`
 	SharesPerSecond                float64           `json:"shares_per_second"`
-	SharesPerSecondShort           float64           `json:"shares_per_second_short,omitempty"`
 	SharesPerMinute                float64           `json:"shares_per_minute,omitempty"`
 	Accepted                       uint64            `json:"accepted"`
 	Rejected                       uint64            `json:"rejected"`
@@ -596,50 +595,36 @@ type PoolPageData struct {
 	MaxAcceptsPerSecond            int     `json:"max_accepts_per_second"`
 	MaxAcceptBurst                 int     `json:"max_accept_burst"`
 	UsingZMQ                       bool    `json:"using_zmq"`
+	BlocksAccepted                 uint64  `json:"blocks_accepted"`
+	BlocksErrored                  uint64  `json:"blocks_errored"`
+	RPCGBTLastSec                  float64 `json:"rpc_gbt_last_sec"`
+	RPCGBTMaxSec                   float64 `json:"rpc_gbt_max_sec"`
+	RPCGBTCount                    uint64  `json:"rpc_gbt_count"`
+	RPCSubmitLastSec               float64 `json:"rpc_submit_last_sec"`
+	RPCSubmitMaxSec                float64 `json:"rpc_submit_max_sec"`
+	RPCSubmitCount                 uint64  `json:"rpc_submit_count"`
+	RPCErrors                      uint64  `json:"rpc_errors"`
+	ShareErrors                    uint64  `json:"share_errors"`
 }
 
 // ServerPageData contains data for the server diagnostics page
 type ServerPageData struct {
-	APIVersion           string            `json:"api_version"`
-	Uptime               time.Duration     `json:"uptime"`
-	ActiveMiners         int               `json:"active_miners"`
-	ActiveTLSMiners      int               `json:"active_tls_miners"`
-	SharesPerSecond      float64           `json:"shares_per_second"`
-	SharesPerSecondShort float64           `json:"shares_per_second_short,omitempty"`
-	SharesPerMinute      float64           `json:"shares_per_minute,omitempty"`
-	PoolHashrate         float64           `json:"pool_hashrate,omitempty"`
-	RenderDuration       time.Duration     `json:"render_duration"`
-	Workers              []WorkerView      `json:"workers"`
-	BannedWorkers        []WorkerView      `json:"banned_workers"`
-	BestShares           []BestShare       `json:"best_shares"`
-	FoundBlocks          []FoundBlockView  `json:"found_blocks,omitempty"`
-	MinerTypes           []MinerTypeView   `json:"miner_types,omitempty"`
-	RPCError             string            `json:"rpc_error,omitempty"`
-	AccountingError      string            `json:"accounting_error,omitempty"`
-	JobFeed              ServerPageJobFeed `json:"job_feed"`
-	VardiffUp            uint64            `json:"vardiff_up"`
-	VardiffDown          uint64            `json:"vardiff_down"`
-	BlocksAccepted       uint64            `json:"blocks_accepted"`
-	BlocksErrored        uint64            `json:"blocks_errored"`
-	RPCGBTLastSec        float64           `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec         float64           `json:"rpc_gbt_max_sec"`
-	RPCGBTCount          uint64            `json:"rpc_gbt_count"`
-	RPCSubmitLastSec     float64           `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec      float64           `json:"rpc_submit_max_sec"`
-	RPCSubmitCount       uint64            `json:"rpc_submit_count"`
-	RPCErrors            uint64            `json:"rpc_errors"`
-	ShareErrors          uint64            `json:"share_errors"`
-	ProcessGoroutines    int               `json:"process_goroutines"`
-	ProcessCPUPercent    float64           `json:"process_cpu_percent"`
-	GoMemAllocBytes      uint64            `json:"go_mem_alloc_bytes"`
-	GoMemSysBytes        uint64            `json:"go_mem_sys_bytes"`
-	ProcessRSSBytes      uint64            `json:"process_rss_bytes"`
-	SystemMemTotalBytes  uint64            `json:"system_mem_total_bytes"`
-	SystemMemFreeBytes   uint64            `json:"system_mem_free_bytes"`
-	SystemMemUsedBytes   uint64            `json:"system_mem_used_bytes"`
-	SystemLoad1          float64           `json:"system_load1"`
-	SystemLoad5          float64           `json:"system_load5"`
-	SystemLoad15         float64           `json:"system_load15"`
+	APIVersion          string            `json:"api_version"`
+	Uptime              time.Duration     `json:"uptime"`
+	RPCError            string            `json:"rpc_error,omitempty"`
+	AccountingError     string            `json:"accounting_error,omitempty"`
+	JobFeed             ServerPageJobFeed `json:"job_feed"`
+	ProcessGoroutines   int               `json:"process_goroutines"`
+	ProcessCPUPercent   float64           `json:"process_cpu_percent"`
+	GoMemAllocBytes     uint64            `json:"go_mem_alloc_bytes"`
+	GoMemSysBytes       uint64            `json:"go_mem_sys_bytes"`
+	ProcessRSSBytes     uint64            `json:"process_rss_bytes"`
+	SystemMemTotalBytes uint64            `json:"system_mem_total_bytes"`
+	SystemMemFreeBytes  uint64            `json:"system_mem_free_bytes"`
+	SystemMemUsedBytes  uint64            `json:"system_mem_used_bytes"`
+	SystemLoad1         float64           `json:"system_load1"`
+	SystemLoad5         float64           `json:"system_load5"`
+	SystemLoad15        float64           `json:"system_load15"`
 }
 
 func (s *StatusServer) statusData() StatusData {
@@ -773,8 +758,6 @@ type FoundBlockView struct {
 	ShareDiff          float64   `json:"share_diff"`
 	PoolFeeSats        int64     `json:"pool_fee_sats,omitempty"`
 	WorkerPayoutSats   int64     `json:"worker_payout_sats,omitempty"`
-	DualPayoutEnabled  bool      `json:"dual_payout_enabled,omitempty"`
-	DualPayoutFallback bool      `json:"dual_payout_fallback,omitempty"`
 }
 
 func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
@@ -1319,7 +1302,6 @@ type PoolStatsData struct {
 	ActiveMiners            int                 `json:"active_miners"`
 	PoolHashrate            float64             `json:"pool_hashrate"`
 	SharesPerSecond         float64             `json:"shares_per_second"`
-	SharesPerSecondShort    float64             `json:"shares_per_second_short,omitempty"`
 	Accepted                uint64              `json:"accepted"`
 	Rejected                uint64              `json:"rejected"`
 	StaleShares             uint64              `json:"stale_shares"`
@@ -1338,7 +1320,6 @@ type PoolStatsData struct {
 	OperatorDonationPercent float64             `json:"operator_donation_percent,omitempty"`
 	OperatorDonationName    string              `json:"operator_donation_name,omitempty"`
 	OperatorDonationURL     string              `json:"operator_donation_url,omitempty"`
-	DualPayoutEnabled       bool                `json:"dual_payout_enabled"`
 	CurrentJob              *Job                `json:"current_job,omitempty"`
 	JobCreated              string              `json:"job_created"`
 	TemplateTime            string              `json:"template_time"`
@@ -1473,7 +1454,6 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			ActiveMiners:            full.ActiveMiners,
 			PoolHashrate:            full.PoolHashrate,
 			SharesPerSecond:         full.SharesPerSecond,
-			SharesPerSecondShort:    full.SharesPerSecondShort,
 			Accepted:                full.Accepted,
 			Rejected:                full.Rejected,
 			StaleShares:             full.StaleShares,
@@ -1759,6 +1739,16 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 			MaxAcceptsPerSecond:            full.MaxAcceptsPerSecond,
 			MaxAcceptBurst:                 full.MaxAcceptBurst,
 			UsingZMQ:                       s.cfg.ZMQBlockAddr != "",
+			BlocksAccepted:                 full.BlocksAccepted,
+			BlocksErrored:                  full.BlocksErrored,
+			RPCGBTLastSec:                  full.RPCGBTLastSec,
+			RPCGBTMaxSec:                   full.RPCGBTMaxSec,
+			RPCGBTCount:                    full.RPCGBTCount,
+			RPCSubmitLastSec:               full.RPCSubmitLastSec,
+			RPCSubmitMaxSec:                full.RPCSubmitMaxSec,
+			RPCSubmitCount:                 full.RPCSubmitCount,
+			RPCErrors:                      full.RPCErrors,
+			ShareErrors:                    full.ShareErrors,
 		}
 		return sonic.Marshal(data)
 	})
@@ -1770,22 +1760,10 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
 		data := ServerPageData{
-			APIVersion:           apiVersion,
-			Uptime:               full.Uptime,
-			ActiveMiners:         full.ActiveMiners,
-			ActiveTLSMiners:      full.ActiveTLSMiners,
-			SharesPerSecond:      full.SharesPerSecond,
-			SharesPerSecondShort: full.SharesPerSecondShort,
-			SharesPerMinute:      full.SharesPerMinute,
-			PoolHashrate:         full.PoolHashrate,
-			RenderDuration:       full.RenderDuration,
-			Workers:              full.Workers,
-			BannedWorkers:        full.BannedWorkers,
-			BestShares:           full.BestShares,
-			FoundBlocks:          full.FoundBlocks,
-			MinerTypes:           full.MinerTypes,
-			RPCError:             full.RPCError,
-			AccountingError:      full.AccountingError,
+			APIVersion:      apiVersion,
+			Uptime:          full.Uptime,
+			RPCError:        full.RPCError,
+			AccountingError: full.AccountingError,
 			JobFeed: ServerPageJobFeed{
 				LastError:         full.JobFeed.LastError,
 				LastErrorAt:       full.JobFeed.LastErrorAt,
@@ -1805,18 +1783,6 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 				BlockBits:         full.JobFeed.BlockBits,
 				BlockDifficulty:   full.JobFeed.BlockDifficulty,
 			},
-			VardiffUp:           full.VardiffUp,
-			VardiffDown:         full.VardiffDown,
-			BlocksAccepted:      full.BlocksAccepted,
-			BlocksErrored:       full.BlocksErrored,
-			RPCGBTLastSec:       full.RPCGBTLastSec,
-			RPCGBTMaxSec:        full.RPCGBTMaxSec,
-			RPCGBTCount:         full.RPCGBTCount,
-			RPCSubmitLastSec:    full.RPCSubmitLastSec,
-			RPCSubmitMaxSec:     full.RPCSubmitMaxSec,
-			RPCSubmitCount:      full.RPCSubmitCount,
-			RPCErrors:           full.RPCErrors,
-			ShareErrors:         full.ShareErrors,
 			ProcessGoroutines:   full.ProcessGoroutines,
 			ProcessCPUPercent:   full.ProcessCPUPercent,
 			GoMemAllocBytes:     full.GoMemAllocBytes,
@@ -2652,7 +2618,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		ActiveMiners:                   activeMiners,
 		ActiveTLSMiners:                activeTLSMiners,
 		SharesPerSecond:                sharesPerSecond,
-		SharesPerSecondShort:           sharesPerSecond,
 		SharesPerMinute:                sharesPerMinute,
 		Accepted:                       accepted,
 		Rejected:                       nonStaleNonLowRejected,
@@ -3009,8 +2974,6 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 		ShareDiff          float64   `json:"share_diff"`
 		PoolFeeSats        int64     `json:"pool_fee_sats"`
 		WorkerPayoutSats   int64     `json:"worker_payout_sats"`
-		DualPayoutEnabled  bool      `json:"dual_payout_enabled"`
-		DualPayoutFallback bool      `json:"dual_payout_fallback"`
 	}
 
 	var recs []FoundBlockView
@@ -3037,8 +3000,6 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 			ShareDiff:          r.ShareDiff,
 			PoolFeeSats:        r.PoolFeeSats,
 			WorkerPayoutSats:   r.WorkerPayoutSats,
-			DualPayoutEnabled:  r.DualPayoutEnabled,
-			DualPayoutFallback: r.DualPayoutFallback,
 		})
 	}
 	if len(recs) == 0 {
