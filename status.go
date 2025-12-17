@@ -330,6 +330,7 @@ func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]
 			"min_peers", minPeers,
 		)
 		disconnects++
+		break
 	}
 	if len(removed) == 0 {
 		return nil
