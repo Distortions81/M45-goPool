@@ -623,12 +623,6 @@ func ensureExampleFiles(dataDir string) {
 }
 
 func ensureExampleFile(path string, contents []byte) {
-	if _, err := os.Stat(path); err == nil {
-		return
-	} else if !errors.Is(err, os.ErrNotExist) {
-		logger.Warn("stat example config failed", "path", path, "error", err)
-		return
-	}
 	if len(contents) == 0 {
 		return
 	}
