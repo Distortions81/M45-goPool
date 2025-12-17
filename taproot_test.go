@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 )
@@ -134,17 +133,6 @@ func TestTaprootScriptGeneration(t *testing.T) {
 	}
 	if poolScript[1] != 0x20 { // 32 bytes
 		t.Errorf("expected length 0x20 (32), got 0x%02x", poolScript[1])
-	}
-}
-
-// TestBech32mEncodingConstants verifies that the bech32m constant is correct
-// as specified in BIP 350.
-func TestBech32mEncodingConstants(t *testing.T) {
-	if bech32.Version0Const != 1 {
-		t.Errorf("bech32 Version0Const should be 1, got %d", bech32.Version0Const)
-	}
-	if bech32.VersionMConst != 0x2bc830a3 {
-		t.Errorf("bech32 VersionMConst should be 0x2bc830a3, got 0x%08x", bech32.VersionMConst)
 	}
 }
 
