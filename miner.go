@@ -1343,8 +1343,14 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	}
 
 	// Traditional vardiff: keep each miner near a target shares/min
-	// by scaling difficulty in proportion to the observed share rate.
-	accRate := computeWindowShareRate(stats, now)
+	// by scaling difficulty in proportion to the observed share rate derived
+	// from the EMA-smoothed hashrate shown in the web panels.
+	rollingHashrate := mc.currentRollingHashrate()
+	if rollingHashrate <= 0 {
+		mc.resetShareWindow(now)
+		return
+	}
+	accRate := (rollingHashrate / hashPerShare) * 60
 	target := mc.vardiff.TargetSharesPerMin
 	if target <= 0 {
 		target = 4
