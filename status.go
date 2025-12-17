@@ -1450,37 +1450,6 @@ type NodePeerInfo struct {
 	ConnectedAt int64   `json:"connected_at"`
 }
 
-// WorkersListData contains paginated worker information
-type WorkersListData struct {
-	APIVersion    string          `json:"api_version"`
-	Workers       []WorkerView    `json:"workers"`
-	BannedWorkers []WorkerView    `json:"banned_workers"`
-	BestShares    []BestShare     `json:"best_shares"`
-	MinerTypes    []MinerTypeView `json:"miner_types,omitempty"`
-	Page          int             `json:"page,omitempty"`
-	Pages         int             `json:"pages,omitempty"`
-	Total         int             `json:"total,omitempty"`
-	PerPage       int             `json:"per_page,omitempty"`
-}
-
-// DiagnosticsData contains system diagnostics (server-only)
-type DiagnosticsData struct {
-	APIVersion          string  `json:"api_version"`
-	ProcessGoroutines   int     `json:"process_goroutines"`
-	ProcessCPUPercent   float64 `json:"process_cpu_percent"`
-	GoMemAllocBytes     uint64  `json:"go_mem_alloc_bytes"`
-	GoMemSysBytes       uint64  `json:"go_mem_sys_bytes"`
-	ProcessRSSBytes     uint64  `json:"process_rss_bytes"`
-	SystemMemTotalBytes uint64  `json:"system_mem_total_bytes"`
-	SystemMemFreeBytes  uint64  `json:"system_mem_free_bytes"`
-	SystemMemUsedBytes  uint64  `json:"system_mem_used_bytes"`
-	SystemLoad1         float64 `json:"system_load1"`
-	SystemLoad5         float64 `json:"system_load5"`
-	SystemLoad15        float64 `json:"system_load15"`
-	ShareErrors         uint64  `json:"share_errors"`
-	AccountingError     string  `json:"accounting_error,omitempty"`
-}
-
 func (s *StatusServer) cachedJSONResponse(key string, ttl time.Duration, build func() ([]byte, error)) ([]byte, time.Time, time.Time, error) {
 	now := time.Now()
 	s.jsonCacheMu.RLock()
@@ -1643,115 +1612,6 @@ func censorBestShare(b BestShare) BestShare {
 	return b
 }
 
-// handleWorkersListJSON returns paginated worker list
-func (s *StatusServer) handleWorkersListJSON(w http.ResponseWriter, r *http.Request) {
-	page := 1
-	perPage := 50
-
-	if p := strings.TrimSpace(r.URL.Query().Get("page")); p != "" {
-		if n, err := strconv.Atoi(p); err == nil && n > 0 {
-			page = n
-		}
-	}
-	if pp := strings.TrimSpace(r.URL.Query().Get("per_page")); pp != "" {
-		if n, err := strconv.Atoi(pp); err == nil && n > 0 && n <= 200 {
-			perPage = n
-		}
-	}
-
-	key := fmt.Sprintf("workers_%d_%d", page, perPage)
-	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		// Get censored data from source
-		full := s.buildCensoredStatusData()
-
-		var workers []WorkerView
-		var bannedWorkers []WorkerView
-
-		workers = append(workers, full.Workers...)
-		bannedWorkers = append(bannedWorkers, full.BannedWorkers...)
-
-		bestShares := full.BestShares
-
-		total := len(workers)
-		pages := 1
-		if total > 0 {
-			pages = (total + perPage - 1) / perPage
-		}
-		if page > pages {
-			page = pages
-		}
-		if page <= 0 {
-			page = 1
-		}
-
-		startIdx := (page - 1) * perPage
-		if startIdx > total {
-			startIdx = total
-		}
-		endIdx := startIdx + perPage
-		if endIdx > total {
-			endIdx = total
-		}
-
-		typeCounts := make(map[string]map[string]int)
-		for _, w := range workers {
-			name := strings.TrimSpace(w.MinerName)
-			version := strings.TrimSpace(w.MinerVersion)
-			if name == "" {
-				t := strings.TrimSpace(w.MinerType)
-				if t != "" {
-					name, version = parseMinerID(t)
-				}
-			}
-			if name == "" {
-				name = "(unknown)"
-			}
-			if typeCounts[name] == nil {
-				typeCounts[name] = make(map[string]int)
-			}
-			typeCounts[name][version]++
-		}
-
-		var minerTypes []MinerTypeView
-		for name, versions := range typeCounts {
-			mt := MinerTypeView{Name: name}
-			for v, count := range versions {
-				mt.Versions = append(mt.Versions, MinerTypeVersionView{
-					Version: v,
-					Workers: count,
-				})
-				mt.Total += count
-			}
-			sort.Slice(mt.Versions, func(i, j int) bool {
-				if mt.Versions[i].Workers == mt.Versions[j].Workers {
-					return mt.Versions[i].Version < mt.Versions[j].Version
-				}
-				return mt.Versions[i].Workers > mt.Versions[j].Workers
-			})
-			minerTypes = append(minerTypes, mt)
-		}
-		sort.Slice(minerTypes, func(i, j int) bool {
-			if minerTypes[i].Total == minerTypes[j].Total {
-				return minerTypes[i].Name < minerTypes[j].Name
-			}
-			return minerTypes[i].Total > minerTypes[j].Total
-		})
-
-		data := WorkersListData{
-			APIVersion:    apiVersion,
-			Workers:       workers[startIdx:endIdx],
-			BannedWorkers: bannedWorkers,
-			BestShares:    bestShares,
-			MinerTypes:    minerTypes,
-			Page:          page,
-			Pages:         pages,
-			Total:         total,
-			PerPage:       perPage,
-		}
-		return sonic.Marshal(data)
-	})
-}
-
 // handleBlocksListJSON returns found blocks
 func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Request) {
 	limit := 10
@@ -1877,30 +1737,6 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 }
 
 // handleDiagnosticsJSON returns system diagnostics
-func (s *StatusServer) handleDiagnosticsJSON(w http.ResponseWriter, r *http.Request) {
-	key := "diagnostics"
-	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.statusData()
-		data := DiagnosticsData{
-			APIVersion:          apiVersion,
-			ProcessGoroutines:   full.ProcessGoroutines,
-			ProcessCPUPercent:   full.ProcessCPUPercent,
-			GoMemAllocBytes:     full.GoMemAllocBytes,
-			GoMemSysBytes:       full.GoMemSysBytes,
-			ProcessRSSBytes:     full.ProcessRSSBytes,
-			SystemMemTotalBytes: full.SystemMemTotalBytes,
-			SystemMemFreeBytes:  full.SystemMemFreeBytes,
-			SystemMemUsedBytes:  full.SystemMemUsedBytes,
-			SystemLoad1:         full.SystemLoad1,
-			SystemLoad5:         full.SystemLoad5,
-			SystemLoad15:        full.SystemLoad15,
-			ShareErrors:         full.ShareErrors,
-			AccountingError:     full.AccountingError,
-		}
-		return sonic.Marshal(data)
-	})
-}
-
 func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Request) {
 	key := "pool_hashrate"
 	s.serveCachedJSON(w, key, poolHashrateTTL, func() ([]byte, error) {
