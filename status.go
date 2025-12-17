@@ -2872,6 +2872,9 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,
+		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
 	}
 }
 
