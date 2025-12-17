@@ -74,7 +74,7 @@ func buildBlockCoinbase(t *testing.T, mc *MinerConn, job *Job, worker string, en
 func newTestAccountStore(t *testing.T) *AccountStore {
 	t.Helper()
 	cfg := Config{DataDir: t.TempDir()}
-	s, err := NewAccountStore(cfg, false, "mainnet")
+	s, err := NewAccountStore(cfg, false, true)
 	if err != nil {
 		t.Fatalf("NewAccountStore error: %v", err)
 	}

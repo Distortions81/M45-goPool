@@ -261,7 +261,9 @@ func main() {
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
 	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
 	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
+	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
 	flag.Parse()
+	cleanBansOnStartup := !*noCleanBansFlag
 
 	level := slog.LevelError
 	if verboseEnabled() {
@@ -470,6 +472,10 @@ func main() {
 	}
 	configureErrorLoggerOutput(newRollingFileWriter(errorLogPath))
 
+	if !cleanBansOnStartup {
+		logger.Warn("ban cleanup on startup disabled", "flag", "no-clean-bans")
+	}
+
 	var netLogPath string
 	if debugEnabled() {
 		var err error
@@ -506,7 +512,7 @@ func main() {
 	// node RPC was unavailable in previous runs.
 	startPendingSubmissionReplayer(ctx, cfg, rpcClient)
 
-	accounting, err := NewAccountStore(cfg, debugEnabled())
+	accounting, err := NewAccountStore(cfg, debugEnabled(), cleanBansOnStartup)
 	if err != nil {
 		fatal("accounting", err)
 	}

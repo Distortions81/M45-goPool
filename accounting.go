@@ -405,28 +405,31 @@ func (b *banList) appendBanLocked(entry banEntry) error {
 		return nil
 	}
 
-	// Read existing entries to build a complete list
-	var entries []banEntry
-	data, err := os.ReadFile(b.path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
 		return err
 	}
-	if len(data) > 0 {
-		entries, err = decodeBanEntries(data)
-		if err != nil {
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	w := bufio.NewWriter(f)
+	if info.Size() > 0 {
+		if _, err := w.Write([]byte{'\n'}); err != nil {
 			return err
 		}
 	}
 
-	// Append the new entry
-	entries = append(entries, entry)
-
-	// Write all entries back
-	newData, err := encodeBanEntries(entries)
+	data, err := encodeBanEntry(entry)
 	if err != nil {
 		return err
 	}
-	if err := writeFileAtomically(b.path, newData, 0, false); err != nil {
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
 		return err
 	}
 	return nil
@@ -470,6 +473,27 @@ func (b *banList) persistLocked() error {
 		return err
 	}
 	return nil
+}
+
+func (b *banList) cleanExpired() error {
+	if b == nil {
+		return nil
+	}
+	now := time.Now()
+	b.mu.Lock()
+	removed := false
+	for k, entry := range b.entries {
+		if entry.Until.IsZero() || now.Before(entry.Until) {
+			continue
+		}
+		delete(b.entries, k)
+		removed = true
+	}
+	b.mu.Unlock()
+	if !removed {
+		return nil
+	}
+	return b.persist()
 }
 
 func (b *banList) lookup(worker string) (banEntry, bool) {
@@ -556,7 +580,7 @@ func syncFileIfExists(path string) error {
 	return f.Sync()
 }
 
-func NewAccountStore(cfg Config, enableShareLog bool) (*AccountStore, error) {
+func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountStore, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
@@ -569,6 +593,11 @@ func NewAccountStore(cfg Config, enableShareLog bool) (*AccountStore, error) {
 	banList, err := newBanList(banPath)
 	if err != nil {
 		return nil, err
+	}
+	if cleanBans {
+		if err := banList.cleanExpired(); err != nil {
+			return nil, err
+		}
 	}
 	return &AccountStore{
 		ban:   banList,

@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/bytedance/sonic"
 )
 
 func TestEncodeDecodeBanEntries(t *testing.T) {
@@ -45,5 +47,26 @@ func TestDecodeBanEntriesEmpty(t *testing.T) {
 	}
 	if entries != nil {
 		t.Fatalf("expected nil entries, got %v", entries)
+	}
+}
+
+func TestDecodeBanEntriesLegacyArray(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	entries := []banEntry{
+		{Worker: "legacy", Until: now.Add(time.Minute), Reason: "legacy"},
+	}
+	data, err := sonic.ConfigDefault.Marshal(entries)
+	if err != nil {
+		t.Fatalf("setup Marshal: %v", err)
+	}
+	decoded, err := decodeBanEntries(data)
+	if err != nil {
+		t.Fatalf("decodeBanEntries legacy: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("decoded %d entries, want 1", len(decoded))
+	}
+	if decoded[0].Worker != "legacy" {
+		t.Fatalf("decoded entry missing legacy worker")
 	}
 }
