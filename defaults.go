@@ -106,7 +106,7 @@ func defaultConfig() Config {
 		// of two within a practical range for typical ASICs.
 		MaxDifficulty:                 defaultMaxDifficulty,
 		MinDifficulty:                 defaultMinDifficulty,
-		LockSuggestedDifficulty:       false,
+		LockSuggestedDifficulty:       true,
 		HashrateEMATauSeconds:         defaultHashrateEMATauSeconds,
 		HashrateEMAMinShares:          defaultHashrateEMAMinShares,
 		NTimeForwardSlackSeconds:      defaultNTimeForwardSlackSeconds,
