@@ -270,6 +270,7 @@ type MinerConn struct {
 	rollingHashrateValue float64
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
+	vardiffReady    bool
 }
 
 type rpcCaller interface {
@@ -1244,6 +1245,7 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
+	hadPrevJob := mc.lastJob != nil
 	if clean {
 		mc.activeJobs = make(map[string]*Job)
 		mc.shareCache = make(map[string]*duplicateShareRing)
@@ -1263,6 +1265,9 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		delete(mc.activeJobs, oldest)
 		delete(mc.shareCache, oldest)
 		delete(mc.jobDifficulty, oldest)
+	}
+	if !mc.vardiffReady && hadPrevJob {
+		mc.vardiffReady = true
 	}
 }
 
@@ -1960,7 +1965,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 	// Adjust difficulty when sending new jobs (new blocks), not on every share.
 	// This gives miners stable difficulty for the duration of a job and prevents
 	// mid-job difficulty changes that can cause confusion.
-	mc.maybeAdjustDifficulty(time.Now())
+	mc.jobMu.Lock()
+	readyForVardiff := mc.vardiffReady
+	mc.jobMu.Unlock()
+	if readyForVardiff {
+		mc.maybeAdjustDifficulty(time.Now())
+	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
 	if maskChanged && mc.versionRoll {
