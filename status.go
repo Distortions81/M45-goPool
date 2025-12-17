@@ -192,6 +192,11 @@ type cachedNodeInfo struct {
 	fetchedAt     time.Time
 }
 
+type peerLookupEntry struct {
+	name      string
+	expiresAt time.Time
+}
+
 func stripPeerPort(addr string) string {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
@@ -202,6 +207,45 @@ func stripPeerPort(addr string) string {
 		return addr
 	}
 	return host
+}
+
+func formatPeerDisplay(host, resolved string) string {
+	resolved = strings.TrimSpace(resolved)
+	if resolved != "" && !strings.EqualFold(resolved, host) {
+		return resolved
+	}
+	return host
+}
+
+func (s *StatusServer) lookupPeerName(host string) string {
+	if host == "" {
+		return ""
+	}
+	now := time.Now()
+	s.peerLookupMu.Lock()
+	if entry, ok := s.peerLookupCache[host]; ok && now.Before(entry.expiresAt) {
+		name := entry.name
+		s.peerLookupMu.Unlock()
+		return name
+	}
+	s.peerLookupMu.Unlock()
+
+	var name string
+	if ptrs, err := net.LookupAddr(host); err == nil && len(ptrs) > 0 {
+		name = strings.TrimSuffix(strings.TrimSpace(ptrs[0]), ".")
+	}
+
+	s.peerLookupMu.Lock()
+	if s.peerLookupCache == nil {
+		s.peerLookupCache = make(map[string]peerLookupEntry)
+	}
+	s.peerLookupCache[host] = peerLookupEntry{
+		name:      name,
+		expiresAt: now.Add(peerLookupTTL),
+	}
+	s.peerLookupMu.Unlock()
+
+	return name
 }
 
 type StatusServer struct {
@@ -230,6 +274,8 @@ type StatusServer struct {
 	nodeInfoMu         sync.Mutex
 	nodeInfo           cachedNodeInfo
 	nodeInfoRefreshing int32
+	peerLookupMu       sync.Mutex
+	peerLookupCache    map[string]peerLookupEntry
 
 	priceSvc    *PriceService
 	jsonCacheMu sync.RWMutex
@@ -2784,6 +2830,7 @@ const (
 	nodeInfoTTL          = 30 * time.Second
 	nodeInfoRPCTimeout   = 5 * time.Second
 	maxNodePeerAddresses = 64
+	peerLookupTTL        = 5 * time.Minute
 )
 
 // ensureNodeInfo returns the cached node snapshot and schedules a non-blocking
@@ -2876,9 +2923,13 @@ func (s *StatusServer) refreshNodeInfo() {
 	if err := s.rpcCallCtx("getpeerinfo", nil, &peerList); err == nil {
 		addrs := make([]string, 0, len(peerList))
 		for _, p := range peerList {
-			if host := stripPeerPort(p.Addr); host != "" {
-				addrs = append(addrs, host)
+			host := stripPeerPort(p.Addr)
+			if host == "" {
+				continue
 			}
+			name := s.lookupPeerName(host)
+			display := formatPeerDisplay(host, name)
+			addrs = append(addrs, display)
 		}
 		if len(addrs) > 1 {
 			sort.Strings(addrs)
