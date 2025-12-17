@@ -395,12 +395,16 @@
 			const date = new Date(value);
 			if (Number.isNaN(date.getTime())) return '—';
 			const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
-			if (diffSec < 0) return '—';
+			if (diffSec < 0) return 'just now';
 			if (diffSec < 5) return 'just now';
 			if (diffSec < 60) return `${diffSec}s ago`;
 			if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
 			if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-			return date.toLocaleString();
+			const days = Math.floor(diffSec / 86400);
+			if (days < 7) return `${days}d ago`;
+			if (days < 30) return `${Math.floor(days / 7)}w ago`;
+			if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+			return `${Math.floor(days / 365)}y ago`;
 		}
 
 		function formatBTCShort(sats) {
