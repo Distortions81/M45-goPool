@@ -256,7 +256,6 @@ func main() {
 	signetFlag := flag.Bool("signet", false, "force signet defaults for RPC/ZMQ ports")
 	regtestFlag := flag.Bool("regtest", false, "force regtest defaults for RPC/ZMQ ports")
 	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW)")
-	sha256NoAVXFlag := flag.Bool("sha256-no-avx", false, "disable the AVX-accelerated sha256-simd backend and fall back to crypto/sha256")
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config file with effective settings on startup")
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
 	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
@@ -488,13 +487,7 @@ func main() {
 
 	logger.Info("starting pool", "listen_addr", cfg.ListenAddr, "status_addr", cfg.StatusAddr)
 	logger.Info("effective config", "config", cfg.Effective())
-	useSimd := !*sha256NoAVXFlag
-	setSha256Implementation(useSimd)
-	if *sha256NoAVXFlag {
-		logger.Info("sha256 safe mode enabled (AVX features disabled)", "implementation", "crypto/sha256")
-	} else {
-		logger.Info("sha256 AVX optimizations enabled", "implementation", "sha256-simd")
-	}
+	logger.Info("sha256 implementation", "implementation", sha256ImplementationName())
 
 	// Config sanity checks.
 	if cfg.PoolFeePercent <= 0 {
