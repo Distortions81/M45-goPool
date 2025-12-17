@@ -433,7 +433,7 @@ func (mc *MinerConn) connectionIDString() string {
 	if seq == 0 {
 		return ""
 	}
-	return encodeBase58Uint64(seq)
+	return encodeBase58Uint64(seq - 1)
 }
 
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
