@@ -1020,15 +1020,17 @@ func buildTemplateFuncs() template.FuncMap {
 			if d <= 0 {
 				return "0"
 			}
-			// Show difficulty in millions with a single decimal, e.g.
-			//  512         -> "512"
-			//  4096        -> "4096"
-			// 21_546_700   -> "21.5M"
 			if d < 1_000_000 {
 				return fmt.Sprintf("%.0f", math.Round(d))
 			}
-			val := d / 1_000_000.0
-			return fmt.Sprintf("%.1fM", val)
+			switch {
+			case d >= 1_000_000_000_000:
+				return fmt.Sprintf("%.1fP", d/1_000_000_000_000.0)
+			case d >= 1_000_000_000:
+				return fmt.Sprintf("%.1fG", d/1_000_000_000.0)
+			default:
+				return fmt.Sprintf("%.1fM", d/1_000_000.0)
+			}
 		},
 		"formatTime": func(t time.Time) string {
 			if t.IsZero() {
