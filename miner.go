@@ -574,7 +574,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		initialDiff = cfg.MinDifficulty
 	}
 
-	return &MinerConn{
+	mc := &MinerConn{
 		ctx:               ctx,
 		id:                c.RemoteAddr().String(),
 		conn:              c,
@@ -607,6 +607,8 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		bootstrapDone:     false,
 		isTLSConnection:   isTLS,
 	}
+	mc.assignConnectionSeq()
+	return mc
 }
 
 func (mc *MinerConn) handle() {
@@ -1799,7 +1801,6 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 			mc.Close("wallet validation failed")
 			return
 		}
-		mc.assignConnectionSeq()
 		if prev := mc.registerWorker(workerName); prev != nil && prev != mc && mc.cfg.KickDuplicateWorkerNames {
 			logger.Info("closing previous connection for worker", "worker", workerName, "remote", prev.id)
 			prev.Close("duplicate worker connection")
