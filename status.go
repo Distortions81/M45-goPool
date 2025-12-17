@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	stdjson "encoding/json"
 	"fmt"
@@ -925,7 +924,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
 	workerHash := ""
 	if stats.Worker != "" {
-		sum := sha256.Sum256([]byte(stats.Worker))
+		sum := sha256Sum([]byte(stats.Worker))
 		workerHash = fmt.Sprintf("%x", sum[:])
 	}
 	hashRate := snap.RollingHashrate
@@ -2217,7 +2216,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	hashSum := sha256.Sum256([]byte(workerID))
+	hashSum := sha256Sum([]byte(workerID))
 	data.QueriedWorkerHash = fmt.Sprintf("%x", hashSum[:])
 
 	data.QueriedWorker = workerID

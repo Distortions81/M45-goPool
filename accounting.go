@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -621,7 +620,7 @@ func workerNameSHA256(name string) string {
 	if name == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(name))
+	sum := sha256Sum([]byte(name))
 	return fmt.Sprintf("%x", sum[:])
 }
 
