@@ -686,15 +686,16 @@ type StatusData struct {
 	SystemLoad5         float64 `json:"system_load5"`
 	SystemLoad15        float64 `json:"system_load15"`
 	// Safe-to-share pool config summary.
-	MaxConns                int     `json:"max_conns"`
-	MaxAcceptsPerSecond     int     `json:"max_accepts_per_second"`
-	MaxAcceptBurst          int     `json:"max_accept_burst"`
-	MinDifficulty           float64 `json:"min_difficulty"`
-	MaxDifficulty           float64 `json:"max_difficulty"`
-	LockSuggestedDifficulty bool    `json:"lock_suggested_difficulty"`
-	HashrateEMATauSeconds   float64 `json:"hashrate_ema_tau_seconds"`
-	HashrateEMAMinShares    int     `json:"hashrate_ema_min_shares"`
-	NTimeForwardSlackSec    int     `json:"ntime_forward_slack_seconds"`
+	MaxConns                 int     `json:"max_conns"`
+	MaxAcceptsPerSecond      int     `json:"max_accepts_per_second"`
+	MaxAcceptBurst           int     `json:"max_accept_burst"`
+	MinDifficulty            float64 `json:"min_difficulty"`
+	MaxDifficulty            float64 `json:"max_difficulty"`
+	LockSuggestedDifficulty  bool    `json:"lock_suggested_difficulty"`
+	KickDuplicateWorkerNames bool    `json:"kick_duplicate_worker_names"`
+	HashrateEMATauSeconds    float64 `json:"hashrate_ema_tau_seconds"`
+	HashrateEMAMinShares     int     `json:"hashrate_ema_min_shares"`
+	NTimeForwardSlackSec     int     `json:"ntime_forward_slack_seconds"`
 	// Worker database summary (status page only).
 	WorkerDatabase WorkerDatabaseStats `json:"worker_database"`
 	Warnings       []string            `json:"warnings,omitempty"`
@@ -1811,7 +1812,15 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 
 		// Convert full WorkerView to minimal RecentWorkView for the overview page
 		recentWork := make([]RecentWorkView, len(full.Workers))
+		connectionCounts := make(map[string]int, len(full.Workers))
 		for i, w := range full.Workers {
+			nameKey := w.Name
+			connectionCounts[nameKey]++
+			count := connectionCounts[nameKey]
+			var connIndex uint64
+			if count > 0 {
+				connIndex = uint64(count - 1)
+			}
 			recentWork[i] = RecentWorkView{
 				Name:            w.Name,
 				DisplayName:     w.DisplayName,
@@ -1819,6 +1828,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 				Difficulty:      w.Difficulty,
 				ShareRate:       w.ShareRate,
 				Accepted:        w.Accepted,
+				ConnectionID:    encodeBase58Uint64(connIndex),
 			}
 		}
 
@@ -2784,6 +2794,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		MinDifficulty:                  s.cfg.MinDifficulty,
 		MaxDifficulty:                  s.cfg.MaxDifficulty,
 		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
 		WorkerDatabase:                 workerDBStats,
 		Warnings:                       warnings,
 	}
@@ -2847,6 +2858,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinDifficulty:                  s.cfg.MinDifficulty,
 		MaxDifficulty:                  s.cfg.MaxDifficulty,
 		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
 		HashrateEMATauSeconds:          s.cfg.HashrateEMATauSeconds,
 		HashrateEMAMinShares:           s.cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,

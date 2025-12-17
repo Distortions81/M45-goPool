@@ -10,6 +10,7 @@
 
 - `hashrate_ema_tau_seconds` – time constant (seconds) for the per-connection hashrate EMA used in worker stats. Larger values smooth the reports but react more slowly; default `600` (~10 minutes).
 - `ntime_forward_slack_seconds` – how far miners may roll `ntime` beyond the template’s `curtime` / `mintime`; default `7000`.
+- `kick_duplicate_worker_names` – when `true`, reusing a worker name closes the prior connection once the new one is validated; default `false` leaves duplicate worker names online and hides the warning text on the overview page.
 
 ## Launch flags
 

@@ -26,9 +26,11 @@
 					<span class="overview-banner-label">Credentials</span>
 					<span class="overview-banner-value">username: &lt;your BTC address&gt;.&lt;worker name&gt;, password: x</span>
 				</div>
+				{{if .KickDuplicateWorkerNames}}
 				<p class="text-sm" style="margin:6px 0 0;color:#ccc;">
 					Reusing a worker ID closes its prior session once wallet verification succeeds.
 				</p>
+				{{end}}
 			</div>
 		</div>
 		<div class="grid">
@@ -80,6 +82,7 @@
 					<thead>
 						<tr>
 							<th title="Worker name">Worker</th>
+							<th title="Connection number">Conn</th>
 							<th title="Rolling hashrate">Hashrate</th>
 							<th title="Current difficulty">Difficulty</th>
 							<th title="Accepted shares per minute">Shares/min</th>
@@ -88,7 +91,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="5" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
+							<td colspan="6" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -202,6 +205,7 @@
 		const hashrateData = [];
 		const timestamps = [];
 		let smoothedHashrate = null;
+		let initialZeroPrepended = false;
 
 		function drawGraph() {
 			// Use display dimensions (logical pixels) for drawing
@@ -324,6 +328,11 @@
 
 			// Apply a small client-side EMA so the graph transitions smoothly
 			// between backend updates instead of stepping sharply each poll.
+			if (!initialZeroPrepended && hashrateData.length === 0) {
+				hashrateData.push(0);
+				timestamps.push(new Date(Date.now() - 5000));
+				initialZeroPrepended = true;
+			}
 			if (smoothedHashrate === null) {
 				smoothedHashrate = newHashrate;
 			} else {
@@ -410,15 +419,17 @@
 			const tbody = document.querySelector('#status-workers-table tbody');
 			if (!tbody) return;
 				if (!workers || workers.length === 0) {
-					tbody.innerHTML = '<tr><td colspan="5" class="text-sm">No worker stats yet.</td></tr>';
+					tbody.innerHTML = '<tr><td colspan="6" class="text-sm">No worker stats yet.</td></tr>';
 					return;
 				}
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
 					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+					const connectionId = worker.connection_id || '—';
 					return `
 						<tr>
 							<td class="mono">${name}</td>
+							<td class="mono">${connectionId}</td>
 							<td>${formatHashrate(worker.rolling_hashrate)}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
 							<td>${shareRate}</td>

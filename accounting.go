@@ -61,6 +61,7 @@ type RecentWorkView struct {
 	Difficulty      float64 `json:"difficulty"`
 	ShareRate       float64 `json:"share_rate"`
 	Accepted        uint64  `json:"accepted"`
+	ConnectionID    string  `json:"connection_id"`
 }
 
 // WorkerDatabaseStats summarizes high-level worker database metrics exposed
