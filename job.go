@@ -1225,7 +1225,8 @@ func reverseBytes32(a *[32]byte) {
 	}
 }
 
-// fully unrolled version
+// Fully unrolled version, probably not needed.
+// The compiler should already do this, but why not
 func reverseBytes32Fast(b *[32]byte) {
 	b[0], b[31] = b[31], b[0]
 	b[1], b[30] = b[30], b[1]
