@@ -114,5 +114,22 @@ document.addEventListener('click', function(e) {
 		console.error('Failed to copy:', err);
 	});
 });
+(function() {
+	const root = document.documentElement;
+	const header = document.querySelector('header');
+	if (!header) return;
+
+	function updatePagePadding() {
+		const height = header.getBoundingClientRect().height;
+		const padding = Math.ceil(height + 16);
+		root.style.setProperty('--page-top-padding', `${padding}px`);
+	}
+
+	updatePagePadding();
+	window.addEventListener('resize', updatePagePadding);
+	if (window.ResizeObserver) {
+		new ResizeObserver(updatePagePadding).observe(header);
+	}
+})();
 </script>
 {{end}}

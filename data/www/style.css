@@ -19,6 +19,7 @@
 	--table-hover: rgba(23, 200, 160, 0.06);
 	--code-bg: #101320;
 	--code-border: #2b3243;
+	--page-top-padding: 96px;
 }
 
 /* Light mode - warm, slightly dimmed palette with blue-ink accent */
@@ -49,7 +50,7 @@ body {
 	background: radial-gradient(circle at top, var(--bg-gradient-start) 0, var(--bg-gradient-mid) 55%, var(--bg-gradient-end) 100%);
 	color: var(--text-primary);
 	margin: 0;
-	padding: 0;
+	padding: var(--page-top-padding) 0 0;
 	font-size: 16px;
 	transition: background 0.3s ease, color 0.3s ease;
 }
@@ -57,7 +58,7 @@ body {
 .page {
 	max-width: 1100px;
 	margin: 0 auto;
-	padding: 96px 24px 32px;
+	padding: 32px 24px 32px;
 }
 
 header {
@@ -688,7 +689,7 @@ a:hover {
 
 @media (max-width: 768px) {
 	.page {
-		padding-top: 100px;
+		padding: 32px 16px 32px;
 	}
 
 	header {
