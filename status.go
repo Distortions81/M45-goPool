@@ -902,40 +902,6 @@ type FoundBlockView struct {
 	WorkerPayoutSats int64     `json:"worker_payout_sats,omitempty"`
 }
 
-func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
-	if stats.WindowStart.IsZero() {
-		return 0
-	}
-	window := now.Sub(stats.WindowStart)
-	if window <= 0 {
-		return 0
-	}
-	return float64(stats.WindowAccepted) / window.Minutes()
-}
-
-// computeWindowHashrate converts the accepted work within the rolling window into hashes per second.
-func computeWindowHashrate(stats MinerStats, now time.Time) float64 {
-	if stats.WindowStart.IsZero() {
-		return 0
-	}
-	window := now.Sub(stats.WindowStart)
-	if window <= 0 || window < 5*time.Second {
-		return 0
-	}
-	if stats.WindowDifficulty <= 0 || stats.WindowAccepted <= 0 {
-		return 0
-	}
-	return (stats.WindowDifficulty * hashPerShare) / window.Seconds()
-}
-
-func computeWindowShareRate(stats MinerStats, now time.Time) float64 {
-	hashrate := computeWindowHashrate(stats, now)
-	if hashrate <= 0 {
-		return 0
-	}
-	return (hashrate / hashPerShare) * 60
-}
-
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	snap := mc.snapshotShareInfo()
 	stats := snap.Stats
@@ -949,9 +915,9 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		sum := sha256.Sum256([]byte(stats.Worker))
 		workerHash = fmt.Sprintf("%x", sum[:])
 	}
-	accRate := shareRatePerMinute(stats, now)
-	diff := mc.currentDifficulty()
 	hashRate := snap.RollingHashrate
+	accRate := (hashRate / hashPerShare) * 60
+	diff := mc.currentDifficulty()
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
 	if len(script) > 0 {
@@ -1015,11 +981,12 @@ func (s *StatusServer) computePoolHashrate() float64 {
 	if s.registry == nil {
 		return 0
 	}
-	now := time.Now()
 	var total float64
 	for _, mc := range s.registry.Snapshot() {
 		snap := mc.snapshotShareInfo()
-		total += computeWindowHashrate(snap.Stats, now)
+		if snap.RollingHashrate > 0 {
+			total += snap.RollingHashrate
+		}
 	}
 	return total
 }
