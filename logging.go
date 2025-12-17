@@ -78,7 +78,8 @@ func configureLoggerOutput(w io.Writer) {
 	if w == nil {
 		w = io.Discard
 	}
-	loggerObj = slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{
+	writer := io.MultiWriter(w, os.Stdout)
+	loggerObj = slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
 		Level:     logLevel,
 		AddSource: true,
 	}))
