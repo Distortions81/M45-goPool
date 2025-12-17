@@ -9,7 +9,6 @@ const (
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 5 * time.Minute
-	ntimeFutureTolerance  = 2 * time.Hour
 	defaultVersionMask    = uint32(0x1fffe000)
 	// initialReadTimeout limits how long we keep a connection around
 	// before it has proven itself by submitting valid shares. This helps

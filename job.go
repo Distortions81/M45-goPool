@@ -1218,16 +1218,8 @@ func reverseBytes(in []byte) []byte {
 }
 
 // reverseBytes32 reverses a 32-byte array in-place, avoiding allocation.
-// Use this for hot paths when you know the size is 32 bytes (hashes).
-func reverseBytes32(a *[32]byte) {
-	for i := 0; i < 16; i++ {
-		a[i], a[31-i] = a[31-i], a[i]
-	}
-}
-
-// Fully unrolled version, probably not needed.
-// The compiler should already do this, but why not
-func reverseBytes32Fast(b *[32]byte) {
+// Fully unrolled for hot paths where hashes must be flipped.
+func reverseBytes32(b *[32]byte) {
 	b[0], b[31] = b[31], b[0]
 	b[1], b[30] = b[30], b[1]
 	b[2], b[29] = b[29], b[2]

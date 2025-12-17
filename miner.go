@@ -2551,7 +2551,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// Reverse in-place for little-endian interpretation
 	var headerHashLE [32]byte
 	copy(headerHashLE[:], headerHashArray[:])
-	reverseBytes32Fast(&headerHashLE)
+	reverseBytes32(&headerHashLE)
 
 	// Use pooled big.Int to avoid allocation
 	hashNum := bigIntPool.Get().(*big.Int)
