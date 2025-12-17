@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1211,10 +1212,8 @@ func doubleSHA256Array(b []byte) [32]byte {
 }
 
 func reverseBytes(in []byte) []byte {
-	out := make([]byte, len(in))
-	for i := range in {
-		out[i] = in[len(in)-1-i]
-	}
+	out := append([]byte(nil), in...)
+	slices.Reverse(out)
 	return out
 }
 
@@ -1224,6 +1223,26 @@ func reverseBytes32(a *[32]byte) {
 	for i := 0; i < 16; i++ {
 		a[i], a[31-i] = a[31-i], a[i]
 	}
+}
+
+// fully unrolled version
+func reverseBytes32Fast(b *[32]byte) {
+	b[0], b[31] = b[31], b[0]
+	b[1], b[30] = b[30], b[1]
+	b[2], b[29] = b[29], b[2]
+	b[3], b[28] = b[28], b[3]
+	b[4], b[27] = b[27], b[4]
+	b[5], b[26] = b[26], b[5]
+	b[6], b[25] = b[25], b[6]
+	b[7], b[24] = b[24], b[7]
+	b[8], b[23] = b[23], b[8]
+	b[9], b[22] = b[22], b[9]
+	b[10], b[21] = b[21], b[10]
+	b[11], b[20] = b[20], b[11]
+	b[12], b[19] = b[19], b[12]
+	b[13], b[18] = b[18], b[13]
+	b[14], b[17] = b[17], b[14]
+	b[15], b[16] = b[16], b[15]
 }
 
 func readVarInt(raw []byte) (uint64, int, error) {
@@ -1256,6 +1275,7 @@ func readVarInt(raw []byte) (uint64, int, error) {
 
 // parseMinerID makes a best-effort attempt to split a miner client
 // identifier into a name and version. Common formats include:
+//
 //	"SomeMiner/4.11.0"   -> ("SomeMiner", "4.11.0")
 //	"MinerName-variant"  -> ("MinerName-variant", "")
 //	"Some Miner 1.2.3"   -> ("Some Miner", "1.2.3")
@@ -1930,7 +1950,7 @@ func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, t
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-		var flagsBytes []byte
+	var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2011,7 +2031,7 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-		var flagsBytes []byte
+	var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2118,7 +2138,7 @@ func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
 	padLen := templateExtraNonce2Size - extranonce2Size
 
-		var flagsBytes []byte
+	var flagsBytes []byte
 	if coinbaseFlags != "" {
 		var err error
 		flagsBytes, err = hex.DecodeString(coinbaseFlags)
@@ -2283,12 +2303,14 @@ func computeMerkleRootFromBranches(coinbaseHash []byte, branches []string) []byt
 
 // buildBlockHeaderFromHex constructs the block header bytes for SHA256d jobs.
 // This differs from the canonical Bitcoin header layout:
+//
 //	header[0:4]   = nonce (BE hex from miner)
 //	header[4:8]   = bits  (BE hex from template)
 //	header[8:12]  = ntime (BE hex from miner)
 //	header[12:44] = merkleRoot (LE bytes)
 //	header[44:76] = previousblockhash (BE bytes from template)
 //	header[76:80] = version (big-endian uint32)
+//
 // The entire 80-byte header is then reversed before hashing.
 // This helper is intended for test and block-construction paths where the
 // previous block hash and bits fields are available only as hex strings. For
