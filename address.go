@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil/base58"
 )
 
 // scriptForAddress performs local validation of a Bitcoin address for the given
@@ -32,65 +32,15 @@ func scriptForAddress(addr string, params *chaincfg.Params) ([]byte, error) {
 
 // ----- Base58 + Base58Check decoding -----
 
-const b58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-
-var b58Indexes [256]int8
-
-func init() {
-	for i := range b58Indexes {
-		b58Indexes[i] = -1
-	}
-	for i := 0; i < len(b58Alphabet); i++ {
-		b58Indexes[b58Alphabet[i]] = int8(i)
-	}
-}
-
-func base58Decode(s string) ([]byte, error) {
-	if s == "" {
-		return nil, errors.New("empty base58 string")
-	}
-	num := big.NewInt(0)
-	radix := big.NewInt(58)
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		idx := b58Indexes[ch]
-		if idx == -1 {
-			return nil, fmt.Errorf("invalid base58 character %q", ch)
-		}
-		num.Mul(num, radix)
-		num.Add(num, big.NewInt(int64(idx)))
-	}
-	// Convert big.Int to bytes.
-	decoded := num.Bytes()
-	// Add leading zeroes for each leading '1'.
-	nLeading := 0
-	for i := 0; i < len(s) && s[i] == '1'; i++ {
-		nLeading++
-	}
-	if nLeading > 0 {
-		decoded = append(make([]byte, nLeading), decoded...)
-	}
-	return decoded, nil
-}
-
 func base58CheckDecode(s string) (version byte, payload []byte, err error) {
-	raw, err := base58Decode(s)
+	if s == "" {
+		return 0, nil, errors.New("empty base58 string")
+	}
+	payload, version, err = base58.CheckDecode(s)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, fmt.Errorf("base58check decode: %w", err)
 	}
-	if len(raw) < 4 {
-		return 0, nil, errors.New("base58check data too short")
-	}
-	data := raw[:len(raw)-4]
-	checksum := raw[len(raw)-4:]
-	h := doubleSHA256(data)
-	if len(h) < 4 || !equalBytes(checksum, h[:4]) {
-		return 0, nil, errors.New("base58check checksum mismatch")
-	}
-	if len(data) < 1 {
-		return 0, nil, errors.New("base58check missing version byte")
-	}
-	return data[0], data[1:], nil
+	return version, payload, nil
 }
 
 func scriptForBase58Address(addr string, params *chaincfg.Params) ([]byte, error) {
@@ -327,37 +277,7 @@ func base58CheckEncode(version byte, payload []byte) (string, error) {
 	if payload == nil {
 		return "", errors.New("nil payload")
 	}
-	data := append([]byte{version}, payload...)
-	check := doubleSHA256(data)
-	if len(check) < 4 {
-		return "", errors.New("checksum too short")
-	}
-	full := append(data, check[:4]...)
-
-	// Convert to big.Int for base58 encoding.
-	// The input bytes are in base-256, not base-58!
-	num := big.NewInt(0)
-	num.SetBytes(full)
-
-	// Encode base58.
-	var out []byte
-	for num.Sign() > 0 {
-		mod := new(big.Int)
-		num.DivMod(num, big.NewInt(58), mod)
-		out = append(out, b58Alphabet[mod.Int64()])
-	}
-	// Leading zero bytes become leading '1' characters.
-	for _, b := range full {
-		if b != 0x00 {
-			break
-		}
-		out = append(out, '1')
-	}
-	// Reverse output.
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return string(out), nil
+	return base58.CheckEncode(payload, version), nil
 }
 
 // bech32CreateChecksum computes the checksum for bech32 or bech32m encoding.
