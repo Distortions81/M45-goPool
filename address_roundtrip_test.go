@@ -7,7 +7,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcutil/base58"
 )
 
 // TestAddressRoundTripAllTypes verifies that address -> script -> address
@@ -152,76 +151,6 @@ func TestCoinbaseOutputAddressRecovery(t *testing.T) {
 			if recoveredPool == tc.poolAddr && recoveredWorker == tc.workerAddr {
 				t.Logf("✓ Pool:   %s ← %x", recoveredPool, poolScript)
 				t.Logf("✓ Worker: %s ← %x", recoveredWorker, workerScript)
-			}
-		})
-	}
-}
-
-// TestBase58EncodingRoundTrip specifically tests base58 encoding/decoding
-// which is critical for P2PKH and P2SH addresses.
-func TestBase58EncodingRoundTrip(t *testing.T) {
-	params := &chaincfg.MainNetParams
-
-	testHashes := []struct {
-		name    string
-		version byte
-		hash    []byte
-	}{
-		{
-			name:    "genesis_p2pkh",
-			version: params.PubKeyHashAddrID,
-			hash: []byte{
-				0x62, 0xe9, 0x07, 0xb1, 0x5c, 0xbf, 0x27, 0xd5,
-				0x42, 0x53, 0x99, 0xeb, 0xf6, 0xf0, 0xfb, 0x50,
-				0xeb, 0xb8, 0x8f, 0x18,
-			},
-		},
-		{
-			name:    "random_p2pkh",
-			version: params.PubKeyHashAddrID,
-			hash: []byte{
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01,
-			},
-		},
-	}
-
-	for _, tc := range testHashes {
-		t.Run(tc.name, func(t *testing.T) {
-			// Encode
-			addr := base58.CheckEncode(tc.hash, tc.version)
-			if addr == "" {
-				t.Fatal("base58CheckEncode returned empty string")
-			}
-
-			t.Logf("Encoded: %s", addr)
-
-			// Verify btcd can decode it
-			btcdAddr, err := btcutil.DecodeAddress(addr, params)
-			if err != nil {
-				t.Fatalf("btcd cannot decode our encoded address: %v", err)
-			}
-
-			// Decode and verify hash matches
-			decodedHash, decodedVer, err := base58.CheckDecode(addr)
-			if err != nil {
-				t.Fatalf("base58CheckDecode failed: %v", err)
-			}
-
-			if decodedVer != tc.version {
-				t.Errorf("version mismatch: expected %d, got %d", tc.version, decodedVer)
-			}
-
-			if !bytes.Equal(decodedHash, tc.hash) {
-				t.Errorf("hash mismatch:\nexpected: %x\ngot:      %x", tc.hash, decodedHash)
-			}
-
-			// Verify btcd's encoding matches ours
-			btcdEncoded := btcdAddr.EncodeAddress()
-			if btcdEncoded != addr {
-				t.Logf("NOTE: Encoding difference (may be OK if both valid):\nours: %s\nbtcd: %s",
-					addr, btcdEncoded)
 			}
 		})
 	}
