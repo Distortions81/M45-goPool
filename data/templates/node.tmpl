@@ -176,18 +176,6 @@
 
 		let peerData = [];
 
-		function formatPeerTimestamp(ts) {
-			if (!ts) {
-				return 'Unknown';
-			}
-			try {
-				const date = new Date(ts * 1000);
-				return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-			} catch (e) {
-				return 'Unknown';
-			}
-		}
-
 		function getSortedPeers() {
 			if (!Array.isArray(peerData) || peerData.length === 0) {
 				return [];
@@ -220,17 +208,48 @@
 				const item = document.createElement('div');
 				item.className = 'peer-entry';
 				const pingLabel = Number.isFinite(peer.ping_ms) ? `${peer.ping_ms.toFixed(1)} ms` : 'N/A';
-				const connectedLabel = formatPeerTimestamp(peer.connected_at);
+				const connectedLabel = formatDurationLabel(peer.connected_at);
 				item.innerHTML = `
 					<div class="peer-label">${peer.display}</div>
 					<div class="peer-meta">
 						<span>Ping ${pingLabel}</span>
-						<span>Connected ${connectedLabel}</span>
+						<span>Time ${connectedLabel}</span>
 					</div>
 				`;
 				grid.appendChild(item);
 			});
 			peerListEl.appendChild(grid);
+		}
+
+		function formatDurationLabel(seconds) {
+			if (!seconds) {
+				return 'Unknown';
+			}
+			const nowSec = Math.floor(Date.now() / 1000);
+			let delta = Math.max(0, nowSec - seconds);
+			if (delta === 0) {
+				return '<1s';
+			}
+			const units = [
+				{ label: 'd', sec: 86400 },
+				{ label: 'h', sec: 3600 },
+				{ label: 'm', sec: 60 },
+				{ label: 's', sec: 1 },
+			];
+			const parts = [];
+			for (const unit of units) {
+				if (parts.length >= 2) {
+					break;
+				}
+				if (delta >= unit.sec) {
+					const count = Math.floor(delta / unit.sec);
+					if (count > 0) {
+						parts.push(`${count}${unit.label}`);
+						delta -= count * unit.sec;
+					}
+				}
+			}
+			return parts.length > 0 ? parts.join(' ') : '<1s';
 		}
 
 		function renderPeerList(peers) {
