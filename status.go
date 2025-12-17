@@ -436,12 +436,6 @@ func shortDisplayID(s string, prefix, suffix int) string {
 	return string(rs[:prefix]) + "..." + string(rs[n-suffix:])
 }
 
-// privacyDisplay returns a censored form with ".." between prefix/suffix.
-func privacyDisplay(s string, prefix, suffix int) string {
-	short := shortDisplayID(s, prefix, suffix)
-	return strings.Replace(short, "...", "..", 1)
-}
-
 // shortWorkerName shortens a worker name but preserves the suffix beginning
 // at the first '.' (if any). This keeps pool-suffixes like ".01" or
 // ".hashboard1" fully visible while shortening only the leading address or
@@ -540,36 +534,7 @@ func aggregateCoinbaseSplit(poolScriptHex, donationScriptHex, workerScriptHex st
 	dbg.DonationPercent = float64(donationVal) * 100 / float64(total)
 }
 
-func redactWorkerViewForPrivacy(w WorkerView) WorkerView {
-	w.WalletAddress = privacyDisplay(w.WalletAddress, 8, 8)
-	w.WalletScript = ""
-	w.LastShareHash = privacyDisplay(w.LastShareHash, 8, 8)
-	w.DisplayLastShare = privacyDisplay(w.DisplayLastShare, 8, 8)
-	w.MinerName = privacyDisplay(w.MinerName, 8, 8)
-	w.Name = privacyDisplay(w.Name, 8, 8)
-	w.DisplayName = privacyDisplay(w.DisplayName, 8, 8)
-	if w.LastShareDetail != nil {
-		c := *w.LastShareDetail
-		c.Header = privacyDisplay(c.Header, 8, 8)
-		c.ShareHash = privacyDisplay(c.ShareHash, 8, 8)
-		c.Target = privacyDisplay(c.Target, 8, 8)
-		c.MerkleRootBE = privacyDisplay(c.MerkleRootBE, 8, 8)
-		c.MerkleRootLE = privacyDisplay(c.MerkleRootLE, 8, 8)
-		c.Coinbase = privacyDisplay(c.Coinbase, 8, 8)
-		if len(c.CoinbaseOutputs) > 0 {
-			outs := make([]CoinbaseOutputDebug, len(c.CoinbaseOutputs))
-			copy(outs, c.CoinbaseOutputs)
-			for i := range outs {
-				outs[i].ScriptHex = privacyDisplay(outs[i].ScriptHex, 8, 8)
-			}
-			c.CoinbaseOutputs = outs
-		}
-		w.LastShareDetail = &c
-	}
-	return w
-}
-
-func setWorkerStatusView(data *WorkerStatusData, wv WorkerView, privacyMode bool) {
+func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 	data.HasWalletAddress = strings.TrimSpace(wv.WalletAddress) != ""
 	data.HasShareHashDetails = strings.TrimSpace(wv.LastShareHash) != "" || strings.TrimSpace(wv.DisplayLastShare) != ""
 	if data.QueriedWorkerHash == "" && wv.WorkerSHA256 != "" {
@@ -2056,7 +2021,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			s.workerPageMu.RUnlock()
 
 			if wv, ok := s.findWorkerViewByHash(workerHash, now); ok {
-				setWorkerStatusView(&data, wv, privacyMode)
+				setWorkerStatusView(&data, wv)
 				if data.BTCPriceFiat > 0 {
 					cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
 					if cur == "" {
@@ -2070,7 +2035,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 				}
 			} else if s.accounting != nil {
 				if wv, ok := s.accounting.WorkerViewBySHA256(workerHash); ok {
-					setWorkerStatusView(&data, wv, privacyMode)
+					setWorkerStatusView(&data, wv)
 					if data.BTCPriceFiat > 0 {
 						cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
 						if cur == "" {
@@ -2223,11 +2188,11 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 	found := false
 	if wv, ok := s.findWorkerViewByName(workerID, now); ok {
-		setWorkerStatusView(&data, wv, privacyMode)
+		setWorkerStatusView(&data, wv)
 		found = true
 	} else if s.accounting != nil {
 		if wv, ok := s.accounting.WorkerViewByName(workerID); ok {
-			setWorkerStatusView(&data, wv, privacyMode)
+			setWorkerStatusView(&data, wv)
 			found = true
 		}
 	}
