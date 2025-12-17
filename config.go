@@ -135,6 +135,9 @@ type Config struct {
 	// HashrateEMATauSeconds controls the time constant (in seconds) for the
 	// per-connection hashrate exponential moving average.
 	HashrateEMATauSeconds float64
+	// HashrateEMAMinShares defines how many shares must be accepted between
+	// EMA samples to ensure the starting window spans enough work.
+	HashrateEMAMinShares int
 	// NTimeForwardSlackSeconds bounds how far ntime may roll forward from
 	// the template's curtime/mintime before being rejected.
 	NTimeForwardSlackSeconds int
@@ -223,6 +226,7 @@ type EffectiveConfig struct {
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
+	HashrateEMAMinShares              int     `json:"hashrate_ema_min_shares,omitempty"`
 	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
 	BanInvalidSubmissionsAfter        int     `json:"ban_invalid_submissions_after,omitempty"`
 	BanInvalidSubmissionsWindow       string  `json:"ban_invalid_submissions_window,omitempty"`
@@ -332,6 +336,7 @@ type difficultyTuning struct {
 
 type hashrateTuning struct {
 	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
 }
 
@@ -437,6 +442,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		},
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
+			HashrateEMAMinShares:     intPtr(cfg.HashrateEMAMinShares),
 			NTimeForwardSlackSeconds: intPtr(cfg.NTimeForwardSlackSeconds),
 		},
 		PeerCleaning: peerCleaningTuning{
@@ -853,6 +859,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
 	}
+	if fc.Hashrate.HashrateEMAMinShares != nil && *fc.Hashrate.HashrateEMAMinShares >= minHashrateEMAMinShares {
+		cfg.HashrateEMAMinShares = *fc.Hashrate.HashrateEMAMinShares
+	}
 	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
 		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds
 	}
@@ -950,6 +959,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
+		HashrateEMAMinShares:          cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,
 		BanInvalidSubmissionsAfter:    cfg.BanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:   cfg.BanInvalidSubmissionsWindow.String(),
@@ -1047,6 +1057,9 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0, got %v", cfg.HashrateEMATauSeconds)
+	}
+	if cfg.HashrateEMAMinShares < minHashrateEMAMinShares {
+		return fmt.Errorf("hashrate_ema_min_shares must be >= %d, got %d", minHashrateEMAMinShares, cfg.HashrateEMAMinShares)
 	}
 	if cfg.NTimeForwardSlackSeconds <= 0 {
 		return fmt.Errorf("ntime_forward_slack_seconds must be > 0, got %v", cfg.NTimeForwardSlackSeconds)

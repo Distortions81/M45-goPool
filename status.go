@@ -693,6 +693,7 @@ type StatusData struct {
 	MaxDifficulty           float64 `json:"max_difficulty"`
 	LockSuggestedDifficulty bool    `json:"lock_suggested_difficulty"`
 	HashrateEMATauSeconds   float64 `json:"hashrate_ema_tau_seconds"`
+	HashrateEMAMinShares    int     `json:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSec    int     `json:"ntime_forward_slack_seconds"`
 	// Worker database summary (status page only).
 	WorkerDatabase WorkerDatabaseStats `json:"worker_database"`
@@ -902,6 +903,17 @@ type FoundBlockView struct {
 	WorkerPayoutSats int64     `json:"worker_payout_sats,omitempty"`
 }
 
+func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
+	if stats.WindowStart.IsZero() {
+		return 0
+	}
+	window := now.Sub(stats.WindowStart)
+	if window <= 0 {
+		return 0
+	}
+	return float64(stats.WindowAccepted) / window.Minutes()
+}
+
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	snap := mc.snapshotShareInfo()
 	stats := snap.Stats
@@ -916,7 +928,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		workerHash = fmt.Sprintf("%x", sum[:])
 	}
 	hashRate := snap.RollingHashrate
-	accRate := (hashRate / hashPerShare) * 60
+	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
@@ -2836,6 +2848,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MaxDifficulty:                  s.cfg.MaxDifficulty,
 		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
 		HashrateEMATauSeconds:          s.cfg.HashrateEMATauSeconds,
+		HashrateEMAMinShares:           s.cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,

@@ -35,7 +35,6 @@ const (
 	defaultCoinbaseScriptSigMaxBytes         = 100
 	defaultReplayLimit                       = int64(16 << 20)
 	defaultMaxConns                          = 10000
-	defaultHashrateEMATauSeconds             = 600.0
 	defaultNTimeForwardSlackSeconds          = 7000
 	defaultBanInvalidSubmissionsAfter        = 60
 	defaultBanInvalidSubmissionsWindow       = time.Minute
@@ -109,6 +108,7 @@ func defaultConfig() Config {
 		MinDifficulty:                 defaultMinDifficulty,
 		LockSuggestedDifficulty:       false,
 		HashrateEMATauSeconds:         defaultHashrateEMATauSeconds,
+		HashrateEMAMinShares:          defaultHashrateEMAMinShares,
 		NTimeForwardSlackSeconds:      defaultNTimeForwardSlackSeconds,
 		BanInvalidSubmissionsAfter:    defaultBanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:   defaultBanInvalidSubmissionsWindow,

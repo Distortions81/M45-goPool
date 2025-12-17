@@ -256,6 +256,11 @@ type MinerConn struct {
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
+	// hashrateSampleCount counts how many shares have been recorded since the
+	// last EMA update so we can ensure the window spans enough work.
+	hashrateSampleCount int
+	// hashrateAccumulatedDiff accumulates credited difficulties between samples.
+	hashrateAccumulatedDiff float64
 	// jobDifficulty records the difficulty in effect when each job notify
 	// was sent to this miner so we can credit shares with the assigned
 	// target even if vardiff changes before the share arrives.
@@ -1163,6 +1168,8 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	mc.stats.WindowDifficulty = 0
 	mc.lastHashrateUpdate = time.Time{}
 	mc.rollingHashrateValue = 0
+	mc.hashrateSampleCount = 0
+	mc.hashrateAccumulatedDiff = 0
 	mc.statsMu.Unlock()
 }
 
@@ -1182,19 +1189,33 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 		return
 	}
 
-	// Derive an instantaneous hashrate sample from this share. We treat the
-	// interval since the last hashrate update as the sample window.
+	samplesNeeded := mc.cfg.HashrateEMAMinShares
+	if samplesNeeded < minHashrateEMAMinShares {
+		samplesNeeded = minHashrateEMAMinShares
+	}
+
 	if mc.lastHashrateUpdate.IsZero() {
-		// First share: just record the timestamp so the next share can form
-		// a meaningful interval.
 		mc.lastHashrateUpdate = shareTime
+		mc.hashrateSampleCount = 1
+		mc.hashrateAccumulatedDiff = targetDiff
 		return
 	}
+
+	mc.hashrateSampleCount++
+	mc.hashrateAccumulatedDiff += targetDiff
+	if mc.hashrateSampleCount < samplesNeeded {
+		return
+	}
+
 	elapsed := shareTime.Sub(mc.lastHashrateUpdate).Seconds()
 	if elapsed <= 0 {
+		mc.lastHashrateUpdate = shareTime
+		mc.hashrateSampleCount = 1
+		mc.hashrateAccumulatedDiff = targetDiff
 		return
 	}
-	sample := (targetDiff * hashPerShare) / elapsed
+
+	sample := (mc.hashrateAccumulatedDiff * hashPerShare) / elapsed
 
 	// Apply an EMA with a configurable time constant so that hashrate responds
 	// quickly to changes but decays smoothly when shares slow down.
@@ -1216,6 +1237,8 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 		mc.rollingHashrateValue = mc.rollingHashrateValue + alpha*(sample-mc.rollingHashrateValue)
 	}
 	mc.lastHashrateUpdate = shareTime
+	mc.hashrateSampleCount = 0
+	mc.hashrateAccumulatedDiff = 0
 }
 
 func (mc *MinerConn) trackJob(job *Job, clean bool) {
