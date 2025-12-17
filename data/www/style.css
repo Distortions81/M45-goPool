@@ -485,6 +485,54 @@ h2 {
 	gap: 8px;
 }
 
+.peer-entry {
+	border: 1px solid var(--card-border);
+	border-radius: 10px;
+	padding: 10px 12px;
+	background: var(--card-bg-mid);
+	box-shadow: 0 6px 18px rgba(2, 10, 30, 0.6);
+	color: var(--text-primary);
+}
+.peer-label {
+	font-weight: 600;
+	word-break: break-word;
+}
+.peer-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 6px;
+	font-size: 12px;
+	color: var(--text-muted);
+	flex-wrap: wrap;
+}
+.peer-controls {
+	margin: 10px 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.peer-controls label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+	color: var(--text-muted);
+}
+.peer-controls select {
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
+	border-radius: 6px;
+	color: var(--text-primary);
+	padding: 4px 10px;
+	font-size: 13px;
+}
+.peer-cleanup-info {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin: 0 0 8px;
+}
+
 a {
 	color: var(--accent);
 	text-decoration: none;

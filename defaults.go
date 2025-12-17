@@ -116,6 +116,9 @@ func defaultConfig() Config {
 		ReconnectBanThreshold:         defaultReconnectBanThreshold,
 		ReconnectBanWindowSeconds:     defaultReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:   defaultReconnectBanDurationSeconds,
+		PeerCleanupEnabled:            true,
+		PeerCleanupMaxPingMs:          150,
+		PeerCleanupMinPeers:           20,
 	}
 }
 

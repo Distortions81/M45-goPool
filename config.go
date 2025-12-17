@@ -162,6 +162,13 @@ type Config struct {
 	// ReconnectBanDurationSeconds controls how long (in seconds) a remote IP
 	// is banned from connecting once it exceeds the reconnect threshold.
 	ReconnectBanDurationSeconds int
+
+	// PeerCleanupEnabled toggles automatic removal of high-latency node peers.
+	PeerCleanupEnabled bool
+	// PeerCleanupMaxPingMs sets the latency threshold (ms) above which peers are candidates for cleanup.
+	PeerCleanupMaxPingMs float64
+	// PeerCleanupMinPeers sets the minimum number of peers to keep after cleanup.
+	PeerCleanupMinPeers int
 }
 
 type EffectiveConfig struct {
@@ -223,6 +230,9 @@ type EffectiveConfig struct {
 	ReconnectBanThreshold             int     `json:"reconnect_ban_threshold,omitempty"`
 	ReconnectBanWindowSeconds         int     `json:"reconnect_ban_window_seconds,omitempty"`
 	ReconnectBanDurationSeconds       int     `json:"reconnect_ban_duration_seconds,omitempty"`
+	PeerCleanupEnabled                bool    `json:"peer_cleanup_enabled,omitempty"`
+	PeerCleanupMaxPingMs              float64 `json:"peer_cleanup_max_ping_ms,omitempty"`
+	PeerCleanupMinPeers               int     `json:"peer_cleanup_min_peers,omitempty"`
 }
 
 type serverConfig struct {
@@ -325,6 +335,12 @@ type hashrateTuning struct {
 	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
 }
 
+type peerCleaningTuning struct {
+	Enabled   *bool    `toml:"enabled"`
+	MaxPingMs *float64 `toml:"max_ping_ms"`
+	MinPeers  *int     `toml:"min_peers"`
+}
+
 type banTuning struct {
 	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
 	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
@@ -339,13 +355,14 @@ type versionTuning struct {
 }
 
 type tuningFileConfig struct {
-	Logging    loggingTuning    `toml:"logging"`
-	RateLimits rateLimitTuning  `toml:"rate_limits"`
-	Timeouts   timeoutTuning    `toml:"timeouts"`
-	Difficulty difficultyTuning `toml:"difficulty"`
-	Hashrate   hashrateTuning   `toml:"hashrate"`
-	Bans       banTuning        `toml:"bans"`
-	Version    versionTuning    `toml:"version"`
+	Logging      loggingTuning      `toml:"logging"`
+	RateLimits   rateLimitTuning    `toml:"rate_limits"`
+	Timeouts     timeoutTuning      `toml:"timeouts"`
+	Difficulty   difficultyTuning   `toml:"difficulty"`
+	Hashrate     hashrateTuning     `toml:"hashrate"`
+	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
+	Bans         banTuning          `toml:"bans"`
+	Version      versionTuning      `toml:"version"`
 }
 
 func buildBaseFileConfig(cfg Config) baseFileConfig {
@@ -421,6 +438,11 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
 			NTimeForwardSlackSeconds: intPtr(cfg.NTimeForwardSlackSeconds),
+		},
+		PeerCleaning: peerCleaningTuning{
+			Enabled:   boolPtr(cfg.PeerCleanupEnabled),
+			MaxPingMs: float64Ptr(cfg.PeerCleanupMaxPingMs),
+			MinPeers:  intPtr(cfg.PeerCleanupMinPeers),
 		},
 		Bans: banTuning{
 			BanInvalidSubmissionsAfter:       intPtr(cfg.BanInvalidSubmissionsAfter),
@@ -834,6 +856,15 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
 		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds
 	}
+	if fc.PeerCleaning.Enabled != nil {
+		cfg.PeerCleanupEnabled = *fc.PeerCleaning.Enabled
+	}
+	if fc.PeerCleaning.MaxPingMs != nil && *fc.PeerCleaning.MaxPingMs >= 0 {
+		cfg.PeerCleanupMaxPingMs = *fc.PeerCleaning.MaxPingMs
+	}
+	if fc.PeerCleaning.MinPeers != nil && *fc.PeerCleaning.MinPeers >= 0 {
+		cfg.PeerCleanupMinPeers = *fc.PeerCleaning.MinPeers
+	}
 	if fc.Bans.BanInvalidSubmissionsAfter != nil && *fc.Bans.BanInvalidSubmissionsAfter >= 0 {
 		cfg.BanInvalidSubmissionsAfter = *fc.Bans.BanInvalidSubmissionsAfter
 	}
@@ -926,6 +957,9 @@ func (cfg Config) Effective() EffectiveConfig {
 		ReconnectBanThreshold:         cfg.ReconnectBanThreshold,
 		ReconnectBanWindowSeconds:     cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:   cfg.ReconnectBanDurationSeconds,
+		PeerCleanupEnabled:            cfg.PeerCleanupEnabled,
+		PeerCleanupMaxPingMs:          cfg.PeerCleanupMaxPingMs,
+		PeerCleanupMinPeers:           cfg.PeerCleanupMinPeers,
 	}
 }
 
@@ -1151,8 +1185,10 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 // The logic uses two configurable time windows:
 // 1. Initial burst (accept_burst_window seconds): handles the immediate reconnection storm
 //   - Burst capacity allows a percentage of miners to connect immediately
+//
 // 2. Sustained reconnection (remaining time): handles the rest of reconnections
 //   - Per-second rate allows remaining miners to connect over the rest of the window
+//
 // Combined, this allows all max_conns miners to reconnect within accept_reconnect_window
 // seconds of a pool restart without being rate-limited, while still protecting against
 // sustained connection floods during normal operation.

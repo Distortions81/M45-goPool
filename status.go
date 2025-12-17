@@ -176,20 +176,35 @@ var knownGenesis = map[string]string{
 }
 
 type cachedNodeInfo struct {
-	network       string
-	subversion    string
-	blocks        int64
-	headers       int64
-	ibd           bool
-	pruned        bool
-	sizeOnDisk    uint64
-	conns         int
-	connsIn       int
-	connsOut      int
-	genesisHash   string
-	bestHash      string
-	peerAddresses []string
-	fetchedAt     time.Time
+	network     string
+	subversion  string
+	blocks      int64
+	headers     int64
+	ibd         bool
+	pruned      bool
+	sizeOnDisk  uint64
+	conns       int
+	connsIn     int
+	connsOut    int
+	genesisHash string
+	bestHash    string
+	peerInfos   []cachedPeerInfo
+	fetchedAt   time.Time
+}
+
+type cachedPeerInfo struct {
+	host        string
+	display     string
+	pingSeconds float64
+	connectedAt time.Time
+}
+
+type peerDisplayInfo struct {
+	host        string
+	display     string
+	pingSeconds float64
+	connectedAt time.Time
+	rawAddr     string
 }
 
 type peerLookupEntry struct {
@@ -246,6 +261,88 @@ func (s *StatusServer) lookupPeerName(host string) string {
 	s.peerLookupMu.Unlock()
 
 	return name
+}
+
+func buildNodePeerInfos(peers []cachedPeerInfo) []NodePeerInfo {
+	out := make([]NodePeerInfo, 0, len(peers))
+	for _, p := range peers {
+		out = append(out, NodePeerInfo{
+			Display:     p.display,
+			PingMs:      p.pingSeconds * 1000,
+			ConnectedAt: p.connectedAt.Unix(),
+		})
+	}
+	return out
+}
+
+func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]struct{} {
+	if !s.cfg.PeerCleanupEnabled || s.rpc == nil {
+		return nil
+	}
+	minPeers := s.cfg.PeerCleanupMinPeers
+	if minPeers <= 0 {
+		minPeers = 20
+	}
+	totalPeers := len(peers)
+	if totalPeers <= minPeers {
+		return nil
+	}
+	maxPingMs := s.cfg.PeerCleanupMaxPingMs
+	if maxPingMs <= 0 {
+		return nil
+	}
+	thresholdSec := maxPingMs / 1000
+	candidates := make([]peerDisplayInfo, 0, len(peers))
+	for _, p := range peers {
+		if p.pingSeconds > thresholdSec {
+			candidates = append(candidates, p)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].pingSeconds > candidates[j].pingSeconds
+	})
+	maxDisconnect := totalPeers - minPeers
+	if maxDisconnect <= 0 {
+		return nil
+	}
+	removed := make(map[string]struct{})
+	disconnects := 0
+	for _, candidate := range candidates {
+		if disconnects >= maxDisconnect {
+			break
+		}
+		if candidate.rawAddr == "" {
+			continue
+		}
+		if err := s.disconnectPeer(candidate.rawAddr); err != nil {
+			logger.Warn("peer cleanup disconnect failed",
+				"peer", candidate.rawAddr,
+				"error", err,
+			)
+			continue
+		}
+		removed[candidate.rawAddr] = struct{}{}
+		logger.Info("peer cleanup disconnected high-ping peer",
+			"peer", candidate.rawAddr,
+			"ping_ms", candidate.pingSeconds*1000,
+			"min_peers", minPeers,
+		)
+		disconnects++
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+	return removed
+}
+
+func (s *StatusServer) disconnectPeer(addr string) error {
+	if s.rpc == nil {
+		return fmt.Errorf("rpc client not configured")
+	}
+	return s.rpcCallCtx("disconnectnode", []interface{}{addr}, nil)
 }
 
 type StatusServer struct {
@@ -525,9 +622,12 @@ type StatusData struct {
 	NodeConnections                int               `json:"node_connections"`
 	NodeConnectionsIn              int               `json:"node_connections_in"`
 	NodeConnectionsOut             int               `json:"node_connections_out"`
-	NodePeerAddresses              []string          `json:"node_peer_addresses,omitempty"`
+	NodePeerInfos                  []NodePeerInfo    `json:"node_peer_infos,omitempty"`
 	NodePruned                     bool              `json:"node_pruned"`
 	NodeSizeOnDiskBytes            uint64            `json:"node_size_on_disk_bytes"`
+	NodePeerCleanupEnabled         bool              `json:"node_peer_cleanup_enabled"`
+	NodePeerCleanupMaxPingMs       float64           `json:"node_peer_cleanup_max_ping_ms"`
+	NodePeerCleanupMinPeers        int               `json:"node_peer_cleanup_min_peers"`
 	GenesisHash                    string            `json:"genesis_hash,omitempty"`
 	GenesisExpected                string            `json:"genesis_expected,omitempty"`
 	GenesisMatch                   bool              `json:"genesis_match"`
@@ -1375,22 +1475,31 @@ type PoolStatsData struct {
 
 // NodePageData contains Bitcoin node information for the node page
 type NodePageData struct {
-	APIVersion               string   `json:"api_version"`
-	NodeNetwork              string   `json:"node_network,omitempty"`
-	NodeSubversion           string   `json:"node_subversion,omitempty"`
-	NodeBlocks               int64    `json:"node_blocks"`
-	NodeHeaders              int64    `json:"node_headers"`
-	NodeInitialBlockDownload bool     `json:"node_initial_block_download"`
-	NodeConnections          int      `json:"node_connections"`
-	NodeConnectionsIn        int      `json:"node_connections_in"`
-	NodeConnectionsOut       int      `json:"node_connections_out"`
-	NodePeers                []string `json:"node_peers,omitempty"`
-	NodePruned               bool     `json:"node_pruned"`
-	NodeSizeOnDiskBytes      uint64   `json:"node_size_on_disk_bytes"`
-	GenesisHash              string   `json:"genesis_hash,omitempty"`
-	GenesisExpected          string   `json:"genesis_expected,omitempty"`
-	GenesisMatch             bool     `json:"genesis_match"`
-	BestBlockHash            string   `json:"best_block_hash,omitempty"`
+	APIVersion               string         `json:"api_version"`
+	NodeNetwork              string         `json:"node_network,omitempty"`
+	NodeSubversion           string         `json:"node_subversion,omitempty"`
+	NodeBlocks               int64          `json:"node_blocks"`
+	NodeHeaders              int64          `json:"node_headers"`
+	NodeInitialBlockDownload bool           `json:"node_initial_block_download"`
+	NodeConnections          int            `json:"node_connections"`
+	NodeConnectionsIn        int            `json:"node_connections_in"`
+	NodeConnectionsOut       int            `json:"node_connections_out"`
+	NodePeers                []NodePeerInfo `json:"node_peers,omitempty"`
+	NodePruned               bool           `json:"node_pruned"`
+	NodeSizeOnDiskBytes      uint64         `json:"node_size_on_disk_bytes"`
+	NodePeerCleanupEnabled   bool           `json:"node_peer_cleanup_enabled"`
+	NodePeerCleanupMaxPingMs float64        `json:"node_peer_cleanup_max_ping_ms"`
+	NodePeerCleanupMinPeers  int            `json:"node_peer_cleanup_min_peers"`
+	GenesisHash              string         `json:"genesis_hash,omitempty"`
+	GenesisExpected          string         `json:"genesis_expected,omitempty"`
+	GenesisMatch             bool           `json:"genesis_match"`
+	BestBlockHash            string         `json:"best_block_hash,omitempty"`
+}
+
+type NodePeerInfo struct {
+	Display     string  `json:"display"`
+	PingMs      float64 `json:"ping_ms"`
+	ConnectedAt int64   `json:"connected_at"`
 }
 
 // WorkersListData contains paginated worker information
@@ -1531,9 +1640,12 @@ func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request
 			NodeConnections:          full.NodeConnections,
 			NodeConnectionsIn:        full.NodeConnectionsIn,
 			NodeConnectionsOut:       full.NodeConnectionsOut,
-			NodePeers:                full.NodePeerAddresses,
+			NodePeers:                full.NodePeerInfos,
 			NodePruned:               full.NodePruned,
 			NodeSizeOnDiskBytes:      full.NodeSizeOnDiskBytes,
+			NodePeerCleanupEnabled:   full.NodePeerCleanupEnabled,
+			NodePeerCleanupMaxPingMs: full.NodePeerCleanupMaxPingMs,
+			NodePeerCleanupMinPeers:  full.NodePeerCleanupMinPeers,
 			GenesisHash:              full.GenesisHash,
 			GenesisExpected:          full.GenesisExpected,
 			GenesisMatch:             full.GenesisMatch,
@@ -2447,7 +2559,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var nodeSizeOnDisk uint64
 	var nodeConns, nodeConnsIn, nodeConnsOut int
 	var genesisHash, bestHash string
-	var nodePeers []string
+	var nodePeers []cachedPeerInfo
 	if s.rpc != nil {
 		info := s.ensureNodeInfo()
 		nodeNetwork = info.network
@@ -2460,8 +2572,8 @@ func (s *StatusServer) buildStatusData() StatusData {
 		nodeConns = info.conns
 		nodeConnsIn = info.connsIn
 		nodeConnsOut = info.connsOut
-		if len(info.peerAddresses) > 0 {
-			nodePeers = append([]string(nil), info.peerAddresses...)
+		if len(info.peerInfos) > 0 {
+			nodePeers = append([]cachedPeerInfo(nil), info.peerInfos...)
 		}
 		genesisHash = info.genesisHash
 		bestHash = info.bestHash
@@ -2627,9 +2739,12 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodeConnections:                nodeConns,
 		NodeConnectionsIn:              nodeConnsIn,
 		NodeConnectionsOut:             nodeConnsOut,
-		NodePeerAddresses:              nodePeers,
+		NodePeerInfos:                  buildNodePeerInfos(nodePeers),
 		NodePruned:                     nodePruned,
 		NodeSizeOnDiskBytes:            nodeSizeOnDisk,
+		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
 		GenesisHash:                    genesisHash,
 		GenesisExpected:                expectedGenesis,
 		GenesisMatch:                   genesisMatch,
@@ -2918,10 +3033,12 @@ func (s *StatusServer) refreshNodeInfo() {
 	}
 
 	var peerList []struct {
-		Addr string `json:"addr"`
+		Addr       string  `json:"addr"`
+		PingTime   float64 `json:"pingtime"`
+		Connection float64 `json:"conntime"`
 	}
 	if err := s.rpcCallCtx("getpeerinfo", nil, &peerList); err == nil {
-		addrs := make([]string, 0, len(peerList))
+		peers := make([]peerDisplayInfo, 0, len(peerList))
 		for _, p := range peerList {
 			host := stripPeerPort(p.Addr)
 			if host == "" {
@@ -2929,15 +3046,43 @@ func (s *StatusServer) refreshNodeInfo() {
 			}
 			name := s.lookupPeerName(host)
 			display := formatPeerDisplay(host, name)
-			addrs = append(addrs, display)
+			connAt := time.Unix(int64(p.Connection), 0)
+			peers = append(peers, peerDisplayInfo{
+				host:        host,
+				display:     display,
+				pingSeconds: p.PingTime,
+				connectedAt: connAt,
+				rawAddr:     p.Addr,
+			})
 		}
-		if len(addrs) > 1 {
-			sort.Strings(addrs)
+		if removed := s.cleanupHighPingPeers(peers); len(removed) > 0 {
+			filtered := peers[:0]
+			for _, peer := range peers {
+				if _, skip := removed[peer.rawAddr]; skip {
+					continue
+				}
+				filtered = append(filtered, peer)
+			}
+			peers = filtered
 		}
-		if len(addrs) > maxNodePeerAddresses {
-			addrs = append([]string(nil), addrs[:maxNodePeerAddresses]...)
+		if len(peers) > 1 {
+			sort.Slice(peers, func(i, j int) bool {
+				return peers[i].connectedAt.Before(peers[j].connectedAt)
+			})
 		}
-		info.peerAddresses = addrs
+		infos := make([]cachedPeerInfo, 0, len(peers))
+		for _, p := range peers {
+			infos = append(infos, cachedPeerInfo{
+				host:        p.host,
+				display:     p.display,
+				pingSeconds: p.pingSeconds,
+				connectedAt: p.connectedAt,
+			})
+		}
+		if len(infos) > maxNodePeerAddresses {
+			infos = append([]cachedPeerInfo(nil), infos[:maxNodePeerAddresses]...)
+		}
+		info.peerInfos = infos
 		updated = true
 	}
 

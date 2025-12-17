@@ -99,6 +99,21 @@
 
 		<div class="card" style="margin-top:16px;">
 			<div class="label">Node peers</div>
+			<div class="peer-controls">
+				<label for="node-peer-sort">Sort by</label>
+				<select id="node-peer-sort">
+					<option value="ping" selected>Ping (lowest first)</option>
+					<option value="age">Age (oldest first)</option>
+				</select>
+			</div>
+			<p class="peer-cleanup-info">
+				<b>Cleanup:</b>
+				{{if .NodePeerCleanupEnabled}}Enabled{{else}}Disabled{{end}}
+				{{if .NodePeerCleanupEnabled}}
+					· threshold {{printf "%.0f" .NodePeerCleanupMaxPingMs}} ms
+					· keep ≥ {{.NodePeerCleanupMinPeers}} peers
+				{{end}}
+			</p>
 			<div class="text-sm" id="node-peer-list">
 				Loading peer list…
 			</div>
@@ -126,6 +141,7 @@
 		const sizeEl = document.getElementById('node-size');
 		const prunedEl = document.getElementById('node-pruned');
 		const peerListEl = document.getElementById('node-peer-list');
+		const peerSortEl = document.getElementById('node-peer-sort');
 
 		function formatBytes(bytes) {
 			if (bytes === undefined || bytes === null) {
@@ -158,26 +174,72 @@
 			return value ? 'true' : 'false';
 		}
 
-		function renderPeerList(peers) {
+		let peerData = [];
+
+		function formatPeerTimestamp(ts) {
+			if (!ts) {
+				return 'Unknown';
+			}
+			try {
+				const date = new Date(ts * 1000);
+				return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+			} catch (e) {
+				return 'Unknown';
+			}
+		}
+
+		function getSortedPeers() {
+			if (!Array.isArray(peerData) || peerData.length === 0) {
+				return [];
+			}
+			const peers = peerData.slice();
+			if (peerSortEl && peerSortEl.value === 'ping') {
+				peers.sort((a, b) => (a.ping_ms || 0) - (b.ping_ms || 0));
+			} else {
+				peers.sort((a, b) => (a.connected_at || 0) - (b.connected_at || 0));
+			}
+			return peers;
+		}
+
+		function updatePeerList() {
 			if (!peerListEl) {
 				return;
 			}
 			peerListEl.innerHTML = '';
-			if (!Array.isArray(peers) || peers.length === 0) {
+			const sorted = getSortedPeers();
+			if (sorted.length === 0) {
 				const empty = document.createElement('div');
 				empty.className = 'text-sm';
 				empty.textContent = 'No peers connected';
 				peerListEl.appendChild(empty);
 				return;
 			}
-			const list = document.createElement('ul');
-			list.className = 'list peer-grid';
-			peers.forEach(peer => {
-				const item = document.createElement('li');
-				item.textContent = peer;
-				list.appendChild(item);
+			const grid = document.createElement('div');
+			grid.className = 'peer-grid';
+			sorted.forEach(peer => {
+				const item = document.createElement('div');
+				item.className = 'peer-entry';
+				const pingLabel = Number.isFinite(peer.ping_ms) ? `${peer.ping_ms.toFixed(1)} ms` : 'N/A';
+				const connectedLabel = formatPeerTimestamp(peer.connected_at);
+				item.innerHTML = `
+					<div class="peer-label">${peer.display}</div>
+					<div class="peer-meta">
+						<span>Ping ${pingLabel}</span>
+						<span>Connected ${connectedLabel}</span>
+					</div>
+				`;
+				grid.appendChild(item);
 			});
-			peerListEl.appendChild(list);
+			peerListEl.appendChild(grid);
+		}
+
+		function renderPeerList(peers) {
+			peerData = Array.isArray(peers) ? peers.slice() : [];
+			updatePeerList();
+		}
+
+		if (peerSortEl) {
+			peerSortEl.addEventListener('change', updatePeerList);
 		}
 
 		function updateNodeInfo(data) {
@@ -222,7 +284,7 @@
 			if (prunedEl) {
 				prunedEl.textContent = displayBoolean(data.node_pruned);
 			}
-			renderPeerList(data.node_peers);
+		renderPeerList(data.node_peers);
 		}
 
 		function formatUTCTimestamp(isoString) {
