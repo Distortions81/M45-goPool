@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 )
@@ -118,7 +120,7 @@ func TestTaprootScriptGeneration(t *testing.T) {
 	}
 
 	// Compare scripts
-	if !equalBytes(btcdScript, poolScript) {
+	if !bytes.Equal(btcdScript, poolScript) {
 		t.Errorf("script mismatch:\nbtcd:   %x\ngoPool: %x",
 			btcdScript, poolScript)
 	}
@@ -138,11 +140,11 @@ func TestTaprootScriptGeneration(t *testing.T) {
 // TestBech32mEncodingConstants verifies that the bech32m constant is correct
 // as specified in BIP 350.
 func TestBech32mEncodingConstants(t *testing.T) {
-	if bech32Const != 1 {
-		t.Errorf("bech32Const should be 1, got %d", bech32Const)
+	if bech32.Version0Const != 1 {
+		t.Errorf("bech32 Version0Const should be 1, got %d", bech32.Version0Const)
 	}
-	if bech32mConst != 0x2bc830a3 {
-		t.Errorf("bech32mConst should be 0x2bc830a3, got 0x%08x", bech32mConst)
+	if bech32.VersionMConst != 0x2bc830a3 {
+		t.Errorf("bech32 VersionMConst should be 0x2bc830a3, got 0x%08x", bech32.VersionMConst)
 	}
 }
 
@@ -201,35 +203,30 @@ func TestWitnessVersionEncoding(t *testing.T) {
 		witnessVersion byte
 		program        []byte
 		expectedPrefix string
-		encoding       uint32
 	}{
 		{
 			name:           "witness_v0_20bytes",
 			witnessVersion: 0,
 			program:        make([]byte, 20), // P2WPKH
 			expectedPrefix: "bc1q",
-			encoding:       bech32Const,
 		},
 		{
 			name:           "witness_v0_32bytes",
 			witnessVersion: 0,
 			program:        make([]byte, 32), // P2WSH
 			expectedPrefix: "bc1q",
-			encoding:       bech32Const,
 		},
 		{
 			name:           "witness_v1_32bytes",
 			witnessVersion: 1,
 			program:        make([]byte, 32), // Taproot
 			expectedPrefix: "bc1p",
-			encoding:       bech32mConst,
 		},
 		{
 			name:           "witness_v2_32bytes",
 			witnessVersion: 2,
 			program:        make([]byte, 32),
 			expectedPrefix: "bc1z",
-			encoding:       bech32mConst,
 		},
 	}
 

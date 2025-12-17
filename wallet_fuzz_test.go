@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -50,7 +51,7 @@ func FuzzScriptForAddress(f *testing.F) {
 		if err != nil {
 			t.Fatalf("scriptForAddress(%s) error: %v", addrStr, err)
 		}
-		if !equalBytes(btcdScript, poolScript) {
+		if !bytes.Equal(btcdScript, poolScript) {
 			t.Fatalf("script mismatch for %s: btcd=%x pool=%x", addrStr, btcdScript, poolScript)
 		}
 	})

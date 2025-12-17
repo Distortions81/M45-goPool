@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcutil/base58"
 )
 
 // TestAddressRoundTripAllTypes verifies that address -> script -> address
@@ -48,7 +50,7 @@ func TestAddressRoundTripAllTypes(t *testing.T) {
 			}
 
 			// Verify scripts match
-			if !equalBytes(btcdScript, poolScript) {
+			if !bytes.Equal(btcdScript, poolScript) {
 				t.Fatalf("script mismatch:\nbtcd:   %x\ngoPool: %x", btcdScript, poolScript)
 			}
 
@@ -78,7 +80,7 @@ func TestAddressRoundTripAllTypes(t *testing.T) {
 				t.Errorf("btcd PayToAddrScript failed for result: %v", err)
 			}
 
-			if !equalBytes(verifyScript, poolScript) {
+			if !bytes.Equal(verifyScript, poolScript) {
 				t.Errorf("script from result address doesn't match:\noriginal: %x\nverify:   %x",
 					poolScript, verifyScript)
 			}
@@ -188,11 +190,7 @@ func TestBase58EncodingRoundTrip(t *testing.T) {
 	for _, tc := range testHashes {
 		t.Run(tc.name, func(t *testing.T) {
 			// Encode
-			addr, err := base58CheckEncode(tc.version, tc.hash)
-			if err != nil {
-				t.Fatalf("base58CheckEncode failed: %v", err)
-			}
-
+			addr := base58.CheckEncode(tc.hash, tc.version)
 			if addr == "" {
 				t.Fatal("base58CheckEncode returned empty string")
 			}
@@ -206,7 +204,7 @@ func TestBase58EncodingRoundTrip(t *testing.T) {
 			}
 
 			// Decode and verify hash matches
-			decodedVer, decodedHash, err := base58CheckDecode(addr)
+			decodedHash, decodedVer, err := base58.CheckDecode(addr)
 			if err != nil {
 				t.Fatalf("base58CheckDecode failed: %v", err)
 			}
@@ -215,7 +213,7 @@ func TestBase58EncodingRoundTrip(t *testing.T) {
 				t.Errorf("version mismatch: expected %d, got %d", tc.version, decodedVer)
 			}
 
-			if !equalBytes(decodedHash, tc.hash) {
+			if !bytes.Equal(decodedHash, tc.hash) {
 				t.Errorf("hash mismatch:\nexpected: %x\ngot:      %x", tc.hash, decodedHash)
 			}
 

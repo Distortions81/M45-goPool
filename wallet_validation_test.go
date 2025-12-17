@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -120,7 +121,7 @@ func TestScriptForAddress_MatchesBtcdPayToAddrScript(t *testing.T) {
 				if len(btcdScript) == 0 || len(poolScript) == 0 {
 					t.Fatalf("empty script for %s", addrStr)
 				}
-				if !equalBytes(btcdScript, poolScript) {
+				if !bytes.Equal(btcdScript, poolScript) {
 					t.Fatalf("script mismatch for %s (type %T): btcd=%x pool=%x", addrStr, a, btcdScript, poolScript)
 				}
 			}

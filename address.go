@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcutil/base58"
 )
 
@@ -18,298 +21,38 @@ func scriptForAddress(addr string, params *chaincfg.Params) ([]byte, error) {
 		return nil, errors.New("empty address")
 	}
 
-	// Try bech32/segwit first.
-	if strings.Contains(addr, "1") {
-		hrp := strings.ToLower(strings.SplitN(addr, "1", 2)[0])
-		if hrp == strings.ToLower(params.Bech32HRPSegwit) {
-			return scriptForSegwitAddress(addr, params)
-		}
-	}
-
-	// Fallback to base58 P2PKH/P2SH.
-	return scriptForBase58Address(addr, params)
-}
-
-// ----- Base58 + Base58Check decoding -----
-
-func base58CheckDecode(s string) (version byte, payload []byte, err error) {
-	if s == "" {
-		return 0, nil, errors.New("empty base58 string")
-	}
-	payload, version, err = base58.CheckDecode(s)
+	addrDecoded, err := btcutil.DecodeAddress(addr, params)
 	if err != nil {
-		return 0, nil, fmt.Errorf("base58check decode: %w", err)
+		return nil, fmt.Errorf("decode address: %w", err)
 	}
-	return version, payload, nil
-}
 
-func scriptForBase58Address(addr string, params *chaincfg.Params) ([]byte, error) {
-	ver, payload, err := base58CheckDecode(addr)
+	if !addrDecoded.IsForNet(params) {
+		return nil, fmt.Errorf("address %s is not valid for %s", addr, params.Name)
+	}
+
+	script, err := txscript.PayToAddrScript(addrDecoded)
 	if err != nil {
-		return nil, fmt.Errorf("decode base58: %w", err)
+		return nil, fmt.Errorf("pay to addr script: %w", err)
 	}
-	switch ver {
-	case params.PubKeyHashAddrID:
-		// OP_DUP OP_HASH160 <20> <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-		if len(payload) != 20 {
-			return nil, fmt.Errorf("p2pkh payload length %d != 20", len(payload))
-		}
-		out := make([]byte, 0, 25)
-		out = append(out, 0x76, 0xa9, 0x14)
-		out = append(out, payload...)
-		out = append(out, 0x88, 0xac)
-		return out, nil
-	case params.ScriptHashAddrID:
-		// OP_HASH160 <20> <scriptHash> OP_EQUAL
-		if len(payload) != 20 {
-			return nil, fmt.Errorf("p2sh payload length %d != 20", len(payload))
-		}
-		out := make([]byte, 0, 23)
-		out = append(out, 0xa9, 0x14)
-		out = append(out, payload...)
-		out = append(out, 0x87)
-		return out, nil
-	default:
-		return nil, fmt.Errorf("unknown base58 version 0x%02x for this network", ver)
-	}
-}
-
-// ----- Bech32 / Bech32m / Segwit decoding -----
-
-const (
-	bech32Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-	// bech32Const is the constant used in bech32 checksum (BIP 173)
-	bech32Const = 1
-	// bech32mConst is the constant used in bech32m checksum (BIP 350)
-	// for witness version 1+ (taproot) addresses
-	bech32mConst = 0x2bc830a3
-)
-
-var bech32CharsetRev [128]int8
-
-func init() {
-	for i := range bech32CharsetRev {
-		bech32CharsetRev[i] = -1
-	}
-	for i := 0; i < len(bech32Charset); i++ {
-		bech32CharsetRev[bech32Charset[i]] = int8(i)
-	}
-}
-
-func bech32Polymod(values []byte) uint32 {
-	const (
-		g0 = 0x3b6a57b2
-		g1 = 0x26508e6d
-		g2 = 0x1ea119fa
-		g3 = 0x3d4233dd
-		g4 = 0x2a1462b3
-	)
-	chk := uint32(1)
-	for _, v := range values {
-		b := chk >> 25
-		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
-		if b&1 != 0 {
-			chk ^= g0
-		}
-		if b&2 != 0 {
-			chk ^= g1
-		}
-		if b&4 != 0 {
-			chk ^= g2
-		}
-		if b&8 != 0 {
-			chk ^= g3
-		}
-		if b&16 != 0 {
-			chk ^= g4
-		}
-	}
-	return chk
-}
-
-func bech32HrpExpand(hrp string) []byte {
-	hrpBytes := []byte(strings.ToLower(hrp))
-	out := make([]byte, 0, len(hrpBytes)*2+1)
-	for _, b := range hrpBytes {
-		out = append(out, b>>5)
-	}
-	out = append(out, 0)
-	for _, b := range hrpBytes {
-		out = append(out, b&31)
-	}
-	return out
-}
-
-func bech32VerifyChecksum(hrp string, data []byte, encoding uint32) bool {
-	values := append(bech32HrpExpand(hrp), data...)
-	return bech32Polymod(values) == encoding
-}
-
-func bech32Decode(s string) (hrp string, data []byte, err error) {
-	if len(s) < 8 || len(s) > 90 {
-		return "", nil, errors.New("bech32 string length out of range")
-	}
-	s = strings.ToLower(s)
-	pos := strings.LastIndexByte(s, '1')
-	if pos < 1 || pos+7 > len(s) {
-		return "", nil, errors.New("invalid bech32 separator position")
-	}
-	hrp = s[:pos]
-	dataPart := s[pos+1:]
-	dataWithChecksum := make([]byte, len(dataPart))
-	for i := 0; i < len(dataPart); i++ {
-		c := dataPart[i]
-		if c < 33 || c >= 128 {
-			return "", nil, errors.New("invalid bech32 character range")
-		}
-		v := bech32CharsetRev[c]
-		if v == -1 {
-			return "", nil, fmt.Errorf("invalid bech32 character %q", c)
-		}
-		dataWithChecksum[i] = byte(v)
-	}
-
-	// According to BIP 350, we must use the correct encoding based on witness version:
-	// - witness version 0: bech32
-	// - witness version 1+: bech32m
-	// First, check both to see which one validates
-	validBech32 := bech32VerifyChecksum(hrp, dataWithChecksum, bech32Const)
-	validBech32m := bech32VerifyChecksum(hrp, dataWithChecksum, bech32mConst)
-
-	if !validBech32 && !validBech32m {
-		return "", nil, errors.New("invalid bech32/bech32m checksum")
-	}
-
-	// Extract data without checksum
-	data = dataWithChecksum[:len(dataWithChecksum)-6]
-
-	// For segwit addresses, verify the correct encoding was used based on witness version
-	if len(data) > 0 {
-		witnessVer := data[0]
-		if witnessVer == 0 && !validBech32 {
-			return "", nil, errors.New("witness version 0 must use bech32 encoding")
-		}
-		if witnessVer >= 1 && witnessVer <= 16 && !validBech32m {
-			return "", nil, errors.New("witness version 1+ must use bech32m encoding")
-		}
-	}
-
-	return hrp, data, nil
-}
-
-// convertBits converts data between bit groups, used for segwit programs.
-func convertBits(data []byte, fromBits, toBits uint, pad bool) ([]byte, error) {
-	var ret []byte
-	var acc uint
-	var bits uint
-	maxv := uint((1 << toBits) - 1)
-	for _, value := range data {
-		if value>>fromBits != 0 {
-			return nil, errors.New("invalid value for convertBits")
-		}
-		acc = (acc << fromBits) | uint(value)
-		bits += fromBits
-		for bits >= toBits {
-			bits -= toBits
-			ret = append(ret, byte((acc>>bits)&maxv))
-		}
-	}
-	if pad {
-		if bits > 0 {
-			ret = append(ret, byte((acc<<(toBits-bits))&maxv))
-		}
-	} else if bits >= fromBits || ((acc<<(toBits-bits))&maxv) != 0 {
-		return nil, errors.New("invalid padding in convertBits")
-	}
-	return ret, nil
-}
-
-func scriptForSegwitAddress(addr string, params *chaincfg.Params) ([]byte, error) {
-	hrp, data, err := bech32Decode(addr)
-	if err != nil {
-		return nil, err
-	}
-	if !strings.EqualFold(hrp, params.Bech32HRPSegwit) {
-		return nil, fmt.Errorf("wrong bech32 hrp %q for this network", hrp)
-	}
-	if len(data) == 0 {
-		return nil, errors.New("empty segwit data")
-	}
-	ver := data[0]
-	prog, err := convertBits(data[1:], 5, 8, false)
-	if err != nil {
-		return nil, fmt.Errorf("convertBits: %w", err)
-	}
-	if len(prog) < 2 || len(prog) > 40 {
-		return nil, fmt.Errorf("invalid segwit program length %d", len(prog))
-	}
-	if ver > 16 {
-		return nil, fmt.Errorf("invalid segwit version %d", ver)
-	}
-
-	// Build script: OP_<ver> <len> <program>
-	script := make([]byte, 0, 2+len(prog))
-	if ver == 0 {
-		script = append(script, 0x00)
-	} else {
-		script = append(script, 0x50+ver)
-	}
-	script = append(script, byte(len(prog)))
-	script = append(script, prog...)
 	return script, nil
 }
 
-func equalBytes(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
+func bech32Decode(s string) (hrp string, data []byte, err error) {
+	hrp, data, version, err := bech32.DecodeGeneric(s)
+	if err != nil {
+		return "", nil, err
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+	if len(data) == 0 {
+		return "", nil, errors.New("empty segwit data")
 	}
-	return true
-}
-
-// base58CheckEncode encodes version+payload using Base58Check with a double
-// SHA256 checksum, mirroring Bitcoin's address encoding.
-func base58CheckEncode(version byte, payload []byte) (string, error) {
-	if payload == nil {
-		return "", errors.New("nil payload")
+	witnessVer := data[0]
+	if witnessVer == 0 && version != bech32.Version0 {
+		return "", nil, errors.New("witness version 0 must use bech32 encoding")
 	}
-	return base58.CheckEncode(payload, version), nil
-}
-
-// bech32CreateChecksum computes the checksum for bech32 or bech32m encoding.
-// The encoding parameter should be bech32Const (1) for bech32 or bech32mConst (0x2bc830a3) for bech32m.
-func bech32CreateChecksum(hrp string, data []byte, encoding uint32) []byte {
-	values := append(bech32HrpExpand(hrp), data...)
-	polymod := bech32Polymod(append(values, []byte{0, 0, 0, 0, 0, 0}...)) ^ encoding
-	var checksum [6]byte
-	for i := 0; i < 6; i++ {
-		checksum[i] = byte((polymod >> uint(5*(5-i))) & 31)
+	if witnessVer >= 1 && witnessVer <= 16 && version != bech32.VersionM {
+		return "", nil, errors.New("witness version 1+ must use bech32m encoding")
 	}
-	return checksum[:]
-}
-
-// bech32Encode builds a bech32 or bech32m string from HRP and data.
-// The encoding parameter should be bech32Const (1) for bech32 or bech32mConst (0x2bc830a3) for bech32m.
-func bech32Encode(hrp string, data []byte, encoding uint32) (string, error) {
-	if hrp == "" {
-		return "", errors.New("empty hrp")
-	}
-	checksum := bech32CreateChecksum(hrp, data, encoding)
-	combined := append(data, checksum...)
-	var out strings.Builder
-	out.WriteString(strings.ToLower(hrp))
-	out.WriteByte('1')
-	for _, v := range combined {
-		if int(v) >= len(bech32Charset) {
-			return "", errors.New("invalid bech32 value")
-		}
-		out.WriteByte(bech32Charset[v])
-	}
-	return out.String(), nil
+	return hrp, data, nil
 }
 
 // scriptToAddress attempts to derive a human-readable Bitcoin address from a
@@ -325,18 +68,14 @@ func scriptToAddress(script []byte, params *chaincfg.Params) string {
 		script[0] == 0x76 && script[1] == 0xa9 &&
 		script[2] == 0x14 && script[23] == 0x88 && script[24] == 0xac {
 		hash := script[3:23]
-		if addr, err := base58CheckEncode(params.PubKeyHashAddrID, hash); err == nil {
-			return addr
-		}
+		return base58.CheckEncode(hash, params.PubKeyHashAddrID)
 	}
 
 	// P2SH: OP_HASH160 <20> <hash> OP_EQUAL
 	if len(script) == 23 &&
 		script[0] == 0xa9 && script[1] == 0x14 && script[22] == 0x87 {
 		hash := script[2:22]
-		if addr, err := base58CheckEncode(params.ScriptHashAddrID, hash); err == nil {
-			return addr
-		}
+		return base58.CheckEncode(hash, params.ScriptHashAddrID)
 	}
 
 	// Segwit: OP_n <program>
@@ -357,19 +96,17 @@ func scriptToAddress(script []byte, params *chaincfg.Params) string {
 			return ""
 		}
 		prog := script[2 : 2+progLen]
-		// Convert witness program from 8-bit to 5-bit
-		progData, err := convertBits(prog, 8, 5, true)
+		progData, err := bech32.ConvertBits(prog, 8, 5, true)
 		if err != nil {
 			return ""
 		}
-		// Prepend witness version (already a 5-bit value, 0-16)
 		data := append([]byte{ver}, progData...)
-		// BIP 350: Use bech32 for witness version 0, bech32m for version 1+
-		var encoding uint32 = bech32Const
-		if ver >= 1 {
-			encoding = bech32mConst
+		var addr string
+		if ver == 0 {
+			addr, err = bech32.Encode(params.Bech32HRPSegwit, data)
+		} else {
+			addr, err = bech32.EncodeM(params.Bech32HRPSegwit, data)
 		}
-		addr, err := bech32Encode(params.Bech32HRPSegwit, data, encoding)
 		if err != nil {
 			return ""
 		}
