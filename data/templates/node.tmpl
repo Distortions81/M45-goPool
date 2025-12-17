@@ -97,6 +97,13 @@
 			</div>
 		</div>
 
+		<div class="card" style="margin-top:16px;">
+			<div class="label">Node peers</div>
+			<div class="text-sm" id="node-peer-list">
+				Loading peer list…
+			</div>
+		</div>
+
 		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
 			<div class="mono" id="node-data-refreshed">Data loading...</div>
 		</div>
@@ -118,6 +125,7 @@
 		const connectionsEl = document.getElementById('node-connections');
 		const sizeEl = document.getElementById('node-size');
 		const prunedEl = document.getElementById('node-pruned');
+		const peerListEl = document.getElementById('node-peer-list');
 
 		function formatBytes(bytes) {
 			if (bytes === undefined || bytes === null) {
@@ -150,8 +158,32 @@
 			return value ? 'true' : 'false';
 		}
 
+		function renderPeerList(peers) {
+			if (!peerListEl) {
+				return;
+			}
+			peerListEl.innerHTML = '';
+			if (!Array.isArray(peers) || peers.length === 0) {
+				const empty = document.createElement('div');
+				empty.className = 'text-sm';
+				empty.textContent = 'No peers connected';
+				peerListEl.appendChild(empty);
+				return;
+			}
+			const list = document.createElement('ul');
+			list.className = 'list peer-grid';
+			peers.forEach(peer => {
+				const item = document.createElement('li');
+				item.textContent = peer;
+				list.appendChild(item);
+			});
+			peerListEl.appendChild(list);
+		}
+
 		function updateNodeInfo(data) {
-			if (!data) return;
+			if (!data) {
+				return;
+			}
 			if (genesisHashEl) {
 				genesisHashEl.textContent = data.genesis_hash || '--';
 			}
@@ -190,10 +222,13 @@
 			if (prunedEl) {
 				prunedEl.textContent = displayBoolean(data.node_pruned);
 			}
+			renderPeerList(data.node_peers);
 		}
 
 		function formatUTCTimestamp(isoString) {
-			if (!isoString) return 'Loading...';
+			if (!isoString) {
+				return 'Loading...';
+			}
 			try {
 				const date = new Date(isoString);
 				return 'Data refreshed at ' + date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
@@ -205,7 +240,9 @@
 		function fetchNodeInfo() {
 			fetch('/api/node')
 				.then(response => {
-					if (!response.ok) throw new Error('Network response was not ok');
+					if (!response.ok) {
+						throw new Error('Network response was not ok');
+					}
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					const dataRefreshedEl = document.getElementById('node-data-refreshed');
 					if (dataRefreshedEl && updatedAt) {

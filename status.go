@@ -164,6 +164,7 @@ func remoteHostFromRequest(r *http.Request) string {
 }
 
 // buildTime can be overridden at build time with:
+//
 //	go build -ldflags="-X main.buildTime=2025-01-02T15:04:05Z"
 var buildTime = ""
 
@@ -175,19 +176,32 @@ var knownGenesis = map[string]string{
 }
 
 type cachedNodeInfo struct {
-	network     string
-	subversion  string
-	blocks      int64
-	headers     int64
-	ibd         bool
-	pruned      bool
-	sizeOnDisk  uint64
-	conns       int
-	connsIn     int
-	connsOut    int
-	genesisHash string
-	bestHash    string
-	fetchedAt   time.Time
+	network       string
+	subversion    string
+	blocks        int64
+	headers       int64
+	ibd           bool
+	pruned        bool
+	sizeOnDisk    uint64
+	conns         int
+	connsIn       int
+	connsOut      int
+	genesisHash   string
+	bestHash      string
+	peerAddresses []string
+	fetchedAt     time.Time
+}
+
+func stripPeerPort(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
 }
 
 type StatusServer struct {
@@ -465,6 +479,7 @@ type StatusData struct {
 	NodeConnections                int               `json:"node_connections"`
 	NodeConnectionsIn              int               `json:"node_connections_in"`
 	NodeConnectionsOut             int               `json:"node_connections_out"`
+	NodePeerAddresses              []string          `json:"node_peer_addresses,omitempty"`
 	NodePruned                     bool              `json:"node_pruned"`
 	NodeSizeOnDiskBytes            uint64            `json:"node_size_on_disk_bytes"`
 	GenesisHash                    string            `json:"genesis_hash,omitempty"`
@@ -1314,21 +1329,22 @@ type PoolStatsData struct {
 
 // NodePageData contains Bitcoin node information for the node page
 type NodePageData struct {
-	APIVersion               string `json:"api_version"`
-	NodeNetwork              string `json:"node_network,omitempty"`
-	NodeSubversion           string `json:"node_subversion,omitempty"`
-	NodeBlocks               int64  `json:"node_blocks"`
-	NodeHeaders              int64  `json:"node_headers"`
-	NodeInitialBlockDownload bool   `json:"node_initial_block_download"`
-	NodeConnections          int    `json:"node_connections"`
-	NodeConnectionsIn        int    `json:"node_connections_in"`
-	NodeConnectionsOut       int    `json:"node_connections_out"`
-	NodePruned               bool   `json:"node_pruned"`
-	NodeSizeOnDiskBytes      uint64 `json:"node_size_on_disk_bytes"`
-	GenesisHash              string `json:"genesis_hash,omitempty"`
-	GenesisExpected          string `json:"genesis_expected,omitempty"`
-	GenesisMatch             bool   `json:"genesis_match"`
-	BestBlockHash            string `json:"best_block_hash,omitempty"`
+	APIVersion               string   `json:"api_version"`
+	NodeNetwork              string   `json:"node_network,omitempty"`
+	NodeSubversion           string   `json:"node_subversion,omitempty"`
+	NodeBlocks               int64    `json:"node_blocks"`
+	NodeHeaders              int64    `json:"node_headers"`
+	NodeInitialBlockDownload bool     `json:"node_initial_block_download"`
+	NodeConnections          int      `json:"node_connections"`
+	NodeConnectionsIn        int      `json:"node_connections_in"`
+	NodeConnectionsOut       int      `json:"node_connections_out"`
+	NodePeers                []string `json:"node_peers,omitempty"`
+	NodePruned               bool     `json:"node_pruned"`
+	NodeSizeOnDiskBytes      uint64   `json:"node_size_on_disk_bytes"`
+	GenesisHash              string   `json:"genesis_hash,omitempty"`
+	GenesisExpected          string   `json:"genesis_expected,omitempty"`
+	GenesisMatch             bool     `json:"genesis_match"`
+	BestBlockHash            string   `json:"best_block_hash,omitempty"`
 }
 
 // WorkersListData contains paginated worker information
@@ -1469,6 +1485,7 @@ func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request
 			NodeConnections:          full.NodeConnections,
 			NodeConnectionsIn:        full.NodeConnectionsIn,
 			NodeConnectionsOut:       full.NodeConnectionsOut,
+			NodePeers:                full.NodePeerAddresses,
 			NodePruned:               full.NodePruned,
 			NodeSizeOnDiskBytes:      full.NodeSizeOnDiskBytes,
 			GenesisHash:              full.GenesisHash,
@@ -2384,6 +2401,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var nodeSizeOnDisk uint64
 	var nodeConns, nodeConnsIn, nodeConnsOut int
 	var genesisHash, bestHash string
+	var nodePeers []string
 	if s.rpc != nil {
 		info := s.ensureNodeInfo()
 		nodeNetwork = info.network
@@ -2396,6 +2414,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		nodeConns = info.conns
 		nodeConnsIn = info.connsIn
 		nodeConnsOut = info.connsOut
+		if len(info.peerAddresses) > 0 {
+			nodePeers = append([]string(nil), info.peerAddresses...)
+		}
 		genesisHash = info.genesisHash
 		bestHash = info.bestHash
 	}
@@ -2560,6 +2581,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodeConnections:                nodeConns,
 		NodeConnectionsIn:              nodeConnsIn,
 		NodeConnectionsOut:             nodeConnsOut,
+		NodePeerAddresses:              nodePeers,
 		NodePruned:                     nodePruned,
 		NodeSizeOnDiskBytes:            nodeSizeOnDisk,
 		GenesisHash:                    genesisHash,
@@ -2759,8 +2781,9 @@ func (s *StatusServer) logShareTotals(accepted, rejected uint64) {
 }
 
 const (
-	nodeInfoTTL        = 30 * time.Second
-	nodeInfoRPCTimeout = 5 * time.Second
+	nodeInfoTTL          = 30 * time.Second
+	nodeInfoRPCTimeout   = 5 * time.Second
+	maxNodePeerAddresses = 64
 )
 
 // ensureNodeInfo returns the cached node snapshot and schedules a non-blocking
@@ -2844,6 +2867,26 @@ func (s *StatusServer) refreshNodeInfo() {
 		info.conns = netInfo.Connections
 		info.connsIn = netInfo.ConnectionsIn
 		info.connsOut = netInfo.ConnectionsOut
+		updated = true
+	}
+
+	var peerList []struct {
+		Addr string `json:"addr"`
+	}
+	if err := s.rpcCallCtx("getpeerinfo", nil, &peerList); err == nil {
+		addrs := make([]string, 0, len(peerList))
+		for _, p := range peerList {
+			if host := stripPeerPort(p.Addr); host != "" {
+				addrs = append(addrs, host)
+			}
+		}
+		if len(addrs) > 1 {
+			sort.Strings(addrs)
+		}
+		if len(addrs) > maxNodePeerAddresses {
+			addrs = append([]string(nil), addrs[:maxNodePeerAddresses]...)
+		}
+		info.peerAddresses = addrs
 		updated = true
 	}
 
