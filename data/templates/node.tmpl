@@ -207,7 +207,7 @@
 			sorted.forEach(peer => {
 				const item = document.createElement('div');
 				item.className = 'peer-entry';
-				const pingLabel = Number.isFinite(peer.ping_ms) ? `${peer.ping_ms.toFixed(1)} ms` : 'N/A';
+				const pingLabel = peer.ping_ms > 0 ? `${peer.ping_ms.toFixed(1)} ms` : '--';
 				const connectedLabel = formatDurationLabel(peer.connected_at);
 				item.innerHTML = `
 					<div class="peer-label">${peer.display}</div>
