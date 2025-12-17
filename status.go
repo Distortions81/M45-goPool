@@ -971,6 +971,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		WindowAccepted:      stats.WindowAccepted,
 		WindowSubmissions:   stats.WindowSubmissions,
 		ShareRate:           accRate,
+		ConnectionID:        mc.connectionIDString(),
 		WalletValidated:     valid,
 	}
 }
@@ -1812,15 +1813,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 
 		// Convert full WorkerView to minimal RecentWorkView for the overview page
 		recentWork := make([]RecentWorkView, len(full.Workers))
-		connectionCounts := make(map[string]int, len(full.Workers))
 		for i, w := range full.Workers {
-			nameKey := w.Name
-			connectionCounts[nameKey]++
-			count := connectionCounts[nameKey]
-			var connIndex uint64
-			if count > 0 {
-				connIndex = uint64(count - 1)
-			}
 			recentWork[i] = RecentWorkView{
 				Name:            w.Name,
 				DisplayName:     w.DisplayName,
@@ -1828,7 +1821,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 				Difficulty:      w.Difficulty,
 				ShareRate:       w.ShareRate,
 				Accepted:        w.Accepted,
-				ConnectionID:    encodeBase58Uint64(connIndex),
+				ConnectionID:    w.ConnectionID,
 			}
 		}
 

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/gopkg/util/logger"
@@ -86,6 +87,8 @@ var defaultVarDiff = VarDiffConfig{
 	BurstWindow:        60 * time.Second,
 	DampingFactor:      0.5, // move 50% toward target to reduce overshoot
 }
+
+var nextConnectionID uint64
 
 // duplicateShareKey is a compact, comparable representation of a share
 // submission used for duplicate detection. It stores a bounded prefix of
@@ -246,6 +249,7 @@ type MinerConn struct {
 	rollingHashrateValue float64
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
+	connectionSeq    uint64
 	vardiffReady    bool
 }
 
@@ -414,6 +418,22 @@ func (mc *MinerConn) setWorkerWallet(worker, addr string, script []byte) {
 		validated: true,
 	}
 	mc.walletMu.Unlock()
+}
+
+func (mc *MinerConn) assignConnectionSeq() {
+	if atomic.LoadUint64(&mc.connectionSeq) != 0 {
+		return
+	}
+	id := atomic.AddUint64(&nextConnectionID, 1)
+	atomic.StoreUint64(&mc.connectionSeq, id)
+}
+
+func (mc *MinerConn) connectionIDString() string {
+	seq := atomic.LoadUint64(&mc.connectionSeq)
+	if seq == 0 {
+		return ""
+	}
+	return encodeBase58Uint64(seq)
 }
 
 func (mc *MinerConn) ensureWorkerWallet(worker string) (string, []byte, bool) {
@@ -1779,6 +1799,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 			mc.Close("wallet validation failed")
 			return
 		}
+		mc.assignConnectionSeq()
 		if prev := mc.registerWorker(workerName); prev != nil && prev != mc && mc.cfg.KickDuplicateWorkerNames {
 			logger.Info("closing previous connection for worker", "worker", workerName, "remote", prev.id)
 			prev.Close("duplicate worker connection")
