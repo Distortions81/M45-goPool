@@ -436,6 +436,22 @@ func (mc *MinerConn) connectionIDString() string {
 	return encodeBase58Uint64(seq)
 }
 
+const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+func encodeBase58Uint64(value uint64) string {
+	if value == 0 {
+		return string(base58Alphabet[0])
+	}
+	var buf [16]byte
+	i := len(buf)
+	for value > 0 {
+		i--
+		buf[i] = base58Alphabet[value%58]
+		value /= 58
+	}
+	return string(buf[i:])
+}
+
 func (mc *MinerConn) ensureWorkerWallet(worker string) (string, []byte, bool) {
 	if worker == "" {
 		return "", nil, false
