@@ -20,10 +20,17 @@ jobs:
         with:
           go-version: 1.24.11
 
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libzmq3-dev pkg-config
+
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
+        env:
+          CGO_ENABLED: "1"
         run: |
           PATH="$(go env GOPATH)/bin:$PATH"
           govulncheck ./...
