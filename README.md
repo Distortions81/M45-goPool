@@ -1,6 +1,7 @@
 # M45-Core-goPool
 
 [![Go CI](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml)
+[![Go Vulncheck](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-Core-goPool)](https://goreportcard.com/report/github.com/Distortions81/M45-Core-goPool)
 [![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Distortions81/M45-Core-goPool)](https://go.dev)
@@ -16,7 +17,7 @@ Solo Bitcoin pool uses `bitcoind` over JSON-RPC + ZMQ and offers Stratum v1, opt
 - Compatibility tests run against [btcd](https://github.com/btcsuite/btcd) and [pogolo](https://github.com/pogodev/pogolo) (see `cross_impl_sanity_test.go`) to sanity check everything.
 - The codebase currently spans ~13,000 lines of code, backed by ~5,500 lines of tests.
 
-Continuous integration runs on GitHub Actions to verify `go test ./...` and ensure code quality.
+Continuous integration runs on GitHub Actions to verify `go test ./...` and ensure code quality, plus a dedicated `Go Vulncheck` workflow runs `govulncheck ./...` to keep dependency vulnerabilities in check.
 
 ## Getting started
 
