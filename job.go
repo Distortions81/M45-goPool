@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bytedance/gopkg/util/logger"
 	"github.com/pebbe/zmq4"
 )
 
@@ -811,11 +810,9 @@ func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
 		fields = append(fields, "error", err)
 	}
 	if jm.zmqHealthy.Swap(false) {
-		args := append([]interface{}{"zmq watcher unhealthy"}, fields...)
-		logger.Warn(args...)
+		logger.Warn("zmq watcher unhealthy", fields...)
 	} else if err != nil {
-		args := append([]interface{}{"zmq watcher error"}, fields...)
-		logger.Error(args...)
+		logger.Error("zmq watcher error", fields...)
 	}
 }
 

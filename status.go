@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bytedance/gopkg/util/logger"
 	"github.com/bytedance/sonic"
 )
 

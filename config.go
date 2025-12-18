@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/gopkg/util/logger"
 	"github.com/pelletier/go-toml"
 )
 
