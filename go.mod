@@ -1,12 +1,12 @@
 module goPool
 
-go 1.24.10
+go 1.24.11
 
 require (
 	github.com/btcsuite/btcd v0.25.0
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
-	github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/bytedance/gopkg v0.1.3
 	github.com/bytedance/sonic v1.14.2
 	github.com/minio/sha256-simd v1.0.1
