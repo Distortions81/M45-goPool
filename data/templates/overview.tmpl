@@ -14,12 +14,22 @@
 				<p class="overview-banner-title">Mining connection info</p>
 				<div class="overview-banner-line">
 					<span class="overview-banner-label">Plain Stratum</span>
-					<span class="overview-banner-value">stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}</span>
+					<span class="overview-banner-value">
+						<button type="button" class="stratum-copy" data-copy-scheme="stratum+tcp://" data-copy-port="{{addrPort .ListenAddr}}">
+							stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}
+						</button>
+						<span class="copy-feedback" aria-live="polite"></span>
+					</span>
 				</div>
 				{{if .StratumTLSListen}}
 				<div class="overview-banner-line">
 					<span class="overview-banner-label">Encrypted Stratum</span>
-					<span class="overview-banner-value">stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}</span>
+					<span class="overview-banner-value">
+						<button type="button" class="stratum-copy" data-copy-scheme="stratum+tls://" data-copy-port="{{addrPort .StratumTLSListen}}">
+							stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}
+						</button>
+						<span class="copy-feedback" aria-live="polite"></span>
+					</span>
 				</div>
 				{{end}}
 				<div class="overview-banner-line">
@@ -689,9 +699,70 @@
 		if (!banner) {
 			return;
 		}
+
 		const host = banner.dataset.host || window.location.hostname || "localhost";
 		banner.querySelectorAll("[data-stratum-host]").forEach(el => {
 			el.textContent = host;
+		});
+
+		const feedbackTimers = new WeakMap();
+		const FEEDBACK_DURATION = 1800;
+
+		function showCopyFeedback(feedbackEl) {
+			if (!feedbackEl) {
+				return;
+			}
+			feedbackEl.textContent = "address copied!";
+			feedbackEl.classList.add("visible");
+			if (feedbackTimers.has(feedbackEl)) {
+				clearTimeout(feedbackTimers.get(feedbackEl));
+			}
+			const timer = setTimeout(() => {
+				feedbackEl.classList.remove("visible");
+			}, FEEDBACK_DURATION);
+			feedbackTimers.set(feedbackEl, timer);
+		}
+
+		async function copyToClipboard(value) {
+			if (!value) {
+				return;
+			}
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(value);
+				return;
+			}
+			const textarea = document.createElement("textarea");
+			textarea.value = value;
+			textarea.setAttribute("readonly", "");
+			textarea.style.position = "fixed";
+			textarea.style.opacity = "0";
+			banner.appendChild(textarea);
+			textarea.select();
+			textarea.setSelectionRange(0, textarea.value.length);
+			try {
+				document.execCommand("copy");
+			} catch (err) {
+				console.error("Copy fallback failed", err);
+			}
+			banner.removeChild(textarea);
+		}
+
+		banner.querySelectorAll(".stratum-copy").forEach(button => {
+			const scheme = button.dataset.copyScheme || "";
+			const port = button.dataset.copyPort || "";
+			const feedbackEl = button.nextElementSibling;
+			button.addEventListener("click", async () => {
+				if (!scheme || !port) {
+					return;
+				}
+				const value = `${scheme}${host}:${port}`;
+				try {
+					await copyToClipboard(value);
+					showCopyFeedback(feedbackEl);
+				} catch (err) {
+					console.error("Failed to copy stratum address:", err);
+				}
+			});
 		});
 	})();
 	</script>
