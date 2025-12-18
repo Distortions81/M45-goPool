@@ -10,36 +10,75 @@
 	{{template "header" .}}
 	<div class="page">
 		<div class="overview-banner" id="overview-banner" data-host="{{.BrandDomain}}">
-			<div>
-				<p class="overview-banner-title">Mining connection info</p>
-				<div class="overview-banner-line">
-					<span class="overview-banner-label">Plain Stratum</span>
-					<span class="overview-banner-value">
-						<button type="button" class="stratum-copy" data-copy-scheme="stratum+tcp://" data-copy-port="{{addrPort .ListenAddr}}">
-							stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}
-						</button>
-						<span class="copy-feedback" aria-live="polite"></span>
-					</span>
+			<div class="connect-panel">
+				<div class="connect-panel-intro">
+					<p class="connect-panel-title">Connect your miner</p>
+					<p class="connect-panel-subtitle">Copy these settings into your mining software.</p>
 				</div>
-				{{if .StratumTLSListen}}
-				<div class="overview-banner-line">
-					<span class="overview-banner-label">Encrypted Stratum</span>
-					<span class="overview-banner-value">
-						<button type="button" class="stratum-copy" data-copy-scheme="stratum+tls://" data-copy-port="{{addrPort .StratumTLSListen}}">
-							stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}
-						</button>
-						<span class="copy-feedback" aria-live="polite"></span>
-					</span>
+
+				<div class="connect-steps">
+					<div class="connect-step">
+						<div class="connect-step-head">
+							<div class="connect-step-number">1</div>
+							<div class="connect-step-label">Pool URL</div>
+						</div>
+						<div class="connect-step-body">
+							<div class="connect-copy-row">
+								<button type="button" class="copy-pill stratum-copy" data-copy-scheme="stratum+tcp://" data-copy-port="{{addrPort .ListenAddr}}" aria-label="Copy pool URL">
+									<span class="copy-pill-action">Copy</span>
+									<span class="copy-pill-value">stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}</span>
+								</button>
+								<span class="copy-feedback" aria-live="polite"></span>
+							</div>
+							{{if .StratumTLSListen}}
+							<details class="connect-advanced">
+								<summary>Optional: encrypted connection (TLS)</summary>
+								<div class="connect-advanced-body">
+									<p class="text-sm connect-hint">Use this only if your miner supports Stratum TLS.</p>
+									<div class="connect-copy-row">
+										<button type="button" class="copy-pill stratum-copy" data-copy-scheme="stratum+tls://" data-copy-port="{{addrPort .StratumTLSListen}}" aria-label="Copy encrypted pool URL (TLS)">
+											<span class="copy-pill-action">Copy</span>
+											<span class="copy-pill-value">stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}</span>
+										</button>
+										<span class="copy-feedback" aria-live="polite"></span>
+									</div>
+								</div>
+							</details>
+							{{end}}
+						</div>
+					</div>
+
+					<div class="connect-step">
+						<div class="connect-step-head">
+							<div class="connect-step-number">2</div>
+							<div class="connect-step-label">Username</div>
+						</div>
+						<div class="connect-step-body">
+							<div class="connect-value mono">YourBTCAddress.WorkerName</div>
+							<p class="text-sm connect-hint">Example: <span class="mono">[wallet].rig1</span></p><p class="text-sm connect-hint">(worker name is anything you like)</p>
+						</div>
+					</div>
+
+					<div class="connect-step">
+						<div class="connect-step-head">
+							<div class="connect-step-number">3</div>
+							<div class="connect-step-label">Password</div>
+						</div>
+						<div class="connect-step-body">
+							<div class="connect-copy-row">
+								<button type="button" class="copy-pill" data-copy-value="x" aria-label="Copy password">
+									<span class="copy-pill-action">Copy</span>
+									<span class="copy-pill-value">x</span>
+								</button>
+								<span class="copy-feedback" aria-live="polite"></span>
+							</div>
+							<p class="text-sm connect-hint">Most miners use <span class="mono">x</span> by default, but any password will work.</p>
+						</div>
+					</div>
 				</div>
-				{{end}}
-				<div class="overview-banner-line">
-					<span class="overview-banner-label">Credentials</span>
-					<span class="overview-banner-value">username: &lt;your BTC address&gt;.&lt;worker name&gt;, password: x</span>
-				</div>
+
 				{{if .KickDuplicateWorkerNames}}
-				<p class="text-sm" style="margin:6px 0 0;color:#ccc;">
-					Reusing a worker ID closes its prior session once wallet verification succeeds.
-				</p>
+				<p class="text-sm connect-note">If you reuse a worker name, the old connection will be replaced after your wallet is verified.</p>
 				{{end}}
 			</div>
 		</div>
@@ -712,7 +751,7 @@
 			if (!feedbackEl) {
 				return;
 			}
-			feedbackEl.textContent = "  [Address Copied!]";
+			feedbackEl.textContent = "Copied";
 			feedbackEl.classList.add("visible");
 			if (feedbackTimers.has(feedbackEl)) {
 				clearTimeout(feedbackTimers.get(feedbackEl));
@@ -747,20 +786,43 @@
 			banner.removeChild(textarea);
 		}
 
+		function feedbackForButton(button) {
+			const row = button.closest(".connect-copy-row");
+			if (row) {
+				return row.querySelector(".copy-feedback");
+			}
+			if (button.nextElementSibling && button.nextElementSibling.classList && button.nextElementSibling.classList.contains("copy-feedback")) {
+				return button.nextElementSibling;
+			}
+			return null;
+		}
+
 		banner.querySelectorAll(".stratum-copy").forEach(button => {
 			const scheme = button.dataset.copyScheme || "";
 			const port = button.dataset.copyPort || "";
-			const feedbackEl = button.nextElementSibling;
+			const feedbackEl = feedbackForButton(button);
 			button.addEventListener("click", async () => {
-				if (!scheme || !port) {
-					return;
-				}
+				if (!scheme || !port) return;
 				const value = `${scheme}${host}:${port}`;
 				try {
 					await copyToClipboard(value);
 					showCopyFeedback(feedbackEl);
 				} catch (err) {
 					console.error("Failed to copy stratum address:", err);
+				}
+			});
+		});
+
+		banner.querySelectorAll("[data-copy-value]").forEach(button => {
+			const value = button.dataset.copyValue || "";
+			const feedbackEl = feedbackForButton(button);
+			button.addEventListener("click", async () => {
+				if (!value) return;
+				try {
+					await copyToClipboard(value);
+					showCopyFeedback(feedbackEl);
+				} catch (err) {
+					console.error("Failed to copy value:", err);
 				}
 			});
 		});
