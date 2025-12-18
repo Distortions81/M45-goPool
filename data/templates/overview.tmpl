@@ -706,13 +706,13 @@
 		});
 
 		const feedbackTimers = new WeakMap();
-		const FEEDBACK_DURATION = 1800;
+		const FEEDBACK_DURATION = 3400;
 
 		function showCopyFeedback(feedbackEl) {
 			if (!feedbackEl) {
 				return;
 			}
-			feedbackEl.textContent = "address copied!";
+			feedbackEl.textContent = "Address Copied!";
 			feedbackEl.classList.add("visible");
 			if (feedbackTimers.has(feedbackEl)) {
 				clearTimeout(feedbackTimers.get(feedbackEl));

@@ -191,11 +191,21 @@ header {
 	font-size: 11px;
 	color: #8ef1ba;
 	opacity: 0;
-	transition: opacity 0.2s ease;
+	transition: opacity 0.25s ease;
 	vertical-align: middle;
 }
 .copy-feedback.visible {
 	opacity: 1;
+	animation: copy-feedback-fade-out 0.35s ease 3s forwards;
+}
+
+@keyframes copy-feedback-fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
 }
 
 .header-inner {
