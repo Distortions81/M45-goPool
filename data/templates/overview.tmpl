@@ -387,7 +387,13 @@
 		function formatDiff(d) {
 			if (!d) return '—';
 			if (d < 1000000) return d.toFixed(0);
-			return (d / 1000000).toFixed(2) + 'M';
+			if (d >= 1000000000000) {
+				return (d / 1000000000000).toFixed(1) + 'P';
+			}
+			if (d >= 1000000000) {
+				return (d / 1000000000).toFixed(1) + 'G';
+			}
+			return (d / 1000000).toFixed(1) + 'M';
 		}
 
 		function formatTimeAgo(value) {
