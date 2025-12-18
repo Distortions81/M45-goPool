@@ -30,6 +30,7 @@ type PoolMetrics struct {
 	bestShareCount int
 	bestSharesMu   sync.RWMutex
 	bestSharesFile string
+	bestShareChan  chan BestShare
 
 	// Simple RPC latency summaries for diagnostics (seconds).
 	rpcGBTLast     float64
@@ -41,7 +42,11 @@ type PoolMetrics struct {
 }
 
 func NewPoolMetrics() *PoolMetrics {
-	return &PoolMetrics{}
+	m := &PoolMetrics{
+		bestShareChan: make(chan BestShare, 64),
+	}
+	go m.bestShareWorker()
+	return m
 }
 
 func (m *PoolMetrics) SetBestSharesFile(path string) {
@@ -253,11 +258,28 @@ func (m *PoolMetrics) TrackBestShare(worker, hash string, difficulty float64, ti
 		return
 	}
 
-	go m.RecordBestShare(share)
+	if ch := m.bestShareChan; ch != nil {
+		select {
+		case ch <- share:
+		default:
+			go m.recordBestShare(share)
+		}
+		return
+	}
+	m.recordBestShare(share)
 }
 
-// RecordBestShare inserts the provided entry into the sorted best-share list.
-func (m *PoolMetrics) RecordBestShare(share BestShare) {
+func (m *PoolMetrics) bestShareWorker() {
+	if m.bestShareChan == nil {
+		return
+	}
+	for share := range m.bestShareChan {
+		m.recordBestShare(share)
+	}
+}
+
+// recordBestShare inserts the provided entry into the sorted best-share list.
+func (m *PoolMetrics) recordBestShare(share BestShare) {
 	if m == nil {
 		return
 	}

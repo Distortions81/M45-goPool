@@ -320,9 +320,16 @@ type AccountStore struct {
 
 // banList holds the persisted bans and synchronizes access via an RWMutex.
 type banList struct {
-	mu      sync.RWMutex
-	entries map[string]banEntry
-	path    string
+	mu       sync.RWMutex
+	entries  map[string]banEntry
+	path     string
+	writeMu  sync.Mutex
+	appendCh chan appendRequest
+}
+
+type appendRequest struct {
+	entry banEntry
+	done  chan error
 }
 
 func newBanList(path string) (*banList, error) {
@@ -332,6 +339,10 @@ func newBanList(path string) (*banList, error) {
 	}
 	if err := bl.load(); err != nil {
 		return nil, err
+	}
+	if path != "" {
+		bl.appendCh = make(chan appendRequest, 32)
+		go bl.appendWorker()
 	}
 	return bl, nil
 }
@@ -376,16 +387,40 @@ func (b *banList) load() error {
 	return nil
 }
 
+func (b *banList) appendWorker() {
+	if b.appendCh == nil {
+		return
+	}
+	for req := range b.appendCh {
+		if req.entry.Worker == "" {
+			if req.done != nil {
+				req.done <- nil
+				close(req.done)
+			}
+			continue
+		}
+		err := b.appendBanLocked(req.entry)
+		if err != nil {
+			logger.Warn("append ban entry", "error", err)
+		}
+		if req.done != nil {
+			req.done <- err
+			close(req.done)
+		}
+	}
+}
+
 func (b *banList) markBan(worker string, until time.Time, reason string) error {
 	if b == nil || b.path == "" || worker == "" {
 		return nil
 	}
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	if until.IsZero() {
 		delete(b.entries, worker)
 		// When unbanning, we need to rewrite the file
-		return b.persistLocked()
+		err := b.persistLocked()
+		b.mu.Unlock()
+		return err
 	}
 
 	// Add to in-memory map
@@ -395,8 +430,17 @@ func (b *banList) markBan(worker string, until time.Time, reason string) error {
 		Reason: reason,
 	}
 	b.entries[worker] = entry
+	ch := b.appendCh
+	b.mu.Unlock()
 
-	// Append to file
+	if ch != nil {
+		req := appendRequest{
+			entry: entry,
+			done:  make(chan error, 1),
+		}
+		ch <- req
+		return <-req.done
+	}
 	return b.appendBanLocked(entry)
 }
 
@@ -404,6 +448,9 @@ func (b *banList) appendBanLocked(entry banEntry) error {
 	if b.path == "" {
 		return nil
 	}
+
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
 
 	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -459,6 +506,9 @@ func (b *banList) persistLocked() error {
 		}
 		entries = append(entries, entry)
 	}
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
+
 	if len(entries) == 0 {
 		if err := os.Remove(b.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove ban file: %w", err)
