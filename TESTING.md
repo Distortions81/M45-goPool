@@ -73,6 +73,27 @@ go test -v ./... -run TestBuildBlock_ParsesWithBtcdAndHasValidMerkle
     `handleBlockShare` path to the point where `submitblock` is invoked, using
     a fake `rpcCaller` so the test does not depend on network latency.
 
+## Profiling with simulated miners
+
+The `TestGenerateGoProfileWithSimulatedMiners` helper can capture a CPU
+profile while a configurable number of simulated miners exercise hashing and
+big-int work. It is gated behind an environment variable so it never runs as
+part of the normal suite. To emit a profile:
+
+```bash
+GO_PROFILE_SIMULATED_MINERS=1 \
+GO_PROFILE_MINER_COUNT=32 \
+GO_PROFILE_DURATION=10s \
+GO_PROFILE_OUTPUT=default.pgo \
+go test -run TestGenerateGoProfileWithSimulatedMiners ./...
+```
+
+Use `GO_PROFILE_MINER_COUNT` to adjust how many goroutines run, `GO_PROFILE_DURATION`
+to shorten or lengthen the capture window, and `GO_PROFILE_OUTPUT` to change the
+file name written by `runtime/pprof`. After the test completes, feed the output
+via `go tool pprof default.pgo ./gopool` (or whichever binary you profiled) to
+inspect or convert the profile.
+
 ## Rough code coverage
 
 For a quick, overall coverage number:
