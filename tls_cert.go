@@ -15,8 +15,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 // ensureSelfSignedCert makes sure a certificate/key pair exists at the given

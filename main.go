@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -19,8 +18,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 // poolSoftwareName is the name of the pool software used throughout the codebase
@@ -260,16 +257,17 @@ func main() {
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
 	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
 	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
+	stdoutLogFlag := flag.Bool("stdoutlog", false, "mirror logs to stdout in addition to writing to files")
 	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
 	flag.Parse()
 	cleanBansOnStartup := !*noCleanBansFlag
 
-	level := slog.LevelError
+	level := logLevelInfo
 	if verboseEnabled() {
-		level = slog.LevelInfo
+		level = logLevelInfo
 	}
 	if debugEnabled() {
-		level = slog.LevelDebug
+		level = logLevelDebug
 	}
 	setLogLevel(level)
 	// Raise the GC target when GOGC is not explicitly set so high-throughput
@@ -461,15 +459,19 @@ func main() {
 	if err != nil {
 		fatal("log file", err)
 	}
-	// Send structured logs only to the pool log file; keep stdout clean
-	// except for explicit operator-facing prints.
-	configureLoggerOutput(newRollingFileWriter(logPath))
-
 	errorLogPath, err := initErrorLogOutput(cfg)
 	if err != nil {
 		fatal("error log file", err)
 	}
-	configureErrorLoggerOutput(newRollingFileWriter(errorLogPath))
+	var debugLogPath string
+	if debugEnabled() {
+		debugLogPath, err = initDebugLogOutput(cfg)
+		if err != nil {
+			fatal("debug log file", err)
+		}
+	}
+	configureFileLogging(logPath, errorLogPath, debugLogPath, *stdoutLogFlag)
+	defer logger.Stop()
 
 	if !cleanBansOnStartup {
 		logger.Warn("ban cleanup on startup disabled", "flag", "no-clean-bans")
@@ -929,8 +931,18 @@ func main() {
 	}
 	// Best-effort sync of log files on shutdown so buffered OS writes are
 	// forced to disk.
+	logger.Info("shutdown complete", "uptime", time.Since(startTime))
+	logger.Stop()
+
+	// Best-effort sync of log files on shutdown so buffered OS writes are
+	// forced to disk.
 	if err := syncFileIfExists(logPath); err != nil {
 		logger.Error("sync pool log", "error", err)
+	}
+	if debugLogPath != "" {
+		if err := syncFileIfExists(debugLogPath); err != nil {
+			logger.Error("sync debug log", "error", err)
+		}
 	}
 	if debugEnabled() && netLogPath != "" {
 		if err := syncFileIfExists(netLogPath); err != nil {
@@ -942,7 +954,6 @@ func main() {
 			logger.Error("sync error log", "error", err)
 		}
 	}
-	logger.Info("shutdown complete", "uptime", time.Since(startTime))
 }
 
 func initLogOutput(cfg Config) (string, error) {
@@ -981,6 +992,19 @@ func initErrorLogOutput(cfg Config) (string, error) {
 		return "", err
 	}
 	path := filepath.Join(logDir, "errors.log")
+	return path, nil
+}
+
+func initDebugLogOutput(cfg Config) (string, error) {
+	dir := cfg.DataDir
+	if dir == "" {
+		dir = defaultDataDir
+	}
+	logDir := filepath.Join(dir, "logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(logDir, "debug.log")
 	return path, nil
 }
 

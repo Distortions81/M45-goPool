@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"math/big"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 // buildShareDetail constructs a ShareDetail payload for a share, including the

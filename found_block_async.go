@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 // foundBlockLogEntry represents a single JSONL line to append to the

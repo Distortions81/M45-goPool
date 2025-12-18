@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 // pendingSubmissionRecord mirrors the JSON structure written to

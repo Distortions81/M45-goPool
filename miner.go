@@ -17,8 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/bytedance/gopkg/util/logger"
 )
 
 var (
@@ -1759,8 +1757,7 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 		if !status.LastSuccess.IsZero() {
 			fields = append(fields, "last_job_at", status.LastSuccess)
 		}
-		args := append([]interface{}{"miner subscribed but no job ready"}, fields...)
-		logger.Warn(args...)
+		logger.Warn("miner subscribed but no job ready", fields...)
 	}
 }
 
