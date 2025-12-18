@@ -19,8 +19,8 @@ const (
 	defaultTemplateExtraNonce2Size           = 8
 	defaultPoolFeePercent                    = 2.0
 	defaultRecentJobs                        = 3
-	defaultSubscribeTimeout                  = 15 * time.Second
-	defaultAuthorizeTimeout                  = 15 * time.Second
+	defaultSubscribeTimeout                  = 30 * time.Second
+	defaultAuthorizeTimeout                  = 30 * time.Second
 	defaultStratumReadTimeout                = 5 * time.Minute
 	defaultMaxAcceptsPerSecond               = 500
 	defaultMaxAcceptBurst                    = 1000
