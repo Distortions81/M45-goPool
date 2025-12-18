@@ -621,7 +621,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		bootstrapDone:     false,
 		isTLSConnection:   isTLS,
 	}
-	mc.assignConnectionSeq()
 	return mc
 }
 
@@ -1823,6 +1822,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
+	mc.assignConnectionSeq()
 	mc.authorized = true
 	mc.authorizeDeadline = time.Time{}
 
