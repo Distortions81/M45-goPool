@@ -1760,14 +1760,63 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Request) {
 	key := "pool_hashrate"
 	s.serveCachedJSON(w, key, poolHashrateTTL, func() ([]byte, error) {
+		var blockHeight int64
+		var blockDifficulty float64
+		blockTimeLeftSec := int64(-1)
+		now := time.Now()
+		if s.jobMgr != nil {
+			fs := s.jobMgr.FeedStatus()
+			blockTip := fs.Payload.BlockTip
+			if blockTip.Height > 0 {
+				blockHeight = blockTip.Height
+			}
+			if blockTip.Difficulty > 0 {
+				blockDifficulty = blockTip.Difficulty
+			}
+			if !blockTip.Time.IsZero() {
+				const targetBlockInterval = 10 * time.Minute
+				remaining := blockTip.Time.Add(targetBlockInterval).Sub(now)
+				if remaining < 0 {
+					remaining = 0
+				}
+				blockTimeLeftSec = int64(remaining.Seconds())
+			}
+			if blockHeight == 0 || blockDifficulty == 0 || blockTimeLeftSec < 0 {
+				if job := s.jobMgr.CurrentJob(); job != nil {
+					tpl := job.Template
+					if blockHeight == 0 && tpl.Height > 0 {
+						blockHeight = tpl.Height
+					}
+					if blockDifficulty == 0 && tpl.Bits != "" {
+						if bits, err := strconv.ParseUint(strings.TrimSpace(tpl.Bits), 16, 32); err == nil {
+							blockDifficulty = difficultyFromBits(uint32(bits))
+						}
+					}
+					if blockTimeLeftSec < 0 && tpl.CurTime > 0 {
+						const targetBlockInterval = 10 * time.Minute
+						remaining := time.Unix(tpl.CurTime, 0).Add(targetBlockInterval).Sub(now)
+						if remaining < 0 {
+							remaining = 0
+						}
+						blockTimeLeftSec = int64(remaining.Seconds())
+					}
+				}
+			}
+		}
 		data := struct {
-			APIVersion   string  `json:"api_version"`
-			PoolHashrate float64 `json:"pool_hashrate"`
-			UpdatedAt    string  `json:"updated_at"`
+			APIVersion         string  `json:"api_version"`
+			PoolHashrate       float64 `json:"pool_hashrate"`
+			BlockHeight        int64   `json:"block_height"`
+			BlockDifficulty    float64 `json:"block_difficulty"`
+			BlockTimeLeftSec   int64   `json:"block_time_left_sec"`
+			UpdatedAt          string  `json:"updated_at"`
 		}{
-			APIVersion:   apiVersion,
-			PoolHashrate: s.computePoolHashrate(),
-			UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
+			APIVersion:       apiVersion,
+			PoolHashrate:     s.computePoolHashrate(),
+			BlockHeight:      blockHeight,
+			BlockDifficulty:  blockDifficulty,
+			BlockTimeLeftSec: blockTimeLeftSec,
+			UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
 		}
 		return sonic.Marshal(data)
 	})
