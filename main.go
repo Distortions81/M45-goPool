@@ -270,11 +270,7 @@ func main() {
 		level = logLevelDebug
 	}
 	setLogLevel(level)
-	// Raise the GC target when GOGC is not explicitly set so high-throughput
-	// pools spend less CPU in GC at the cost of a modestly larger heap.
-	if os.Getenv("GOGC") == "" {
-		debugpkg.SetGCPercent(300)
-	}
+
 	// Mirror build-time debug/verbose settings into globals used by hot paths.
 	debugLogging = debugEnabled()
 	verboseLogging = verboseEnabled()
@@ -303,7 +299,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Set up SIGUSR1 handler for template reloading (will be connected to statusServer later)
+	// Set up SIGUSR1 handler for template reloading
 	reloadChan := make(chan os.Signal, 1)
 	signal.Notify(reloadChan, syscall.SIGUSR1)
 

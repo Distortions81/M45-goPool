@@ -143,9 +143,7 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 		}
 		c.recordLastError(err)
 		if c.metrics != nil {
-			c.metrics.mu.Lock()
-			c.metrics.rpcErrorCount++
-			c.metrics.mu.Unlock()
+			c.metrics.RecordRPCError(err)
 		}
 		if !c.shouldRetry(err) {
 			return err

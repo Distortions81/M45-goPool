@@ -12,6 +12,22 @@ import (
 )
 
 const defaultBestShareLimit = 12
+const poolErrorHistorySize = 6
+const rpcGBTRollingWindowSeconds = 24 * 60 * 60
+
+type ErrorEvent struct {
+	At      time.Time
+	Type    string
+	Message string
+}
+
+type latencyBucket struct {
+	sec   int64
+	count uint64
+	sum   float64
+	min   float64
+	max   float64
+}
 
 type PoolMetrics struct {
 	accepted uint64
@@ -26,6 +42,8 @@ type PoolMetrics struct {
 	rpcErrorCount    uint64
 	shareErrorCount  uint64
 
+	errorHistory []ErrorEvent
+
 	bestShares     [defaultBestShareLimit]BestShare
 	bestShareCount int
 	bestSharesMu   sync.RWMutex
@@ -39,6 +57,8 @@ type PoolMetrics struct {
 	rpcSubmitLast  float64
 	rpcSubmitMax   float64
 	rpcSubmitCount uint64
+
+	rpcGBTBuckets []latencyBucket
 }
 
 func NewPoolMetrics() *PoolMetrics {
@@ -126,6 +146,7 @@ func (m *PoolMetrics) RecordSubmitError(reason string) {
 	_ = sanitizeLabel(reason, "unspecified")
 	m.mu.Lock()
 	m.shareErrorCount++
+	m.recordErrorEventLocked("share", reason, time.Now())
 	m.mu.Unlock()
 }
 
@@ -135,6 +156,7 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 	}
 	seconds := dur.Seconds()
 	// Track simple summaries for a few key methods for the server dashboard.
+	now := time.Now()
 	m.mu.Lock()
 	switch method {
 	case "getblocktemplate":
@@ -147,6 +169,7 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 			m.rpcGBTMax = seconds
 		}
 		m.rpcGBTCount++
+		m.observeGBTRollingLocked(seconds, now)
 	case "submitblock":
 		m.rpcSubmitLast = seconds
 		if seconds > m.rpcSubmitMax {
@@ -155,6 +178,66 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 		m.rpcSubmitCount++
 	}
 	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) RecordRPCError(err error) {
+	if m == nil || err == nil {
+		return
+	}
+	m.mu.Lock()
+	m.rpcErrorCount++
+	m.recordErrorEventLocked("rpc", err.Error(), time.Now())
+	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) RecordErrorEvent(kind, message string, at time.Time) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.recordErrorEventLocked(kind, message, at)
+	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) recordErrorEventLocked(kind, message string, at time.Time) {
+	if kind == "" {
+		kind = "unknown"
+	}
+	if message == "" {
+		message = "unspecified"
+	}
+	m.errorHistory = append(m.errorHistory, ErrorEvent{
+		At:      at,
+		Type:    kind,
+		Message: message,
+	})
+	if len(m.errorHistory) > poolErrorHistorySize {
+		m.errorHistory = m.errorHistory[len(m.errorHistory)-poolErrorHistorySize:]
+	}
+}
+
+func (m *PoolMetrics) observeGBTRollingLocked(seconds float64, now time.Time) {
+	if m.rpcGBTBuckets == nil {
+		m.rpcGBTBuckets = make([]latencyBucket, rpcGBTRollingWindowSeconds)
+	}
+	sec := now.Unix()
+	idx := int(sec % int64(len(m.rpcGBTBuckets)))
+	b := &m.rpcGBTBuckets[idx]
+	if b.sec != sec {
+		b.sec = sec
+		b.count = 0
+		b.sum = 0
+		b.min = 0
+		b.max = 0
+	}
+	b.count++
+	b.sum += seconds
+	if b.min == 0 || seconds < b.min {
+		b.min = seconds
+	}
+	if seconds > b.max {
+		b.max = seconds
+	}
 }
 
 func (m *PoolMetrics) RecordVardiffMove(direction string) {
@@ -213,6 +296,63 @@ func (m *PoolMetrics) SnapshotDiagnostics() (vardiffUp, vardiffDown, blocksAccep
 		m.rpcGBTLast, m.rpcGBTMax, m.rpcGBTCount,
 		m.rpcSubmitLast, m.rpcSubmitMax, m.rpcSubmitCount,
 		m.rpcErrorCount, m.shareErrorCount
+}
+
+func (m *PoolMetrics) SnapshotErrorHistory() []ErrorEvent {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.errorHistory) == 0 {
+		return nil
+	}
+	out := make([]ErrorEvent, len(m.errorHistory))
+	copy(out, m.errorHistory)
+	return out
+}
+
+func (m *PoolMetrics) SnapshotGBTRollingStats(now time.Time) (min1h, avg1h, max1h float64) {
+	if m == nil {
+		return
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.rpcGBTBuckets) == 0 {
+		return
+	}
+	sec := now.Unix()
+	min1h, avg1h, max1h = snapshotLatencyWindow(m.rpcGBTBuckets, sec, 60*60)
+	return
+}
+
+func snapshotLatencyWindow(buckets []latencyBucket, nowSec int64, windowSec int64) (min, avg, max float64) {
+	if len(buckets) == 0 || windowSec <= 0 {
+		return 0, 0, 0
+	}
+	var sum float64
+	var count uint64
+	size := int64(len(buckets))
+	for i := int64(0); i < windowSec; i++ {
+		sec := nowSec - i
+		idx := int(sec % size)
+		b := buckets[idx]
+		if b.sec != sec || b.count == 0 {
+			continue
+		}
+		count += b.count
+		sum += b.sum
+		if min == 0 || b.min < min {
+			min = b.min
+		}
+		if b.max > max {
+			max = b.max
+		}
+	}
+	if count == 0 {
+		return 0, 0, 0
+	}
+	return min, sum / float64(count), max
 }
 
 // SnapshotBestShares returns the best-share list sorted by descending difficulty.

@@ -637,6 +637,10 @@ type StatusData struct {
 	RPCSubmitCount                 uint64            `json:"rpc_submit_count"`
 	RPCErrors                      uint64            `json:"rpc_errors"`
 	ShareErrors                    uint64            `json:"share_errors"`
+	RPCGBTMin1hSec                 float64           `json:"rpc_gbt_min_1h_sec"`
+	RPCGBTAvg1hSec                 float64           `json:"rpc_gbt_avg_1h_sec"`
+	RPCGBTMax1hSec                 float64           `json:"rpc_gbt_max_1h_sec"`
+	ErrorHistory                   []PoolErrorEvent  `json:"error_history,omitempty"`
 	// Local process / system diagnostics (server-only).
 	ProcessGoroutines   int     `json:"process_goroutines"`
 	ProcessCPUPercent   float64 `json:"process_cpu_percent"`
@@ -700,19 +704,29 @@ type OverviewPageData struct {
 	MinerTypes      []MinerTypeView  `json:"miner_types,omitempty"`
 }
 
+type PoolErrorEvent struct {
+	At      string `json:"at,omitempty"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
 // PoolPageData contains data for the pool info page
 type PoolPageData struct {
-	APIVersion       string  `json:"api_version"`
-	BlocksAccepted   uint64  `json:"blocks_accepted"`
-	BlocksErrored    uint64  `json:"blocks_errored"`
-	RPCGBTLastSec    float64 `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec     float64 `json:"rpc_gbt_max_sec"`
-	RPCGBTCount      uint64  `json:"rpc_gbt_count"`
-	RPCSubmitLastSec float64 `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec  float64 `json:"rpc_submit_max_sec"`
-	RPCSubmitCount   uint64  `json:"rpc_submit_count"`
-	RPCErrors        uint64  `json:"rpc_errors"`
-	ShareErrors      uint64  `json:"share_errors"`
+	APIVersion       string           `json:"api_version"`
+	BlocksAccepted   uint64           `json:"blocks_accepted"`
+	BlocksErrored    uint64           `json:"blocks_errored"`
+	RPCGBTLastSec    float64          `json:"rpc_gbt_last_sec"`
+	RPCGBTMaxSec     float64          `json:"rpc_gbt_max_sec"`
+	RPCGBTCount      uint64           `json:"rpc_gbt_count"`
+	RPCSubmitLastSec float64          `json:"rpc_submit_last_sec"`
+	RPCSubmitMaxSec  float64          `json:"rpc_submit_max_sec"`
+	RPCSubmitCount   uint64           `json:"rpc_submit_count"`
+	RPCErrors        uint64           `json:"rpc_errors"`
+	ShareErrors      uint64           `json:"share_errors"`
+	RPCGBTMin1hSec   float64          `json:"rpc_gbt_min_1h_sec"`
+	RPCGBTAvg1hSec   float64          `json:"rpc_gbt_avg_1h_sec"`
+	RPCGBTMax1hSec   float64          `json:"rpc_gbt_max_1h_sec"`
+	ErrorHistory     []PoolErrorEvent `json:"error_history,omitempty"`
 }
 
 // ServerPageData contains data for the server diagnostics page
@@ -1685,6 +1699,10 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 			RPCSubmitCount:   full.RPCSubmitCount,
 			RPCErrors:        full.RPCErrors,
 			ShareErrors:      full.ShareErrors,
+			RPCGBTMin1hSec:   full.RPCGBTMin1hSec,
+			RPCGBTAvg1hSec:   full.RPCGBTAvg1hSec,
+			RPCGBTMax1hSec:   full.RPCGBTMax1hSec,
+			ErrorHistory:     full.ErrorHistory,
 		}
 		return sonic.Marshal(data)
 	})
@@ -2115,6 +2133,8 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var rpcSubmitLast, rpcSubmitMax float64
 	var rpcSubmitCount uint64
 	var rpcErrors, shareErrors uint64
+	var rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h float64
+	var errorHistory []PoolErrorEvent
 	if s.metrics != nil {
 		accepted, rejected, reasons = s.metrics.Snapshot()
 		s.logShareTotals(accepted, rejected)
@@ -2122,6 +2142,22 @@ func (s *StatusServer) buildStatusData() StatusData {
 			rpcGBTLast, rpcGBTMax, rpcGBTCount,
 			rpcSubmitLast, rpcSubmitMax, rpcSubmitCount,
 			rpcErrors, shareErrors = s.metrics.SnapshotDiagnostics()
+		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(time.Now())
+		rawErrors := s.metrics.SnapshotErrorHistory()
+		if len(rawErrors) > 0 {
+			errorHistory = make([]PoolErrorEvent, len(rawErrors))
+			for i, ev := range rawErrors {
+				at := ""
+				if !ev.At.IsZero() {
+					at = ev.At.UTC().Format(time.RFC3339)
+				}
+				errorHistory[i] = PoolErrorEvent{
+					At:      at,
+					Type:    ev.Type,
+					Message: ev.Message,
+				}
+			}
+		}
 	}
 	// Process / system diagnostics (best-effort only; failures are treated as
 	// zero values).
@@ -2572,6 +2608,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 		RPCSubmitCount:                 rpcSubmitCount,
 		RPCErrors:                      rpcErrors,
 		ShareErrors:                    shareErrors,
+		RPCGBTMin1hSec:                 rpcGBTMin1h,
+		RPCGBTAvg1hSec:                 rpcGBTAvg1h,
+		RPCGBTMax1hSec:                 rpcGBTMax1h,
+		ErrorHistory:                   errorHistory,
 		ProcessGoroutines:              procGoroutines,
 		ProcessCPUPercent:              cpuPercent,
 		GoMemAllocBytes:                ms.Alloc,

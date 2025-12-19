@@ -121,6 +121,11 @@
 			</div>
 		</div>
 
+		<div class="card">
+			<div class="label">Recent errors</div>
+			<div class="mono" id="pool-error-history">--</div>
+		</div>
+
 		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
 			<div class="mono" id="pool-data-refreshed">Data loading...</div>
 		</div>
@@ -134,6 +139,7 @@
 		const rpcGBTEl = document.getElementById('pool-rpc-gbt');
 		const rpcSubmitEl = document.getElementById('pool-rpc-submit');
 		const errorCountersEl = document.getElementById('pool-error-counters');
+		const errorHistoryEl = document.getElementById('pool-error-history');
 		const dataRefreshedEl = document.getElementById('pool-data-refreshed');
 
 		function formatMilliseconds(value) {
@@ -157,13 +163,41 @@
 			}
 		}
 
+		function formatErrorTimestamp(isoString) {
+			if (!isoString) return 'unknown time';
+			try {
+				const date = new Date(isoString);
+				return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+			} catch (e) {
+				return isoString;
+			}
+		}
+
+		function renderErrorHistory(errors) {
+			if (!errorHistoryEl) return;
+			if (!errors || errors.length === 0) {
+				errorHistoryEl.textContent = 'No recent errors';
+				return;
+			}
+			errorHistoryEl.replaceChildren();
+			const ordered = errors.slice().reverse();
+			ordered.forEach((entry) => {
+				const line = document.createElement('div');
+				const stamp = formatErrorTimestamp(entry.at);
+				const kind = entry.type || 'error';
+				const message = entry.message || 'unspecified';
+				line.textContent = `${stamp}  ${kind}: ${message}`;
+				errorHistoryEl.appendChild(line);
+			});
+		}
+
 		function updatePoolMetrics(data, updatedAt) {
 			if (!data) return;
 			if (blockSubEl) {
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
 			}
 			if (rpcGBTEl) {
-				rpcGBTEl.innerHTML = `last: ${formatMilliseconds(data.rpc_gbt_last_sec)}<br>max: ${formatMilliseconds(data.rpc_gbt_max_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
+				rpcGBTEl.innerHTML = `1h min: ${formatMilliseconds(data.rpc_gbt_min_1h_sec)}<br>1h avg: ${formatMilliseconds(data.rpc_gbt_avg_1h_sec)}<br>1h max: ${formatMilliseconds(data.rpc_gbt_max_1h_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
 			}
 			if (rpcSubmitEl) {
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;
@@ -171,6 +205,7 @@
 			if (errorCountersEl) {
 				errorCountersEl.innerHTML = `RPC errors: ${data.rpc_errors || 0}<br>Share errors: ${data.share_errors || 0}`;
 			}
+			renderErrorHistory(data.error_history);
 			if (dataRefreshedEl && updatedAt) {
 				dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
 			}

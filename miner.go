@@ -581,8 +581,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		vdiff.MinDiff = vdiff.MaxDiff
 	}
 
-	// Start miners at difficulty 1 (like foundation pool's default of 8, but more accessible)
-	// Vardiff will adjust up/down from here based on share rate
 	initialDiff := 1.0
 	if cfg.MinDifficulty > initialDiff {
 		initialDiff = cfg.MinDifficulty
@@ -1404,8 +1402,8 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	// is from the target, but clamp the change factor to avoid
 	// over-correcting in a single step.
 	ratio := accRate / target
-	// Dead band around the target: no change if we're within ±20%.
-	const band = 0.20
+	// Dead band around the target: no change if we're within ±50%.
+	const band = 0.50
 	if ratio >= 1-band && ratio <= 1+band {
 		mc.resetShareWindow(now)
 		return
@@ -1416,7 +1414,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	// This prevents oscillation and allows the system to converge smoothly.
 	dampingFactor := mc.vardiff.DampingFactor
 	if dampingFactor <= 0 || dampingFactor > 1 {
-		dampingFactor = 0.75 // default: move 75% toward target
+		dampingFactor = 0.5 // default: move 50% toward target
 	}
 
 	// Calculate damped adjustment ratio:
@@ -2728,6 +2726,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")
+				mc.metrics.RecordErrorEvent("submitblock", err.Error(), now)
 			}
 			logger.Error("submitblock build error", "remote", mc.id, "error", err)
 			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
@@ -2743,6 +2742,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 	if err != nil {
 		if mc.metrics != nil {
 			mc.metrics.RecordBlockSubmission("error")
+			mc.metrics.RecordErrorEvent("submitblock", err.Error(), time.Now())
 		}
 		logger.Error("submitblock error", "error", err)
 		// Best-effort: record this block for manual or future retry when the
