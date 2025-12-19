@@ -92,6 +92,21 @@
 				<div class="value" id="status-pool-hashrate">--</div>
 			</div>
 			<div class="card">
+				<div class="label">Block height</div>
+				<div class="value mono" id="status-block-height">--</div>
+				<div class="card-context">Current chain tip</div>
+			</div>
+			<div class="card">
+				<div class="label">Bitcoin difficulty</div>
+				<div class="value mono" id="status-block-difficulty">--</div>
+				<div class="card-context">Network target difficulty</div>
+			</div>
+			<div class="card">
+				<div class="label">Time left for block</div>
+				<div class="value mono" id="status-block-time-left">--</div>
+				<div class="card-context">Estimated until next block</div>
+			</div>
+			<div class="card">
 				<div class="label">Pool fee</div>
 				{{if gt .PoolFeePercent 0.0}}
 					<div class="value">
@@ -678,6 +693,9 @@
 	(function() {
 		const REFRESH_INTERVAL = 5000;
 		const valueEl = document.getElementById('status-pool-hashrate');
+		const blockHeightEl = document.getElementById('status-block-height');
+		const blockDifficultyEl = document.getElementById('status-block-difficulty');
+		const blockTimeLeftEl = document.getElementById('status-block-time-left');
 		if (!valueEl) {
 			return;
 		}
@@ -694,6 +712,40 @@
 				idx++;
 			}
 			return `${val.toFixed(2)} ${units[idx]}`;
+		}
+
+		function formatDifficulty(diff) {
+			if (!diff || diff <= 0) {
+				return '--';
+			}
+			if (diff < 1000000) return diff.toFixed(0);
+			if (diff >= 1000000000000000) {
+				return (diff / 1000000000000000).toFixed(1) + 'P';
+			}
+			if (diff >= 1000000000000) {
+				return (diff / 1000000000000).toFixed(1) + 'T';
+			}
+			if (diff >= 1000000000) {
+				return (diff / 1000000000).toFixed(1) + 'G';
+			}
+			return (diff / 1000000).toFixed(1) + 'M';
+		}
+
+		function formatTimeLeft(seconds) {
+			if (seconds === null || seconds === undefined || seconds < 0) {
+				return '--';
+			}
+			const total = Math.max(0, Math.floor(seconds));
+			const hours = Math.floor(total / 3600);
+			const minutes = Math.floor((total % 3600) / 60);
+			const secs = total % 60;
+			if (hours > 0) {
+				return `${hours}h ${minutes}m`;
+			}
+			if (minutes > 0) {
+				return `${minutes}m ${secs}s`;
+			}
+			return `${secs}s`;
 		}
 
 		function updateHashrateDisplay(rate) {
@@ -715,6 +767,17 @@
 				.then(data => {
 					if (data && typeof data.pool_hashrate === 'number') {
 						updateHashrateDisplay(data.pool_hashrate);
+					}
+					if (blockHeightEl && typeof data.block_height === 'number' && data.block_height > 0) {
+						blockHeightEl.textContent = data.block_height.toLocaleString();
+					} else if (blockHeightEl) {
+						blockHeightEl.textContent = '--';
+					}
+					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
+						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
+					}
+					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
+						blockTimeLeftEl.textContent = formatTimeLeft(data.block_time_left_sec);
 					}
 				})
 				.catch(err => {
