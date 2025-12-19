@@ -1344,120 +1344,20 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		return
 	}
 
-	mc.statsMu.Lock()
-	stats := mc.stats
-	mc.statsMu.Unlock()
+	snap := mc.snapshotShareInfo()
+	newDiff := mc.suggestedVardiff(now, snap)
 
-	windowStart := stats.WindowStart
-	windowAccepted := stats.WindowAccepted
-	windowSubmissions := stats.WindowSubmissions
-
-	if windowSubmissions == 0 || windowStart.IsZero() {
-		return
-	}
-
-	// Require a full adjustment window before making a difficulty change.
-	// This prevents rapid oscillation and gives stable measurements.
-	elapsed := now.Sub(windowStart)
-	if elapsed < mc.vardiff.AdjustmentWindow {
-		return
-	}
-
-	// Avoid making multiple vardiff moves back-to-back; give miners a short
-	// grace window so shares calculated at the previous difficulty can arrive
-	// and be covered by the previous-difficulty acceptance logic.
 	mc.diffMu.Lock()
-	lastChange := mc.lastDiffChange
 	currentDiff := mc.difficulty
 	mc.diffMu.Unlock()
-	if !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
-		return
-	}
-	if windowAccepted == 0 {
-		// No accepted shares in the window; nothing meaningful to base
-		// an adjustment on yet.
-		return
-	}
-
-	// Traditional vardiff: keep each miner near a target shares/min
-	// by scaling difficulty in proportion to the observed share rate derived
-	// from the EMA-smoothed hashrate shown in the web panels.
-	rollingHashrate := mc.currentRollingHashrate()
-	if rollingHashrate <= 0 {
-		mc.resetShareWindow(now)
-		return
-	}
-	accRate := (rollingHashrate / hashPerShare) * 60
-	target := mc.vardiff.TargetSharesPerMin
-	if target <= 0 {
-		target = 4
-	}
-	if accRate <= 0 {
-		// Reset the window so we do not accumulate stale time.
-		mc.resetShareWindow(now)
-		return
-	}
-
-	// Scale difficulty proportionally to how far the accepted share rate
-	// is from the target, but clamp the change factor to avoid
-	// over-correcting in a single step.
-	ratio := accRate / target
-	// Dead band around the target: no change if we're within ±50%.
-	const band = 0.50
-	if ratio >= 1-band && ratio <= 1+band {
-		mc.resetShareWindow(now)
-		return
-	}
-
-	// Apply damping to reduce overshoot: instead of moving all the way
-	// to the ideal difficulty, move only a fraction of the distance.
-	// This prevents oscillation and allows the system to converge smoothly.
-	dampingFactor := mc.vardiff.DampingFactor
-	if dampingFactor <= 0 || dampingFactor > 1 {
-		dampingFactor = 0.5 // default: move 50% toward target
-	}
-
-	// Calculate damped adjustment ratio:
-	// adjustRatio = 1 + dampingFactor * (ratio - 1)
-	// Examples with dampingFactor=0.75:
-	//   ratio=2.0 (too fast) → adjustRatio=1.75 (increase diff by 75% instead of 100%)
-	//   ratio=0.5 (too slow) → adjustRatio=0.625 (decrease diff by 37.5% instead of 50%)
-	adjustRatio := 1.0 + dampingFactor*(ratio-1.0)
-
-	newDiff := currentDiff * adjustRatio
-	if newDiff <= 0 || math.IsNaN(newDiff) || math.IsInf(newDiff, 0) {
-		return
-	}
-
-	// Respect the configured step as the maximum factor of change per adjustment.
-	// This limits how much difficulty can change in a single adjustment to prevent
-	// overshooting and ensure gradual, stable convergence to the target share rate.
-	factor := newDiff / currentDiff
-	step := mc.vardiff.Step
-	if step <= 1 {
-		step = 2
-	}
-	maxFactor := step
-	minFactor := 1 / step
-	if factor > maxFactor {
-		factor = maxFactor
-	}
-	if factor < minFactor {
-		factor = minFactor
-	}
-	newDiff = currentDiff * factor
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return
 	}
-	if newDiff > mc.vardiff.MaxDiff {
-		newDiff = mc.vardiff.MaxDiff
-	}
-	if newDiff < mc.vardiff.MinDiff {
-		newDiff = mc.vardiff.MinDiff
-	}
-	if mc.cfg.MaxDifficulty > 0 && newDiff > mc.cfg.MaxDifficulty {
-		newDiff = mc.cfg.MaxDifficulty
+
+	accRate := 0.0
+	if snap.RollingHashrate > 0 {
+		accRate = (snap.RollingHashrate / hashPerShare) * 60
 	}
 
 	mc.resetShareWindow(now)
@@ -1475,6 +1375,95 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		mc.metrics.RecordVardiffMove(dir)
 	}
 	mc.setDifficulty(newDiff)
+}
+
+// suggestedVardiff returns the difficulty VarDiff would select based on the
+// current stats, without applying any changes.
+func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) float64 {
+	windowStart := snap.Stats.WindowStart
+	windowAccepted := snap.Stats.WindowAccepted
+	windowSubmissions := snap.Stats.WindowSubmissions
+
+	mc.diffMu.Lock()
+	lastChange := mc.lastDiffChange
+	currentDiff := mc.difficulty
+	mc.diffMu.Unlock()
+
+	if currentDiff <= 0 {
+		currentDiff = mc.vardiff.MinDiff
+	}
+	if windowSubmissions == 0 || windowStart.IsZero() {
+		return currentDiff
+	}
+	elapsed := now.Sub(windowStart)
+	if elapsed < mc.vardiff.AdjustmentWindow {
+		return currentDiff
+	}
+	if !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
+		return currentDiff
+	}
+	if windowAccepted == 0 {
+		return currentDiff
+	}
+
+	rollingHashrate := snap.RollingHashrate
+	if rollingHashrate <= 0 {
+		return currentDiff
+	}
+
+	diffPerTH := mc.vardiff.MinDiff
+	if diffPerTH <= 0 {
+		diffPerTH = 4096
+	}
+	targetDiff := diffPerTH * (rollingHashrate / 1e12)
+	if targetDiff <= 0 || math.IsNaN(targetDiff) || math.IsInf(targetDiff, 0) {
+		return currentDiff
+	}
+	if targetDiff > mc.vardiff.MaxDiff {
+		targetDiff = mc.vardiff.MaxDiff
+	}
+	if targetDiff < mc.vardiff.MinDiff {
+		targetDiff = mc.vardiff.MinDiff
+	}
+	if mc.cfg.MaxDifficulty > 0 && targetDiff > mc.cfg.MaxDifficulty {
+		targetDiff = mc.cfg.MaxDifficulty
+	}
+
+	ratio := targetDiff / currentDiff
+	const band = 0.25
+	if ratio >= 1-band && ratio <= 1+band {
+		return currentDiff
+	}
+
+	dampingFactor := mc.vardiff.DampingFactor
+	if dampingFactor <= 0 || dampingFactor > 1 {
+		dampingFactor = 0.5
+	}
+
+	newDiff := currentDiff + dampingFactor*(targetDiff-currentDiff)
+	if newDiff <= 0 || math.IsNaN(newDiff) || math.IsInf(newDiff, 0) {
+		return currentDiff
+	}
+
+	factor := newDiff / currentDiff
+	step := mc.vardiff.Step
+	if step <= 1 {
+		step = 2
+	}
+	maxFactor := step
+	minFactor := 1 / step
+	if factor > maxFactor {
+		factor = maxFactor
+	}
+	if factor < minFactor {
+		factor = minFactor
+	}
+	newDiff = currentDiff * factor
+
+	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
+		return currentDiff
+	}
+	return mc.clampDifficulty(newDiff)
 }
 
 // quantizeDifficultyToPowerOfTwo snaps a difficulty value to a power-of-two

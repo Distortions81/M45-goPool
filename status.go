@@ -919,6 +919,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	if lastShareHash != "" {
 		displayHash = shortDisplayID(lastShareHash, hashPrefix, hashSuffix)
 	}
+	vardiff := mc.suggestedVardiff(now, snap)
 	banned := mc.isBanned(now)
 	until, reason, _ := mc.banDetails()
 	return WorkerView{
@@ -940,6 +941,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		LastShareDifficulty: snap.LastShareDifficulty,
 		LastShareDetail:     snap.LastShareDetail,
 		Difficulty:          diff,
+		Vardiff:             vardiff,
 		RollingHashrate:     hashRate,
 		LastReject:          snap.LastReject,
 		Banned:              banned,
@@ -1659,6 +1661,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 				DisplayName:     w.DisplayName,
 				RollingHashrate: w.RollingHashrate,
 				Difficulty:      w.Difficulty,
+				Vardiff:         w.Vardiff,
 				ShareRate:       w.ShareRate,
 				Accepted:        w.Accepted,
 				ConnectionID:    w.ConnectionID,

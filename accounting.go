@@ -38,6 +38,7 @@ type WorkerView struct {
 	LastShareDifficulty float64      `json:"last_share_difficulty,omitempty"`
 	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
 	Difficulty          float64      `json:"difficulty"`
+	Vardiff             float64      `json:"-"`
 	RollingHashrate     float64      `json:"rolling_hashrate"`
 	LastReject          string       `json:"last_reject"`
 	Banned              bool         `json:"banned"`
@@ -59,6 +60,7 @@ type RecentWorkView struct {
 	DisplayName     string  `json:"display_name"`
 	RollingHashrate float64 `json:"rolling_hashrate"`
 	Difficulty      float64 `json:"difficulty"`
+	Vardiff         float64 `json:"vardiff"`
 	ShareRate       float64 `json:"share_rate"`
 	Accepted        uint64  `json:"accepted"`
 	ConnectionID    string  `json:"connection_id"`
