@@ -324,7 +324,7 @@ header {
 
 .connect-steps {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
 	gap: 12px;
 }
 
@@ -404,6 +404,7 @@ header {
 	align-items: center;
 	gap: 10px;
 	position: relative;
+	min-width: 0;
 }
 
 .copy-pill {
@@ -411,6 +412,8 @@ header {
 	display: flex;
 	align-items: baseline;
 	gap: 10px;
+	min-width: 0;
+	max-width: 100%;
 	padding: 10px 12px;
 	border-radius: 10px;
 	border: 1px solid rgba(44, 241, 194, 0.45);
@@ -462,9 +465,10 @@ header {
 	font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 	font-size: 13px;
 	color: #ffffff;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: normal;
+	word-break: break-all;
 }
 
 [data-theme="light"] .copy-pill-value {
@@ -563,8 +567,8 @@ header {
 }
 
 .brand-logo {
-	height: 48px;
-	width: 48px;
+	height: 64px;
+	width: 64px;
 	border-radius: 8px;
 	object-fit: contain;
 	background: radial-gradient(circle at 30% 20%, #2cf1c2 0, #111320 55%, #050712 100%);
