@@ -696,6 +696,7 @@
 		const blockHeightEl = document.getElementById('status-block-height');
 		const blockDifficultyEl = document.getElementById('status-block-difficulty');
 		const blockTimeLeftEl = document.getElementById('status-block-time-left');
+		let blockTimeLeftSec = null;
 		if (!valueEl) {
 			return;
 		}
@@ -732,7 +733,7 @@
 		}
 
 		function formatTimeLeft(seconds) {
-			if (seconds === null || seconds === undefined || seconds < 0) {
+			if (seconds === null || seconds === undefined || seconds <= 0) {
 				return '--';
 			}
 			const total = Math.max(0, Math.floor(seconds));
@@ -746,6 +747,13 @@
 				return `${minutes}m ${secs}s`;
 			}
 			return `${secs}s`;
+		}
+
+		function renderBlockTimeLeft() {
+			if (!blockTimeLeftEl) {
+				return;
+			}
+			blockTimeLeftEl.textContent = formatTimeLeft(blockTimeLeftSec);
 		}
 
 		function updateHashrateDisplay(rate) {
@@ -777,7 +785,8 @@
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
 					}
 					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
-						blockTimeLeftEl.textContent = formatTimeLeft(data.block_time_left_sec);
+						blockTimeLeftSec = data.block_time_left_sec;
+						renderBlockTimeLeft();
 					}
 				})
 				.catch(err => {
@@ -787,6 +796,15 @@
 
 		fetchHashrate();
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
+		setInterval(() => {
+			if (typeof blockTimeLeftSec === 'number' && blockTimeLeftSec > 0) {
+				blockTimeLeftSec -= 1;
+				if (blockTimeLeftSec <= 0) {
+					blockTimeLeftSec = 0;
+				}
+				renderBlockTimeLeft();
+			}
+		}, 1000);
 	})();
 	</script>
 	<script>
