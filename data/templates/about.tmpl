@@ -32,7 +32,11 @@
 		<div class="card">
 			<h2>Technical Stack</h2>
 			<p>Custom-built pool software written in Go, running a Bitcoin Core node with RPC and ZMQ for low-latency block template updates. Each miner connection runs independently on its own goroutine for responsive communication under load.</p>
-			<p>Our code is open source on <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank" rel="noopener noreferrer">GitHub</a> under the AGPL license. We welcome code review, security audits, and contributions.</p>
+			{{if .GitHubURL}}
+			<p>Our code is open source on <a href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a> under the AGPL license. We welcome code review, security audits, and contributions.</p>
+			{{else}}
+			<p>Our code is open source under the AGPL license. We welcome code review, security audits, and contributions.</p>
+			{{end}}
 		</div>
 
 		<div class="card">

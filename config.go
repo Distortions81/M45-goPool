@@ -34,6 +34,8 @@ type Config struct {
 	PoolDonationAddress string
 	// DiscordURL is an optional Discord invite link shown in the header.
 	DiscordURL string
+	// GitHubURL is an optional GitHub link shown in the header and About page.
+	GitHubURL string
 	// ServerLocation is an optional server location string shown in the header.
 	ServerLocation string
 	// StratumTLSListen is an optional TCP address for a TLS-enabled
@@ -187,6 +189,7 @@ type EffectiveConfig struct {
 	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
 	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
 	DiscordURL                        string  `json:"discord_url,omitempty"`
+	GitHubURL                         string  `json:"github_url,omitempty"`
 	ServerLocation                    string  `json:"server_location,omitempty"`
 	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
 	RPCURL                            string  `json:"rpc_url"`
@@ -256,6 +259,7 @@ type brandingConfig struct {
 	FiatCurrency        string `toml:"fiat_currency"`
 	PoolDonationAddress string `toml:"pool_donation_address"`
 	DiscordURL          string `toml:"discord_url"`
+	GitHubURL           string `toml:"github_url"`
 	ServerLocation      string `toml:"server_location"`
 }
 
@@ -393,6 +397,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			FiatCurrency:        cfg.FiatCurrency,
 			PoolDonationAddress: cfg.PoolDonationAddress,
 			DiscordURL:          cfg.DiscordURL,
+			GitHubURL:           cfg.GitHubURL,
 			ServerLocation:      cfg.ServerLocation,
 		},
 		Stratum: stratumConfig{
@@ -747,6 +752,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Branding.DiscordURL != "" {
 		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
 	}
+	if fc.Branding.GitHubURL != "" {
+		cfg.GitHubURL = strings.TrimSpace(fc.Branding.GitHubURL)
+	}
 	if fc.Branding.ServerLocation != "" {
 		cfg.ServerLocation = strings.TrimSpace(fc.Branding.ServerLocation)
 	}
@@ -926,6 +934,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		FiatCurrency:                      cfg.FiatCurrency,
 		PoolDonationAddress:               cfg.PoolDonationAddress,
 		DiscordURL:                        cfg.DiscordURL,
+		GitHubURL:                         cfg.GitHubURL,
 		ServerLocation:                    cfg.ServerLocation,
 		RPCURL:                            cfg.RPCURL,
 		RPCUser:                           cfg.RPCUser,

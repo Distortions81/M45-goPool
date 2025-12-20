@@ -566,6 +566,7 @@ type StatusData struct {
 	BTCPriceUpdatedAt              string            `json:"btc_price_updated_at,omitempty"`
 	PoolDonationAddress            string            `json:"pool_donation_address,omitempty"`
 	DiscordURL                     string            `json:"discord_url,omitempty"`
+	GitHubURL                      string            `json:"github_url,omitempty"`
 	NodeNetwork                    string            `json:"node_network,omitempty"`
 	NodeSubversion                 string            `json:"node_subversion,omitempty"`
 	NodeBlocks                     int64             `json:"node_blocks"`
@@ -2591,6 +2592,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		BTCPriceUpdatedAt:              btcPriceUpdated,
 		PoolDonationAddress:            s.cfg.PoolDonationAddress,
 		DiscordURL:                     s.cfg.DiscordURL,
+		GitHubURL:                      s.cfg.GitHubURL,
 		NodeNetwork:                    nodeNetwork,
 		NodeSubversion:                 nodeSubversion,
 		NodeBlocks:                     nodeBlocks,
@@ -2725,6 +2727,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		FiatCurrency:                   s.cfg.FiatCurrency,
 		PoolDonationAddress:            s.cfg.PoolDonationAddress,
 		DiscordURL:                     s.cfg.DiscordURL,
+		GitHubURL:                      s.cfg.GitHubURL,
 		NodeRPCURL:                     s.cfg.RPCURL,
 		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
 		PayoutAddress:                  s.cfg.PayoutAddress,

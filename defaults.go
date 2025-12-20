@@ -11,6 +11,7 @@ const (
 	defaultStatusTLSAddr                     = ":443"
 	defaultStatusTagline                     = "Solo Mining Pool"
 	defaultFiatCurrency                      = "usd"
+	defaultGitHubURL                         = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
 	defaultStratumTLSListen                  = ":4333"
 	defaultRPCURL                            = "http://127.0.0.1:8332"
 	defaultRPCUser                           = "bitcoinrpc"
@@ -62,6 +63,7 @@ func defaultConfig() Config {
 		FiatCurrency:        defaultFiatCurrency,
 		PoolDonationAddress: "",
 		DiscordURL:          "",
+		GitHubURL:           defaultGitHubURL,
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
 		StratumTLSListen:        defaultStratumTLSListen,

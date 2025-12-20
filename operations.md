@@ -5,6 +5,7 @@
 - `data/config/config.toml` (**required**): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings.
 - `data/config/secrets.toml` (**required**): sensitive values like `rpc_user` / `rpc_pass` needed to connect to bitcoind.
 - `data/config/tuning.toml` (optional): advanced tuning and limits. Deleting this file reverts to the built-in defaults. See `data/config/examples/tuning.toml.example` for the current list.
+- Branding options in `config.toml` include `discord_url` and `github_url`, which control the header and About-page links.
 
 ## Tuning highlights
 
