@@ -248,7 +248,6 @@ type MinerConn struct {
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64
-	vardiffReady    bool
 }
 
 type rpcCaller interface {
@@ -775,7 +774,7 @@ func (mc *MinerConn) writeResponse(resp StratumResponse) {
 
 func (mc *MinerConn) listenJobs() {
 	for job := range mc.jobCh {
-		mc.sendNotifyFor(job)
+			mc.sendNotifyFor(job, false)
 	}
 }
 
@@ -1266,7 +1265,6 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
-	hadPrevJob := mc.lastJob != nil
 	if clean {
 		mc.activeJobs = make(map[string]*Job)
 		mc.shareCache = make(map[string]*duplicateShareRing)
@@ -1286,9 +1284,6 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		delete(mc.activeJobs, oldest)
 		delete(mc.shareCache, oldest)
 		delete(mc.jobDifficulty, oldest)
-	}
-	if !mc.vardiffReady && hadPrevJob {
-		mc.vardiffReady = true
 	}
 }
 
@@ -1350,10 +1345,10 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionH
 	return cache.seenOrAdd(dk)
 }
 
-func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
+func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	// If this connection is locked to a static difficulty, skip VarDiff.
 	if mc.lockDifficulty {
-		return
+		return false
 	}
 
 	snap := mc.snapshotShareInfo()
@@ -1364,7 +1359,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 	mc.diffMu.Unlock()
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
-		return
+		return false
 	}
 
 	accRate := 0.0
@@ -1387,6 +1382,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) {
 		mc.metrics.RecordVardiffMove(dir)
 	}
 	mc.setDifficulty(newDiff)
+	return true
 }
 
 // suggestedVardiff returns the difficulty VarDiff would select based on the
@@ -1405,10 +1401,6 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		currentDiff = mc.vardiff.MinDiff
 	}
 	if windowSubmissions == 0 || windowStart.IsZero() {
-		return currentDiff
-	}
-	elapsed := now.Sub(windowStart)
-	if elapsed < mc.vardiff.AdjustmentWindow {
 		return currentDiff
 	}
 	if !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
@@ -1451,7 +1443,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	}
 
 	ratio := targetDiff / currentDiff
-	const band = 0.25
+	const band = 0.5
 	if ratio >= 1-band && ratio <= 1+band {
 		return currentDiff
 	}
@@ -1845,7 +1837,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	// to be valid, send initial difficulty and a job so hashing can start.
 	if job := mc.jobMgr.CurrentJob(); job != nil {
 		mc.setDifficulty(mc.vardiff.MinDiff)
-		mc.sendNotifyFor(job)
+		mc.sendNotifyFor(job, false)
 	}
 }
 
@@ -1980,16 +1972,9 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	mc.writeResponse(StratumResponse{ID: req.ID, Result: result, Error: nil})
 }
 
-func (mc *MinerConn) sendNotifyFor(job *Job) {
-	// Adjust difficulty when sending new jobs (new blocks), not on every share.
-	// This gives miners stable difficulty for the duration of a job and prevents
-	// mid-job difficulty changes that can cause confusion.
-	mc.jobMu.Lock()
-	readyForVardiff := mc.vardiffReady
-	mc.jobMu.Unlock()
-	if readyForVardiff {
-		mc.maybeAdjustDifficulty(time.Now())
-	}
+func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
+	// Opportunistically adjust difficulty before notifying about the job.
+	mc.maybeAdjustDifficulty(time.Now())
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
 	if maskChanged && mc.versionRoll {
@@ -2070,8 +2055,8 @@ func (mc *MinerConn) sendNotifyFor(job *Job) {
 	shareTarget := mc.shareTargetOrDefault()
 
 	// clean_jobs should only be true when the template actually changed (prevhash/height)
-	// so miners don’t drop work on harmless re-notifies.
-	cleanJobs := job.Clean && mc.cleanFlagFor(job)
+	// unless we're forcing a clean notify to pair with a difficulty change.
+	cleanJobs := forceClean || (job.Clean && mc.cleanFlagFor(job))
 	mc.trackJob(job, cleanJobs)
 	mc.setJobDifficulty(job.JobID, mc.currentDifficulty())
 
@@ -2633,6 +2618,9 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	detail := mc.buildShareDetail(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
 	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, shareDiff, now)
+	if mc.maybeAdjustDifficulty(now) {
+		mc.sendNotifyFor(job, true)
+	}
 
 	if !isBlock {
 		accRate, subRate := mc.shareRates(now)
