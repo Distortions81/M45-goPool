@@ -749,6 +749,17 @@
 			return `${secs}s`;
 		}
 
+		function getUpdatedAtMillis(value) {
+			if (!value) {
+				return null;
+			}
+			const parsed = Date.parse(value);
+			if (Number.isNaN(parsed)) {
+				return null;
+			}
+			return parsed;
+		}
+
 		function renderBlockTimeLeft() {
 			if (!blockTimeLeftEl) {
 				return;
@@ -770,9 +781,10 @@
 			fetch('/api/pool-hashrate')
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
-					return response.json();
+					const updatedAt = response.headers.get('X-JSON-Updated-At');
+					return response.json().then(data => ({ data, updatedAt }));
 				})
-				.then(data => {
+				.then(({ data, updatedAt }) => {
 					if (data && typeof data.pool_hashrate === 'number') {
 						updateHashrateDisplay(data.pool_hashrate);
 					}
@@ -786,6 +798,11 @@
 					}
 					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
 						blockTimeLeftSec = data.block_time_left_sec;
+						const updatedMillis = getUpdatedAtMillis(updatedAt || data.updated_at);
+						if (updatedMillis !== null) {
+							const ageSec = Math.max(0, (Date.now() - updatedMillis) / 1000);
+							blockTimeLeftSec = Math.max(0, blockTimeLeftSec - ageSec);
+						}
 						renderBlockTimeLeft();
 					}
 				})
