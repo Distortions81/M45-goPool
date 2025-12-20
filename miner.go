@@ -1423,11 +1423,14 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		return currentDiff
 	}
 
-	diffPerTH := mc.vardiff.MinDiff
-	if diffPerTH <= 0 {
-		diffPerTH = 4096
+	targetShares := mc.vardiff.TargetSharesPerMin
+	if targetShares <= 0 {
+		targetShares = defaultVarDiff.TargetSharesPerMin
 	}
-	targetDiff := diffPerTH * (rollingHashrate / 1e12)
+	if targetShares <= 0 {
+		targetShares = 6
+	}
+	targetDiff := (rollingHashrate / hashPerShare) * 60 / targetShares
 	if targetDiff <= 0 || math.IsNaN(targetDiff) || math.IsInf(targetDiff, 0) {
 		return currentDiff
 	}
