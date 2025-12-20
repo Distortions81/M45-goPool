@@ -76,12 +76,12 @@ type workerWalletState struct {
 }
 
 var defaultVarDiff = VarDiffConfig{
-	MinDiff:            4096,
+	MinDiff:            1024,
 	MaxDiff:            65536,
-	TargetSharesPerMin: 5, // aim for roughly one share every 12s
+	TargetSharesPerMin: 6, // aim for roughly one share every 12s
 	AdjustmentWindow:   90 * time.Second,
 	Step:               2,
-	MaxBurstShares:     60, // throttle spammy submitters
+	MaxBurstShares:     600, // throttle spammy submitters
 	BurstWindow:        60 * time.Second,
 	DampingFactor:      0.5, // move 50% toward target to reduce overshoot
 }
@@ -714,7 +714,19 @@ func (mc *MinerConn) handle() {
 				Result: nil,
 				Error:  newStratumError(20, "Not supported."),
 			})
+			return
 		}
+
+		mc.resetHandshakeTimeout(now)
+	}
+}
+
+func (mc *MinerConn) resetHandshakeTimeout(now time.Time) {
+	if !mc.subscribed && mc.cfg.SubscribeTimeout > 0 {
+		mc.subscribeDeadline = now.Add(mc.cfg.SubscribeTimeout)
+	}
+	if mc.subscribed && !mc.authorized && mc.authorizeTimeout > 0 {
+		mc.authorizeDeadline = now.Add(mc.authorizeTimeout)
 	}
 }
 
@@ -1419,6 +1431,12 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if targetDiff <= 0 || math.IsNaN(targetDiff) || math.IsInf(targetDiff, 0) {
 		return currentDiff
 	}
+	// Aim one step lower than the computed target to reduce timeouts.
+	stepFactor := mc.vardiff.Step
+	if stepFactor <= 1 {
+		stepFactor = 2
+	}
+	targetDiff = targetDiff / stepFactor
 	if targetDiff > mc.vardiff.MaxDiff {
 		targetDiff = mc.vardiff.MaxDiff
 	}

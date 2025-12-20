@@ -43,7 +43,7 @@ const (
 	defaultReconnectBanWindowSeconds         = 60
 	defaultReconnectBanDurationSeconds       = 300
 	defaultMaxDifficulty                     = 65536
-	defaultMinDifficulty                     = 4096
+	defaultMinDifficulty                     = 1024
 	defaultMinVersionBits                    = 1
 	defaultRefreshInterval                   = 10 * time.Second
 	defaultZMQReceiveTimeout                 = 15 * time.Second
@@ -106,7 +106,7 @@ func defaultConfig() Config {
 		// of two within a practical range for typical ASICs.
 		MaxDifficulty:                 defaultMaxDifficulty,
 		MinDifficulty:                 defaultMinDifficulty,
-		LockSuggestedDifficulty:       true,
+		LockSuggestedDifficulty:       false,
 		HashrateEMATauSeconds:         defaultHashrateEMATauSeconds,
 		HashrateEMAMinShares:          defaultHashrateEMAMinShares,
 		NTimeForwardSlackSeconds:      defaultNTimeForwardSlackSeconds,

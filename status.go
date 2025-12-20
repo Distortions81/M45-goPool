@@ -1804,12 +1804,12 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		data := struct {
-			APIVersion         string  `json:"api_version"`
-			PoolHashrate       float64 `json:"pool_hashrate"`
-			BlockHeight        int64   `json:"block_height"`
-			BlockDifficulty    float64 `json:"block_difficulty"`
-			BlockTimeLeftSec   int64   `json:"block_time_left_sec"`
-			UpdatedAt          string  `json:"updated_at"`
+			APIVersion       string  `json:"api_version"`
+			PoolHashrate     float64 `json:"pool_hashrate"`
+			BlockHeight      int64   `json:"block_height"`
+			BlockDifficulty  float64 `json:"block_difficulty"`
+			BlockTimeLeftSec int64   `json:"block_time_left_sec"`
+			UpdatedAt        string  `json:"updated_at"`
 		}{
 			APIVersion:       apiVersion,
 			PoolHashrate:     s.computePoolHashrate(),
