@@ -583,6 +583,7 @@ func main() {
 		mux.HandleFunc("/api/node", statusServer.handleNodePageJSON)
 		mux.HandleFunc("/api/server", statusServer.handleServerPageJSON)
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
+		mux.HandleFunc("/api/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkersJSON))
 
 		// Other endpoints
 		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)

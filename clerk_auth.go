@@ -243,7 +243,14 @@ func (v *ClerkVerifier) ExchangeDevBrowserJWT(ctx context.Context, devBrowserJWT
 	if sessionID == "" {
 		return "", nil, errors.New("no active session in dev browser token")
 	}
-	tok, err := v.clerkSessions.CreateToken(ctx, &clerksession.CreateTokenParams{ID: sessionID})
+	expiresIn := int64(clerkDevSessionTokenTTL / time.Second)
+	if expiresIn <= 0 {
+		expiresIn = 60 * 60
+	}
+	tok, err := v.clerkSessions.CreateToken(ctx, &clerksession.CreateTokenParams{
+		ID:               sessionID,
+		ExpiresInSeconds: clerk.Int64(expiresIn),
+	})
 	if err != nil {
 		return "", nil, fmt.Errorf("create session token: %w", err)
 	}
