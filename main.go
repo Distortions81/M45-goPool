@@ -512,7 +512,13 @@ func main() {
 	if clerkErr != nil {
 		logger.Warn("initialize clerk verifier", "error", clerkErr)
 	}
-	workerLists := newWorkerListStore()
+	workerListDBPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	workerLists, workerListErr := newWorkerListStore(workerListDBPath)
+	if workerListErr != nil {
+		logger.Warn("open saved workers store", "error", workerListErr, "path", workerListDBPath)
+	} else {
+		defer workerLists.Close()
+	}
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
@@ -586,7 +592,9 @@ func main() {
 	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
 	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
 	mux.HandleFunc("/worker/save", statusServer.withClerkUser(statusServer.handleWorkerSave))
+	mux.HandleFunc("/worker/remove", statusServer.withClerkUser(statusServer.handleWorkerRemove))
 	mux.HandleFunc("/login", statusServer.handleClerkLogin)
+	mux.HandleFunc("/logout", statusServer.handleClerkLogout)
 	mux.HandleFunc(cfg.ClerkCallbackPath, statusServer.handleClerkCallback)
 	mux.HandleFunc("/node", statusServer.handleNodeInfo)
 	mux.HandleFunc("/pool", statusServer.handlePoolInfo)

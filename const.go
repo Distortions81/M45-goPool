@@ -28,4 +28,7 @@ const (
 	maxVersionHexLen    = 8   // submit version_bits parameter (4-byte hex)
 
 	maxDuplicateShareKeyBytes = 64
+
+	// forceClerkLoginUIForTesting shows the Clerk card when development forces it.
+	forceClerkLoginUIForTesting = false
 )

@@ -14,15 +14,19 @@ import (
 	"sync"
 	"time"
 
+	clerk "github.com/clerk/clerk-sdk-go/v2"
+	clerkclient "github.com/clerk/clerk-sdk-go/v2/client"
+	clerksession "github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/golang-jwt/jwt/v5"
 )
 
 const (
-	defaultClerkIssuer            = "https://clerk.clerk.dev"
+	defaultClerkIssuerURL         = "https://clerk.clerk.dev"
 	defaultClerkJWKSURL           = "https://clerk.clerk.dev/.well-known/jwks"
 	defaultClerkSessionCookieName = "__session"
 	defaultClerkSignInURL         = "https://auth.clerk.dev/sign-in"
 	defaultClerkCallbackPath      = "/clerk/callback"
+	clerkDevBrowserJWTQueryParam  = "__clerk_db_jwt"
 )
 
 type ClerkUser struct {
@@ -101,6 +105,9 @@ type ClerkVerifier struct {
 	callbackPath    string
 	sessionCookie   string
 	signInURL       string
+	secretKey       string
+	clerkClients    *clerkclient.Client
+	clerkSessions   *clerksession.Client
 	keys            map[string]*rsa.PublicKey
 	mu              sync.RWMutex
 	lastKeyRefresh  time.Time
@@ -112,9 +119,9 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 	if jwksURL == "" {
 		jwksURL = defaultClerkJWKSURL
 	}
-	issuer := strings.TrimSpace(cfg.ClerkIssuer)
+	issuer := strings.TrimSpace(cfg.ClerkIssuerURL)
 	if issuer == "" {
-		issuer = defaultClerkIssuer
+		issuer = defaultClerkIssuerURL
 	}
 	sessionCookie := strings.TrimSpace(cfg.ClerkSessionCookieName)
 	if sessionCookie == "" {
@@ -128,6 +135,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 	if callbackPath == "" {
 		callbackPath = defaultClerkCallbackPath
 	}
+	secretKey := strings.TrimSpace(cfg.ClerkSecretKey)
 
 	v := &ClerkVerifier{
 		client: &http.Client{
@@ -138,7 +146,14 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 		callbackPath:    callbackPath,
 		sessionCookie:   sessionCookie,
 		signInURL:       signInURL,
+		secretKey:       secretKey,
 		keyRefreshLimit: 5 * time.Minute,
+	}
+	if secretKey != "" {
+		cc := &clerk.ClientConfig{}
+		cc.Key = clerk.String(secretKey)
+		v.clerkClients = clerkclient.NewClient(cc)
+		v.clerkSessions = clerksession.NewClient(cc)
 	}
 	if err := v.refreshKeys(); err != nil {
 		return nil, err
@@ -215,6 +230,52 @@ func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {
 		return nil, errors.New("invalid session token")
 	}
 	return claims, nil
+}
+
+// ExchangeDevBrowserJWT exchanges Clerk's development-only __clerk_db_jwt query
+// parameter for a short-lived session JWT (which can then be stored in the
+// normal __session cookie and verified networklessly via JWKS).
+func (v *ClerkVerifier) ExchangeDevBrowserJWT(ctx context.Context, devBrowserJWT string) (string, *ClerkSessionClaims, error) {
+	if v == nil {
+		return "", nil, errors.New("clerk verifier not configured")
+	}
+	devBrowserJWT = strings.TrimSpace(devBrowserJWT)
+	if devBrowserJWT == "" {
+		return "", nil, errors.New("missing dev browser jwt")
+	}
+	if v.secretKey == "" || v.clerkClients == nil || v.clerkSessions == nil {
+		return "", nil, errors.New("clerk_secret_key not configured")
+	}
+	cl, err := v.clerkClients.Verify(ctx, &clerkclient.VerifyParams{Token: clerk.String(devBrowserJWT)})
+	if err != nil {
+		return "", nil, fmt.Errorf("verify dev browser jwt: %w", err)
+	}
+	var sessionID string
+	if cl != nil && cl.LastActiveSessionID != nil {
+		sessionID = strings.TrimSpace(*cl.LastActiveSessionID)
+	}
+	if sessionID == "" && cl != nil && len(cl.Sessions) > 0 {
+		sessionID = strings.TrimSpace(cl.Sessions[0].ID)
+	}
+	if sessionID == "" && cl != nil && len(cl.SessionIDs) > 0 {
+		sessionID = strings.TrimSpace(cl.SessionIDs[0])
+	}
+	if sessionID == "" {
+		return "", nil, errors.New("no active session in dev browser token")
+	}
+	tok, err := v.clerkSessions.CreateToken(ctx, &clerksession.CreateTokenParams{ID: sessionID})
+	if err != nil {
+		return "", nil, fmt.Errorf("create session token: %w", err)
+	}
+	jwtToken := strings.TrimSpace(tok.JWT)
+	if jwtToken == "" {
+		return "", nil, errors.New("missing session jwt")
+	}
+	claims, err := v.Verify(jwtToken)
+	if err != nil {
+		return "", nil, fmt.Errorf("verify exchanged session token: %w", err)
+	}
+	return jwtToken, claims, nil
 }
 
 func (v *ClerkVerifier) LoginURL(r *http.Request, redirectPath string, frontendAPI string) string {

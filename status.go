@@ -1871,7 +1871,7 @@ func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusDa
 	if s == nil || data == nil || s.clerk == nil {
 		return
 	}
-	data.ClerkEnabled = true
+	data.ClerkEnabled = forceClerkLoginUIForTesting || s.clerk != nil
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
 		redirect = "/worker"
@@ -1880,24 +1880,67 @@ func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusDa
 	if user := ClerkUserFromContext(r.Context()); user != nil {
 		data.ClerkUser = user
 		if s.workerLists != nil {
-			data.SavedWorkers = s.workerLists.List(user.UserID)
+			if list, err := s.workerLists.List(user.UserID); err == nil {
+				data.SavedWorkers = list
+			} else {
+				logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
+			}
 		}
 	}
 }
 
 func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
-	if s == nil || s.clerk == nil {
+	if s == nil {
 		return ""
 	}
-	login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.cfg.ClerkFrontendAPI)
-	if redirect == "" {
-		return login
+	redirectURL := s.clerkRedirectURL(r, redirect)
+	if s.clerk != nil {
+		login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.cfg.ClerkFrontendAPIURL)
+		if redirect == "" {
+			return login
+		}
+		sep := "?"
+		if strings.Contains(login, "?") {
+			sep = "&"
+		}
+		return login + sep + "redirect=" + url.QueryEscape(redirect)
 	}
-	sep := "?"
-	if strings.Contains(login, "?") {
-		sep = "&"
+
+	base := strings.TrimSpace(s.cfg.ClerkSignInURL)
+	if base == "" {
+		base = defaultClerkSignInURL
 	}
-	return login + sep + "redirect=" + url.QueryEscape(redirect)
+	values := url.Values{}
+	values.Set("redirect_url", redirectURL)
+	if frontendAPI := strings.TrimSpace(s.cfg.ClerkFrontendAPIURL); frontendAPI != "" {
+		values.Set("frontend_api", frontendAPI)
+	}
+	return base + "?" + values.Encode()
+}
+
+func (s *StatusServer) clerkRedirectURL(r *http.Request, redirect string) string {
+	if s == nil {
+		return "/worker"
+	}
+	redirectPath := safeRedirectPath(redirect)
+	if redirectPath == "" {
+		redirectPath = "/worker"
+	}
+	scheme := "http"
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	host := r.Host
+	if host == "" {
+		host = "localhost"
+	}
+	return (&url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   redirectPath,
+	}).String()
 }
 
 func safeRedirectPath(value string) string {
@@ -1935,7 +1978,7 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 }
 
 func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) {
-	if s == nil || s.clerk == nil {
+	if s == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -1947,7 +1990,7 @@ func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Request) {
-	if s == nil || s.clerk == nil {
+	if s == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -1955,7 +1998,35 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 	if redirect == "" {
 		redirect = "/worker"
 	}
+	if s.clerk == nil {
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
 	if s.clerkUserFromRequest(r) == nil {
+		if devBrowserJWT := strings.TrimSpace(r.URL.Query().Get(clerkDevBrowserJWTQueryParam)); devBrowserJWT != "" {
+			if jwtToken, claims, err := s.clerk.ExchangeDevBrowserJWT(r.Context(), devBrowserJWT); err != nil {
+				logger.Warn("clerk dev browser exchange failed", "error", err)
+			} else {
+				cookie := &http.Cookie{
+					Name:     s.clerk.SessionCookieName(),
+					Value:    jwtToken,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
+				}
+				if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+					cookie.Secure = strings.EqualFold(proto, "https")
+				} else {
+					cookie.Secure = r.TLS != nil
+				}
+				if claims != nil && claims.ExpiresAt != nil {
+					cookie.Expires = claims.ExpiresAt.Time
+				}
+				http.SetCookie(w, cookie)
+				http.Redirect(w, r, redirect, http.StatusSeeOther)
+				return
+			}
+		}
 		loginTarget := "/login?redirect=" + url.QueryEscape(redirect)
 		http.Redirect(w, r, loginTarget, http.StatusSeeOther)
 		return
@@ -1983,9 +2054,72 @@ func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if s.workerLists != nil {
-		s.workerLists.Add(user.UserID, worker)
+		if err := s.workerLists.Add(user.UserID, worker); err != nil {
+			logger.Warn("save worker name", "error", err, "user_id", user.UserID)
+		}
 	}
 	http.Redirect(w, r, "/worker", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	worker := strings.TrimSpace(r.FormValue("worker"))
+	if worker == "" {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+	if s.workerLists != nil {
+		if err := s.workerLists.Remove(user.UserID, worker); err != nil {
+			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
+		}
+	}
+	http.Redirect(w, r, "/worker", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/worker"
+	}
+	cookieName := strings.TrimSpace(s.cfg.ClerkSessionCookieName)
+	if s.clerk != nil {
+		cookieName = strings.TrimSpace(s.clerk.SessionCookieName())
+	}
+	if cookieName == "" {
+		cookieName = defaultClerkSessionCookieName
+	}
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0),
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		cookie.Secure = strings.EqualFold(proto, "https")
+	} else {
+		cookie.Secure = r.TLS != nil
+	}
+	http.SetCookie(w, cookie)
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.

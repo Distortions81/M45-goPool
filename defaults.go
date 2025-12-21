@@ -65,11 +65,12 @@ func defaultConfig() Config {
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
 		StratumTLSListen:        defaultStratumTLSListen,
-		ClerkIssuer:             defaultClerkIssuer,
+		ClerkIssuerURL:          defaultClerkIssuerURL,
 		ClerkJWKSURL:            defaultClerkJWKSURL,
 		ClerkSignInURL:          defaultClerkSignInURL,
 		ClerkCallbackPath:       defaultClerkCallbackPath,
-		ClerkFrontendAPI:        "",
+		ClerkFrontendAPIURL:     "",
+		ClerkBackendAPIURL:      "",
 		ClerkSessionCookieName:  defaultClerkSessionCookieName,
 		RPCURL:                  defaultRPCURL,
 		RPCUser:                 defaultRPCUser,

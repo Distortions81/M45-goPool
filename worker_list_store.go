@@ -1,59 +1,123 @@
 package main
 
 import (
-	"sort"
+	"database/sql"
+	"os"
+	"path/filepath"
 	"strings"
-	"sync"
+
+	_ "modernc.org/sqlite"
 )
 
 const maxSavedWorkersPerUser = 64
 
 type workerListStore struct {
-	mu    sync.RWMutex
-	lists map[string]map[string]struct{}
+	db *sql.DB
 }
 
-func newWorkerListStore() *workerListStore {
-	return &workerListStore{
-		lists: make(map[string]map[string]struct{}),
+func newWorkerListStore(path string) (*workerListStore, error) {
+	if path == "" {
+		return nil, os.ErrInvalid
 	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open("sqlite", path+"?_foreign_keys=1&_journal=WAL")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS saved_workers (
+			user_id TEXT NOT NULL,
+			worker TEXT NOT NULL,
+			PRIMARY KEY(user_id, worker)
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	return &workerListStore{db: db}, nil
 }
 
-func (s *workerListStore) Add(userID, worker string) {
-	if userID == "" {
-		return
+func (s *workerListStore) Add(userID, worker string) error {
+	if s == nil || s.db == nil {
+		return nil
 	}
+	userID = strings.TrimSpace(userID)
 	worker = strings.TrimSpace(worker)
-	if worker == "" || len(worker) > workerLookupMaxBytes {
-		return
+	if userID == "" || worker == "" {
+		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	set, ok := s.lists[userID]
-	if !ok {
-		set = make(map[string]struct{})
-		s.lists[userID] = set
+	if len(worker) > workerLookupMaxBytes {
+		return nil
 	}
-	if len(set) >= maxSavedWorkersPerUser {
-		return
+
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM saved_workers WHERE user_id = ?", userID).Scan(&count); err != nil {
+		return err
 	}
-	set[worker] = struct{}{}
+	if count >= maxSavedWorkersPerUser {
+		return nil
+	}
+
+	_, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker) VALUES (?, ?)", userID, worker)
+	return err
 }
 
-func (s *workerListStore) List(userID string) []string {
+func (s *workerListStore) List(userID string) ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	userID = strings.TrimSpace(userID)
 	if userID == "" {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT worker FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var workers []string
+	for rows.Next() {
+		var worker string
+		if err := rows.Scan(&worker); err != nil {
+			return nil, err
+		}
+		workers = append(workers, worker)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return workers, nil
+}
+
+func (s *workerListStore) Remove(userID, worker string) error {
+	if s == nil || s.db == nil {
 		return nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	set, ok := s.lists[userID]
-	if !ok {
+	userID = strings.TrimSpace(userID)
+	worker = strings.TrimSpace(worker)
+	if userID == "" || worker == "" {
 		return nil
 	}
-	out := make([]string, 0, len(set))
-	for worker := range set {
-		out = append(out, worker)
+	if len(worker) > workerLookupMaxBytes {
+		return nil
 	}
-	sort.Strings(out)
-	return out
+	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker)
+	return err
+}
+
+func (s *workerListStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
 }
