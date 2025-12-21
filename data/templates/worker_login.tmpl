@@ -9,6 +9,34 @@
 <body>
 	{{template "header" .}}
 	<div class="page">
+		{{if .ClerkUser}}
+		<div class="card">
+			<h2>Saved workers</h2>
+			<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
+			<form method="post" action="/worker/save">
+				<div class="label">Worker name</div>
+				<div class="input-row">
+					<input class="input" type="text" name="worker" placeholder="wallet.worker">
+					<button class="btn" type="submit">Save</button>
+				</div>
+			</form>
+			{{if .SavedWorkers}}
+				<ul class="text-sm" style="margin-top:10px;">
+					{{range .SavedWorkers}}
+						<li class="mono">{{.}}</li>
+					{{end}}
+				</ul>
+			{{else}}
+				<p class="text-sm" style="margin-top:10px;">No saved workers yet. Save a worker to see it here.</p>
+			{{end}}
+		</div>
+		{{else if .ClerkEnabled}}
+		<div class="card">
+			<h2>Worker monitoring</h2>
+			<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
+			<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
+		</div>
+		{{end}}
 		<div class="card">
 			<form method="get" action="/worker/sha256" id="workerLookupForm">
 				<div class="label">Worker ID</div>

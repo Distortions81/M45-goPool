@@ -8,6 +8,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/bytedance/sonic v1.14.2
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/minio/sha256-simd v1.0.1
 	github.com/pebbe/zmq4 v1.4.0
 	github.com/pelletier/go-toml v1.9.5

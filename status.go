@@ -12,6 +12,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -353,8 +354,10 @@ type StatusServer struct {
 	rpc                 *RPCClient
 	cfg                 Config
 	ctx                 context.Context
+	clerk               *ClerkVerifier
 	start               time.Time
 	workerLookupLimiter *workerLookupRateLimiter
+	workerLists         *workerListStore
 	lastStatsMu         sync.Mutex
 	lastAccepted        uint64
 	lastRejected        uint64
@@ -557,6 +560,10 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 type StatusData struct {
 	ListenAddr                     string            `json:"listen_addr"`
 	StratumTLSListen               string            `json:"stratum_tls_listen,omitempty"`
+	ClerkEnabled                   bool              `json:"clerk_enabled"`
+	ClerkLoginURL                  string            `json:"clerk_login_url,omitempty"`
+	ClerkUser                      *ClerkUser        `json:"clerk_user,omitempty"`
+	SavedWorkers                   []string          `json:"saved_workers,omitempty"`
 	BrandName                      string            `json:"brand_name"`
 	BrandDomain                    string            `json:"brand_domain"`
 	Tagline                        string            `json:"tagline,omitempty"`
@@ -1210,7 +1217,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -1232,7 +1239,9 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		cfg:                 cfg,
 		ctx:                 ctx,
 		start:               start,
+		clerk:               clerk,
 		workerLookupLimiter: newWorkerLookupRateLimiter(workerLookupRateLimitMax, workerLookupRateLimitWindow),
+		workerLists:         workerLists,
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
 	}
@@ -1823,6 +1832,88 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
+	if s == nil || s.clerk == nil {
+		return h
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := s.clerkUserFromRequest(r)
+		if user != nil {
+			r = r.WithContext(contextWithClerkUser(r.Context(), user))
+		}
+		h(w, r)
+	}
+}
+
+func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
+	if s == nil || s.clerk == nil {
+		return nil
+	}
+	cookie, err := r.Cookie(s.clerk.SessionCookieName())
+	if err != nil {
+		return nil
+	}
+	claims, err := s.clerk.Verify(cookie.Value)
+	if err != nil {
+		logger.Debug("clerk verify failed", "error", err)
+		return nil
+	}
+	return &ClerkUser{
+		UserID:    claims.UserID,
+		SessionID: claims.SessionID,
+		Email:     claims.Email,
+		FirstName: claims.FirstName,
+		LastName:  claims.LastName,
+	}
+}
+
+func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusData) {
+	if s == nil || data == nil || s.clerk == nil {
+		return
+	}
+	data.ClerkEnabled = true
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/worker"
+	}
+	data.ClerkLoginURL = s.clerkLoginURL(r, redirect)
+	if user := ClerkUserFromContext(r.Context()); user != nil {
+		data.ClerkUser = user
+		if s.workerLists != nil {
+			data.SavedWorkers = s.workerLists.List(user.UserID)
+		}
+	}
+}
+
+func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
+	if s == nil || s.clerk == nil {
+		return ""
+	}
+	login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.cfg.ClerkFrontendAPI)
+	if redirect == "" {
+		return login
+	}
+	sep := "?"
+	if strings.Contains(login, "?") {
+		sep = "&"
+	}
+	return login + sep + "redirect=" + url.QueryEscape(redirect)
+}
+
+func safeRedirectPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") {
+		return ""
+	}
+	if strings.ContainsAny(value, "\n\r") {
+		return ""
+	}
+	return value
+}
+
 // handleWorkerStatus renders the worker login page.
 func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -1831,6 +1922,7 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 	data := WorkerStatusData{
 		StatusData: base,
 	}
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "worker_login", data); err != nil {
@@ -1840,6 +1932,60 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 			"We couldn't render the worker login page.",
 			"Template error while rendering worker login.")
 	}
+}
+
+func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) {
+	if s == nil || s.clerk == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/worker"
+	}
+	http.Redirect(w, r, s.clerkLoginURL(r, redirect), http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Request) {
+	if s == nil || s.clerk == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/worker"
+	}
+	if s.clerkUserFromRequest(r) == nil {
+		loginTarget := "/login?redirect=" + url.QueryEscape(redirect)
+		http.Redirect(w, r, loginTarget, http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	worker := strings.TrimSpace(r.FormValue("worker"))
+	if worker == "" {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+	if s.workerLists != nil {
+		s.workerLists.Add(user.UserID, worker)
+	}
+	http.Redirect(w, r, "/worker", http.StatusSeeOther)
 }
 
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.
@@ -1889,6 +2035,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	}
 	data.BTCPriceFiat = btcPrice
 	data.BTCPriceUpdatedAt = btcPriceUpdated
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	var workerHash string
 	switch r.Method {

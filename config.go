@@ -42,10 +42,22 @@ type Config struct {
 	// Stratum listener (e.g. ":3443"). When empty, TLS for Stratum is
 	// disabled and only the plain TCP listener is used.
 	StratumTLSListen string
-	RPCURL           string // e.g. "http://127.0.0.1:8332"
-	RPCUser          string
-	RPCPass          string
-	PayoutAddress    string
+	// ClerkIssuer is the trusted issuer for Clerk session tokens.
+	ClerkIssuer string
+	// ClerkJWKSURL is the URL where Clerk publishes RSA keys for verifying JWTs.
+	ClerkJWKSURL string
+	// ClerkSignInURL is the hosted Clerk sign-in page (typically auth.clerk.dev/sign-in).
+	ClerkSignInURL string
+	// ClerkCallbackPath determines where Clerk redirects after sign-in.
+	ClerkCallbackPath string
+	// ClerkFrontendAPI is optionally passed to Clerk so it can identify your front-end instance.
+	ClerkFrontendAPI string
+	// ClerkSessionCookieName is the cookie that Clerk sets for authenticated sessions.
+	ClerkSessionCookieName string
+	RPCURL                 string // e.g. "http://127.0.0.1:8332"
+	RPCUser                string
+	RPCPass                string
+	PayoutAddress          string
 	// PayoutScript is reserved for future internal overrides and is not
 	// populated from or written to config.toml.
 	PayoutScript   string
@@ -190,6 +202,12 @@ type EffectiveConfig struct {
 	GitHubURL                         string  `json:"github_url,omitempty"`
 	ServerLocation                    string  `json:"server_location,omitempty"`
 	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
+	ClerkIssuer                       string  `json:"clerk_issuer,omitempty"`
+	ClerkJWKSURL                      string  `json:"clerk_jwks_url,omitempty"`
+	ClerkSignInURL                    string  `json:"clerk_signin_url,omitempty"`
+	ClerkCallbackPath                 string  `json:"clerk_callback_path,omitempty"`
+	ClerkFrontendAPI                  string  `json:"clerk_frontend_api,omitempty"`
+	ClerkSessionCookieName            string  `json:"clerk_session_cookie_name,omitempty"`
 	RPCURL                            string  `json:"rpc_url"`
 	RPCUser                           string  `json:"rpc_user"`
 	RPCPassSet                        bool    `json:"rpc_pass_set"`
@@ -263,6 +281,15 @@ type stratumConfig struct {
 	StratumTLSListen string `toml:"stratum_tls_listen"`
 }
 
+type authConfig struct {
+	ClerkIssuer            string `toml:"clerk_issuer"`
+	ClerkJWKSURL           string `toml:"clerk_jwks_url"`
+	ClerkSignInURL         string `toml:"clerk_signin_url"`
+	ClerkCallbackPath      string `toml:"clerk_callback_path"`
+	ClerkFrontendAPI       string `toml:"clerk_frontend_api"`
+	ClerkSessionCookieName string `toml:"clerk_session_cookie_name"`
+}
+
 type nodeConfig struct {
 	RPCURL        string `toml:"rpc_url"`
 	PayoutAddress string `toml:"payout_address"`
@@ -288,6 +315,7 @@ type baseFileConfig struct {
 	Server   serverConfig   `toml:"server"`
 	Branding brandingConfig `toml:"branding"`
 	Stratum  stratumConfig  `toml:"stratum"`
+	Auth     authConfig     `toml:"auth"`
 	Node     nodeConfig     `toml:"node"`
 	Mining   miningConfig   `toml:"mining"`
 }
@@ -415,6 +443,14 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			CoinbasePoolTag:           stringPtr(cfg.CoinbasePoolTag),
 			CoinbaseMsg:               cfg.CoinbaseMsg,
 			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
+		},
+		Auth: authConfig{
+			ClerkIssuer:            cfg.ClerkIssuer,
+			ClerkJWKSURL:           cfg.ClerkJWKSURL,
+			ClerkSignInURL:         cfg.ClerkSignInURL,
+			ClerkCallbackPath:      cfg.ClerkCallbackPath,
+			ClerkFrontendAPI:       cfg.ClerkFrontendAPI,
+			ClerkSessionCookieName: cfg.ClerkSessionCookieName,
 		},
 	}
 }
@@ -757,6 +793,24 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 		}
 		cfg.StratumTLSListen = addr
 	}
+	if fc.Auth.ClerkIssuer != "" {
+		cfg.ClerkIssuer = strings.TrimSpace(fc.Auth.ClerkIssuer)
+	}
+	if fc.Auth.ClerkJWKSURL != "" {
+		cfg.ClerkJWKSURL = strings.TrimSpace(fc.Auth.ClerkJWKSURL)
+	}
+	if fc.Auth.ClerkSignInURL != "" {
+		cfg.ClerkSignInURL = strings.TrimSpace(fc.Auth.ClerkSignInURL)
+	}
+	if fc.Auth.ClerkCallbackPath != "" {
+		cfg.ClerkCallbackPath = strings.TrimSpace(fc.Auth.ClerkCallbackPath)
+	}
+	if fc.Auth.ClerkFrontendAPI != "" {
+		cfg.ClerkFrontendAPI = strings.TrimSpace(fc.Auth.ClerkFrontendAPI)
+	}
+	if fc.Auth.ClerkSessionCookieName != "" {
+		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
+	}
 	if fc.Node.RPCURL != "" {
 		cfg.RPCURL = fc.Node.RPCURL
 	}
@@ -922,6 +976,13 @@ func (cfg Config) Effective() EffectiveConfig {
 		DiscordURL:                        cfg.DiscordURL,
 		GitHubURL:                         cfg.GitHubURL,
 		ServerLocation:                    cfg.ServerLocation,
+		StratumTLSListen:                  cfg.StratumTLSListen,
+		ClerkIssuer:                       cfg.ClerkIssuer,
+		ClerkJWKSURL:                      cfg.ClerkJWKSURL,
+		ClerkSignInURL:                    cfg.ClerkSignInURL,
+		ClerkCallbackPath:                 cfg.ClerkCallbackPath,
+		ClerkFrontendAPI:                  cfg.ClerkFrontendAPI,
+		ClerkSessionCookieName:            cfg.ClerkSessionCookieName,
 		RPCURL:                            cfg.RPCURL,
 		RPCUser:                           cfg.RPCUser,
 		RPCPassSet:                        strings.TrimSpace(cfg.RPCPass) != "",
@@ -953,7 +1014,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		AcceptSteadyStateReconnectPercent: cfg.AcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:  cfg.AcceptSteadyStateReconnectWindow,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
-		ConnectionTimeout:                cfg.ConnectionTimeout.String(),
+		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
 		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
 		MinVersionBits:                    cfg.MinVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,

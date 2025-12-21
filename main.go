@@ -495,10 +495,24 @@ func main() {
 		logger.Warn("high pool_fee_percent; verify configuration", "pool_fee_percent", cfg.PoolFeePercent)
 	}
 
+	callbackPath := strings.TrimSpace(cfg.ClerkCallbackPath)
+	if callbackPath == "" {
+		callbackPath = defaultClerkCallbackPath
+	}
+	if !strings.HasPrefix(callbackPath, "/") {
+		callbackPath = "/" + callbackPath
+	}
+	cfg.ClerkCallbackPath = callbackPath
+
 	startTime := time.Now()
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)
 	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
+	clerkVerifier, clerkErr := NewClerkVerifier(cfg)
+	if clerkErr != nil {
+		logger.Warn("initialize clerk verifier", "error", clerkErr)
+	}
+	workerLists := newWorkerListStore()
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
@@ -523,7 +537,7 @@ func main() {
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
-	statusServer := NewStatusServer(ctx, nil, metrics, registry, accounting, rpcClient, cfg, startTime)
+	statusServer := NewStatusServer(ctx, nil, metrics, registry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
@@ -569,8 +583,11 @@ func main() {
 		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
 	}
 	// HTML endpoints
-	mux.HandleFunc("/worker", statusServer.handleWorkerStatus)
-	mux.HandleFunc("/worker/sha256", statusServer.handleWorkerStatusBySHA256)
+	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
+	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
+	mux.HandleFunc("/worker/save", statusServer.withClerkUser(statusServer.handleWorkerSave))
+	mux.HandleFunc("/login", statusServer.handleClerkLogin)
+	mux.HandleFunc(cfg.ClerkCallbackPath, statusServer.handleClerkCallback)
 	mux.HandleFunc("/node", statusServer.handleNodeInfo)
 	mux.HandleFunc("/pool", statusServer.handlePoolInfo)
 	mux.HandleFunc("/server", statusServer.handleServerInfoPage)
