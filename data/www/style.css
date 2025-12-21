@@ -1025,6 +1025,11 @@ a:hover {
 	color: #f6b34a;
 	border: 1px solid rgba(246, 179, 74, 0.6);
 }
+.badge.badge-danger {
+	background: #f44336;
+	color: #fff;
+	border-color: #e53935;
+}
 
 .button-row {
 	display: flex;

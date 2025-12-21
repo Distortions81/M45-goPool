@@ -13,7 +13,13 @@
 		<div class="card">
 			<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
 				<div>
-					<h2 style="margin-top:0;">Add workers</h2>
+					<h2 style="margin-top:0;">
+						{{if eq .SavedWorkersCount 0}}
+							Add your first worker!
+						{{else}}
+							Add workers
+						{{end}}
+					</h2>
 				</div>
 				<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -36,7 +42,7 @@
 			<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
 				<h2 style="margin-top:0;">Your workers</h2>
 				<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-					<span class="badge">Saved: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
+					<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
 					<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
 					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
 						<span id="privacyToggleIcon" aria-hidden="true">
@@ -97,14 +103,20 @@
 				</table>
 			</div>
 
+			{{$offlineCount := len .OfflineWorkerEntries}}
 			<div id="offlineSection" {{if not .OfflineWorkerEntries}}style="display:none;"{{end}}>
 				<div style="border-top:1px solid var(--card-border); margin:18px 0 0;"></div>
-				<h2 style="margin-top:18px; margin-bottom:10px;">OFFLINE</h2>
+				<h2 style="margin-top:18px; margin-bottom:10px;">
+					OFFLINE
+					{{if gt $offlineCount 0}}
+						<span class="badge badge-danger" style="margin-left:8px;">{{$offlineCount}} offline</span>
+					{{end}}
+				</h2>
 				<ul class="text-sm" style="margin-top:8px;" id="offlineWorkersList">
 					{{range .OfflineWorkerEntries}}
 						<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
 							<span class="sensitive-worker" data-worker-name="{{.Name}}"></span>
-							<span class="badge">Offline</span>
+							<span class="badge badge-danger">Offline</span>
 						</li>
 					{{end}}
 				</ul>
@@ -128,7 +140,12 @@
 		// Saved workers total hashrate graph (sum of online workers).
 		const chartCanvas = document.getElementById('savedWorkersHashrateChart');
 		const maxDataPoints = 60; // 5 minutes at 5-second intervals
+		const MIN_GRAPH_MAX_HASHRATE = 5 * 1e12; // 5 TH/s minimum scale
+		const MIN_GRAPH_MAX_SHARES = 200; // shares/min minimum scale
+		const HASHRATE_LINE_COLOR = '#2cf1c2';
+		const SHARES_LINE_COLOR = '#a86bff';
 		const hashrateData = [];
+		const sharesData = [];
 		let chartCtx = null;
 
 		function resizeChartCanvas() {
@@ -170,7 +187,7 @@
 
 			chartCtx.clearRect(0, 0, width, height);
 
-			if (hashrateData.length === 0) {
+			if (hashrateData.length === 0 && sharesData.length === 0) {
 				chartCtx.fillStyle = '#b3bbd4';
 				chartCtx.font = '14px monospace';
 				chartCtx.textAlign = 'center';
@@ -178,8 +195,14 @@
 				return;
 			}
 
-			const maxHashrate = Math.max(...hashrateData, 0);
-			const range = maxHashrate || 1;
+			const points = hashrateData.slice(-maxDataPoints);
+			const sharesPoints = sharesData.slice(-maxDataPoints);
+			const maxHashrate = Math.max(...points, 0);
+			const maxShares = Math.max(...sharesPoints, 0);
+			const hashrateRange = Math.max(maxHashrate, MIN_GRAPH_MAX_HASHRATE, 1);
+			const shareRange = Math.max(maxShares, MIN_GRAPH_MAX_SHARES, 1);
+			const range = hashrateRange;
+			const stepCount = Math.max(points.length, sharesPoints.length);
 
 			// Grid
 			chartCtx.strokeStyle = '#2a2f3a';
@@ -198,7 +221,7 @@
 			chartCtx.textAlign = 'right';
 			for (let i = 0; i <= 4; i++) {
 				const y = paddingTop + (graphHeight / 4) * i;
-				const value = maxHashrate - (range / 4) * i;
+				const value = hashrateRange - (range / 4) * i;
 				chartCtx.fillText(formatHashrateShort(value), paddingLeft - 8, y + 4);
 			}
 
@@ -210,26 +233,43 @@
 			chartCtx.lineTo(width - paddingRight, height - paddingBottom);
 			chartCtx.stroke();
 
-			// Line
-			const points = hashrateData.slice(-maxDataPoints);
-			const step = points.length > 1 ? graphWidth / (points.length - 1) : 0;
-			chartCtx.strokeStyle = '#2cf1c2';
-			chartCtx.lineWidth = 2;
-			chartCtx.beginPath();
-			points.forEach((v, i) => {
-				const x = paddingLeft + step * i;
-				const y = paddingTop + graphHeight - (v / range) * graphHeight;
-				if (i === 0) chartCtx.moveTo(x, y);
-				else chartCtx.lineTo(x, y);
-			});
-			chartCtx.stroke();
+			const step = stepCount > 1 ? graphWidth / (stepCount - 1) : 0;
+
+			// Hashrate line (green)
+			if (points.length > 0) {
+				chartCtx.strokeStyle = HASHRATE_LINE_COLOR;
+				chartCtx.lineWidth = 2;
+				chartCtx.beginPath();
+				points.forEach((v, i) => {
+					const x = paddingLeft + step * i;
+					const y = paddingTop + graphHeight - (v / range) * graphHeight;
+					if (i === 0) chartCtx.moveTo(x, y);
+					else chartCtx.lineTo(x, y);
+				});
+				chartCtx.stroke();
+			}
+
+			// Shares/min line (purple)
+			if (sharesPoints.length > 0) {
+				chartCtx.strokeStyle = SHARES_LINE_COLOR;
+				chartCtx.lineWidth = 2;
+				chartCtx.beginPath();
+				sharesPoints.forEach((v, i) => {
+					const x = paddingLeft + step * i;
+					const y = paddingTop + graphHeight - (v / shareRange) * graphHeight;
+					if (i === 0) chartCtx.moveTo(x, y);
+					else chartCtx.lineTo(x, y);
+				});
+				chartCtx.stroke();
+			}
 
 			// Latest label
-			const last = points[points.length - 1];
+			const lastHashrate = points.length ? points[points.length - 1] : 0;
+			const lastShares = sharesPoints.length ? sharesPoints[sharesPoints.length - 1] : 0;
 			chartCtx.fillStyle = '#eafff7';
 			chartCtx.font = '12px monospace';
 			chartCtx.textAlign = 'left';
-			chartCtx.fillText(`Total: ${formatHashrateShort(last)}`, paddingLeft, paddingTop - 2);
+			chartCtx.fillText(`Total: ${formatHashrateShort(lastHashrate)} • Shares/min: ${formatShareRatePerMin(lastShares)}`, paddingLeft, paddingTop - 2);
 		}
 
 		if (chartCanvas) {
@@ -320,12 +360,18 @@
 					const online = Array.isArray(data.online_workers) ? data.online_workers : [];
 					// Update total hashrate time series (sum of online worker hashrate).
 					let totalHashrate = 0;
-					for (const w of online) totalHashrate += Number(w.hashrate || 0);
-					if (isFinite(totalHashrate)) {
-						hashrateData.push(totalHashrate);
-						if (hashrateData.length > maxDataPoints) hashrateData.shift();
-						drawHashrateGraph();
+					let totalShares = 0;
+					for (const w of online) {
+						totalHashrate += Number(w.hashrate || 0);
+						totalShares += Number(w.shares_per_minute || 0);
 					}
+					const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
+					const safeShares = isFinite(totalShares) ? totalShares : 0;
+					hashrateData.push(safeHashrate);
+					sharesData.push(safeShares);
+					if (hashrateData.length > maxDataPoints) hashrateData.shift();
+					if (sharesData.length > maxDataPoints) sharesData.shift();
+					drawHashrateGraph();
 					if (online.length === 0) {
 						onlineBody.innerHTML = '<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>';
 					} else {
