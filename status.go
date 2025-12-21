@@ -2046,15 +2046,19 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	base := s.baseTemplateData(start)
 
 	type savedWorkerEntry struct {
-		Name   string
-		Online bool
+		Name      string
+		Hashrate  float64
+		ShareRate float64
+		Accepted  uint64
+		Difficulty float64
 	}
 	data := struct {
 		StatusData
-		SavedWorkerEntries []savedWorkerEntry
-		SavedWorkersCount  int
-		SavedWorkersOnline int
-		SavedWorkersMax    int
+		OnlineWorkerEntries  []savedWorkerEntry
+		OfflineWorkerEntries []savedWorkerEntry
+		SavedWorkersCount    int
+		SavedWorkersOnline   int
+		SavedWorkersMax      int
 	}{StatusData: base}
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
@@ -2067,14 +2071,24 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 	for _, worker := range data.SavedWorkers {
-		_, online := s.findWorkerViewByName(worker, now)
+		view, online := s.findWorkerViewByName(worker, now)
+		hashrate := view.RollingHashrate
+		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+		}
+		entry := savedWorkerEntry{
+			Name:      worker,
+			Hashrate:  hashrate,
+			ShareRate: view.ShareRate,
+			Accepted:  view.Accepted,
+			Difficulty: view.Difficulty,
+		}
 		if online {
 			data.SavedWorkersOnline++
+			data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
+		} else {
+			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
 		}
-		data.SavedWorkerEntries = append(data.SavedWorkerEntries, savedWorkerEntry{
-			Name:   worker,
-			Online: online,
-		})
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2084,6 +2098,81 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 			"Saved workers page error",
 			"We couldn't render the saved workers page.",
 			"Template error while rendering saved workers.")
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	saved := []string(nil)
+	if s.workerLists != nil {
+		if list, err := s.workerLists.List(user.UserID); err == nil {
+			saved = list
+		} else {
+			logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
+		}
+	}
+
+	type entry struct {
+		Name            string  `json:"name"`
+		Online          bool    `json:"online"`
+		Hashrate        float64 `json:"hashrate"`
+		SharesPerMinute float64 `json:"shares_per_minute"`
+		Accepted        uint64  `json:"accepted"`
+		Difficulty      float64 `json:"difficulty"`
+	}
+	now := time.Now()
+	resp := struct {
+		UpdatedAt      string  `json:"updated_at"`
+		SavedMax       int     `json:"saved_max"`
+		SavedCount     int     `json:"saved_count"`
+		OnlineCount    int     `json:"online_count"`
+		OnlineWorkers  []entry `json:"online_workers"`
+		OfflineWorkers []entry `json:"offline_workers"`
+	}{
+		UpdatedAt:  now.UTC().Format(time.RFC3339),
+		SavedMax:   maxSavedWorkersPerUser,
+		SavedCount: len(saved),
+	}
+
+	for _, worker := range saved {
+		view, online := s.findWorkerViewByName(worker, now)
+		hashrate := view.RollingHashrate
+		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+		}
+		e := entry{
+			Name:            worker,
+			Online:          online,
+			Hashrate:        hashrate,
+			SharesPerMinute: view.ShareRate,
+			Accepted:        view.Accepted,
+			Difficulty:      view.Difficulty,
+		}
+		if online {
+			resp.OnlineCount++
+			resp.OnlineWorkers = append(resp.OnlineWorkers, e)
+		} else {
+			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("saved workers json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("saved workers json write", "error", err)
 	}
 }
 
