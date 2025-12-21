@@ -53,8 +53,8 @@ func (u *ClerkUser) DisplayName() string {
 
 type ClerkSessionClaims struct {
 	jwt.RegisteredClaims
-	SessionID string `json:"session_id"`
-	UserID    string `json:"user_id"`
+	Version   int    `json:"v,omitempty"`
+	SessionID string `json:"sid"`
 	Email     string `json:"email"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`

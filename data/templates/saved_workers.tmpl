@@ -1,0 +1,55 @@
+{{/* Saved workers page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Saved Workers</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		{{if .ClerkUser}}
+		<div class="card">
+			<h2>Saved workers</h2>
+			<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
+			<div class="button-row">
+				<a class="btn btn-secondary" href="/worker">Quick Worker Lookup</a>
+				<a class="btn btn-secondary" href="/logout?redirect=/worker">Sign out</a>
+			</div>
+			<form method="post" action="/worker/save">
+				<div class="label">Worker name</div>
+				<div class="input-row">
+					<input class="input" type="text" name="worker" placeholder="wallet.worker">
+					<button class="btn" type="submit">Save</button>
+				</div>
+			</form>
+			{{if .SavedWorkers}}
+				<ul class="text-sm" style="margin-top:10px;">
+					{{range .SavedWorkers}}
+						<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
+							<span>{{.}}</span>
+							<form method="post" action="/worker/remove" style="margin:0;">
+								<input type="hidden" name="worker" value="{{.}}">
+								<button class="btn btn-secondary" type="submit">Remove</button>
+							</form>
+						</li>
+					{{end}}
+				</ul>
+			{{else}}
+				<p class="text-sm" style="margin-top:10px;">No saved workers yet. Save a worker to see it here.</p>
+			{{end}}
+		</div>
+		{{else}}
+		<div class="card">
+			<h2>Saved workers</h2>
+			<p class="text-sm">Sign in to save workers for quick access.</p>
+			<a class="btn" href="/login?redirect=/saved-workers">Sign in with Google</a>
+		</div>
+		{{end}}
+
+		{{template "footer" .}}
+	</div>
+</body>
+</html>
+

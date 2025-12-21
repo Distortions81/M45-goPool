@@ -1158,6 +1158,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
 	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
+	savedWorkersPath := filepath.Join(dataDir, "templates", "saved_workers.tmpl")
 	workerStatusPath := filepath.Join(dataDir, "templates", "worker_status.tmpl")
 	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
 	poolInfoPath := filepath.Join(dataDir, "templates", "pool.tmpl")
@@ -1180,6 +1181,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	workerLoginHTML, err := os.ReadFile(workerLoginPath)
 	if err != nil {
 		return nil, fmt.Errorf("load worker login template: %w", err)
+	}
+	savedWorkersHTML, err := os.ReadFile(savedWorkersPath)
+	if err != nil {
+		return nil, fmt.Errorf("load saved workers template: %w", err)
 	}
 	workerStatusHTML, err := os.ReadFile(workerStatusPath)
 	if err != nil {
@@ -1208,6 +1213,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
 	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
+	template.Must(tmpl.New("saved_workers").Parse(string(savedWorkersHTML)))
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
 	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
 	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
@@ -1859,7 +1865,7 @@ func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 		return nil
 	}
 	return &ClerkUser{
-		UserID:    claims.UserID,
+		UserID:    claims.Subject,
 		SessionID: claims.SessionID,
 		Email:     claims.Email,
 		FirstName: claims.FirstName,
@@ -1874,7 +1880,7 @@ func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusDa
 	data.ClerkEnabled = forceClerkLoginUIForTesting || s.clerk != nil
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
-		redirect = "/worker"
+		redirect = "/saved-workers"
 	}
 	data.ClerkLoginURL = s.clerkLoginURL(r, redirect)
 	if user := ClerkUserFromContext(r.Context()); user != nil {
@@ -1984,7 +1990,7 @@ func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) 
 	}
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
-		redirect = "/worker"
+		redirect = "/saved-workers"
 	}
 	http.Redirect(w, r, s.clerkLoginURL(r, redirect), http.StatusSeeOther)
 }
@@ -1996,7 +2002,7 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 	}
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
-		redirect = "/worker"
+		redirect = "/saved-workers"
 	}
 	if s.clerk == nil {
 		http.Redirect(w, r, redirect, http.StatusSeeOther)
@@ -2032,6 +2038,30 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	base := s.baseTemplateData(start)
+
+	data := struct {
+		StatusData
+	}{StatusData: base}
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
+
+	if data.ClerkUser == nil {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "saved_workers", data); err != nil {
+		logger.Error("saved workers template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Saved workers page error",
+			"We couldn't render the saved workers page.",
+			"Template error while rendering saved workers.")
+	}
 }
 
 func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) {
@@ -2085,7 +2115,7 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
 		}
 	}
-	http.Redirect(w, r, "/worker", http.StatusSeeOther)
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
 }
 
 func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request) {

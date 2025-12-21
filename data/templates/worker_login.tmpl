@@ -9,50 +9,29 @@
 <body>
 	{{template "header" .}}
 	<div class="page">
-		{{if .ClerkUser}}
+		{{if .ClerkEnabled}}
 		<div class="card">
-			<h2>Saved workers</h2>
-			<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
-			<div class="button-row">
-				<a class="btn btn-secondary" href="/logout?redirect=/worker">Sign out</a>
-			</div>
-			<form method="post" action="/worker/save">
-				<div class="label">Worker name</div>
-				<div class="input-row">
-					<input class="input" type="text" name="worker" placeholder="wallet.worker">
-					<button class="btn" type="submit">Save</button>
+			<h2>Login to track multiple workers</h2>
+			{{if .ClerkUser}}
+				<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
+				<div class="button-row">
+					<a class="btn" href="/saved-workers">Manage saved workers</a>
+					<a class="btn btn-secondary" href="/logout?redirect=/worker">Sign out</a>
 				</div>
-			</form>
-			{{if .SavedWorkers}}
-				<ul class="text-sm" style="margin-top:10px;">
-					{{range .SavedWorkers}}
-						<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
-							<span>{{.}}</span>
-							<form method="post" action="/worker/remove" style="margin:0;">
-								<input type="hidden" name="worker" value="{{.}}">
-								<button class="btn btn-secondary" type="submit">Remove</button>
-							</form>
-						</li>
-					{{end}}
-				</ul>
 			{{else}}
-				<p class="text-sm" style="margin-top:10px;">No saved workers yet. Save a worker to see it here.</p>
+				<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
+				<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
 			{{end}}
-		</div>
-		{{else if .ClerkEnabled}}
-		<div class="card">
-			<h2>Worker monitoring</h2>
-			<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
-			<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
 		</div>
 		{{end}}
 		<div class="card">
+			<h2>Quick Worker Lookup</h2>
 			<form method="get" action="/worker/sha256" id="workerLookupForm">
 				<div class="label">Worker ID</div>
 				<div class="input-row">
 					<input class="input" type="text" id="workerInput">
 					<input type="hidden" name="hash" id="workerHash">
-					<button class="btn" type="submit">Login</button>
+					<button class="btn" type="submit">Search</button>
 				</div>
 				<p class="text-sm">Use the full wallet.worker-name from your miner.</p>
 			</form>
