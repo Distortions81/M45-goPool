@@ -20,9 +20,7 @@ const (
 	defaultTemplateExtraNonce2Size           = 8
 	defaultPoolFeePercent                    = 2.0
 	defaultRecentJobs                        = 3
-	defaultSubscribeTimeout                  = 30 * time.Second
-	defaultAuthorizeTimeout                  = 30 * time.Second
-	defaultStratumReadTimeout                = 5 * time.Minute
+	defaultConnectionTimeout                 = 30 * time.Second
 	defaultMaxAcceptsPerSecond               = 500
 	defaultMaxAcceptBurst                    = 1000
 	defaultAcceptReconnectWindow             = 15
@@ -99,9 +97,7 @@ func defaultConfig() Config {
 		AcceptSteadyStateReconnectPercent: defaultAcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:  defaultAcceptSteadyStateReconnectWindow,
 		MaxRecentJobs:                     defaultRecentJobs,
-		SubscribeTimeout:                  defaultSubscribeTimeout,
-		AuthorizeTimeout:                  defaultAuthorizeTimeout,
-		StratumReadTimeout:                defaultStratumReadTimeout,
+		ConnectionTimeout:                 defaultConnectionTimeout,
 		VersionMask:                       defaultVersionMask,
 		MinVersionBits:                    defaultMinVersionBits,
 		// Default difficulty range: 512–16000 so all live targets are powers

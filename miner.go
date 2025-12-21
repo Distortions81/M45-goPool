@@ -210,9 +210,6 @@ type MinerConn struct {
 	workerWallets       map[string]workerWalletState
 	subscribed          bool
 	authorized          bool
-	subscribeDeadline   time.Time
-	authorizeDeadline   time.Time
-	authorizeTimeout    time.Duration
 	cleanupOnce         sync.Once
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
@@ -230,6 +227,8 @@ type MinerConn struct {
 	// connectedAt is the time this miner connection was established,
 	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time
+	// lastActivity tracks when we last saw a RPC message from this miner.
+	lastActivity time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
@@ -538,19 +537,14 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		ctx = context.Background()
 	}
 	now := time.Now()
-	if cfg.StratumReadTimeout <= 0 {
-		cfg.StratumReadTimeout = defaultStratumReadTimeout
+	if cfg.ConnectionTimeout <= 0 {
+		cfg.ConnectionTimeout = defaultConnectionTimeout
 	}
 	jobCh := jobMgr.Subscribe()
 	en1 := jobMgr.NextExtranonce1()
 	maxRecentJobs := cfg.MaxRecentJobs
 	if maxRecentJobs <= 0 {
 		maxRecentJobs = defaultRecentJobs
-	}
-
-	subDeadline := time.Time{}
-	if cfg.SubscribeTimeout > 0 {
-		subDeadline = time.Now().Add(cfg.SubscribeTimeout)
 	}
 
 	mask := cfg.VersionMask
@@ -586,37 +580,36 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	}
 
 	mc := &MinerConn{
-		ctx:               ctx,
-		id:                c.RemoteAddr().String(),
-		conn:              c,
-		writer:            bufio.NewWriter(c),
-		reader:            bufio.NewReaderSize(c, maxStratumMessageSize),
-		jobMgr:            jobMgr,
-		rpc:               rpc,
-		cfg:               cfg,
-		extranonce1:       en1,
-		jobCh:             jobCh,
-		difficulty:        initialDiff,
-		shareTarget:       targetFromDifficulty(initialDiff),
-		vardiff:           vdiff,
-		metrics:           metrics,
-		accounting:        accounting,
-		workerRegistry:    workerRegistry,
-		activeJobs:        make(map[string]*Job),
-		connectedAt:       now,
-		jobDifficulty:     make(map[string]float64),
-		shareCache:        make(map[string]*duplicateShareRing),
-		maxRecentJobs:     maxRecentJobs,
-		lastPenalty:       time.Now(),
-		versionRoll:       false,
-		versionMask:       0,
-		poolMask:          mask,
-		minerMask:         0,
-		minVerBits:        minBits,
-		subscribeDeadline: subDeadline,
-		authorizeTimeout:  cfg.AuthorizeTimeout,
-		bootstrapDone:     false,
-		isTLSConnection:   isTLS,
+		ctx:             ctx,
+		id:              c.RemoteAddr().String(),
+		conn:            c,
+		writer:          bufio.NewWriter(c),
+		reader:          bufio.NewReaderSize(c, maxStratumMessageSize),
+		jobMgr:          jobMgr,
+		rpc:             rpc,
+		cfg:             cfg,
+		extranonce1:     en1,
+		jobCh:           jobCh,
+		difficulty:      initialDiff,
+		shareTarget:     targetFromDifficulty(initialDiff),
+		vardiff:         vdiff,
+		metrics:         metrics,
+		accounting:      accounting,
+		workerRegistry:  workerRegistry,
+		activeJobs:      make(map[string]*Job),
+		connectedAt:     now,
+		lastActivity:    now,
+		jobDifficulty:   make(map[string]float64),
+		shareCache:      make(map[string]*duplicateShareRing),
+		maxRecentJobs:   maxRecentJobs,
+		lastPenalty:     time.Now(),
+		versionRoll:     false,
+		versionMask:     0,
+		poolMask:        mask,
+		minerMask:       0,
+		minVerBits:      minBits,
+		bootstrapDone:   false,
+		isTLSConnection: isTLS,
 	}
 	return mc
 }
@@ -632,15 +625,11 @@ func (mc *MinerConn) handle() {
 		if mc.ctx.Err() != nil {
 			return
 		}
-		if expired, reason := mc.handshakeExpired(now); expired {
-			logger.Warn("closing miner for handshake timeout", "remote", mc.id, "reason", reason)
+		if expired, reason := mc.idleExpired(now); expired {
+			logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
 			return
 		}
-
 		deadline := now.Add(mc.currentReadTimeout(now))
-		if hsDeadline, ok := mc.nextHandshakeDeadline(now); ok && hsDeadline.Before(deadline) {
-			deadline = hsDeadline
-		}
 		if err := mc.conn.SetReadDeadline(deadline); err != nil {
 			if mc.ctx.Err() != nil {
 				return
@@ -650,6 +639,7 @@ func (mc *MinerConn) handle() {
 		}
 
 		line, err := mc.reader.ReadBytes('\n')
+		now = time.Now()
 		if err != nil {
 			if errors.Is(err, bufio.ErrBufferFull) {
 				logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
@@ -680,6 +670,7 @@ func (mc *MinerConn) handle() {
 		if len(line) == 0 {
 			continue
 		}
+		mc.recordActivity(now)
 
 		var req StratumRequest
 		if err := fastJSONUnmarshal(line, &req); err != nil {
@@ -716,16 +707,6 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-		mc.resetHandshakeTimeout(now)
-	}
-}
-
-func (mc *MinerConn) resetHandshakeTimeout(now time.Time) {
-	if !mc.subscribed && mc.cfg.SubscribeTimeout > 0 {
-		mc.subscribeDeadline = now.Add(mc.cfg.SubscribeTimeout)
-	}
-	if mc.subscribed && !mc.authorized && mc.authorizeTimeout > 0 {
-		mc.authorizeDeadline = now.Add(mc.authorizeTimeout)
 	}
 }
 
@@ -751,9 +732,9 @@ func (mc *MinerConn) writeJSON(v interface{}) error {
 // has submitted a few valid shares we switch to the configured, longer
 // timeout.
 func (mc *MinerConn) currentReadTimeout(now time.Time) time.Duration {
-	base := mc.cfg.StratumReadTimeout
+	base := mc.cfg.ConnectionTimeout
 	if base <= 0 {
-		base = defaultStratumReadTimeout
+		base = defaultConnectionTimeout
 	}
 
 	mc.statsMu.Lock()
@@ -774,7 +755,7 @@ func (mc *MinerConn) writeResponse(resp StratumResponse) {
 
 func (mc *MinerConn) listenJobs() {
 	for job := range mc.jobCh {
-			mc.sendNotifyFor(job, false)
+		mc.sendNotifyFor(job, false)
 	}
 }
 
@@ -941,30 +922,22 @@ func validateWorkerWallet(_ rpcCaller, _ *AccountStore, worker string) bool {
 	return err == nil
 }
 
-func (mc *MinerConn) handshakeExpired(now time.Time) (bool, string) {
-	if !mc.subscribed && !mc.subscribeDeadline.IsZero() && !now.Before(mc.subscribeDeadline) {
-		return true, "subscribe timeout"
-	}
-	if !mc.authorized && !mc.authorizeDeadline.IsZero() && !now.Before(mc.authorizeDeadline) {
-		return true, "authorize timeout"
-	}
-	return false, ""
+func (mc *MinerConn) recordActivity(now time.Time) {
+	mc.lastActivity = now
 }
 
-func (mc *MinerConn) nextHandshakeDeadline(now time.Time) (time.Time, bool) {
-	var deadline time.Time
-	if !mc.subscribed && !mc.subscribeDeadline.IsZero() && mc.subscribeDeadline.After(now) {
-		deadline = mc.subscribeDeadline
+func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
+	timeout := mc.cfg.ConnectionTimeout
+	if timeout <= 0 {
+		timeout = defaultConnectionTimeout
 	}
-	if !mc.authorized && !mc.authorizeDeadline.IsZero() && mc.authorizeDeadline.After(now) {
-		if deadline.IsZero() || mc.authorizeDeadline.Before(deadline) {
-			deadline = mc.authorizeDeadline
-		}
+	if timeout <= 0 || mc.lastActivity.IsZero() {
+		return false, ""
 	}
-	if deadline.IsZero() {
-		return time.Time{}, false
+	if now.Sub(mc.lastActivity) > timeout {
+		return true, "connection timeout"
 	}
-	return deadline, true
+	return false, ""
 }
 
 // submitRejectReason classifies categories of invalid submissions. It is used
@@ -1702,9 +1675,6 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	}
 
 	mc.subscribed = true
-	if !mc.authorized && mc.authorizeDeadline.IsZero() && mc.authorizeTimeout > 0 {
-		mc.authorizeDeadline = time.Now().Add(mc.authorizeTimeout)
-	}
 
 	// Result spec (simplified):
 	// [
@@ -1824,7 +1794,6 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 
 	mc.assignConnectionSeq()
 	mc.authorized = true
-	mc.authorizeDeadline = time.Time{}
 
 	resp := StratumResponse{
 		ID:     req.ID,

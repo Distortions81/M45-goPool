@@ -122,9 +122,7 @@ type Config struct {
 	// Default: 60 seconds.
 	AcceptSteadyStateReconnectWindow int
 	MaxRecentJobs                    int
-	SubscribeTimeout                 time.Duration
-	AuthorizeTimeout                 time.Duration
-	StratumReadTimeout               time.Duration
+	ConnectionTimeout                time.Duration
 	VersionMask                      uint32
 	MinVersionBits                   int
 	VersionMaskConfigured            bool
@@ -223,9 +221,7 @@ type EffectiveConfig struct {
 	AcceptSteadyStateReconnectPercent float64 `json:"accept_steady_state_reconnect_percent,omitempty"`
 	AcceptSteadyStateReconnectWindow  int     `json:"accept_steady_state_reconnect_window,omitempty"`
 	MaxRecentJobs                     int     `json:"max_recent_jobs"`
-	SubscribeTimeout                  string  `json:"subscribe_timeout"`
-	AuthorizeTimeout                  string  `json:"authorize_timeout"`
-	StratumReadTimeout                string  `json:"stratum_read_timeout"`
+	ConnectionTimeout                 string  `json:"connection_timeout"`
 	VersionMask                       string  `json:"version_mask,omitempty"`
 	MinVersionBits                    int     `json:"min_version_bits,omitempty"`
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
@@ -331,9 +327,7 @@ type rateLimitTuning struct {
 }
 
 type timeoutTuning struct {
-	SubscribeTimeoutSec   *int `toml:"subscribe_timeout_seconds"`
-	AuthorizeTimeoutSec   *int `toml:"authorize_timeout_seconds"`
-	StratumReadTimeoutSec *int `toml:"stratum_read_timeout_seconds"`
+	ConnectionTimeoutSec *int `toml:"connection_timeout_seconds"`
 }
 
 type difficultyTuning struct {
@@ -445,9 +439,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			AcceptSteadyStateReconnectWindow:  intPtr(cfg.AcceptSteadyStateReconnectWindow),
 		},
 		Timeouts: timeoutTuning{
-			SubscribeTimeoutSec:   intPtr(int(cfg.SubscribeTimeout / time.Second)),
-			AuthorizeTimeoutSec:   intPtr(int(cfg.AuthorizeTimeout / time.Second)),
-			StratumReadTimeoutSec: intPtr(int(cfg.StratumReadTimeout / time.Second)),
+			ConnectionTimeoutSec: intPtr(int(cfg.ConnectionTimeout / time.Second)),
 		},
 		Difficulty: difficultyTuning{
 			MaxDifficulty:           float64Ptr(cfg.MaxDifficulty),
@@ -852,14 +844,8 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.RateLimits.AcceptSteadyStateReconnectWindow != nil {
 		cfg.AcceptSteadyStateReconnectWindow = *fc.RateLimits.AcceptSteadyStateReconnectWindow
 	}
-	if fc.Timeouts.SubscribeTimeoutSec != nil {
-		cfg.SubscribeTimeout = time.Duration(*fc.Timeouts.SubscribeTimeoutSec) * time.Second
-	}
-	if fc.Timeouts.AuthorizeTimeoutSec != nil {
-		cfg.AuthorizeTimeout = time.Duration(*fc.Timeouts.AuthorizeTimeoutSec) * time.Second
-	}
-	if fc.Timeouts.StratumReadTimeoutSec != nil {
-		cfg.StratumReadTimeout = time.Duration(*fc.Timeouts.StratumReadTimeoutSec) * time.Second
+	if fc.Timeouts.ConnectionTimeoutSec != nil {
+		cfg.ConnectionTimeout = time.Duration(*fc.Timeouts.ConnectionTimeoutSec) * time.Second
 	}
 	if fc.Difficulty.MaxDifficulty != nil {
 		cfg.MaxDifficulty = *fc.Difficulty.MaxDifficulty
@@ -967,9 +953,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		AcceptSteadyStateReconnectPercent: cfg.AcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:  cfg.AcceptSteadyStateReconnectWindow,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
-		SubscribeTimeout:                  cfg.SubscribeTimeout.String(),
-		AuthorizeTimeout:                  cfg.AuthorizeTimeout.String(),
-		StratumReadTimeout:                cfg.StratumReadTimeout.String(),
+		ConnectionTimeout:                cfg.ConnectionTimeout.String(),
 		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
 		MinVersionBits:                    cfg.MinVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,
@@ -1039,20 +1023,11 @@ func validateConfig(cfg Config) error {
 	if cfg.CoinbaseScriptSigMaxBytes < 0 {
 		return fmt.Errorf("coinbase_scriptsig_max_bytes cannot be negative")
 	}
-	if cfg.SubscribeTimeout < 0 {
-		return fmt.Errorf("subscribe_timeout_seconds cannot be negative")
+	if cfg.ConnectionTimeout < 0 {
+		return fmt.Errorf("connection_timeout_seconds cannot be negative")
 	}
-	if cfg.SubscribeTimeout < minMinerTimeout {
-		return fmt.Errorf("subscribe_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.SubscribeTimeout)
-	}
-	if cfg.AuthorizeTimeout < 0 {
-		return fmt.Errorf("authorize_timeout_seconds cannot be negative")
-	}
-	if cfg.AuthorizeTimeout < minMinerTimeout {
-		return fmt.Errorf("authorize_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.AuthorizeTimeout)
-	}
-	if cfg.StratumReadTimeout < minMinerTimeout {
-		return fmt.Errorf("stratum_read_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.StratumReadTimeout)
+	if cfg.ConnectionTimeout < minMinerTimeout {
+		return fmt.Errorf("connection_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.ConnectionTimeout)
 	}
 	if cfg.MinVersionBits < 0 {
 		return fmt.Errorf("min_version_bits cannot be negative")
