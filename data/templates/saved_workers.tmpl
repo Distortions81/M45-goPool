@@ -11,33 +11,79 @@
 	<div class="page">
 		{{if .ClerkUser}}
 		<div class="card">
-			<h2>Saved workers</h2>
-			<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
-			<div class="button-row">
-				<a class="btn btn-secondary" href="/worker">Quick Worker Lookup</a>
-				<a class="btn btn-secondary" href="/logout?redirect=/worker">Sign out</a>
+			<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+				<div>
+					<h2 style="margin-top:0;">Manage Workers</h2>
+				</div>
+				<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+						<polyline points="16 17 21 12 16 7"></polyline>
+						<line x1="21" y1="12" x2="9" y2="12"></line>
+					</svg>
+					<span>Sign out</span>
+				</a>
 			</div>
-			<form method="post" action="/worker/save">
-				<div class="label">Worker name</div>
+			<div style="border-top:1px solid var(--card-border); margin:14px 0;"></div>
+			<div class="label">Add worker</div>
+			<form method="post" action="/worker/save" style="margin-top:8px;">
 				<div class="input-row">
 					<input class="input" type="text" name="worker" placeholder="wallet.worker">
-					<button class="btn" type="submit">Save</button>
+					<button class="btn" type="submit">Add</button>
 				</div>
 			</form>
-			{{if .SavedWorkers}}
-				<ul class="text-sm" style="margin-top:10px;">
-					{{range .SavedWorkers}}
-						<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
-							<span>{{.}}</span>
-							<form method="post" action="/worker/remove" style="margin:0;">
-								<input type="hidden" name="worker" value="{{.}}">
-								<button class="btn btn-secondary" type="submit">Remove</button>
-							</form>
-						</li>
-					{{end}}
-				</ul>
+		</div>
+
+		<div class="card">
+			<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+				<h2 style="margin-top:0;">Your workers</h2>
+				<div style="display:flex; gap:8px; flex-wrap:wrap;">
+					<span class="badge">Saved: {{.SavedWorkersCount}} / {{.SavedWorkersMax}}</span>
+					<span class="badge">Online: {{.SavedWorkersOnline}}</span>
+				</div>
+			</div>
+			{{if .SavedWorkerEntries}}
+				<div style="overflow-x:auto; margin-top:12px;">
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Worker</th>
+								<th>Status</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{{range .SavedWorkerEntries}}
+								<tr>
+									<td class="mono">{{.Name}}</td>
+									<td>
+										{{if .Online}}
+											<span class="badge">Online</span>
+										{{else}}
+											<span class="badge">Offline</span>
+										{{end}}
+									</td>
+									<td style="text-align:right;">
+										<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+											<input type="hidden" name="worker" value="{{.Name}}">
+											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+													<path d="M10 11v6"></path>
+													<path d="M14 11v6"></path>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+												</svg>
+											</button>
+										</form>
+									</td>
+								</tr>
+							{{end}}
+						</tbody>
+					</table>
+				</div>
 			{{else}}
-				<p class="text-sm" style="margin-top:10px;">No saved workers yet. Save a worker to see it here.</p>
+				<p class="text-sm" style="margin-top:10px;">No saved workers yet. Add a worker above to start tracking.</p>
 			{{end}}
 		</div>
 		{{else}}
@@ -50,6 +96,19 @@
 
 		{{template "footer" .}}
 	</div>
+	{{if .ClerkUser}}
+	<script>
+	(function() {
+		const forms = document.querySelectorAll('form[data-remove-worker]');
+		for (const form of forms) {
+			form.addEventListener('submit', function(e) {
+				const worker = form.getAttribute('data-remove-worker') || '';
+				const msg = worker ? `Remove saved worker "${worker}"?` : 'Remove saved worker?';
+				if (!confirm(msg)) e.preventDefault();
+			});
+		}
+	})();
+	</script>
+	{{end}}
 </body>
 </html>
-

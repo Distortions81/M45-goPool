@@ -1867,9 +1867,6 @@ func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 	return &ClerkUser{
 		UserID:    claims.Subject,
 		SessionID: claims.SessionID,
-		Email:     claims.Email,
-		FirstName: claims.FirstName,
-		LastName:  claims.LastName,
 	}
 }
 
@@ -1972,6 +1969,10 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 		StatusData: base,
 	}
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
+	if data.ClerkUser != nil {
+		http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "worker_login", data); err != nil {
@@ -2044,14 +2045,36 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	start := time.Now()
 	base := s.baseTemplateData(start)
 
+	type savedWorkerEntry struct {
+		Name   string
+		Online bool
+	}
 	data := struct {
 		StatusData
+		SavedWorkerEntries []savedWorkerEntry
+		SavedWorkersCount  int
+		SavedWorkersOnline int
+		SavedWorkersMax    int
 	}{StatusData: base}
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	if data.ClerkUser == nil {
 		http.Redirect(w, r, "/worker", http.StatusSeeOther)
 		return
+	}
+
+	data.SavedWorkersMax = maxSavedWorkersPerUser
+	data.SavedWorkersCount = len(data.SavedWorkers)
+	now := time.Now()
+	for _, worker := range data.SavedWorkers {
+		_, online := s.findWorkerViewByName(worker, now)
+		if online {
+			data.SavedWorkersOnline++
+		}
+		data.SavedWorkerEntries = append(data.SavedWorkerEntries, savedWorkerEntry{
+			Name:   worker,
+			Online: online,
+		})
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2088,7 +2111,7 @@ func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) 
 			logger.Warn("save worker name", "error", err, "user_id", user.UserID)
 		}
 	}
-	http.Redirect(w, r, "/worker", http.StatusSeeOther)
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
 }
 
 func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request) {

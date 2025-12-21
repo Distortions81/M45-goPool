@@ -32,32 +32,12 @@ const (
 type ClerkUser struct {
 	UserID    string
 	SessionID string
-	Email     string
-	FirstName string
-	LastName  string
-}
-
-func (u *ClerkUser) DisplayName() string {
-	if u == nil {
-		return ""
-	}
-	name := strings.TrimSpace(u.FirstName + " " + u.LastName)
-	if name == "" {
-		if u.Email != "" {
-			return u.Email
-		}
-		return u.UserID
-	}
-	return name
 }
 
 type ClerkSessionClaims struct {
 	jwt.RegisteredClaims
 	Version   int    `json:"v,omitempty"`
 	SessionID string `json:"sid"`
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
 }
 
 type clerkJWKS struct {

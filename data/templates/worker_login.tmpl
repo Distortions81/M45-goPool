@@ -12,16 +12,8 @@
 		{{if .ClerkEnabled}}
 		<div class="card">
 			<h2>Login to track multiple workers</h2>
-			{{if .ClerkUser}}
-				<p class="text-sm">Signed in as <strong>{{.ClerkUser.DisplayName}}</strong></p>
-				<div class="button-row">
-					<a class="btn" href="/saved-workers">Manage saved workers</a>
-					<a class="btn btn-secondary" href="/logout?redirect=/worker">Sign out</a>
-				</div>
-			{{else}}
-				<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
-				<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
-			{{end}}
+			<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
+			<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
 		</div>
 		{{end}}
 		<div class="card">
