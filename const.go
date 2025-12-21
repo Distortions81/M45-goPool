@@ -10,10 +10,11 @@ const (
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 5 * time.Minute
 	defaultVersionMask    = uint32(0x1fffe000)
+	minMinerTimeout       = 30 * time.Second
 	// initialReadTimeout limits how long we keep a connection around
 	// before it has proven itself by submitting valid shares. This helps
 	// protect against floods of idle connections.
-	initialReadTimeout = 10 * time.Second
+	initialReadTimeout = minMinerTimeout
 	// Minimum time between difficulty changes so that shares from the
 	// previous target have a chance to arrive and be covered by the
 	// previous-difficulty grace logic. This caps vardiff moves for a given

@@ -1042,11 +1042,17 @@ func validateConfig(cfg Config) error {
 	if cfg.SubscribeTimeout < 0 {
 		return fmt.Errorf("subscribe_timeout_seconds cannot be negative")
 	}
+	if cfg.SubscribeTimeout < minMinerTimeout {
+		return fmt.Errorf("subscribe_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.SubscribeTimeout)
+	}
 	if cfg.AuthorizeTimeout < 0 {
 		return fmt.Errorf("authorize_timeout_seconds cannot be negative")
 	}
-	if cfg.StratumReadTimeout <= 0 {
-		return fmt.Errorf("stratum_read_timeout_seconds must be > 0, got %s", cfg.StratumReadTimeout)
+	if cfg.AuthorizeTimeout < minMinerTimeout {
+		return fmt.Errorf("authorize_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.AuthorizeTimeout)
+	}
+	if cfg.StratumReadTimeout < minMinerTimeout {
+		return fmt.Errorf("stratum_read_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.StratumReadTimeout)
 	}
 	if cfg.MinVersionBits < 0 {
 		return fmt.Errorf("min_version_bits cannot be negative")
