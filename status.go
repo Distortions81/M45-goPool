@@ -704,6 +704,8 @@ type OverviewPageData struct {
 	ActiveTLSMiners int              `json:"active_tls_miners"`
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
+	BTCPriceUSD     float64          `json:"btc_price_usd,omitempty"`
+	BTCPriceUpdated string           `json:"btc_price_updated_at,omitempty"`
 	RenderDuration  time.Duration    `json:"render_duration"`
 	Workers         []RecentWorkView `json:"workers"`
 	BannedWorkers   []WorkerView     `json:"banned_workers"`
@@ -1668,6 +1670,16 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
+		var btcUSD float64
+		var btcUpdated string
+		if s.priceSvc != nil {
+			if price, err := s.priceSvc.BTCPrice("usd"); err == nil && price > 0 {
+				btcUSD = price
+				if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
+					btcUpdated = ts.UTC().Format(time.RFC3339)
+				}
+			}
+		}
 
 		// Convert full WorkerView to minimal RecentWorkView for the overview page
 		recentWork := make([]RecentWorkView, len(full.Workers))
@@ -1690,6 +1702,8 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			ActiveTLSMiners: full.ActiveTLSMiners,
 			SharesPerMinute: full.SharesPerMinute,
 			PoolHashrate:    full.PoolHashrate,
+			BTCPriceUSD:     btcUSD,
+			BTCPriceUpdated: btcUpdated,
 			RenderDuration:  full.RenderDuration,
 			Workers:         recentWork,
 			BannedWorkers:   full.BannedWorkers,
@@ -2046,10 +2060,10 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	base := s.baseTemplateData(start)
 
 	type savedWorkerEntry struct {
-		Name      string
-		Hashrate  float64
-		ShareRate float64
-		Accepted  uint64
+		Name       string
+		Hashrate   float64
+		ShareRate  float64
+		Accepted   uint64
 		Difficulty float64
 	}
 	data := struct {
@@ -2077,10 +2091,10 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
 		}
 		entry := savedWorkerEntry{
-			Name:      worker,
-			Hashrate:  hashrate,
-			ShareRate: view.ShareRate,
-			Accepted:  view.Accepted,
+			Name:       worker,
+			Hashrate:   hashrate,
+			ShareRate:  view.ShareRate,
+			Accepted:   view.Accepted,
 			Difficulty: view.Difficulty,
 		}
 		if online {

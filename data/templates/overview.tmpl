@@ -107,6 +107,11 @@
 				<div class="card-context">Estimated until next block</div>
 			</div>
 			<div class="card">
+				<div class="label">BTC price (USD)</div>
+				<div class="value mono" id="status-btc-price">--</div>
+				<div class="card-context" id="status-btc-price-updated">Updated --</div>
+			</div>
+			<div class="card">
 				<div class="label">Pool fee</div>
 				{{if gt .PoolFeePercent 0.0}}
 					<div class="value">
@@ -632,6 +637,29 @@
 						valueEl.textContent = formatHashrate(newData.pool_hashrate);
 						if (window.updateHashrateGraph && newData.pool_hashrate) {
 							window.updateHashrateGraph(newData.pool_hashrate);
+						}
+						break;
+					case 'BTC price (USD)':
+						{
+							const priceEl = document.getElementById('status-btc-price');
+							const updatedEl = document.getElementById('status-btc-price-updated');
+							const price = Number(newData.btc_price_usd ?? 0);
+							if (priceEl) {
+								priceEl.textContent = price > 0 ? ('$' + price.toFixed(2)) : '--';
+							}
+							if (updatedEl) {
+								const ts = newData.btc_price_updated_at;
+								if (ts) {
+									try {
+										const d = new Date(ts);
+										updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+									} catch (_) {
+										updatedEl.textContent = 'Updated --';
+									}
+								} else {
+									updatedEl.textContent = 'Updated --';
+								}
+							}
 						}
 						break;
 				}
