@@ -495,9 +495,10 @@ func main() {
 		logger.Warn("high pool_fee_percent; verify configuration", "pool_fee_percent", cfg.PoolFeePercent)
 	}
 
-	metrics := NewPoolMetrics()
-	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
 	startTime := time.Now()
+	metrics := NewPoolMetrics()
+	metrics.SetStartTime(startTime)
+	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.

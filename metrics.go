@@ -14,6 +14,7 @@ import (
 const defaultBestShareLimit = 12
 const poolErrorHistorySize = 6
 const rpcGBTRollingWindowSeconds = 24 * 60 * 60
+const startupErrorIgnoreDuration = 2 * time.Minute
 
 type ErrorEvent struct {
 	At      time.Time
@@ -41,6 +42,7 @@ type PoolMetrics struct {
 	blockSubErrored  uint64
 	rpcErrorCount    uint64
 	shareErrorCount  uint64
+	start            time.Time
 
 	errorHistory []ErrorEvent
 
@@ -124,6 +126,10 @@ func (m *PoolMetrics) RecordShare(accepted bool, reason string) {
 		return
 	}
 	m.mu.Lock()
+	if m.shouldIgnoreStartupRejectLocked(reason) {
+		m.mu.Unlock()
+		return
+	}
 	m.rejected++
 	if m.rejectReasons == nil {
 		m.rejectReasons = make(map[string]uint64)
@@ -135,6 +141,29 @@ func (m *PoolMetrics) RecordShare(accepted bool, reason string) {
 	m.mu.Unlock()
 
 	m.RecordSubmitError(reason)
+}
+
+func (m *PoolMetrics) SetStartTime(start time.Time) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.start = start
+	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) shouldIgnoreStartupRejectLocked(reason string) bool {
+	if m.start.IsZero() {
+		return false
+	}
+	if time.Since(m.start) >= startupErrorIgnoreDuration {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "lowdiff", "low difficulty share", "stale job":
+		return true
+	}
+	return false
 }
 
 func (m *PoolMetrics) RecordSubmitError(reason string) {
