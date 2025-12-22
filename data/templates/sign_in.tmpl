@@ -57,7 +57,7 @@
 		const script = document.createElement('script');
 		script.async = true;
 		script.crossOrigin = 'anonymous';
-		script.src = 'https://cdn.clerk.com/clerk.js';
+		script.src = {{printf "%q" .ClerkJSURL}};
 		script.setAttribute('data-clerk-publishable-key', publishableKey);
 		script.onload = async () => {
 			window.clearTimeout(timeout);

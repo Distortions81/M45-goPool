@@ -498,6 +498,7 @@ type WorkerStatusData struct {
 type SignInPageData struct {
 	StatusData
 	ClerkPublishableKey string
+	ClerkJSURL          string
 	AfterSignInURL      string
 	AfterSignUpURL      string
 }
@@ -2136,9 +2137,19 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		redirect = "/saved-workers"
 	}
 
+	clerkJSHost := strings.TrimRight(strings.TrimSpace(s.Config().ClerkFrontendAPIURL), "/")
+	if clerkJSHost == "" {
+		clerkJSHost = strings.TrimRight(strings.TrimSpace(s.Config().ClerkIssuerURL), "/")
+	}
+	if clerkJSHost == "" {
+		clerkJSHost = "https://clerk.clerk.com"
+	}
+	clerkJSURL := clerkJSHost + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+
 	data := SignInPageData{
 		StatusData:           base,
 		ClerkPublishableKey:  pk,
+		ClerkJSURL:           clerkJSURL,
 		AfterSignInURL:       redirect,
 		AfterSignUpURL:       redirect,
 	}
