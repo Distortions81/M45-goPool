@@ -1914,11 +1914,14 @@ func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 	}
 	cookie, err := r.Cookie(s.clerk.SessionCookieName())
 	if err != nil {
+		if err != http.ErrNoCookie {
+			logger.Warn("failed to read session cookie", "error", err, "remote_addr", r.RemoteAddr)
+		}
 		return nil
 	}
 	claims, err := s.clerk.Verify(cookie.Value)
 	if err != nil {
-		logger.Debug("clerk verify failed", "error", err)
+		logger.Warn("clerk session verification failed", "error", err, "remote_addr", r.RemoteAddr)
 		return nil
 	}
 	return &ClerkUser{

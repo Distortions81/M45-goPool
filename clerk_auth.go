@@ -144,7 +144,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 func (v *ClerkVerifier) refreshKeys() error {
 	resp, err := v.client.Get(v.jwksURL)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch jwks: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -152,7 +152,7 @@ func (v *ClerkVerifier) refreshKeys() error {
 	}
 	var jwks clerkJWKS
 	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
-		return err
+		return fmt.Errorf("decode jwks: %w", err)
 	}
 	newKeys := make(map[string]*rsa.PublicKey)
 	for _, key := range jwks.Keys {
@@ -161,6 +161,7 @@ func (v *ClerkVerifier) refreshKeys() error {
 		}
 		pub, err := key.rsaPublicKey()
 		if err != nil {
+			logger.Warn("failed to parse jwks rsa key", "error", err, "kid", key.Kid)
 			continue
 		}
 		if key.Kid != "" {
@@ -193,7 +194,9 @@ func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {
 		pub := v.keyFor(kid)
 		if pub == nil {
 			if time.Since(v.lastKeyRefresh) > v.keyRefreshLimit {
-				_ = v.refreshKeys()
+				if err := v.refreshKeys(); err != nil {
+					logger.Warn("failed to refresh clerk jwks keys", "error", err, "kid", kid)
+				}
 				pub = v.keyFor(kid)
 			}
 		}
