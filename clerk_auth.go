@@ -119,7 +119,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 
 	v := &ClerkVerifier{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 		jwksURL:         jwksURL,
 		issuer:          issuer,

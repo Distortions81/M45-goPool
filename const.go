@@ -8,9 +8,9 @@ const (
 	minHashrateEMAMinShares      = 10
 
 	maxStratumMessageSize = 64 * 1024
-	stratumWriteTimeout   = 5 * time.Minute
+	stratumWriteTimeout   = 60 * time.Second
 	defaultVersionMask    = uint32(0x1fffe000)
-	minMinerTimeout       = 30 * time.Second
+	minMinerTimeout       = 60 * time.Second
 	// initialReadTimeout limits how long we keep a connection around
 	// before it has proven itself by submitting valid shares. This helps
 	// protect against floods of idle connections.

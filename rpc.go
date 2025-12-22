@@ -76,13 +76,10 @@ func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
+			Timeout:   60 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 5 * time.Second,
+		IdleConnTimeout: 60 * time.Second,
 		// Bitcoind RPC doesn't use Expect: 100-continue, but keep a small
 		// timeout so misbehaving proxies can't stall us indefinitely.
 		ExpectContinueTimeout: 1 * time.Second,
