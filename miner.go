@@ -76,7 +76,7 @@ type workerWalletState struct {
 }
 
 var defaultVarDiff = VarDiffConfig{
-	MinDiff:            1024,
+	MinDiff:            512,
 	MaxDiff:            65536,
 	TargetSharesPerMin: 6, // aim for roughly one share every 12s
 	AdjustmentWindow:   90 * time.Second,
