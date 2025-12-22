@@ -12,6 +12,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -274,10 +275,10 @@ func buildNodePeerInfos(peers []cachedPeerInfo) []NodePeerInfo {
 }
 
 func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]struct{} {
-	if !s.cfg.PeerCleanupEnabled || s.rpc == nil {
+	if !s.Config().PeerCleanupEnabled || s.rpc == nil {
 		return nil
 	}
-	minPeers := s.cfg.PeerCleanupMinPeers
+	minPeers := s.Config().PeerCleanupMinPeers
 	if minPeers <= 0 {
 		minPeers = 20
 	}
@@ -285,7 +286,7 @@ func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]
 	if totalPeers <= minPeers {
 		return nil
 	}
-	maxPingMs := s.cfg.PeerCleanupMaxPingMs
+	maxPingMs := s.Config().PeerCleanupMaxPingMs
 	if maxPingMs <= 0 {
 		return nil
 	}
@@ -351,10 +352,12 @@ type StatusServer struct {
 	registry            *MinerRegistry
 	accounting          *AccountStore
 	rpc                 *RPCClient
-	cfg                 Config
+	cfg                 atomic.Value
 	ctx                 context.Context
+	clerk               *ClerkVerifier
 	start               time.Time
 	workerLookupLimiter *workerLookupRateLimiter
+	workerLists         *workerListStore
 	lastStatsMu         sync.Mutex
 	lastAccepted        uint64
 	lastRejected        uint64
@@ -391,6 +394,22 @@ type cachedWorkerPage struct {
 	payload   []byte
 	updatedAt time.Time
 	expiresAt time.Time
+}
+
+func (s *StatusServer) Config() Config {
+	if s == nil {
+		return Config{}
+	}
+	if v := s.cfg.Load(); v != nil {
+		if cfg, ok := v.(Config); ok {
+			return cfg
+		}
+	}
+	return Config{}
+}
+
+func (s *StatusServer) UpdateConfig(cfg Config) {
+	s.cfg.Store(cfg)
 }
 
 // shortDisplayID returns a sanitized, shortened version of s suitable for
@@ -557,6 +576,10 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 type StatusData struct {
 	ListenAddr                     string            `json:"listen_addr"`
 	StratumTLSListen               string            `json:"stratum_tls_listen,omitempty"`
+	ClerkEnabled                   bool              `json:"clerk_enabled"`
+	ClerkLoginURL                  string            `json:"clerk_login_url,omitempty"`
+	ClerkUser                      *ClerkUser        `json:"clerk_user,omitempty"`
+	SavedWorkers                   []string          `json:"saved_workers,omitempty"`
 	BrandName                      string            `json:"brand_name"`
 	BrandDomain                    string            `json:"brand_domain"`
 	Tagline                        string            `json:"tagline,omitempty"`
@@ -697,6 +720,8 @@ type OverviewPageData struct {
 	ActiveTLSMiners int              `json:"active_tls_miners"`
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
+	BTCPriceUSD     float64          `json:"btc_price_usd,omitempty"`
+	BTCPriceUpdated string           `json:"btc_price_updated_at,omitempty"`
 	RenderDuration  time.Duration    `json:"render_duration"`
 	Workers         []RecentWorkView `json:"workers"`
 	BannedWorkers   []WorkerView     `json:"banned_workers"`
@@ -709,6 +734,32 @@ type PoolErrorEvent struct {
 	At      string `json:"at,omitempty"`
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+const poolErrorHistoryDisplayWindow = time.Hour
+
+func filterRecentPoolErrorEvents(raw []ErrorEvent, now time.Time, maxAge time.Duration) []PoolErrorEvent {
+	if len(raw) == 0 {
+		return nil
+	}
+	filtered := make([]PoolErrorEvent, 0, len(raw))
+	for _, ev := range raw {
+		if ev.At.IsZero() {
+			continue
+		}
+		if maxAge > 0 && now.Sub(ev.At) > maxAge {
+			continue
+		}
+		filtered = append(filtered, PoolErrorEvent{
+			At:      ev.At.UTC().Format(time.RFC3339),
+			Type:    ev.Type,
+			Message: ev.Message,
+		})
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
 }
 
 // PoolPageData contains data for the pool info page
@@ -953,6 +1004,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		WindowSubmissions:   stats.WindowSubmissions,
 		ShareRate:           accRate,
 		ConnectionID:        mc.connectionIDString(),
+		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
 		WalletValidated:     valid,
 	}
 }
@@ -1151,6 +1203,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
 	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
+	savedWorkersPath := filepath.Join(dataDir, "templates", "saved_workers.tmpl")
 	workerStatusPath := filepath.Join(dataDir, "templates", "worker_status.tmpl")
 	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
 	poolInfoPath := filepath.Join(dataDir, "templates", "pool.tmpl")
@@ -1173,6 +1226,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	workerLoginHTML, err := os.ReadFile(workerLoginPath)
 	if err != nil {
 		return nil, fmt.Errorf("load worker login template: %w", err)
+	}
+	savedWorkersHTML, err := os.ReadFile(savedWorkersPath)
+	if err != nil {
+		return nil, fmt.Errorf("load saved workers template: %w", err)
 	}
 	workerStatusHTML, err := os.ReadFile(workerStatusPath)
 	if err != nil {
@@ -1201,6 +1258,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
 	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
+	template.Must(tmpl.New("saved_workers").Parse(string(savedWorkersHTML)))
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
 	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
 	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
@@ -1210,7 +1268,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -1229,13 +1287,15 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		registry:            registry,
 		accounting:          accounting,
 		rpc:                 rpc,
-		cfg:                 cfg,
 		ctx:                 ctx,
 		start:               start,
+		clerk:               clerk,
 		workerLookupLimiter: newWorkerLookupRateLimiter(workerLookupRateLimitMax, workerLookupRateLimitWindow),
+		workerLists:         workerLists,
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
 	}
+	server.UpdateConfig(cfg)
 	server.scheduleNodeInfoRefresh()
 	return server
 }
@@ -1248,7 +1308,7 @@ func (s *StatusServer) ReloadTemplates() error {
 		return fmt.Errorf("status server is nil")
 	}
 
-	tmpl, err := loadTemplates(s.cfg.DataDir)
+	tmpl, err := loadTemplates(s.Config().DataDir)
 	if err != nil {
 		return err
 	}
@@ -1653,6 +1713,16 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		full := s.buildCensoredStatusData()
+		var btcUSD float64
+		var btcUpdated string
+		if s.priceSvc != nil {
+			if price, err := s.priceSvc.BTCPrice("usd"); err == nil && price > 0 {
+				btcUSD = price
+				if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
+					btcUpdated = ts.UTC().Format(time.RFC3339)
+				}
+			}
+		}
 
 		// Convert full WorkerView to minimal RecentWorkView for the overview page
 		recentWork := make([]RecentWorkView, len(full.Workers))
@@ -1675,6 +1745,8 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			ActiveTLSMiners: full.ActiveTLSMiners,
 			SharesPerMinute: full.SharesPerMinute,
 			PoolHashrate:    full.PoolHashrate,
+			BTCPriceUSD:     btcUSD,
+			BTCPriceUpdated: btcUpdated,
 			RenderDuration:  full.RenderDuration,
 			Workers:         recentWork,
 			BannedWorkers:   full.BannedWorkers,
@@ -1823,6 +1895,128 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
+	if s == nil || s.clerk == nil {
+		return h
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := s.clerkUserFromRequest(r)
+		if user != nil {
+			r = r.WithContext(contextWithClerkUser(r.Context(), user))
+		}
+		h(w, r)
+	}
+}
+
+func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
+	if s == nil || s.clerk == nil {
+		return nil
+	}
+	cookie, err := r.Cookie(s.clerk.SessionCookieName())
+	if err != nil {
+		return nil
+	}
+	claims, err := s.clerk.Verify(cookie.Value)
+	if err != nil {
+		logger.Debug("clerk verify failed", "error", err)
+		return nil
+	}
+	return &ClerkUser{
+		UserID:    claims.Subject,
+		SessionID: claims.SessionID,
+	}
+}
+
+func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusData) {
+	if s == nil || data == nil || s.clerk == nil {
+		return
+	}
+	data.ClerkEnabled = forceClerkLoginUIForTesting || s.clerk != nil
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/saved-workers"
+	}
+	data.ClerkLoginURL = s.clerkLoginURL(r, redirect)
+	if user := ClerkUserFromContext(r.Context()); user != nil {
+		data.ClerkUser = user
+		if s.workerLists != nil {
+			if list, err := s.workerLists.List(user.UserID); err == nil {
+				data.SavedWorkers = list
+			} else {
+				logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
+			}
+		}
+	}
+}
+
+func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
+	if s == nil {
+		return ""
+	}
+	redirectURL := s.clerkRedirectURL(r, redirect)
+	if s.clerk != nil {
+		login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.Config().ClerkFrontendAPIURL)
+		if redirect == "" {
+			return login
+		}
+		sep := "?"
+		if strings.Contains(login, "?") {
+			sep = "&"
+		}
+		return login + sep + "redirect=" + url.QueryEscape(redirect)
+	}
+
+	base := strings.TrimSpace(s.Config().ClerkSignInURL)
+	if base == "" {
+		base = defaultClerkSignInURL
+	}
+	values := url.Values{}
+	values.Set("redirect_url", redirectURL)
+	if frontendAPI := strings.TrimSpace(s.Config().ClerkFrontendAPIURL); frontendAPI != "" {
+		values.Set("frontend_api", frontendAPI)
+	}
+	return base + "?" + values.Encode()
+}
+
+func (s *StatusServer) clerkRedirectURL(r *http.Request, redirect string) string {
+	if s == nil {
+		return "/worker"
+	}
+	redirectPath := safeRedirectPath(redirect)
+	if redirectPath == "" {
+		redirectPath = "/worker"
+	}
+	scheme := "http"
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	host := r.Host
+	if host == "" {
+		host = "localhost"
+	}
+	return (&url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   redirectPath,
+	}).String()
+}
+
+func safeRedirectPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") {
+		return ""
+	}
+	if strings.ContainsAny(value, "\n\r") {
+		return ""
+	}
+	return value
+}
+
 // handleWorkerStatus renders the worker login page.
 func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -1830,6 +2024,11 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 
 	data := WorkerStatusData{
 		StatusData: base,
+	}
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
+	if data.ClerkUser != nil {
+		http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1842,6 +2041,288 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/saved-workers"
+	}
+	http.Redirect(w, r, s.clerkLoginURL(r, redirect), http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/saved-workers"
+	}
+	if s.clerk == nil {
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+	if s.clerkUserFromRequest(r) == nil {
+		if devBrowserJWT := strings.TrimSpace(r.URL.Query().Get(clerkDevBrowserJWTQueryParam)); devBrowserJWT != "" {
+			if jwtToken, claims, err := s.clerk.ExchangeDevBrowserJWT(r.Context(), devBrowserJWT); err != nil {
+				logger.Warn("clerk dev browser exchange failed", "error", err)
+			} else {
+				cookie := &http.Cookie{
+					Name:     s.clerk.SessionCookieName(),
+					Value:    jwtToken,
+					Path:     "/",
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
+				}
+				if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+					cookie.Secure = strings.EqualFold(proto, "https")
+				} else {
+					cookie.Secure = r.TLS != nil
+				}
+				if claims != nil && claims.ExpiresAt != nil {
+					cookie.Expires = claims.ExpiresAt.Time
+				}
+				http.SetCookie(w, cookie)
+				http.Redirect(w, r, redirect, http.StatusSeeOther)
+				return
+			}
+		}
+		loginTarget := "/login?redirect=" + url.QueryEscape(redirect)
+		http.Redirect(w, r, loginTarget, http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	base := s.baseTemplateData(start)
+
+	type savedWorkerEntry struct {
+		Name       string
+		Hashrate   float64
+		ShareRate  float64
+		Accepted   uint64
+		Difficulty float64
+	}
+	data := struct {
+		StatusData
+		OnlineWorkerEntries  []savedWorkerEntry
+		OfflineWorkerEntries []savedWorkerEntry
+		SavedWorkersCount    int
+		SavedWorkersOnline   int
+		SavedWorkersMax      int
+	}{StatusData: base}
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
+
+	if data.ClerkUser == nil {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+
+	data.SavedWorkersMax = maxSavedWorkersPerUser
+	data.SavedWorkersCount = len(data.SavedWorkers)
+	now := time.Now()
+	for _, worker := range data.SavedWorkers {
+		view, online := s.findWorkerViewByName(worker, now)
+		hashrate := view.RollingHashrate
+		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+		}
+		entry := savedWorkerEntry{
+			Name:       worker,
+			Hashrate:   hashrate,
+			ShareRate:  view.ShareRate,
+			Accepted:   view.Accepted,
+			Difficulty: view.Difficulty,
+		}
+		if online {
+			data.SavedWorkersOnline++
+			data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
+		} else {
+			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "saved_workers", data); err != nil {
+		logger.Error("saved workers template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Saved workers page error",
+			"We couldn't render the saved workers page.",
+			"Template error while rendering saved workers.")
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	saved := []string(nil)
+	if s.workerLists != nil {
+		if list, err := s.workerLists.List(user.UserID); err == nil {
+			saved = list
+		} else {
+			logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
+		}
+	}
+
+	type entry struct {
+		Name            string  `json:"name"`
+		Online          bool    `json:"online"`
+		Hashrate        float64 `json:"hashrate"`
+		SharesPerMinute float64 `json:"shares_per_minute"`
+		Accepted        uint64  `json:"accepted"`
+		Difficulty      float64 `json:"difficulty"`
+		ConnectionSeq   uint64  `json:"connection_seq,omitempty"`
+	}
+	now := time.Now()
+	resp := struct {
+		UpdatedAt      string  `json:"updated_at"`
+		SavedMax       int     `json:"saved_max"`
+		SavedCount     int     `json:"saved_count"`
+		OnlineCount    int     `json:"online_count"`
+		OnlineWorkers  []entry `json:"online_workers"`
+		OfflineWorkers []entry `json:"offline_workers"`
+	}{
+		UpdatedAt:  now.UTC().Format(time.RFC3339),
+		SavedMax:   maxSavedWorkersPerUser,
+		SavedCount: len(saved),
+	}
+
+	for _, worker := range saved {
+		view, online := s.findWorkerViewByName(worker, now)
+		hashrate := view.RollingHashrate
+		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+		}
+		e := entry{
+			Name:            worker,
+			Online:          online,
+			Hashrate:        hashrate,
+			SharesPerMinute: view.ShareRate,
+			Accepted:        view.Accepted,
+			Difficulty:      view.Difficulty,
+			ConnectionSeq:   view.ConnectionSeq,
+		}
+		if online {
+			resp.OnlineCount++
+			resp.OnlineWorkers = append(resp.OnlineWorkers, e)
+		} else {
+			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("saved workers json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("saved workers json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	worker := strings.TrimSpace(r.FormValue("worker"))
+	if worker == "" {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+	if s.workerLists != nil {
+		if err := s.workerLists.Add(user.UserID, worker); err != nil {
+			logger.Warn("save worker name", "error", err, "user_id", user.UserID)
+		}
+	}
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	worker := strings.TrimSpace(r.FormValue("worker"))
+	if worker == "" {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
+	if s.workerLists != nil {
+		if err := s.workerLists.Remove(user.UserID, worker); err != nil {
+			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
+		}
+	}
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		http.NotFound(w, r)
+		return
+	}
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/worker"
+	}
+	cookieName := strings.TrimSpace(s.Config().ClerkSessionCookieName)
+	if s.clerk != nil {
+		cookieName = strings.TrimSpace(s.clerk.SessionCookieName())
+	}
+	if cookieName == "" {
+		cookieName = defaultClerkSessionCookieName
+	}
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0),
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		cookie.Secure = strings.EqualFold(proto, "https")
+	} else {
+		cookie.Secure = r.TLS != nil
+	}
+	http.SetCookie(w, cookie)
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.
 // This endpoint expects the SHA256 hash of the worker name and performs direct lookup.
 func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http.Request) {
@@ -1852,7 +2333,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	// label coinbase outputs by destination. Errors are treated as
 	// "unknown" and do not affect normal worker stats rendering.
 	var poolScriptHex string
-	addr := strings.TrimSpace(s.cfg.PayoutAddress)
+	addr := strings.TrimSpace(s.Config().PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
 			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
@@ -1861,8 +2342,8 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 	// Best-effort derivation of the donation script for 3-way payout display.
 	var donationScriptHex string
-	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
-	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+	donationAddr := strings.TrimSpace(s.Config().OperatorDonationAddress)
+	if donationAddr != "" && s.Config().OperatorDonationPercent > 0 {
 		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
 			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
@@ -1872,7 +2353,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	var btcPrice float64
 	var btcPriceUpdated string
 	if s.priceSvc != nil {
-		if price, err := s.priceSvc.BTCPrice(s.cfg.FiatCurrency); err == nil && price > 0 {
+		if price, err := s.priceSvc.BTCPrice(s.Config().FiatCurrency); err == nil && price > 0 {
 			btcPrice = price
 			if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
 				btcPriceUpdated = ts.UTC().Format("2006-01-02 15:04:05 MST")
@@ -1889,6 +2370,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	}
 	data.BTCPriceFiat = btcPrice
 	data.BTCPriceUpdatedAt = btcPriceUpdated
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	var workerHash string
 	switch r.Method {
@@ -2045,7 +2527,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	// label coinbase outputs by destination. Errors are treated as
 	// "unknown" and do not affect normal worker stats rendering.
 	var poolScriptHex string
-	addr := strings.TrimSpace(s.cfg.PayoutAddress)
+	addr := strings.TrimSpace(s.Config().PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
 			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
@@ -2054,8 +2536,8 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 
 	// Best-effort derivation of the donation script for 3-way payout display.
 	var donationScriptHex string
-	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
-	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+	donationAddr := strings.TrimSpace(s.Config().OperatorDonationAddress)
+	if donationAddr != "" && s.Config().OperatorDonationPercent > 0 {
 		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
 			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
@@ -2188,6 +2670,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var rpcErrors, shareErrors uint64
 	var rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h float64
 	var errorHistory []PoolErrorEvent
+	now := time.Now()
 	if s.metrics != nil {
 		accepted, rejected, reasons = s.metrics.Snapshot()
 		s.logShareTotals(accepted, rejected)
@@ -2195,21 +2678,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 			rpcGBTLast, rpcGBTMax, rpcGBTCount,
 			rpcSubmitLast, rpcSubmitMax, rpcSubmitCount,
 			rpcErrors, shareErrors = s.metrics.SnapshotDiagnostics()
-		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(time.Now())
+		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(now)
 		rawErrors := s.metrics.SnapshotErrorHistory()
-		if len(rawErrors) > 0 {
-			errorHistory = make([]PoolErrorEvent, len(rawErrors))
-			for i, ev := range rawErrors {
-				at := ""
-				if !ev.At.IsZero() {
-					at = ev.At.UTC().Format(time.RFC3339)
-				}
-				errorHistory[i] = PoolErrorEvent{
-					At:      at,
-					Type:    ev.Type,
-					Message: ev.Message,
-				}
-			}
+		if filtered := filterRecentPoolErrorEvents(rawErrors, now, poolErrorHistoryDisplayWindow); len(filtered) > 0 {
+			errorHistory = filtered
 		}
 	}
 	// Process / system diagnostics (best-effort only; failures are treated as
@@ -2279,7 +2751,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 
-	now := time.Now()
+	snapshotTime := time.Now()
 	var workers []WorkerView
 	var bannedWorkers []WorkerView
 	var bestShares []BestShare
@@ -2288,7 +2760,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 	var allWorkers []WorkerView
 	var workerDBStats WorkerDatabaseStats
-	allWorkers = s.snapshotWorkerViews(now)
+	allWorkers = s.snapshotWorkerViews(snapshotTime)
 	workers = make([]WorkerView, 0, len(allWorkers))
 	bannedWorkers = make([]WorkerView, 0, len(allWorkers))
 	seen := make(map[string]struct{}, len(allWorkers))
@@ -2315,7 +2787,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 
-	foundBlocks := loadFoundBlocks(s.cfg.DataDir, 10)
+	foundBlocks := loadFoundBlocks(s.Config().DataDir, 10)
 
 	// Aggregate workers by miner type for a "miner types" summary near the
 	// bottom of the status page, grouping versions per miner type.
@@ -2463,7 +2935,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var btcPrice float64
 	var btcPriceUpdated string
 	if s.priceSvc != nil {
-		if price, err := s.priceSvc.BTCPrice(s.cfg.FiatCurrency); err == nil && price > 0 {
+		if price, err := s.priceSvc.BTCPrice(s.Config().FiatCurrency); err == nil && price > 0 {
 			btcPrice = price
 			if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
 				btcPriceUpdated = ts.UTC().Format("2006-01-02 15:04:05 MST")
@@ -2525,11 +2997,11 @@ func (s *StatusServer) buildStatusData() StatusData {
 		jobFeed.ErrorHistory = fs.ErrorHistory
 	}
 
-	brandName := strings.TrimSpace(s.cfg.StatusBrandName)
+	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {
 		brandName = "Solo Pool"
 	}
-	brandDomain := strings.TrimSpace(s.cfg.StatusBrandDomain)
+	brandDomain := strings.TrimSpace(s.Config().StatusBrandDomain)
 
 	activeMiners := 0
 	if s.jobMgr != nil {
@@ -2549,9 +3021,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		bt = "(dev build)"
 	}
 
-	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	expectedGenesis := ""
 	if nodeNetwork != "" {
@@ -2565,10 +3037,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 	// Collect configuration warnings for potentially risky or surprising
 	// setups so the UI can show a prominent banner.
 	var warnings []string
-	if s.cfg.PoolFeePercent > 10 {
+	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if strings.EqualFold(nodeNetwork, "mainnet") && s.cfg.MinDifficulty < 1 {
+	if strings.EqualFold(nodeNetwork, "mainnet") && s.Config().MinDifficulty < 1 {
 		warnings = append(warnings, "Minimum difficulty is configured below 1 on mainnet. This can flood the pool and node with tiny shares; verify you really need CPU-style difficulties on mainnet.")
 	}
 	if nodeNetwork != "" && !strings.EqualFold(nodeNetwork, "mainnet") {
@@ -2577,36 +3049,36 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if expectedGenesis != "" && genesisHash != "" && !genesisMatch {
 		warnings = append(warnings, "Connected node's genesis hash does not match the expected Bitcoin genesis for network "+nodeNetwork+". Verify the node is on the genuine Bitcoin chain, not a fork or alt network.")
 	}
-	if s.cfg.MaxAcceptsPerSecond == 0 && s.cfg.MaxConns == 0 {
+	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
 	return StatusData{
-		ListenAddr:                     s.cfg.ListenAddr,
-		StratumTLSListen:               s.cfg.StratumTLSListen,
+		ListenAddr:                     s.Config().ListenAddr,
+		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
-		Tagline:                        s.cfg.StatusTagline,
-		FiatCurrency:                   s.cfg.FiatCurrency,
+		Tagline:                        s.Config().StatusTagline,
+		FiatCurrency:                   s.Config().FiatCurrency,
 		BTCPriceFiat:                   btcPrice,
 		BTCPriceUpdatedAt:              btcPriceUpdated,
-		PoolDonationAddress:            s.cfg.PoolDonationAddress,
-		DiscordURL:                     s.cfg.DiscordURL,
-		GitHubURL:                      s.cfg.GitHubURL,
+		PoolDonationAddress:            s.Config().PoolDonationAddress,
+		DiscordURL:                     s.Config().DiscordURL,
+		GitHubURL:                      s.Config().GitHubURL,
 		NodeNetwork:                    nodeNetwork,
 		NodeSubversion:                 nodeSubversion,
 		NodeBlocks:                     nodeBlocks,
 		NodeHeaders:                    nodeHeaders,
 		NodeInitialBlockDownload:       nodeIBD,
-		NodeRPCURL:                     s.cfg.RPCURL,
-		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
-		PayoutAddress:                  s.cfg.PayoutAddress,
-		PoolFeePercent:                 s.cfg.PoolFeePercent,
-		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
-		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
-		OperatorDonationName:           s.cfg.OperatorDonationName,
-		OperatorDonationURL:            s.cfg.OperatorDonationURL,
-		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		NodeRPCURL:                     s.Config().RPCURL,
+		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		PayoutAddress:                  s.Config().PayoutAddress,
+		PoolFeePercent:                 s.Config().PoolFeePercent,
+		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
+		OperatorDonationAddress:        s.Config().OperatorDonationAddress,
+		OperatorDonationName:           s.Config().OperatorDonationName,
+		OperatorDonationURL:            s.Config().OperatorDonationURL,
+		CoinbaseMessage:                s.Config().CoinbaseMsg,
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
@@ -2616,9 +3088,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodePeerInfos:                  buildNodePeerInfos(nodePeers),
 		NodePruned:                     nodePruned,
 		NodeSizeOnDiskBytes:            nodeSizeOnDisk,
-		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
-		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
-		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
+		NodePeerCleanupEnabled:         s.Config().PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.Config().PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.Config().PeerCleanupMinPeers,
 		GenesisHash:                    genesisHash,
 		GenesisExpected:                expectedGenesis,
 		GenesisMatch:                   genesisMatch,
@@ -2677,13 +3149,13 @@ func (s *StatusServer) buildStatusData() StatusData {
 		SystemLoad1:                    load1,
 		SystemLoad5:                    load5,
 		SystemLoad15:                   load15,
-		MaxConns:                       s.cfg.MaxConns,
-		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
-		MinDifficulty:                  s.cfg.MinDifficulty,
-		MaxDifficulty:                  s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
+		MaxConns:                       s.Config().MaxConns,
+		MaxAcceptsPerSecond:            s.Config().MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.Config().MaxAcceptBurst,
+		MinDifficulty:                  s.Config().MinDifficulty,
+		MaxDifficulty:                  s.Config().MaxDifficulty,
+		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
 		WorkerDatabase:                 workerDBStats,
 		Warnings:                       warnings,
 	}
@@ -2694,69 +3166,69 @@ func (s *StatusServer) buildStatusData() StatusData {
 // hitting the expensive statusData/metrics paths so that HTML pages rely on
 // cached JSON endpoints for dynamic data.
 func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
-	brandName := strings.TrimSpace(s.cfg.StatusBrandName)
+	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {
 		brandName = "Solo Pool"
 	}
-	brandDomain := strings.TrimSpace(s.cfg.StatusBrandDomain)
+	brandDomain := strings.TrimSpace(s.Config().StatusBrandDomain)
 
 	bt := strings.TrimSpace(buildTime)
 	if bt == "" {
 		bt = "(dev build)"
 	}
 
-	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	var warnings []string
-	if s.cfg.PoolFeePercent > 10 {
+	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if s.cfg.MaxAcceptsPerSecond == 0 && s.cfg.MaxConns == 0 {
+	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
 	return StatusData{
-		ListenAddr:                     s.cfg.ListenAddr,
-		StratumTLSListen:               s.cfg.StratumTLSListen,
+		ListenAddr:                     s.Config().ListenAddr,
+		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
-		Tagline:                        s.cfg.StatusTagline,
-		ServerLocation:                 s.cfg.ServerLocation,
-		FiatCurrency:                   s.cfg.FiatCurrency,
-		PoolDonationAddress:            s.cfg.PoolDonationAddress,
-		DiscordURL:                     s.cfg.DiscordURL,
-		GitHubURL:                      s.cfg.GitHubURL,
-		NodeRPCURL:                     s.cfg.RPCURL,
-		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
-		PayoutAddress:                  s.cfg.PayoutAddress,
-		PoolFeePercent:                 s.cfg.PoolFeePercent,
-		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
-		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
-		OperatorDonationName:           s.cfg.OperatorDonationName,
-		OperatorDonationURL:            s.cfg.OperatorDonationURL,
-		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		Tagline:                        s.Config().StatusTagline,
+		ServerLocation:                 s.Config().ServerLocation,
+		FiatCurrency:                   s.Config().FiatCurrency,
+		PoolDonationAddress:            s.Config().PoolDonationAddress,
+		DiscordURL:                     s.Config().DiscordURL,
+		GitHubURL:                      s.Config().GitHubURL,
+		NodeRPCURL:                     s.Config().RPCURL,
+		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		PayoutAddress:                  s.Config().PayoutAddress,
+		PoolFeePercent:                 s.Config().PoolFeePercent,
+		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
+		OperatorDonationAddress:        s.Config().OperatorDonationAddress,
+		OperatorDonationName:           s.Config().OperatorDonationName,
+		OperatorDonationURL:            s.Config().OperatorDonationURL,
+		CoinbaseMessage:                s.Config().CoinbaseMsg,
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
 		PoolSoftware:                   poolSoftwareName,
 		BuildTime:                      bt,
-		MaxConns:                       s.cfg.MaxConns,
-		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
-		MinDifficulty:                  s.cfg.MinDifficulty,
-		MaxDifficulty:                  s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
-		HashrateEMATauSeconds:          s.cfg.HashrateEMATauSeconds,
-		HashrateEMAMinShares:           s.cfg.HashrateEMAMinShares,
-		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,
+		MaxConns:                       s.Config().MaxConns,
+		MaxAcceptsPerSecond:            s.Config().MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.Config().MaxAcceptBurst,
+		MinDifficulty:                  s.Config().MinDifficulty,
+		MaxDifficulty:                  s.Config().MaxDifficulty,
+		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
+		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
+		HashrateEMAMinShares:           s.Config().HashrateEMAMinShares,
+		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,
-		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
-		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
-		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
+		NodePeerCleanupEnabled:         s.Config().PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.Config().PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.Config().PeerCleanupMinPeers,
 	}
 }
 

@@ -49,6 +49,7 @@ type WorkerView struct {
 	WindowSubmissions   int          `json:"window_submissions"`
 	ShareRate           float64      `json:"share_rate"`
 	ConnectionID        string       `json:"connection_id,omitempty"`
+	ConnectionSeq       uint64       `json:"connection_seq,omitempty"`
 	WalletValidated     bool         `json:"wallet_validated,omitempty"`
 }
 

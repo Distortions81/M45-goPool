@@ -13,6 +13,7 @@ func TestCachedJSONResponseTTL(t *testing.T) {
 	s := &StatusServer{
 		jsonCache: make(map[string]cachedJSONResponse),
 	}
+	s.UpdateConfig(Config{})
 
 	key := "test-json"
 	ttl := 50 * time.Millisecond

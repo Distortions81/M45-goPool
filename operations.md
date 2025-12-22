@@ -47,6 +47,18 @@ systemctl kill -s SIGUSR1 gopool.service
 
 This is useful for updating the UI while the pool is running. If template parsing fails, the error is logged and the old templates remain active.
 
+### Live config reloading
+
+Status pages and API responses reflect the current configuration, so editing `data/config/*.toml` and sending `SIGUSR2` tells goPool to re-read the base config, tuning overrides, and secrets without restarting the whole pool. The reload refreshes the branding, payout, difficulty, and rate-limit summaries shown on the UI, but listeners or Clerk/Clerk callback paths stay tied to the values that were active at startup, so restart after making those kinds of changes.
+
+```bash
+# Signal goPool to reload the config files
+kill -SIGUSR2 <pid>
+
+# Or via systemd
+systemctl kill -s SIGUSR2 gopool.service
+```
+
 ## Logging
 
 - Logs live under `data_dir/logs` (e.g. `data/logs`):

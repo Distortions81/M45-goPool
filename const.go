@@ -28,4 +28,13 @@ const (
 	maxVersionHexLen    = 8   // submit version_bits parameter (4-byte hex)
 
 	maxDuplicateShareKeyBytes = 64
+
+	// forceClerkLoginUIForTesting shows the Clerk card when development forces it.
+	forceClerkLoginUIForTesting = false
+
+	// clerkDevSessionTokenTTL controls how long our localhost session JWT
+	// (exchanged from Clerk's development __clerk_db_jwt) should last.
+	// This only applies to development instances; production should rely on
+	// first-party cookies on your own domain.
+	clerkDevSessionTokenTTL = 12 * time.Hour
 )

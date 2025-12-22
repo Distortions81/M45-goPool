@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,8 @@ const (
 	logLevelWarn
 	logLevelError
 )
+
+const logRetentionDays = 3
 
 var levelNames = []string{
 	"DEBUG",
@@ -226,46 +229,97 @@ func formatAttrs(attrs []any) string {
 	return b.String()
 }
 
-func newRollingFileWriter(path string) io.Writer {
+func newDailyRollingFileWriter(path string) io.Writer {
 	if path == "" {
 		return io.Discard
 	}
-	return &rollingFileWriter{path: path}
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return &dailyRollingFileWriter{
+		dir:  dir,
+		name: name,
+		ext:  ext,
+	}
 }
 
-type rollingFileWriter struct {
-	path string
-	mu   sync.Mutex
-	f    *os.File
+type dailyRollingFileWriter struct {
+	dir         string
+	name        string
+	ext         string
+	mu          sync.Mutex
+	f           *os.File
+	currentDate string
 }
 
-func (w *rollingFileWriter) ensureFile() error {
-	if w.path == "" {
+func (w *dailyRollingFileWriter) ensureFile(now time.Time) error {
+	if w.name == "" || w.dir == "" {
+		return fmt.Errorf("invalid log path")
+	}
+	date := now.UTC().Format("2006-01-02")
+	if w.f != nil && w.currentDate == date {
 		return nil
 	}
-	if _, err := os.Stat(w.path); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if w.f != nil {
-			_ = w.f.Close()
-			w.f = nil
-		}
+	if w.f != nil {
+		_ = w.f.Close()
+		w.f = nil
 	}
-	if w.f == nil {
-		f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
-			return err
-		}
-		w.f = f
+	filename := fmt.Sprintf("%s-%s%s", w.name, date, w.ext)
+	target := filepath.Join(w.dir, filename)
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
 	}
+	w.f = f
+	w.currentDate = date
+	w.cleanupOldLogs(now)
 	return nil
 }
 
-func (w *rollingFileWriter) Write(p []byte) (int, error) {
+func (w *dailyRollingFileWriter) cleanupOldLogs(now time.Time) {
+	if logRetentionDays <= 0 {
+		return
+	}
+	if w.name == "" || w.dir == "" {
+		return
+	}
+	cutoff := now.UTC().AddDate(0, 0, -(logRetentionDays - 1))
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return
+	}
+	prefix := w.name + "-"
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, w.ext) {
+			continue
+		}
+		if len(name) < len(prefix)+len(w.ext)+len("2006-01-02") {
+			continue
+		}
+		dateStr := name[len(prefix) : len(name)-len(w.ext)]
+		if len(dateStr) != len("2006-01-02") {
+			continue
+		}
+		ts, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			continue
+		}
+		if ts.Before(cutoff) {
+			_ = os.Remove(filepath.Join(w.dir, name))
+		}
+	}
+}
+
+func (w *dailyRollingFileWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if err := w.ensureFile(); err != nil {
+	now := time.Now()
+	if err := w.ensureFile(now); err != nil {
 		return 0, err
 	}
 	if w.f == nil {
@@ -274,7 +328,7 @@ func (w *rollingFileWriter) Write(p []byte) (int, error) {
 	return w.f.Write(p)
 }
 
-func (w *rollingFileWriter) Close() error {
+func (w *dailyRollingFileWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.f == nil {
@@ -291,9 +345,9 @@ func setLogLevel(level logLevel) {
 
 func configureFileLogging(poolPath, errorPath, debugPath string, stdout bool) {
 	logger.configureWriters(
-		newRollingFileWriter(poolPath),
-		newRollingFileWriter(errorPath),
-		newRollingFileWriter(debugPath),
+		newDailyRollingFileWriter(poolPath),
+		newDailyRollingFileWriter(errorPath),
+		newDailyRollingFileWriter(debugPath),
 		stdout,
 	)
 }

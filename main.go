@@ -60,6 +60,104 @@ type reconnectEntry struct {
 	bannedUntil time.Time
 }
 
+type runtimeOverrides struct {
+	bind    string
+	rpcURL  string
+	flood   bool
+	noZMQ   bool
+	mainnet bool
+	testnet bool
+	signet  bool
+	regtest bool
+}
+
+func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
+	if overrides.flood {
+		cfg.MinDifficulty = 0.0000001
+		cfg.MaxDifficulty = 0.0000001
+	}
+
+	selectedNetworks := 0
+	if overrides.mainnet {
+		selectedNetworks++
+	}
+	if overrides.testnet {
+		selectedNetworks++
+	}
+	if overrides.signet {
+		selectedNetworks++
+	}
+	if overrides.regtest {
+		selectedNetworks++
+	}
+	if selectedNetworks > 1 {
+		return fmt.Errorf("only one of -mainnet, -testnet, -signet, -regtest may be set")
+	}
+
+	if overrides.rpcURL != "" {
+		cfg.RPCURL = overrides.rpcURL
+	} else if cfg.RPCURL == "http://127.0.0.1:8332" {
+		switch {
+		case overrides.testnet:
+			cfg.RPCURL = "http://127.0.0.1:18332"
+		case overrides.signet:
+			cfg.RPCURL = "http://127.0.0.1:38332"
+		case overrides.regtest:
+			cfg.RPCURL = "http://127.0.0.1:18443"
+		}
+	}
+
+	if overrides.bind != "" {
+		_, port, err := net.SplitHostPort(cfg.ListenAddr)
+		if err != nil {
+			cfg.ListenAddr = net.JoinHostPort(overrides.bind, strings.TrimPrefix(cfg.ListenAddr, ":"))
+		} else {
+			cfg.ListenAddr = net.JoinHostPort(overrides.bind, port)
+		}
+
+		if cfg.StatusAddr != "" {
+			_, port, err = net.SplitHostPort(cfg.StatusAddr)
+			if err != nil {
+				cfg.StatusAddr = net.JoinHostPort(overrides.bind, strings.TrimPrefix(cfg.StatusAddr, ":"))
+			} else {
+				cfg.StatusAddr = net.JoinHostPort(overrides.bind, port)
+			}
+		}
+
+		if cfg.StatusTLSAddr != "" {
+			_, port, err = net.SplitHostPort(cfg.StatusTLSAddr)
+			if err != nil {
+				cfg.StatusTLSAddr = net.JoinHostPort(overrides.bind, strings.TrimPrefix(cfg.StatusTLSAddr, ":"))
+			} else {
+				cfg.StatusTLSAddr = net.JoinHostPort(overrides.bind, port)
+			}
+		}
+
+		if cfg.StratumTLSListen != "" {
+			_, port, err = net.SplitHostPort(cfg.StratumTLSListen)
+			if err != nil {
+				cfg.StratumTLSListen = net.JoinHostPort(overrides.bind, strings.TrimPrefix(cfg.StratumTLSListen, ":"))
+			} else {
+				cfg.StratumTLSListen = net.JoinHostPort(overrides.bind, port)
+			}
+		}
+	}
+
+	if cfg.ZMQBlockAddr == "" {
+		if overrides.mainnet || overrides.testnet || overrides.signet || overrides.regtest {
+			cfg.ZMQBlockAddr = "tcp://127.0.0.1:28332"
+		}
+	}
+
+	if overrides.noZMQ {
+		cfg.ZMQBlockAddr = ""
+	} else if cfg.ZMQBlockAddr == "" {
+		return fmt.Errorf("missing zmq_block_addr; set it in config.toml or use -no-zmq to disable ZMQ")
+	}
+
+	return nil
+}
+
 func newReconnectTracker(threshold int, window, banDuration time.Duration) *reconnectTracker {
 	if threshold <= 0 || window <= 0 || banDuration <= 0 {
 		return nil
@@ -260,6 +358,16 @@ func main() {
 	stdoutLogFlag := flag.Bool("stdoutlog", false, "mirror logs to stdout in addition to writing to files")
 	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
 	flag.Parse()
+	overrides := runtimeOverrides{
+		bind:    *bindFlag,
+		rpcURL:  *rpcURLFlag,
+		flood:   *floodFlag,
+		noZMQ:   *noZMQFlag,
+		mainnet: *mainnetFlag,
+		testnet: *testnetFlag,
+		signet:  *signetFlag,
+		regtest: *regtestFlag,
+	}
 	cleanBansOnStartup := !*noCleanBansFlag
 
 	level := logLevelInfo
@@ -299,106 +407,17 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Set up SIGUSR1 handler for template reloading
+	// Set up SIGUSR1/SIGUSR2 handler for template/config reloading
 	reloadChan := make(chan os.Signal, 1)
-	signal.Notify(reloadChan, syscall.SIGUSR1)
+	signal.Notify(reloadChan, syscall.SIGUSR1, syscall.SIGUSR2)
 
 	cfgPath := defaultConfigPath()
 	cfg := loadConfig(cfgPath, *secretsPathFlag)
-	if *floodFlag {
-		// Flood-test mode: clamp difficulty to a very low fixed
-		// level so miners send many low-difficulty shares. This is
-		// intended for local testing / benchmarks, not production.
-		cfg.MinDifficulty = 0.0000001
-		cfg.MaxDifficulty = 0.0000001
-	}
 	if err := validateConfig(cfg); err != nil {
 		fatal("config", err)
 	}
-
-	// Apply CLI overrides for RPC and network selection on top of file/env config.
-	selectedNetworks := 0
-	if *mainnetFlag {
-		selectedNetworks++
-	}
-	if *testnetFlag {
-		selectedNetworks++
-	}
-	if *signetFlag {
-		selectedNetworks++
-	}
-	if *regtestFlag {
-		selectedNetworks++
-	}
-	if selectedNetworks > 1 {
-		fatal("config", fmt.Errorf("only one of -mainnet, -testnet, -signet, -regtest may be set"))
-	}
-
-	if *rpcURLFlag != "" {
-		cfg.RPCURL = *rpcURLFlag
-	} else if cfg.RPCURL == "http://127.0.0.1:8332" {
-		// If a network is selected and RPC URL is still the compiled-in
-		// mainnet default, adjust it to a network-appropriate default.
-		switch {
-		case *testnetFlag:
-			cfg.RPCURL = "http://127.0.0.1:18332"
-		case *signetFlag:
-			cfg.RPCURL = "http://127.0.0.1:38332"
-		case *regtestFlag:
-			cfg.RPCURL = "http://127.0.0.1:18443"
-		}
-	}
-
-	if *bindFlag != "" {
-		_, port, err := net.SplitHostPort(cfg.ListenAddr)
-		if err != nil {
-			cfg.ListenAddr = net.JoinHostPort(*bindFlag, strings.TrimPrefix(cfg.ListenAddr, ":"))
-		} else {
-			cfg.ListenAddr = net.JoinHostPort(*bindFlag, port)
-		}
-
-		if cfg.StatusAddr != "" {
-			_, port, err = net.SplitHostPort(cfg.StatusAddr)
-			if err != nil {
-				cfg.StatusAddr = net.JoinHostPort(*bindFlag, strings.TrimPrefix(cfg.StatusAddr, ":"))
-			} else {
-				cfg.StatusAddr = net.JoinHostPort(*bindFlag, port)
-			}
-		}
-
-		// Apply to status HTTPS address
-		if cfg.StatusTLSAddr != "" {
-			_, port, err = net.SplitHostPort(cfg.StatusTLSAddr)
-			if err != nil {
-				cfg.StatusTLSAddr = net.JoinHostPort(*bindFlag, strings.TrimPrefix(cfg.StatusTLSAddr, ":"))
-			} else {
-				cfg.StatusTLSAddr = net.JoinHostPort(*bindFlag, port)
-			}
-		}
-
-		// Apply to stratum TLS address if configured
-		if cfg.StratumTLSListen != "" {
-			_, port, err = net.SplitHostPort(cfg.StratumTLSListen)
-			if err != nil {
-				cfg.StratumTLSListen = net.JoinHostPort(*bindFlag, strings.TrimPrefix(cfg.StratumTLSListen, ":"))
-			} else {
-				cfg.StratumTLSListen = net.JoinHostPort(*bindFlag, port)
-			}
-		}
-	}
-
-	// Provide a sensible default ZMQ address when a network is selected and
-	// none was configured.
-	if cfg.ZMQBlockAddr == "" {
-		if *mainnetFlag || *testnetFlag || *signetFlag || *regtestFlag {
-			cfg.ZMQBlockAddr = "tcp://127.0.0.1:28332"
-		}
-	}
-
-	if *noZMQFlag {
-		cfg.ZMQBlockAddr = ""
-	} else if cfg.ZMQBlockAddr == "" {
-		fatal("config", fmt.Errorf("missing zmq_block_addr; set it in config.toml or use -no-zmq to disable ZMQ"))
+	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
+		fatal("config", err)
 	}
 
 	// Select btcd network params for local address validation based on the
@@ -480,7 +499,7 @@ func main() {
 		if err != nil {
 			fatal("net log file", err)
 		}
-		setNetLogWriter(newRollingFileWriter(netLogPath))
+			setNetLogWriter(newDailyRollingFileWriter(netLogPath))
 	}
 
 	logger.Info("starting pool", "listen_addr", cfg.ListenAddr, "status_addr", cfg.StatusAddr)
@@ -495,10 +514,30 @@ func main() {
 		logger.Warn("high pool_fee_percent; verify configuration", "pool_fee_percent", cfg.PoolFeePercent)
 	}
 
+	callbackPath := strings.TrimSpace(cfg.ClerkCallbackPath)
+	if callbackPath == "" {
+		callbackPath = defaultClerkCallbackPath
+	}
+	if !strings.HasPrefix(callbackPath, "/") {
+		callbackPath = "/" + callbackPath
+	}
+	cfg.ClerkCallbackPath = callbackPath
+
 	startTime := time.Now()
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)
 	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
+	clerkVerifier, clerkErr := NewClerkVerifier(cfg)
+	if clerkErr != nil {
+		logger.Warn("initialize clerk verifier", "error", clerkErr)
+	}
+	workerListDBPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	workerLists, workerListErr := newWorkerListStore(workerListDBPath)
+	if workerListErr != nil {
+		logger.Warn("open saved workers store", "error", workerListErr, "path", workerListDBPath)
+	} else {
+		defer workerLists.Close()
+	}
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
@@ -523,21 +562,33 @@ func main() {
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
-	statusServer := NewStatusServer(ctx, nil, metrics, registry, accounting, rpcClient, cfg, startTime)
+	statusServer := NewStatusServer(ctx, nil, metrics, registry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
 
-	// Start SIGUSR1 handler for live template reloading
+	// Start SIGUSR1/SIGUSR2 handler for live template/config reloading
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-reloadChan:
-				logger.Info("SIGUSR1 received, reloading templates")
-				if err := statusServer.ReloadTemplates(); err != nil {
-					logger.Error("template reload failed", "error", err)
+			case sig := <-reloadChan:
+				switch sig {
+				case syscall.SIGUSR1:
+					logger.Info("SIGUSR1 received, reloading templates")
+					if err := statusServer.ReloadTemplates(); err != nil {
+						logger.Error("template reload failed", "error", err)
+					}
+				case syscall.SIGUSR2:
+					logger.Info("SIGUSR2 received, reloading config")
+					reloadedCfg, err := reloadStatusConfig(cfgPath, *secretsPathFlag, overrides)
+					if err != nil {
+						logger.Error("config reload failed", "error", err)
+						continue
+					}
+					statusServer.UpdateConfig(reloadedCfg)
+					logger.Info("config reloaded", "path", cfgPath)
 				}
 			}
 		}
@@ -563,14 +614,21 @@ func main() {
 		mux.HandleFunc("/api/node", statusServer.handleNodePageJSON)
 		mux.HandleFunc("/api/server", statusServer.handleServerPageJSON)
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
+		mux.HandleFunc("/api/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkersJSON))
 
 		// Other endpoints
 		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)
 		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
 	}
 	// HTML endpoints
-	mux.HandleFunc("/worker", statusServer.handleWorkerStatus)
-	mux.HandleFunc("/worker/sha256", statusServer.handleWorkerStatusBySHA256)
+	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
+	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
+	mux.HandleFunc("/worker/save", statusServer.withClerkUser(statusServer.handleWorkerSave))
+	mux.HandleFunc("/worker/remove", statusServer.withClerkUser(statusServer.handleWorkerRemove))
+	mux.HandleFunc("/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkers))
+	mux.HandleFunc("/login", statusServer.handleClerkLogin)
+	mux.HandleFunc("/logout", statusServer.handleClerkLogout)
+	mux.HandleFunc(cfg.ClerkCallbackPath, statusServer.handleClerkCallback)
 	mux.HandleFunc("/node", statusServer.handleNodeInfo)
 	mux.HandleFunc("/pool", statusServer.handlePoolInfo)
 	mux.HandleFunc("/server", statusServer.handleServerInfoPage)
@@ -951,6 +1009,47 @@ func main() {
 			logger.Error("sync error log", "error", err)
 		}
 	}
+}
+
+func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides) (Config, error) {
+	cfg := loadConfig(cfgPath, secretsPath)
+	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
+		return Config{}, err
+	}
+
+	tag := poolSoftwareName
+	brand := strings.TrimSpace(cfg.StatusBrandName)
+	if brand != "" {
+		tag = poolSoftwareName + "-" + brand
+	}
+	var buf []byte
+	for i := 0; i < len(tag); i++ {
+		b := tag[i]
+		if b >= 0x20 && b <= 0x7e {
+			buf = append(buf, b)
+		}
+	}
+	if len(buf) == 0 {
+		buf = []byte(poolSoftwareName)
+	}
+	if len(buf) > 40 {
+		buf = buf[:40]
+	}
+	cfg.CoinbaseMsg = string(buf)
+
+	callbackPath := strings.TrimSpace(cfg.ClerkCallbackPath)
+	if callbackPath == "" {
+		callbackPath = defaultClerkCallbackPath
+	}
+	if !strings.HasPrefix(callbackPath, "/") {
+		callbackPath = "/" + callbackPath
+	}
+	cfg.ClerkCallbackPath = callbackPath
+
+	if err := validateConfig(cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func initLogOutput(cfg Config) (string, error) {

@@ -1,0 +1,562 @@
+{{/* Saved workers page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Saved Workers</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		{{if .ClerkUser}}
+		<div class="panel-stack">
+			<div class="card">
+				<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+					<div>
+						<h2 style="margin-top:0;">
+							{{if eq .SavedWorkersCount 0}}
+								Add your first worker!
+							{{else}}
+								Add workers
+							{{end}}
+						</h2>
+					</div>
+					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+							<polyline points="16 17 21 12 16 7"></polyline>
+							<line x1="21" y1="12" x2="9" y2="12"></line>
+						</svg>
+						<span>Sign out</span>
+					</a>
+				</div>
+				<form method="post" action="/worker/save" style="margin-top:12px;">
+					<div class="input-row">
+						<input class="input" type="text" name="worker" placeholder="wallet.worker">
+						<button class="btn" type="submit">Add</button>
+					</div>
+				</form>
+			</div>
+
+			{{$offlineCount := len .OfflineWorkerEntries}}
+			<div class="card offline-card" id="offlineSection">
+				<div class="offline-card-header">
+					<h2 style="margin:0;">Offline Workers</h2>
+					<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
+						{{$offlineCount}} offline
+					</span>
+				</div>
+				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
+					{{range .OfflineWorkerEntries}}
+						<li>
+							<span class="mono sensitive-worker" data-worker-name="{{.Name}}"></span>
+							<span class="badge badge-danger">Offline</span>
+						</li>
+					{{end}}
+				</ul>
+				<p id="offlineEmptyMessage" class="text-sm" style="color:var(--text-muted); margin-top:10px; {{if gt $offlineCount 0}}display:none;{{end}}">
+					All saved workers are currently online.
+				</p>
+			</div>
+
+			<div class="card graph-card">
+				<div class="graph-card-header">
+					<h2 style="margin:0;">Total Hashrate</h2>
+					<p class="text-sm graph-card-description">
+						Live sum of your saved workers’ hashrate and shares rate over the last five minutes.
+					</p>
+				</div>
+				<div style="margin-top:12px;">
+					<canvas id="savedWorkersHashrateChart" style="width:100%;height:180px;"></canvas>
+				</div>
+			</div>
+
+			<div class="card">
+				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+					<h2 style="margin-top:0;">Your workers</h2>
+					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+						<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
+						<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
+						<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
+							<span id="privacyToggleIcon" aria-hidden="true">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+									<circle cx="12" cy="12" r="3"></circle>
+									<line x1="4" y1="20" x2="20" y2="4"></line>
+								</svg>
+							</span>
+							<span id="privacyToggleText">Privacy</span>
+						</button>
+					</div>
+				</div>
+				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
+					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
+					<select id="savedWorkersSortField" class="input" style="max-width:220px;">
+						<option value="connection_seq">Connection #</option>
+						<option value="name">Name</option>
+						<option value="hashrate">Hashrate</option>
+					</select>
+					<button id="savedWorkersSortOrder" class="btn btn-secondary" type="button" aria-label="Toggle sort order">Desc ↓</button>
+				</div>
+				<div style="overflow-x:auto; margin-top:12px;">
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Worker</th>
+								<th>Hashrate</th>
+								<th>Diff</th>
+								<th>Shares/min</th>
+								<th>Accepted</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody id="onlineWorkersBody">
+							{{if .OnlineWorkerEntries}}
+								{{range .OnlineWorkerEntries}}
+								<tr>
+									<td class="mono sensitive-worker" data-worker-name="{{.Name}}"></td>
+									<td>{{if gt .Hashrate 0.0}}{{formatHashrate .Hashrate}}{{else}}—{{end}}</td>
+									<td>{{formatDiff .Difficulty}}</td>
+									<td>{{formatShareRate .ShareRate}}</td>
+									<td>{{.Accepted}}</td>
+									<td style="text-align:right;">
+										<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+											<input type="hidden" name="worker" value="{{.Name}}">
+											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+													<path d="M10 11v6"></path>
+													<path d="M14 11v6"></path>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+												</svg>
+											</button>
+										</form>
+									</td>
+								</tr>
+								{{end}}
+							{{else}}
+								<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>
+							{{end}}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+		{{else}}
+		<div class="card">
+			<h2>Saved workers</h2>
+			<p class="text-sm">Sign in to save workers for quick access.</p>
+			<a class="btn" href="/login?redirect=/saved-workers">Sign in with Google</a>
+		</div>
+		{{end}}
+
+		{{template "footer" .}}
+	</div>
+	{{if .ClerkUser}}
+	<script>
+	(function() {
+		let hideWorkerNames = true;
+
+		// Saved workers total hashrate graph (sum of online workers).
+		const chartCanvas = document.getElementById('savedWorkersHashrateChart');
+		const maxDataPoints = 60; // 5 minutes at 5-second intervals
+		const MIN_GRAPH_MAX_HASHRATE = 5 * 1e12; // 5 TH/s minimum scale
+		const MIN_GRAPH_MAX_SHARES = 200; // shares/min minimum scale
+		const HASHRATE_LINE_COLOR = '#2cf1c2';
+		const SHARES_LINE_COLOR = '#a86bff';
+		const hashrateData = [];
+		const sharesData = [];
+		let chartCtx = null;
+
+		function resizeChartCanvas() {
+			if (!chartCanvas) return null;
+			const dpr = window.devicePixelRatio || 1;
+			const rect = chartCanvas.getBoundingClientRect();
+			chartCanvas.width = rect.width * dpr;
+			chartCanvas.height = rect.height * dpr;
+			const ctx = chartCanvas.getContext('2d');
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			return ctx;
+		}
+
+		function formatHashrateShort(h) {
+			if (!isFinite(h) || h <= 0) return '0 H/s';
+			const units = ['H/s','KH/s','MH/s','GH/s','TH/s','PH/s'];
+			let val = h;
+			let unit = units[0];
+			for (let i = 0; i < units.length - 1 && val >= 1000; i++) {
+				val /= 1000;
+				unit = units[i+1];
+			}
+			if (val >= 100) return `${val.toFixed(0)} ${unit}`;
+			if (val >= 10) return `${val.toFixed(1)} ${unit}`;
+			return `${val.toFixed(2)} ${unit}`;
+		}
+
+		function drawHashrateGraph() {
+			if (!chartCanvas || !chartCtx) return;
+			const rect = chartCanvas.getBoundingClientRect();
+			const width = rect.width;
+			const height = rect.height;
+			const paddingLeft = 70;
+			const paddingRight = 20;
+			const paddingTop = 16;
+			const paddingBottom = 26;
+			const graphWidth = width - paddingLeft - paddingRight;
+			const graphHeight = height - paddingTop - paddingBottom;
+
+			chartCtx.clearRect(0, 0, width, height);
+
+			if (hashrateData.length === 0 && sharesData.length === 0) {
+				chartCtx.fillStyle = '#b3bbd4';
+				chartCtx.font = '14px monospace';
+				chartCtx.textAlign = 'center';
+				chartCtx.fillText('Waiting for data...', width / 2, height / 2);
+				return;
+			}
+
+			const points = hashrateData.slice(-maxDataPoints);
+			const sharesPoints = sharesData.slice(-maxDataPoints);
+			const maxHashrate = Math.max(...points, 0);
+			const maxShares = Math.max(...sharesPoints, 0);
+			const hashrateRange = Math.max(maxHashrate, MIN_GRAPH_MAX_HASHRATE, 1);
+			const shareRange = Math.max(maxShares, MIN_GRAPH_MAX_SHARES, 1);
+			const range = hashrateRange;
+			const stepCount = Math.max(points.length, sharesPoints.length);
+
+			// Grid
+			chartCtx.strokeStyle = '#2a2f3a';
+			chartCtx.lineWidth = 1;
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight / 4) * i;
+				chartCtx.beginPath();
+				chartCtx.moveTo(paddingLeft, y);
+				chartCtx.lineTo(width - paddingRight, y);
+				chartCtx.stroke();
+			}
+
+			// Y labels
+			chartCtx.fillStyle = '#b3bbd4';
+			chartCtx.font = '11px monospace';
+			chartCtx.textAlign = 'right';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight / 4) * i;
+				const value = hashrateRange - (range / 4) * i;
+				chartCtx.fillText(formatHashrateShort(value), paddingLeft - 8, y + 4);
+			}
+
+			// Axis
+			chartCtx.strokeStyle = '#3b455d';
+			chartCtx.beginPath();
+			chartCtx.moveTo(paddingLeft, paddingTop);
+			chartCtx.lineTo(paddingLeft, height - paddingBottom);
+			chartCtx.lineTo(width - paddingRight, height - paddingBottom);
+			chartCtx.stroke();
+
+			const step = stepCount > 1 ? graphWidth / (stepCount - 1) : 0;
+
+			// Hashrate line (green)
+			if (points.length > 0) {
+				chartCtx.strokeStyle = HASHRATE_LINE_COLOR;
+				chartCtx.lineWidth = 2;
+				chartCtx.beginPath();
+				points.forEach((v, i) => {
+					const x = paddingLeft + step * i;
+					const y = paddingTop + graphHeight - (v / range) * graphHeight;
+					if (i === 0) chartCtx.moveTo(x, y);
+					else chartCtx.lineTo(x, y);
+				});
+				chartCtx.stroke();
+			}
+
+			// Shares/min line (purple)
+			if (sharesPoints.length > 0) {
+				chartCtx.strokeStyle = SHARES_LINE_COLOR;
+				chartCtx.lineWidth = 2;
+				chartCtx.beginPath();
+				sharesPoints.forEach((v, i) => {
+					const x = paddingLeft + step * i;
+					const y = paddingTop + graphHeight - (v / shareRange) * graphHeight;
+					if (i === 0) chartCtx.moveTo(x, y);
+					else chartCtx.lineTo(x, y);
+				});
+				chartCtx.stroke();
+			}
+
+			// Latest label
+			const lastHashrate = points.length ? points[points.length - 1] : 0;
+			const lastShares = sharesPoints.length ? sharesPoints[sharesPoints.length - 1] : 0;
+			chartCtx.fillStyle = '#eafff7';
+			chartCtx.font = '12px monospace';
+			chartCtx.textAlign = 'left';
+			chartCtx.fillText(`Total: ${formatHashrateShort(lastHashrate)} • Shares/min: ${formatShareRatePerMin(lastShares)}`, paddingLeft, paddingTop - 2);
+		}
+
+		if (chartCanvas) {
+			chartCtx = resizeChartCanvas();
+			drawHashrateGraph();
+			window.addEventListener('resize', function() {
+				chartCtx = resizeChartCanvas();
+				drawHashrateGraph();
+			});
+		}
+
+		function formatHashrate(h) {
+			if (!isFinite(h) || h <= 0) return '0 H/s';
+			const units = ['H/s','KH/s','MH/s','GH/s','TH/s','PH/s'];
+			let val = h;
+			let unit = units[0];
+			for (let i = 0; i < units.length - 1 && val >= 1000; i++) {
+				val /= 1000;
+				unit = units[i+1];
+			}
+			return `${val.toFixed(3)} ${unit}`;
+		}
+
+		function formatShareRatePerMin(v) {
+			if (!isFinite(v) || v <= 0) return '0';
+			if (v >= 1000) return v.toFixed(1);
+			if (v >= 10) return v.toFixed(2);
+			return v.toFixed(3);
+		}
+
+		function formatDiffShort(d) {
+			if (!isFinite(d) || d <= 0) return '0';
+			if (d < 1_000_000) return Math.round(d).toString();
+			if (d >= 1_000_000_000_000) return `${(d / 1_000_000_000_000.0).toFixed(1)}P`;
+			if (d >= 1_000_000_000) return `${(d / 1_000_000_000.0).toFixed(1)}G`;
+			return `${(d / 1_000_000.0).toFixed(1)}M`;
+		}
+
+		const onlineBody = document.getElementById('onlineWorkersBody');
+		const sortFieldSelect = document.getElementById('savedWorkersSortField');
+		const sortOrderBtn = document.getElementById('savedWorkersSortOrder');
+		let currentSortField = sortFieldSelect && sortFieldSelect.value ? sortFieldSelect.value : 'connection_seq';
+		let sortDescending = true;
+		let lastOnlineWorkers = [];
+
+		function updateSortOrderButtonText() {
+			if (!sortOrderBtn) return;
+			sortOrderBtn.textContent = sortDescending ? 'Desc ↓' : 'Asc ↑';
+			sortOrderBtn.setAttribute('aria-pressed', sortDescending ? 'true' : 'false');
+		}
+
+		function getSortValue(field, worker) {
+			if (!worker) return '';
+			switch (field) {
+			case 'name':
+				return (worker.name || '').toLowerCase();
+			case 'hashrate':
+				return Number(worker.hashrate || 0);
+			default:
+				return Number(worker.connection_seq || 0);
+			}
+		}
+
+		function compareWorkers(a, b) {
+			const aVal = getSortValue(currentSortField, a);
+			const bVal = getSortValue(currentSortField, b);
+			if (typeof aVal === 'string' && typeof bVal === 'string') {
+				const cmp = aVal.localeCompare(bVal);
+				if (cmp !== 0) return cmp;
+			} else if (typeof aVal === 'number' && typeof bVal === 'number') {
+				if (aVal < bVal) return -1;
+				if (aVal > bVal) return 1;
+			}
+			const nameA = (a.name || '').toLowerCase();
+			const nameB = (b.name || '').toLowerCase();
+			if (nameA < nameB) return -1;
+			if (nameA > nameB) return 1;
+			return 0;
+		}
+
+		function sortWorkers(workers) {
+			const clone = workers.slice();
+			clone.sort((a, b) => {
+				const cmp = compareWorkers(a, b);
+				return sortDescending ? -cmp : cmp;
+			});
+			return clone;
+		}
+
+		function renderOnlineWorkers(workers) {
+			lastOnlineWorkers = Array.isArray(workers) ? workers.slice() : [];
+			if (!onlineBody) return;
+			const sorted = sortWorkers(lastOnlineWorkers);
+			if (sorted.length === 0) {
+				onlineBody.innerHTML = '<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>';
+				return;
+			}
+			onlineBody.innerHTML = sorted.map(w => `
+				<tr>
+					<td class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></td>
+					<td>${Number(w.hashrate || 0) > 0 ? formatHashrate(Number(w.hashrate || 0)) : '—'}</td>
+					<td>${formatDiffShort(Number(w.difficulty || 0))}</td>
+					<td>${formatShareRatePerMin(Number(w.shares_per_minute || 0))}</td>
+					<td>${Number(w.accepted || 0)}</td>
+					<td style="text-align:right;">
+						<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+							<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+							<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<polyline points="3 6 5 6 21 6"></polyline>
+									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+									<path d="M10 11v6"></path>
+									<path d="M14 11v6"></path>
+									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+								</svg>
+							</button>
+						</form>
+					</td>
+				</tr>
+			`).join('');
+			attachRemoveConfirms(onlineBody);
+			applyWorkerNameCensoring(onlineBody);
+		}
+
+		// Censor a string by keeping first 8 and last 8 chars with ".." in between
+		function censorString(s) {
+			if (!s || s.length <= 16) return s;
+			if (s.startsWith('..')) s = s.substring(2).trim();
+			return s.substring(0, 8) + '..' + s.substring(s.length - 8);
+		}
+
+		function applyWorkerNameCensoring(root) {
+			const els = (root || document).querySelectorAll('.sensitive-worker[data-worker-name]');
+			for (const el of els) {
+				const original = el.getAttribute('data-worker-name') || '';
+				el.textContent = hideWorkerNames ? censorString(original) : original;
+			}
+		}
+
+		function attachRemoveConfirms(root) {
+			const forms = (root || document).querySelectorAll('form[data-remove-worker]');
+			for (const form of forms) {
+				if (form.__removeConfirmAttached) continue;
+				form.__removeConfirmAttached = true;
+				form.addEventListener('submit', function(e) {
+					const worker = form.getAttribute('data-remove-worker') || '';
+					const msg = worker ? `Remove saved worker "${worker}"?` : 'Remove saved worker?';
+					if (!confirm(msg)) e.preventDefault();
+				});
+			}
+		}
+
+		function updatePrivacyToggle() {
+			const btn = document.getElementById('privacyToggleNames');
+			const text = document.getElementById('privacyToggleText');
+			if (!btn || !text) return;
+			text.textContent = hideWorkerNames ? 'Privacy: On' : 'Privacy: Off';
+		}
+
+		async function refreshSavedWorkers() {
+			try {
+				const res = await fetch('/api/saved-workers', { credentials: 'same-origin' });
+				if (!res.ok) return;
+				const data = await res.json();
+				const savedCount = document.getElementById('savedCount');
+				const savedMax = document.getElementById('savedMax');
+				const onlineCount = document.getElementById('onlineCount');
+				if (savedCount) savedCount.textContent = data.saved_count ?? '';
+				if (savedMax) savedMax.textContent = data.saved_max ?? '';
+				if (onlineCount) onlineCount.textContent = data.online_count ?? '';
+
+				const online = Array.isArray(data.online_workers) ? data.online_workers : [];
+				// Update total hashrate time series (sum of online worker hashrate).
+				let totalHashrate = 0;
+				let totalShares = 0;
+				for (const w of online) {
+					totalHashrate += Number(w.hashrate || 0);
+					totalShares += Number(w.shares_per_minute || 0);
+				}
+				const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
+				const safeShares = isFinite(totalShares) ? totalShares : 0;
+				hashrateData.push(safeHashrate);
+				sharesData.push(safeShares);
+				if (hashrateData.length > maxDataPoints) hashrateData.shift();
+				if (sharesData.length > maxDataPoints) sharesData.shift();
+				drawHashrateGraph();
+				renderOnlineWorkers(online);
+
+				const offlineList = document.getElementById('offlineWorkersList');
+				const offlineSection = document.getElementById('offlineSection');
+				const offlineEmptyMessage = document.getElementById('offlineEmptyMessage');
+				const offlineCountBadge = document.getElementById('offlineCountBadge');
+				if (offlineList && offlineSection && offlineEmptyMessage) {
+					const offline = Array.isArray(data.offline_workers) ? data.offline_workers : [];
+					offlineSection.style.display = '';
+					if (offline.length === 0) {
+						offlineList.innerHTML = '';
+						offlineList.style.display = 'none';
+						offlineEmptyMessage.style.display = '';
+						if (offlineCountBadge) {
+							offlineCountBadge.style.display = 'none';
+						}
+					} else {
+						offlineEmptyMessage.style.display = 'none';
+						offlineList.style.display = '';
+						if (offlineCountBadge) {
+							offlineCountBadge.style.display = '';
+							offlineCountBadge.textContent = `${offline.length} offline`;
+						}
+						offlineList.innerHTML = offline.map(w => `
+							<li>
+								<span class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></span>
+								<span class="badge badge-danger">Offline</span>
+							</li>
+						`).join('');
+						applyWorkerNameCensoring(offlineList);
+					}
+				}
+			} catch (_) {}
+		}
+
+		function escapeHTML(str) {
+			return String(str)
+				.replaceAll('&', '&amp;')
+				.replaceAll('<', '&lt;')
+				.replaceAll('>', '&gt;')
+				.replaceAll('"', '&quot;')
+				.replaceAll("'", '&#39;');
+		}
+
+		function escapeAttr(str) {
+			return escapeHTML(str);
+		}
+
+		attachRemoveConfirms(document);
+		applyWorkerNameCensoring(document);
+		updatePrivacyToggle();
+
+		const privacyToggle = document.getElementById('privacyToggleNames');
+		if (privacyToggle) {
+			privacyToggle.addEventListener('click', function() {
+				hideWorkerNames = !hideWorkerNames;
+				updatePrivacyToggle();
+				applyWorkerNameCensoring(document);
+			});
+		}
+
+		refreshSavedWorkers();
+		setInterval(refreshSavedWorkers, 5000);
+		updateSortOrderButtonText();
+		if (sortFieldSelect) {
+			sortFieldSelect.addEventListener('change', function() {
+				currentSortField = sortFieldSelect.value || 'connection_seq';
+				renderOnlineWorkers(lastOnlineWorkers);
+			});
+		}
+		if (sortOrderBtn) {
+			sortOrderBtn.addEventListener('click', function() {
+				sortDescending = !sortDescending;
+				updateSortOrderButtonText();
+				renderOnlineWorkers(lastOnlineWorkers);
+			});
+		}
+	})();
+	</script>
+	{{end}}
+</body>
+</html>
