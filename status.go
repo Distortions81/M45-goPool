@@ -3754,6 +3754,35 @@ func (s *StatusServer) renderErrorPage(w http.ResponseWriter, r *http.Request, s
 	}
 }
 
+// handleStaticFile returns an http.HandlerFunc that serves a static HTML file
+// from the www directory. This is used for legal pages like privacy.html and terms.html.
+func (s *StatusServer) handleStaticFile(filename string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cfg := s.Config()
+		wwwDir := filepath.Join(cfg.DataDir, "www")
+		filePath := filepath.Join(wwwDir, filename)
+
+		// Security check: ensure the resolved path is within wwwDir
+		cleanPath := filepath.Clean(filePath)
+		wwwDirClean := filepath.Clean(wwwDir)
+		if !strings.HasPrefix(cleanPath, wwwDirClean) {
+			http.Error(w, "Invalid file path", http.StatusBadRequest)
+			return
+		}
+
+		// Check if file exists
+		info, err := os.Stat(cleanPath)
+		if err != nil || info.IsDir() {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Serve the file
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		http.ServeFile(w, r, cleanPath)
+	}
+}
+
 func (s *StatusServer) Ready() bool {
 	if s.jobMgr == nil || !s.jobMgr.Ready() {
 		return false
