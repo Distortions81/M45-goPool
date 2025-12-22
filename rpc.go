@@ -91,7 +91,7 @@ func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
 		pass:    cfg.RPCPass,
 		metrics: metrics,
 		client: &http.Client{
-			Timeout:   10 * time.Second,
+			Timeout:   60 * time.Second,
 			Transport: transport,
 		},
 		lp: &http.Client{
