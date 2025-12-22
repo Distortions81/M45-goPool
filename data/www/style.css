@@ -308,6 +308,13 @@ header {
 	gap: 4px;
 }
 
+.connect-panel-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
 .connect-panel-title {
 	margin: 0;
 	font-size: 18px;
@@ -320,6 +327,22 @@ header {
 	margin: 0;
 	color: rgba(216, 235, 255, 0.85);
 	font-size: 14px;
+}
+
+.connect-panel-cta {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: rgba(44, 241, 194, 0.8);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.connect-panel-cta-icon {
+	font-size: 16px;
+	line-height: 1;
 }
 
 [data-theme="light"] .connect-panel-title {
