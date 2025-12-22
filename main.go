@@ -712,13 +712,48 @@ func main() {
 			}()
 		}
 
-		// If HTTP and HTTPS ports differ, start a small HTTP
-		// redirector on the HTTP port that sends users to the
-		// HTTPS URL on the TLS port.
+		// If HTTP and HTTPS ports differ, start HTTP server that serves
+		// main page (with auto-redirect), privacy, terms, and static files.
 		if httpAddr != "" && httpAddr != httpsAddr {
-			redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			selectiveHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				path := r.URL.Path
+				// Main page: serve with auto-redirect to HTTPS
+				if path == "/" {
+					host := r.Host
+					if h, _, err := net.SplitHostPort(host); err == nil {
+						host = h
+					}
+					_, tlsPort, err := net.SplitHostPort(httpsAddr)
+					targetHost := host
+					if err == nil && tlsPort != "" && tlsPort != "443" {
+						targetHost = net.JoinHostPort(host, tlsPort)
+					}
+					target := "https://" + targetHost + r.URL.RequestURI()
+					// Serve a simple HTML page with meta refresh redirect
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="refresh" content="0; url=%s">
+<title>Redirecting...</title>
+</head>
+<body>
+<p>Redirecting to <a href="%s">HTTPS</a>...</p>
+</body>
+</html>`, target, target)
+					return
+				}
+				// Allow privacy, terms, and static files
+				if strings.HasPrefix(path, "/privacy") || strings.HasPrefix(path, "/terms") ||
+				   strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".css") ||
+				   strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".png") ||
+				   strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".ico") ||
+				   strings.HasPrefix(path, "/.well-known/") {
+					mux.ServeHTTP(w, r)
+					return
+				}
+				// Redirect everything else to HTTPS
 				host := r.Host
-				// Strip any existing port from Host.
 				if h, _, err := net.SplitHostPort(host); err == nil {
 					host = h
 				}
@@ -732,12 +767,12 @@ func main() {
 			})
 			statusHTTPServer = &http.Server{
 				Addr:    httpAddr,
-				Handler: redirectHandler,
+				Handler: selectiveHandler,
 			}
 			go func() {
-				logger.Info("status http redirector listening", "addr", httpAddr, "target", httpsAddr)
+				logger.Info("status page listening (http, selective)", "addr", httpAddr)
 				if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fatal("status redirect server error", err)
+					fatal("status server error", err)
 				}
 			}()
 		}
