@@ -1004,6 +1004,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		WindowSubmissions:   stats.WindowSubmissions,
 		ShareRate:           accRate,
 		ConnectionID:        mc.connectionIDString(),
+		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
 		WalletValidated:     valid,
 	}
 }
@@ -2184,6 +2185,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		SharesPerMinute float64 `json:"shares_per_minute"`
 		Accepted        uint64  `json:"accepted"`
 		Difficulty      float64 `json:"difficulty"`
+		ConnectionSeq   uint64  `json:"connection_seq,omitempty"`
 	}
 	now := time.Now()
 	resp := struct {
@@ -2212,6 +2214,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 			SharesPerMinute: view.ShareRate,
 			Accepted:        view.Accepted,
 			Difficulty:      view.Difficulty,
+			ConnectionSeq:   view.ConnectionSeq,
 		}
 		if online {
 			resp.OnlineCount++

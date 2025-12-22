@@ -90,6 +90,15 @@
 						</button>
 					</div>
 				</div>
+				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
+					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
+					<select id="savedWorkersSortField" class="input" style="max-width:220px;">
+						<option value="connection_seq">Connection #</option>
+						<option value="name">Name</option>
+						<option value="hashrate">Hashrate</option>
+					</select>
+					<button id="savedWorkersSortOrder" class="btn btn-secondary" type="button" aria-label="Toggle sort order">Desc ↓</button>
+				</div>
 				<div style="overflow-x:auto; margin-top:12px;">
 					<table class="table">
 						<thead>
@@ -321,6 +330,92 @@
 			return `${(d / 1_000_000.0).toFixed(1)}M`;
 		}
 
+		const onlineBody = document.getElementById('onlineWorkersBody');
+		const sortFieldSelect = document.getElementById('savedWorkersSortField');
+		const sortOrderBtn = document.getElementById('savedWorkersSortOrder');
+		let currentSortField = sortFieldSelect && sortFieldSelect.value ? sortFieldSelect.value : 'connection_seq';
+		let sortDescending = true;
+		let lastOnlineWorkers = [];
+
+		function updateSortOrderButtonText() {
+			if (!sortOrderBtn) return;
+			sortOrderBtn.textContent = sortDescending ? 'Desc ↓' : 'Asc ↑';
+			sortOrderBtn.setAttribute('aria-pressed', sortDescending ? 'true' : 'false');
+		}
+
+		function getSortValue(field, worker) {
+			if (!worker) return '';
+			switch (field) {
+			case 'name':
+				return (worker.name || '').toLowerCase();
+			case 'hashrate':
+				return Number(worker.hashrate || 0);
+			default:
+				return Number(worker.connection_seq || 0);
+			}
+		}
+
+		function compareWorkers(a, b) {
+			const aVal = getSortValue(currentSortField, a);
+			const bVal = getSortValue(currentSortField, b);
+			if (typeof aVal === 'string' && typeof bVal === 'string') {
+				const cmp = aVal.localeCompare(bVal);
+				if (cmp !== 0) return cmp;
+			} else if (typeof aVal === 'number' && typeof bVal === 'number') {
+				if (aVal < bVal) return -1;
+				if (aVal > bVal) return 1;
+			}
+			const nameA = (a.name || '').toLowerCase();
+			const nameB = (b.name || '').toLowerCase();
+			if (nameA < nameB) return -1;
+			if (nameA > nameB) return 1;
+			return 0;
+		}
+
+		function sortWorkers(workers) {
+			const clone = workers.slice();
+			clone.sort((a, b) => {
+				const cmp = compareWorkers(a, b);
+				return sortDescending ? -cmp : cmp;
+			});
+			return clone;
+		}
+
+		function renderOnlineWorkers(workers) {
+			lastOnlineWorkers = Array.isArray(workers) ? workers.slice() : [];
+			if (!onlineBody) return;
+			const sorted = sortWorkers(lastOnlineWorkers);
+			if (sorted.length === 0) {
+				onlineBody.innerHTML = '<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>';
+				return;
+			}
+			onlineBody.innerHTML = sorted.map(w => `
+				<tr>
+					<td class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></td>
+					<td>${Number(w.hashrate || 0) > 0 ? formatHashrate(Number(w.hashrate || 0)) : '—'}</td>
+					<td>${formatDiffShort(Number(w.difficulty || 0))}</td>
+					<td>${formatShareRatePerMin(Number(w.shares_per_minute || 0))}</td>
+					<td>${Number(w.accepted || 0)}</td>
+					<td style="text-align:right;">
+						<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+							<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+							<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<polyline points="3 6 5 6 21 6"></polyline>
+									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+									<path d="M10 11v6"></path>
+									<path d="M14 11v6"></path>
+									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+								</svg>
+							</button>
+						</form>
+					</td>
+				</tr>
+			`).join('');
+			attachRemoveConfirms(onlineBody);
+			applyWorkerNameCensoring(onlineBody);
+		}
+
 		// Censor a string by keeping first 8 and last 8 chars with ".." in between
 		function censorString(s) {
 			if (!s || s.length <= 16) return s;
@@ -368,53 +463,22 @@
 				if (savedMax) savedMax.textContent = data.saved_max ?? '';
 				if (onlineCount) onlineCount.textContent = data.online_count ?? '';
 
-				const onlineBody = document.getElementById('onlineWorkersBody');
-				if (onlineBody) {
-					const online = Array.isArray(data.online_workers) ? data.online_workers : [];
-					// Update total hashrate time series (sum of online worker hashrate).
-					let totalHashrate = 0;
-					let totalShares = 0;
-					for (const w of online) {
-						totalHashrate += Number(w.hashrate || 0);
-						totalShares += Number(w.shares_per_minute || 0);
-					}
-					const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
-					const safeShares = isFinite(totalShares) ? totalShares : 0;
-					hashrateData.push(safeHashrate);
-					sharesData.push(safeShares);
-					if (hashrateData.length > maxDataPoints) hashrateData.shift();
-					if (sharesData.length > maxDataPoints) sharesData.shift();
-					drawHashrateGraph();
-					if (online.length === 0) {
-						onlineBody.innerHTML = '<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>';
-					} else {
-						onlineBody.innerHTML = online.map(w => `
-							<tr>
-								<td class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></td>
-								<td>${Number(w.hashrate || 0) > 0 ? formatHashrate(Number(w.hashrate || 0)) : '—'}</td>
-								<td>${formatDiffShort(Number(w.difficulty || 0))}</td>
-								<td>${formatShareRatePerMin(Number(w.shares_per_minute || 0))}</td>
-								<td>${Number(w.accepted || 0)}</td>
-								<td style="text-align:right;">
-									<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-										<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
-										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-												<polyline points="3 6 5 6 21 6"></polyline>
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-												<path d="M10 11v6"></path>
-												<path d="M14 11v6"></path>
-												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-											</svg>
-										</button>
-									</form>
-								</td>
-							</tr>
-						`).join('');
-					}
-					attachRemoveConfirms(onlineBody);
-					applyWorkerNameCensoring(onlineBody);
+				const online = Array.isArray(data.online_workers) ? data.online_workers : [];
+				// Update total hashrate time series (sum of online worker hashrate).
+				let totalHashrate = 0;
+				let totalShares = 0;
+				for (const w of online) {
+					totalHashrate += Number(w.hashrate || 0);
+					totalShares += Number(w.shares_per_minute || 0);
 				}
+				const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
+				const safeShares = isFinite(totalShares) ? totalShares : 0;
+				hashrateData.push(safeHashrate);
+				sharesData.push(safeShares);
+				if (hashrateData.length > maxDataPoints) hashrateData.shift();
+				if (sharesData.length > maxDataPoints) sharesData.shift();
+				drawHashrateGraph();
+				renderOnlineWorkers(online);
 
 				const offlineList = document.getElementById('offlineWorkersList');
 				const offlineSection = document.getElementById('offlineSection');
@@ -477,6 +541,20 @@
 
 		refreshSavedWorkers();
 		setInterval(refreshSavedWorkers, 5000);
+		updateSortOrderButtonText();
+		if (sortFieldSelect) {
+			sortFieldSelect.addEventListener('change', function() {
+				currentSortField = sortFieldSelect.value || 'connection_seq';
+				renderOnlineWorkers(lastOnlineWorkers);
+			});
+		}
+		if (sortOrderBtn) {
+			sortOrderBtn.addEventListener('click', function() {
+				sortDescending = !sortDescending;
+				updateSortOrderButtonText();
+				renderOnlineWorkers(lastOnlineWorkers);
+			});
+		}
 	})();
 	</script>
 	{{end}}
