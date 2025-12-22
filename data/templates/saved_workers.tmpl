@@ -52,6 +52,18 @@
 						<li>
 							<span class="mono sensitive-worker" data-worker-name="{{.Name}}"></span>
 							<span class="badge badge-danger">Offline</span>
+							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+								<input type="hidden" name="worker" value="{{.Name}}">
+								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+										<path d="M10 11v6"></path>
+										<path d="M14 11v6"></path>
+										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+									</svg>
+								</button>
+							</form>
 						</li>
 					{{end}}
 				</ul>
@@ -505,9 +517,22 @@
 							<li>
 								<span class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></span>
 								<span class="badge badge-danger">Offline</span>
+								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+									<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<polyline points="3 6 5 6 21 6"></polyline>
+											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+											<path d="M10 11v6"></path>
+											<path d="M14 11v6"></path>
+											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+										</svg>
+									</button>
+								</form>
 							</li>
 						`).join('');
 						applyWorkerNameCensoring(offlineList);
+						attachRemoveConfirms(offlineList);
 					}
 				}
 			} catch (_) {}
