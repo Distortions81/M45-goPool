@@ -1,0 +1,62 @@
+{{/* Clerk embedded sign-in page */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Sign In</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<div class="card">
+			<h2>Sign in</h2>
+			<p class="text-sm">Sign in to access your saved workers dashboard.</p>
+			<div id="clerk-sign-in" style="margin-top: 18px;"></div>
+			<noscript>
+				<p class="text-sm" style="color:#f88d8d;margin-top:12px;">
+					Sign-in requires JavaScript to be enabled.
+				</p>
+			</noscript>
+		</div>
+
+		{{template "footer" .}}
+	</div>
+
+	<script async crossorigin="anonymous"
+		src="https://cdn.clerk.com/clerk.js"
+		data-clerk-publishable-key="{{.ClerkPublishableKey}}"></script>
+	<script>
+	(function() {
+		const target = document.getElementById('clerk-sign-in');
+		if (!target) return;
+		const afterSignInUrl = {{printf "%q" .AfterSignInURL}};
+		const afterSignUpUrl = {{printf "%q" .AfterSignUpURL}};
+
+		async function mount() {
+			if (!window.Clerk) {
+				target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">Sign-in failed to load. Please try again.</p>';
+				return;
+			}
+			try {
+				await window.Clerk.load();
+				window.Clerk.mountSignIn(target, {
+					afterSignInUrl,
+					afterSignUpUrl,
+				});
+			} catch (err) {
+				console.error('Clerk sign-in load failed', err);
+				target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">Sign-in failed to load. Please try again.</p>';
+			}
+		}
+
+		if (document.readyState === 'complete') {
+			mount();
+		} else {
+			window.addEventListener('load', mount);
+		}
+	})();
+	</script>
+</body>
+</html>

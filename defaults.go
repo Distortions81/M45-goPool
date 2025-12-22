@@ -70,7 +70,6 @@ func defaultConfig() Config {
 		ClerkSignInURL:          defaultClerkSignInURL,
 		ClerkCallbackPath:       defaultClerkCallbackPath,
 		ClerkFrontendAPIURL:     "",
-		ClerkBackendAPIURL:      "",
 		ClerkSessionCookieName:  defaultClerkSessionCookieName,
 		RPCURL:                  defaultRPCURL,
 		RPCUser:                 defaultRPCUser,

@@ -691,6 +691,7 @@ func main() {
 	mux.HandleFunc("/worker/remove", statusServer.withClerkUser(statusServer.handleWorkerRemove))
 	mux.HandleFunc("/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkers))
 	mux.HandleFunc("/login", statusServer.handleClerkLogin)
+	mux.HandleFunc("/sign-in", statusServer.handleSignIn)
 	mux.HandleFunc("/logout", statusServer.handleClerkLogout)
 	mux.HandleFunc(cfg.ClerkCallbackPath, statusServer.handleClerkCallback)
 	mux.HandleFunc("/node", statusServer.handleNodeInfo)

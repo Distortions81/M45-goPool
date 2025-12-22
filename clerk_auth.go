@@ -22,7 +22,7 @@ import (
 
 const (
 	defaultClerkIssuerURL         = "https://clerk.clerk.dev"
-	defaultClerkJWKSURL           = "https://clerk.clerk.dev/.well-known/jwks"
+	defaultClerkJWKSURL           = "https://clerk.clerk.dev/.well-known/jwks.json"
 	defaultClerkSessionCookieName = "__session"
 	defaultClerkSignInURL         = "https://auth.clerk.dev/sign-in"
 	defaultClerkCallbackPath      = "/clerk/callback"

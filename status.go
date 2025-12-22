@@ -495,6 +495,13 @@ type WorkerStatusData struct {
 	HasShareHashDetails bool
 }
 
+type SignInPageData struct {
+	StatusData
+	ClerkPublishableKey string
+	AfterSignInURL      string
+	AfterSignUpURL      string
+}
+
 // workerPrivacyModeFromRequest parses the "privacy" query parameter and
 // returns whether privacy mode should be enabled for a request. Privacy is
 // enabled by default (hiding wallet and hash details) unless explicitly
@@ -1203,6 +1210,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
 	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
+	signInPath := filepath.Join(dataDir, "templates", "sign_in.tmpl")
 	savedWorkersPath := filepath.Join(dataDir, "templates", "saved_workers.tmpl")
 	workerStatusPath := filepath.Join(dataDir, "templates", "worker_status.tmpl")
 	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
@@ -1226,6 +1234,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	workerLoginHTML, err := os.ReadFile(workerLoginPath)
 	if err != nil {
 		return nil, fmt.Errorf("load worker login template: %w", err)
+	}
+	signInHTML, err := os.ReadFile(signInPath)
+	if err != nil {
+		return nil, fmt.Errorf("load sign in template: %w", err)
 	}
 	savedWorkersHTML, err := os.ReadFile(savedWorkersPath)
 	if err != nil {
@@ -1258,6 +1270,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
 	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
+	template.Must(tmpl.New("sign_in").Parse(string(signInHTML)))
 	template.Must(tmpl.New("saved_workers").Parse(string(savedWorkersHTML)))
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
 	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
@@ -2094,11 +2107,50 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		}
-		loginTarget := "/login?redirect=" + url.QueryEscape(redirect)
+		loginTarget := "/sign-in?redirect=" + url.QueryEscape(redirect)
 		http.Redirect(w, r, loginTarget, http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		http.NotFound(w, r)
+		return
+	}
+	start := time.Now()
+	base := s.baseTemplateData(start)
+
+	pk := strings.TrimSpace(os.Getenv("CLERK_PUBLISHABLE_KEY"))
+	if pk == "" {
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Sign-in misconfigured",
+			"Sign-in is not configured on this server.",
+			"Missing environment variable CLERK_PUBLISHABLE_KEY (expected pk_live_... or pk_test_...).")
+		return
+	}
+
+	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
+	if redirect == "" {
+		redirect = "/saved-workers"
+	}
+
+	data := SignInPageData{
+		StatusData:           base,
+		ClerkPublishableKey:  pk,
+		AfterSignInURL:       redirect,
+		AfterSignUpURL:       redirect,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "sign_in", data); err != nil {
+		logger.Error("sign in template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Sign-in page error",
+			"We couldn't render the sign-in page.",
+			"Template error while rendering sign-in.")
+	}
 }
 
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {

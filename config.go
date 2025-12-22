@@ -57,8 +57,6 @@ type Config struct {
 	ClerkCallbackPath string
 	// ClerkFrontendAPIURL is optionally passed to Clerk so it can identify your front-end instance.
 	ClerkFrontendAPIURL string
-	// ClerkBackendAPIURL is the base Clerk backend endpoint (unused, optional).
-	ClerkBackendAPIURL string
 	// ClerkSessionCookieName is the cookie that Clerk sets for authenticated sessions.
 	ClerkSessionCookieName string
 	// ClerkSecretKey is the Clerk backend secret key (sk_test_... / sk_live_...).
@@ -217,7 +215,6 @@ type EffectiveConfig struct {
 	ClerkSignInURL                    string  `json:"clerk_signin_url,omitempty"`
 	ClerkCallbackPath                 string  `json:"clerk_callback_path,omitempty"`
 	ClerkFrontendAPIURL               string  `json:"clerk_frontend_api_url,omitempty"`
-	ClerkBackendAPIURL                string  `json:"clerk_backend_api_url,omitempty"`
 	ClerkSessionCookieName            string  `json:"clerk_session_cookie_name,omitempty"`
 	RPCURL                            string  `json:"rpc_url"`
 	RPCUser                           string  `json:"rpc_user"`
@@ -298,7 +295,6 @@ type authConfig struct {
 	ClerkSignInURL         string `toml:"clerk_signin_url"`
 	ClerkCallbackPath      string `toml:"clerk_callback_path"`
 	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url"`
-	ClerkBackendAPIURL     string `toml:"clerk_backend_api_url"`
 	ClerkSessionCookieName string `toml:"clerk_session_cookie_name"`
 }
 
@@ -462,7 +458,6 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ClerkSignInURL:         cfg.ClerkSignInURL,
 			ClerkCallbackPath:      cfg.ClerkCallbackPath,
 			ClerkFrontendAPIURL:    cfg.ClerkFrontendAPIURL,
-			ClerkBackendAPIURL:     cfg.ClerkBackendAPIURL,
 			ClerkSessionCookieName: cfg.ClerkSessionCookieName,
 		},
 	}
@@ -822,9 +817,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Auth.ClerkFrontendAPIURL != "" {
 		cfg.ClerkFrontendAPIURL = strings.TrimSpace(fc.Auth.ClerkFrontendAPIURL)
 	}
-	if fc.Auth.ClerkBackendAPIURL != "" {
-		cfg.ClerkBackendAPIURL = strings.TrimSpace(fc.Auth.ClerkBackendAPIURL)
-	}
 	if fc.Auth.ClerkSessionCookieName != "" {
 		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
 	}
@@ -1002,7 +994,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		ClerkSignInURL:                    cfg.ClerkSignInURL,
 		ClerkCallbackPath:                 cfg.ClerkCallbackPath,
 		ClerkFrontendAPIURL:               cfg.ClerkFrontendAPIURL,
-		ClerkBackendAPIURL:                cfg.ClerkBackendAPIURL,
 		ClerkSessionCookieName:            cfg.ClerkSessionCookieName,
 		RPCURL:                            cfg.RPCURL,
 		RPCUser:                           cfg.RPCUser,
