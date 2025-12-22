@@ -24,11 +24,18 @@
 		</div>
 		<nav class="header-links">
 			<a class="header-link home-link" href="/">🏠 Overview</a>
-			<a class="header-link about-link" href="/about">ℹ️ About</a>
-			<a class="header-link" href="/pool">💎 Pool</a>
-			<a class="header-link" href="/node">🔗 Node</a>
-			<a class="header-link" href="/server">🖥️ Server</a>
-			<a class="header-link worker-login-link" href="/worker">👤 Login</a>
+			<div class="header-dropdown">
+				<button class="header-link more-info-toggle" id="moreInfoMenuButton" type="button" aria-haspopup="true">
+					More Info ▼
+				</button>
+				<div class="header-dropdown-menu" role="menu" aria-labelledby="moreInfoMenuButton">
+					<a class="header-dropdown-link" role="menuitem" href="/about">ℹ️ About Us</a>
+					<a class="header-dropdown-link" role="menuitem" href="/pool">💎 Pool Stats</a>
+					<a class="header-dropdown-link" role="menuitem" href="/node">🔗 Bitcoin Node Info</a>
+					<a class="header-dropdown-link" role="menuitem" href="/server">🖥️ Server Stats</a>
+				</div>
+			</div>
+			<a class="header-link worker-login-link" href="/worker">👤 Sign-In</a>
 			<span class="header-sep" aria-hidden="true"></span>
 			{{if .GitHubURL}}
 			<a class="header-link github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a>

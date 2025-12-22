@@ -10,22 +10,33 @@
 	{{template "header" .}}
 	<div class="page">
 		{{if .ClerkEnabled}}
-		<div class="card">
-			<h2>Login to track multiple workers</h2>
-			<p class="text-sm">Sign in with Google (powered by Clerk) to save names for quick access.</p>
-			<a class="btn" href="{{.ClerkLoginURL}}">Sign in with Google</a>
+		<div class="card login-card">
+			<div class="login-card-header">
+				<span class="login-card-badge">New Feature!</span>
+				<h2>Personal Worker Dashboard</h2>
+			</div>
+			<p class="text-sm login-card-description">
+				Sign in with Google to unlock a dedicated dashboard for your workers!
+			</p>
+			<a class="btn btn-highlight" href="{{.ClerkLoginURL}}">Sign in with Google</a>
 		</div>
 		{{end}}
-		<div class="card">
-			<h2>Quick Worker Lookup</h2>
+		<div class="card worker-lookup-card">
+			<div class="lookup-card-header">
+				<h2>Quick Worker Lookup</h2>
+				<p class="text-sm lookup-card-description">
+					Enter the full wallet.worker-name from your miner check hash rate, shares and online status without signing in.
+			</div>
 			<form method="get" action="/worker/sha256" id="workerLookupForm">
 				<div class="label">Worker ID</div>
 				<div class="input-row">
-					<input class="input" type="text" id="workerInput">
+					<input class="input" type="text" id="workerInput" placeholder="walletName.workerName">
 					<input type="hidden" name="hash" id="workerHash">
 					<button class="btn" type="submit">Search</button>
 				</div>
-				<p class="text-sm">Use the full wallet.worker-name from your miner.</p>
+				<p class="text-sm lookup-card-footnote">
+					Use the exact wallet.worker-name shown in your miner configuration.
+				</p>
 			</form>
 			{{if .Error}}
 				<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.Error}}</p>
