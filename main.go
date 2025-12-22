@@ -212,6 +212,70 @@ type fileServerWithFallback struct {
 	wwwRoot    *os.Root
 }
 
+// httpRedirectInjector wraps an http.Handler and injects a meta refresh redirect
+// into HTML responses for the main page when served over HTTP.
+type httpRedirectInjector struct {
+	mux       http.Handler
+	httpsAddr string
+}
+
+func (h *httpRedirectInjector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Only inject redirect for the main page
+	if r.URL.Path != "/" {
+		h.mux.ServeHTTP(w, r)
+		return
+	}
+
+	// Calculate HTTPS target URL
+	host := r.Host
+	if hostOnly, _, err := net.SplitHostPort(host); err == nil {
+		host = hostOnly
+	}
+	_, tlsPort, err := net.SplitHostPort(h.httpsAddr)
+	targetHost := host
+	if err == nil && tlsPort != "" && tlsPort != "443" {
+		targetHost = net.JoinHostPort(host, tlsPort)
+	}
+	httpsURL := "https://" + targetHost + r.URL.RequestURI()
+
+	// Capture the response
+	rec := &responseRecorder{
+		ResponseWriter: w,
+		statusCode:     200,
+	}
+	h.mux.ServeHTTP(rec, r)
+
+	// If it's HTML, inject meta refresh
+	if rec.statusCode == 200 && strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
+		body := rec.body.String()
+		// Inject meta refresh right after <head> tag
+		metaTag := fmt.Sprintf(`<meta http-equiv="refresh" content="0; url=%s">`, httpsURL)
+		if idx := strings.Index(body, "<head>"); idx != -1 {
+			body = body[:idx+6] + "\n" + metaTag + body[idx+6:]
+		} else if idx := strings.Index(body, "<HEAD>"); idx != -1 {
+			body = body[:idx+6] + "\n" + metaTag + body[idx+6:]
+		}
+		w.Write([]byte(body))
+	}
+}
+
+// responseRecorder captures the response body for modification
+type responseRecorder struct {
+	http.ResponseWriter
+	body       strings.Builder
+	statusCode int
+}
+
+func (r *responseRecorder) Write(b []byte) (int, error) {
+	r.body.Write(b)
+	return len(b), nil
+}
+
+func (r *responseRecorder) WriteHeader(statusCode int) {
+	r.statusCode = statusCode
+	// Don't call underlying WriteHeader yet - we'll write everything at once
+}
+
 func (h *fileServerWithFallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if file exists in www directory using os.Root for secure path resolution.
 	// os.Root provides OS-level guarantees against path traversal by ensuring all
@@ -715,41 +779,20 @@ func main() {
 		// If HTTP and HTTPS ports differ, start HTTP server that serves
 		// main page (with auto-redirect), privacy, terms, and static files.
 		if httpAddr != "" && httpAddr != httpsAddr {
+			// Create a wrapper that injects meta refresh into main page HTML
+			httpOnlyHandler := &httpRedirectInjector{
+				mux:       mux,
+				httpsAddr: httpsAddr,
+			}
 			selectiveHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				path := r.URL.Path
-				// Main page: serve with auto-redirect to HTTPS
-				if path == "/" {
-					host := r.Host
-					if h, _, err := net.SplitHostPort(host); err == nil {
-						host = h
-					}
-					_, tlsPort, err := net.SplitHostPort(httpsAddr)
-					targetHost := host
-					if err == nil && tlsPort != "" && tlsPort != "443" {
-						targetHost = net.JoinHostPort(host, tlsPort)
-					}
-					target := "https://" + targetHost + r.URL.RequestURI()
-					// Serve a simple HTML page with meta refresh redirect
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					fmt.Fprintf(w, `<!DOCTYPE html>
-<html>
-<head>
-<meta http-equiv="refresh" content="0; url=%s">
-<title>Redirecting...</title>
-</head>
-<body>
-<p>Redirecting to <a href="%s">HTTPS</a>...</p>
-</body>
-</html>`, target, target)
-					return
-				}
-				// Allow privacy, terms, and static files
-				if strings.HasPrefix(path, "/privacy") || strings.HasPrefix(path, "/terms") ||
+				// Main page, privacy, terms, and static files: serve via injector
+				if path == "/" || strings.HasPrefix(path, "/privacy") || strings.HasPrefix(path, "/terms") ||
 				   strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".css") ||
 				   strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".png") ||
 				   strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".ico") ||
 				   strings.HasPrefix(path, "/.well-known/") {
-					mux.ServeHTTP(w, r)
+					httpOnlyHandler.ServeHTTP(w, r)
 					return
 				}
 				// Redirect everything else to HTTPS
