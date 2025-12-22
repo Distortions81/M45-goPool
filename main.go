@@ -499,7 +499,7 @@ func main() {
 		if err != nil {
 			fatal("net log file", err)
 		}
-		setNetLogWriter(newRollingFileWriter(netLogPath))
+			setNetLogWriter(newDailyRollingFileWriter(netLogPath))
 	}
 
 	logger.Info("starting pool", "listen_addr", cfg.ListenAddr, "status_addr", cfg.StatusAddr)
