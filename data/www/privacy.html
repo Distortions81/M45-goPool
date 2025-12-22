@@ -171,9 +171,8 @@
     <h3>2.1 Information You Provide</h3>
     <p>When you use the Service, we collect the following information that you directly provide:</p>
     <ul>
-      <li><strong>User IDs:</strong> Bitcoin wallet addresses or other identifiers you use to receive mining rewards</li>
-      <li><strong>Worker IDs:</strong> Custom names or identifiers you assign to your mining devices or software</li>
-      <li><strong>Authentication Credentials:</strong> Passwords or authentication tokens (if applicable) for accessing worker statistics or account features</li>
+      <li><strong>Worker IDs:</strong> Custom names or identifiers provided by your mining hardware/software, or manually assigned by you through the personal dashboard if you use our optional login system. Worker IDs contain Bitcoin wallet addresses used to receive mining rewards.</li>
+      <li><strong>Login System User IDs:</strong> If you use our optional login system, we store user IDs provided by Clerk.com (our authentication service provider) to associate your account with your workers and statistics</li>
     </ul>
 
     <h3>2.2 Automatically Collected Information</h3>
@@ -232,14 +231,14 @@
       </thead>
       <tbody>
         <tr>
-          <td>User IDs (Wallet Addresses)</td>
-          <td>Retained indefinitely while account is active; may be retained after inactivity for accounting and legal purposes</td>
-          <td>Payment processing, accounting, legal compliance</td>
-        </tr>
-        <tr>
           <td>Worker IDs</td>
           <td>Retained indefinitely while account is active; may be retained after inactivity for accounting and legal purposes</td>
           <td>Worker identification, performance tracking</td>
+        </tr>
+        <tr>
+          <td>Login System User IDs</td>
+          <td>Retained while account is active; deleted upon account deletion request</td>
+          <td>Account association, dashboard access</td>
         </tr>
         <tr>
           <td>System Logs (Connection Logs, Error Logs)</td>
@@ -287,12 +286,13 @@
     <p>We may share information with trusted third-party service providers who assist in operating the Service, such as:</p>
     <ul>
       <li>Hosting and infrastructure providers</li>
+      <li>Authentication services (Clerk.com) for optional login functionality</li>
       <li>Payment processors and blockchain services</li>
       <li>Security and anti-fraud services</li>
       <li>Analytics and monitoring tools</li>
       <li>Technical support and maintenance contractors</li>
     </ul>
-    <p>These service providers are contractually obligated to use information only for specified purposes and to maintain appropriate security measures.</p>
+    <p>These service providers are contractually obligated to use information only for specified purposes and to maintain appropriate security measures. If you use our optional login system, Clerk.com processes your authentication and provides us with a user ID to associate with your account.</p>
 
     <h4>5.2.2 Legal Requirements</h4>
     <p>We may disclose information when required by law or in response to:</p>
