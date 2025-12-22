@@ -1890,6 +1890,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	}
 
 	result := make(map[string]interface{})
+	shouldSendVersionMask := false
 	for _, ext := range rawExts {
 		name, _ := ext.(string)
 		switch name {
@@ -1931,7 +1932,11 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			result["version-rolling"] = true
 			result["version-rolling.mask"] = fmt.Sprintf("%08x", mask)
 			result["version-rolling.min-bit-count"] = mc.minVerBits
-			mc.sendVersionMask()
+			// Important: some miners (including some cgminer-based firmwares)
+			// expect the immediate next line after mining.configure to be its
+			// JSON-RPC response. If we send an unsolicited notification before
+			// the response, they may treat configure as failed and reconnect.
+			shouldSendVersionMask = true
 		default:
 			// Unknown extension; explicitly deny so miners don't retry forever.
 			result[name] = false
@@ -1939,6 +1944,9 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	}
 
 	mc.writeResponse(StratumResponse{ID: req.ID, Result: result, Error: nil})
+	if shouldSendVersionMask {
+		mc.sendVersionMask()
+	}
 }
 
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
