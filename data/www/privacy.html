@@ -3,44 +3,458 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy Policy</title>
+  <title>Privacy Policy - m45core.com</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; line-height: 1.6; padding: 0 20px; }
-    h1, h2 { color: #333; }
-    a { color: #1a0dab; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      line-height: 1.7;
+      padding: 20px;
+      color: #2c3e50;
+      background-color: #f8f9fa;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      border-bottom: 3px solid #2c3e50;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .site-name {
+      font-size: 1.3em;
+      color: #3498db;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    h1 {
+      color: #2c3e50;
+      font-size: 2.2em;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .effective-date {
+      font-style: italic;
+      color: #7f8c8d;
+      font-size: 0.95em;
+      margin-top: 10px;
+    }
+    h2 {
+      color: #2c3e50;
+      margin-top: 35px;
+      margin-bottom: 15px;
+      font-size: 1.5em;
+      font-weight: 600;
+      border-left: 4px solid #3498db;
+      padding-left: 12px;
+    }
+    h3 {
+      color: #34495e;
+      margin-top: 25px;
+      margin-bottom: 12px;
+      font-size: 1.2em;
+      font-weight: 600;
+    }
+    h4 {
+      color: #34495e;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      font-size: 1.05em;
+      font-weight: 600;
+    }
+    p {
+      margin: 12px 0;
+      text-align: justify;
+    }
+    a {
+      color: #3498db;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+      color: #2980b9;
+    }
+    .important {
+      background: linear-gradient(to right, #e3f2fd, #e8f5fc);
+      border: 2px solid #2196f3;
+      border-radius: 6px;
+      padding: 20px;
+      margin: 25px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    .important strong {
+      color: #0d47a1;
+      font-size: 1.1em;
+    }
+    ul, ol {
+      margin: 15px 0;
+      padding-left: 35px;
+    }
+    li {
+      margin: 8px 0;
+      line-height: 1.6;
+    }
+    strong {
+      color: #2c3e50;
+      font-weight: 600;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    th, td {
+      border: 1px solid #e0e0e0;
+      padding: 14px;
+      text-align: left;
+      line-height: 1.5;
+    }
+    th {
+      background: linear-gradient(to bottom, #34495e, #2c3e50);
+      color: white;
+      font-weight: 600;
+      font-size: 0.95em;
+    }
+    tr:nth-child(even) {
+      background-color: #f8f9fa;
+    }
+    tr:hover {
+      background-color: #e8f4f8;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 25px;
+      border-top: 2px solid #ecf0f1;
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+    @media (max-width: 768px) {
+      .container { padding: 25px 20px; }
+      h1 { font-size: 1.8em; }
+      h2 { font-size: 1.3em; }
+      body { padding: 10px; }
+      table { font-size: 0.9em; }
+      th, td { padding: 10px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Privacy Policy</h1>
+  <div class="container">
+    <div class="header">
+      <div class="site-name">m45core.com</div>
+      <h1>Privacy Policy</h1>
+      <p class="effective-date">Effective Date: December 22, 2025</p>
+    </div>
 
-  <p>We respect your privacy and collect only the minimum data necessary to operate our service.</p>
+    <div class="important">
+      <strong>PRIVACY NOTICE:</strong> This Privacy Policy describes how we collect, use, store, and protect information when you use our cryptocurrency mining pool service. By using the Service, you consent to the data practices described in this policy.
+    </div>
 
-  <h2>Information We Collect</h2>
-  <p>We only retain the following information:</p>
-  <ul>
-    <li>User IDs</li>
-    <li>Worker IDs</li>
-  </ul>
+    <h2>1. Introduction and Scope</h2>
+    <p>This Privacy Policy ("Policy") applies to the cryptocurrency mining pool service operated by m45core.com (the "Service," "Pool," "we," "us," or "our") and governs the collection, use, disclosure, and protection of information obtained from users ("you," "your," or "User") who connect mining devices or software to the Pool. The Service functions solely as a message forwarding service within the Bitcoin network. All block rewards are distributed automatically by the Bitcoin network through coinbase transactions; we do not process, aggregate, hold, or transmit any cryptocurrency.</p>
 
-  <h2>Logs</h2>
-  <p>System logs may be generated for operational purposes but are deleted automatically after 3 days.</p>
+    <p>This Policy is incorporated into and forms part of our <a href="https://m45core.com/terms.html" target="_blank" rel="noopener noreferrer">Terms of Service</a>. By using the Service, you acknowledge that you have read, understood, and agree to be bound by this Privacy Policy.</p>
 
-  <h2>Data Usage</h2>
-  <p>Retained IDs are used solely to:</p>
-  <ul>
-    <li>Identify users and workers within the system</li>
-    <li>Ensure proper system functionality</li>
-  </ul>
+    <h2>2. Information We Collect</h2>
 
-  <h2>Data Sharing</h2>
-  <p>We do not sell, share, or disclose this data to third parties.</p>
+    <h3>2.1 Information You Provide</h3>
+    <p>When you use the Service, we collect the following information that you directly provide:</p>
+    <ul>
+      <li><strong>User IDs:</strong> Bitcoin wallet addresses or other identifiers you use to receive mining rewards</li>
+      <li><strong>Worker IDs:</strong> Custom names or identifiers you assign to your mining devices or software</li>
+      <li><strong>Authentication Credentials:</strong> Passwords or authentication tokens (if applicable) for accessing worker statistics or account features</li>
+    </ul>
 
-  <h2>Data Retention</h2>
-  <p>User IDs and Worker IDs are retained only as necessary for system operation. Logs are deleted after 3 days.</p>
+    <h3>2.2 Automatically Collected Information</h3>
+    <p>We automatically collect certain technical and operational information when you connect to the Service, including:</p>
+    <ul>
+      <li><strong>Connection Data:</strong> IP addresses, connection timestamps, connection duration, and network protocol information</li>
+      <li><strong>Mining Performance Data:</strong> Hash rates, share submissions (accepted and rejected), difficulty levels, mining software information (type, version, user agent strings)</li>
+      <li><strong>System and Device Information:</strong> Mining hardware types, firmware versions, operating system information, and other technical specifications transmitted by your mining software</li>
+      <li><strong>Block Reward Data:</strong> Block discovery information, reward amounts, transaction hashes, miner wallet addresses, and timestamps</li>
+      <li><strong>Usage Data:</strong> Service access patterns, feature usage, and interaction with Pool interfaces</li>
+    </ul>
 
-  <h2>Changes to This Policy</h2>
-  <p>We may update this policy occasionally. Any changes will be reflected on this page.</p>
+    <h3>2.3 Blockchain Data</h3>
+    <p>Certain information, such as Bitcoin wallet addresses and transaction details, is recorded on public blockchain networks. This information is publicly accessible and permanent. We have no control over blockchain data once recorded.</p>
 
+    <h3>2.4 Information We Do NOT Collect</h3>
+    <p>We do not collect or require:</p>
+    <ul>
+      <li>Personal identification documents (ID cards, passports, driver's licenses)</li>
+      <li>Full legal names (unless voluntarily provided in worker names or communications)</li>
+      <li>Physical addresses or contact information (unless voluntarily provided)</li>
+      <li>Email addresses (unless you choose to provide them for notifications or support)</li>
+      <li>Financial account information (credit cards, bank accounts)</li>
+      <li>Social Security Numbers or government-issued identification numbers</li>
+      <li>Biometric data</li>
+    </ul>
+
+    <h2>3. How We Use Information</h2>
+
+    <h3>3.1 Primary Purposes</h3>
+    <p>We use collected information for the following purposes:</p>
+    <ul>
+      <li><strong>Service Operation:</strong> To operate the message forwarding service, relay mining messages, and maintain operational records</li>
+      <li><strong>Account Management:</strong> To identify users and workers and track mining performance</li>
+      <li><strong>Block Reward Recording:</strong> To record block discoveries and maintain transaction records (note: all block rewards are distributed automatically by the Bitcoin network through the coinbase transaction; we have no control over the distribution process except for determining wallet addresses written into the coinbase, including our pool fee percentage)</li>
+      <li><strong>Performance Monitoring:</strong> To display hashrate statistics, share acceptance rates, and other performance metrics</li>
+      <li><strong>Security and Fraud Prevention:</strong> To detect and prevent abuse, fraud, invalid shares, attacks, and unauthorized access</li>
+      <li><strong>Technical Support:</strong> To troubleshoot issues, respond to support requests, and improve Service reliability</li>
+      <li><strong>Service Improvement:</strong> To analyze usage patterns, optimize pool performance, and develop new features</li>
+      <li><strong>Legal Compliance:</strong> To comply with applicable laws, regulations, legal processes, and governmental requests</li>
+    </ul>
+
+    <h3>3.2 Analytics and Aggregated Data</h3>
+    <p>We may use collected information to generate anonymized, aggregated statistics about pool performance, mining trends, and service usage. These aggregated statistics do not identify individual users and may be publicly displayed or shared.</p>
+
+    <h2>4. Data Retention</h2>
+
+    <h3>4.1 Retention Periods</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Data Type</th>
+          <th>Retention Period</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>User IDs (Wallet Addresses)</td>
+          <td>Retained indefinitely while account is active; may be retained after inactivity for accounting and legal purposes</td>
+          <td>Payment processing, accounting, legal compliance</td>
+        </tr>
+        <tr>
+          <td>Worker IDs</td>
+          <td>Retained indefinitely while account is active; may be retained after inactivity for accounting and legal purposes</td>
+          <td>Worker identification, performance tracking</td>
+        </tr>
+        <tr>
+          <td>System Logs (Connection Logs, Error Logs)</td>
+          <td>Automatically deleted after 3 days under normal operation; may be retained longer if systems are offline, inaccessible, or malfunctioning</td>
+          <td>Troubleshooting, security monitoring</td>
+        </tr>
+        <tr>
+          <td>Mining Performance Data (Shares, Hashrates)</td>
+          <td>Recent data retained for display purposes; older data may be aggregated or deleted</td>
+          <td>Performance statistics, reward calculation</td>
+        </tr>
+        <tr>
+          <td>Block Reward Records</td>
+          <td>Retained for accounting and operational purposes as required by law (typically 7+ years)</td>
+          <td>Financial records, operational history, audits</td>
+        </tr>
+        <tr>
+          <td>Security and Fraud Data</td>
+          <td>Retained as necessary to maintain bans, prevent abuse, and support security investigations</td>
+          <td>Security, fraud prevention, abuse mitigation</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 Data Deletion</h3>
+    <p>We implement automated processes to delete certain data according to the retention schedules above. However, some data may be retained longer when:</p>
+    <ul>
+      <li>Required by applicable laws or regulations;</li>
+      <li>Necessary for legal claims, compliance, or regulatory investigations;</li>
+      <li>Needed to enforce our Terms of Service or protect our rights;</li>
+      <li>Required for accounting, tax, or audit purposes;</li>
+      <li>Stored in backup systems (backups are periodically purged); or</li>
+      <li>Impossible to delete due to technical limitations (e.g., blockchain records).</li>
+    </ul>
+
+    <h2>5. Information Sharing and Disclosure</h2>
+
+    <h3>5.1 General Policy</h3>
+    <p>We do not sell, rent, trade, or otherwise transfer your personally identifiable information to third parties for marketing purposes. We maintain strict controls over information access and sharing.</p>
+
+    <h3>5.2 Limited Sharing</h3>
+    <p>We may share information in the following limited circumstances:</p>
+
+    <h4>5.2.1 Service Providers</h4>
+    <p>We may share information with trusted third-party service providers who assist in operating the Service, such as:</p>
+    <ul>
+      <li>Hosting and infrastructure providers</li>
+      <li>Payment processors and blockchain services</li>
+      <li>Security and anti-fraud services</li>
+      <li>Analytics and monitoring tools</li>
+      <li>Technical support and maintenance contractors</li>
+    </ul>
+    <p>These service providers are contractually obligated to use information only for specified purposes and to maintain appropriate security measures.</p>
+
+    <h4>5.2.2 Legal Requirements</h4>
+    <p>We may disclose information when required by law or in response to:</p>
+    <ul>
+      <li>Legal processes (subpoenas, court orders, search warrants)</li>
+      <li>Government or regulatory requests</li>
+      <li>Law enforcement investigations</li>
+      <li>National security or public safety requirements</li>
+      <li>Tax authority requests and audits</li>
+    </ul>
+
+    <h4>5.2.3 Protection of Rights</h4>
+    <p>We may disclose information when necessary to:</p>
+    <ul>
+      <li>Enforce our Terms of Service or other agreements</li>
+      <li>Protect our rights, property, or safety</li>
+      <li>Protect the rights, property, or safety of users or the public</li>
+      <li>Detect, prevent, or investigate fraud, security breaches, or illegal activities</li>
+      <li>Defend against legal claims or litigation</li>
+    </ul>
+
+    <h4>5.2.4 Business Transfers</h4>
+    <p>In the event of a merger, acquisition, reorganization, bankruptcy, or sale of assets, user information may be transferred to successor entities or acquiring parties. You will be notified of any such change via the Service interface or other reasonable means.</p>
+
+    <h4>5.2.5 Public Information</h4>
+    <p>Certain information may be publicly displayed on the Service, including:</p>
+    <ul>
+      <li>Anonymized or truncated wallet addresses (e.g., "1A2B3C...X9Y8Z7")</li>
+      <li>Worker names (if you choose publicly identifiable names)</li>
+      <li>Mining statistics and performance data</li>
+      <li>Block discovery information</li>
+      <li>Aggregated pool statistics</li>
+    </ul>
+
+    <h4>5.2.6 Consent</h4>
+    <p>We may share information with your explicit consent or at your direction.</p>
+
+    <h2>6. Data Security</h2>
+
+    <h3>6.1 Security Measures</h3>
+    <p>We implement reasonable technical, administrative, and physical security measures designed to protect information from unauthorized access, disclosure, alteration, and destruction. These measures include:</p>
+    <ul>
+      <li>Encryption of data in transit using TLS/SSL protocols</li>
+      <li>Secure server infrastructure with access controls</li>
+      <li>Regular security monitoring and vulnerability assessments</li>
+      <li>Authentication and authorization mechanisms</li>
+      <li>Intrusion detection and prevention systems</li>
+      <li>Regular security updates and patches</li>
+      <li>Employee and contractor training on data protection</li>
+      <li>Limited access to information on a need-to-know basis</li>
+    </ul>
+
+    <h3>6.2 Security Limitations</h3>
+    <p><strong>IMPORTANT:</strong> While we strive to protect your information, no security system is impenetrable. We cannot guarantee absolute security of data transmitted over the internet or stored electronically. You acknowledge and accept the inherent security risks of internet-based services and cryptocurrency operations.</p>
+
+    <h3>6.3 User Responsibility</h3>
+    <p>You are responsible for:</p>
+    <ul>
+      <li>Maintaining the security of your Bitcoin wallet addresses and private keys</li>
+      <li>Protecting your worker credentials and authentication information</li>
+      <li>Using secure networks and devices to access the Service</li>
+      <li>Immediately reporting any suspected security breaches or unauthorized access</li>
+      <li>Keeping your mining software and systems updated and secure</li>
+    </ul>
+
+    <h2>7. Cookies and Tracking Technologies</h2>
+
+    <h3>7.1 Use of Cookies</h3>
+    <p>We may use cookies, web beacons, and similar tracking technologies to:</p>
+    <ul>
+      <li>Maintain user sessions and authentication states</li>
+      <li>Remember user preferences and settings</li>
+      <li>Analyze usage patterns and improve Service performance</li>
+      <li>Monitor Service availability and troubleshoot issues</li>
+      <li>Enhance security and detect fraudulent activity</li>
+    </ul>
+
+    <h3>7.2 Types of Cookies</h3>
+    <ul>
+      <li><strong>Essential Cookies:</strong> Required for basic Service functionality</li>
+      <li><strong>Performance Cookies:</strong> Collect anonymous usage data for analytics</li>
+      <li><strong>Functional Cookies:</strong> Remember preferences and settings</li>
+      <li><strong>Security Cookies:</strong> Support authentication and fraud detection</li>
+    </ul>
+
+    <h3>7.3 Managing Cookies</h3>
+    <p>Most web browsers allow you to control cookies through settings. However, disabling cookies may limit your ability to use certain Service features.</p>
+
+    <h2>8. Third-Party Links and Services</h2>
+    <p>The Service may contain links to third-party websites, services, or resources (e.g., blockchain explorers, wallet providers, exchanges). We are not responsible for the privacy practices or content of third parties. We encourage you to review the privacy policies of any third-party services you access.</p>
+
+    <h2>9. International Data Transfers</h2>
+    <p>The Service may be operated from and involve data processing in multiple jurisdictions. By using the Service, you consent to the transfer of information to countries outside your country of residence, which may have different data protection laws. We take reasonable measures to ensure appropriate safeguards are in place for international data transfers.</p>
+
+    <h2>10. Children's Privacy</h2>
+    <p>The Service is not intended for use by individuals under the age of 18 (or the age of majority in your jurisdiction). We do not knowingly collect information from minors. If you believe a minor has provided information to us, please contact us immediately, and we will take steps to delete such information.</p>
+
+    <h2>11. Your Rights and Choices</h2>
+
+    <h3>11.1 Access and Correction</h3>
+    <p>You may access and review certain information through the Service interface (e.g., worker statistics, block discovery history). If you need to correct or update information, please contact us.</p>
+
+    <h3>11.2 Data Deletion Requests</h3>
+    <p>You may request deletion of your information by discontinuing use of the Service. However, we may retain certain information as described in Section 4 (Data Retention) for legal, accounting, security, or operational purposes.</p>
+
+    <h3>11.3 Opt-Out of Communications</h3>
+    <p>If you receive communications from us (e.g., notifications, alerts), you may opt out through the Service settings or by following unsubscribe instructions in the communications.</p>
+
+    <h3>11.4 Do Not Track Signals</h3>
+    <p>Some browsers support "Do Not Track" (DNT) signals. Our Service does not currently respond to DNT signals.</p>
+
+    <h3>11.5 Jurisdictional Rights</h3>
+    <p>Depending on your location, you may have additional rights under data protection laws (e.g., GDPR, CCPA), including:</p>
+    <ul>
+      <li>Right to access your personal data</li>
+      <li>Right to correct inaccurate data</li>
+      <li>Right to delete data (subject to limitations)</li>
+      <li>Right to restrict or object to processing</li>
+      <li>Right to data portability</li>
+      <li>Right to withdraw consent</li>
+      <li>Right to lodge complaints with data protection authorities</li>
+    </ul>
+    <p>To exercise these rights, please contact us through the Service. We will respond to requests in accordance with applicable laws.</p>
+
+    <h2>12. California Privacy Rights (CCPA)</h2>
+    <p>If you are a California resident, you may have additional rights under the California Consumer Privacy Act (CCPA), including:</p>
+    <ul>
+      <li>Right to know what personal information is collected, used, shared, or sold</li>
+      <li>Right to request deletion of personal information</li>
+      <li>Right to opt-out of the sale of personal information (we do not sell personal information)</li>
+      <li>Right to non-discrimination for exercising CCPA rights</li>
+    </ul>
+    <p>To exercise CCPA rights, please contact us through the Service.</p>
+
+    <h2>13. European Privacy Rights (GDPR)</h2>
+    <p>If you are in the European Economic Area (EEA), United Kingdom, or Switzerland, you have rights under the General Data Protection Regulation (GDPR), including those described in Section 11.5. Our legal basis for processing information includes:</p>
+    <ul>
+      <li><strong>Contractual Necessity:</strong> Processing required to provide the Service pursuant to our Terms of Service</li>
+      <li><strong>Consent:</strong> You have consented to processing for specific purposes</li>
+      <li><strong>Legal Obligation:</strong> Processing required to comply with legal requirements</li>
+      <li><strong>Legitimate Interests:</strong> Processing necessary for our legitimate business interests (e.g., security, fraud prevention)</li>
+    </ul>
+
+    <h2>14. Changes to This Privacy Policy</h2>
+    <p>We reserve the right to modify this Privacy Policy at any time. Changes will be effective immediately upon posting to this page, with the "Effective Date" revised accordingly. Material changes may be announced through the Service interface or other reasonable means. Your continued use of the Service after changes constitutes acceptance of the updated Privacy Policy. We encourage you to review this Policy periodically.</p>
+
+    <h2>15. Contact Information</h2>
+    <p>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us through the communication channels provided on the Service interface.</p>
+
+    <h2>16. Data Controller</h2>
+    <p>For purposes of applicable data protection laws, the operator(s) of m45core.com act as the data controller responsible for your information.</p>
+
+    <h2>17. Disclaimer</h2>
+    <p><strong>This Privacy Policy describes our current data practices. We make reasonable efforts to maintain accurate and up-to-date information, but we do not warrant or guarantee the completeness or accuracy of this Policy. To the maximum extent permitted by law, we disclaim liability for any errors, omissions, or outdated information in this Policy.</strong></p>
+
+    <h2>18. Acknowledgment and Consent</h2>
+    <p><strong>BY USING THE SERVICE, YOU ACKNOWLEDGE THAT YOU HAVE READ AND UNDERSTOOD THIS PRIVACY POLICY AND CONSENT TO THE COLLECTION, USE, DISCLOSURE, AND RETENTION OF YOUR INFORMATION AS DESCRIBED HEREIN.</strong></p>
+
+    <div class="footer">
+      <p><strong>m45core.com</strong> &mdash; Bitcoin Mining Pool</p>
+      <p>Last Updated: December 22, 2025</p>
+    </div>
+  </div>
 </body>
 </html>
