@@ -28,9 +28,9 @@
 	(function() {
 		const target = document.getElementById('clerk-sign-in');
 		if (!target) return;
-		const publishableKey = {{printf "%q" .ClerkPublishableKey}};
-		const afterSignInUrl = {{printf "%q" .AfterSignInURL}};
-		const afterSignUpUrl = {{printf "%q" .AfterSignUpURL}};
+		const publishableKey = "{{.ClerkPublishableKey}}";
+		const afterSignInUrl = "{{.AfterSignInURL}}";
+		const afterSignUpUrl = "{{.AfterSignUpURL}}";
 
 		const fail = (msg) => {
 			target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">' + msg + '</p>';
@@ -57,7 +57,7 @@
 		const script = document.createElement('script');
 		script.async = true;
 		script.crossOrigin = 'anonymous';
-		script.src = {{printf "%q" .ClerkJSURL}};
+		script.src = "{{.ClerkJSURL}}";
 		script.setAttribute('data-clerk-publishable-key', publishableKey);
 		script.onload = async () => {
 			window.clearTimeout(timeout);
