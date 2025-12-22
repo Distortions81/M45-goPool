@@ -736,6 +736,32 @@ type PoolErrorEvent struct {
 	Message string `json:"message"`
 }
 
+const poolErrorHistoryDisplayWindow = time.Hour
+
+func filterRecentPoolErrorEvents(raw []ErrorEvent, now time.Time, maxAge time.Duration) []PoolErrorEvent {
+	if len(raw) == 0 {
+		return nil
+	}
+	filtered := make([]PoolErrorEvent, 0, len(raw))
+	for _, ev := range raw {
+		if ev.At.IsZero() {
+			continue
+		}
+		if maxAge > 0 && now.Sub(ev.At) > maxAge {
+			continue
+		}
+		filtered = append(filtered, PoolErrorEvent{
+			At:      ev.At.UTC().Format(time.RFC3339),
+			Type:    ev.Type,
+			Message: ev.Message,
+		})
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
 // PoolPageData contains data for the pool info page
 type PoolPageData struct {
 	APIVersion       string           `json:"api_version"`
@@ -2641,6 +2667,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var rpcErrors, shareErrors uint64
 	var rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h float64
 	var errorHistory []PoolErrorEvent
+	now := time.Now()
 	if s.metrics != nil {
 		accepted, rejected, reasons = s.metrics.Snapshot()
 		s.logShareTotals(accepted, rejected)
@@ -2648,21 +2675,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 			rpcGBTLast, rpcGBTMax, rpcGBTCount,
 			rpcSubmitLast, rpcSubmitMax, rpcSubmitCount,
 			rpcErrors, shareErrors = s.metrics.SnapshotDiagnostics()
-		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(time.Now())
+		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(now)
 		rawErrors := s.metrics.SnapshotErrorHistory()
-		if len(rawErrors) > 0 {
-			errorHistory = make([]PoolErrorEvent, len(rawErrors))
-			for i, ev := range rawErrors {
-				at := ""
-				if !ev.At.IsZero() {
-					at = ev.At.UTC().Format(time.RFC3339)
-				}
-				errorHistory[i] = PoolErrorEvent{
-					At:      at,
-					Type:    ev.Type,
-					Message: ev.Message,
-				}
-			}
+		if filtered := filterRecentPoolErrorEvents(rawErrors, now, poolErrorHistoryDisplayWindow); len(filtered) > 0 {
+			errorHistory = filtered
 		}
 	}
 	// Process / system diagnostics (best-effort only; failures are treated as
@@ -2732,7 +2748,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 
-	now := time.Now()
+	snapshotTime := time.Now()
 	var workers []WorkerView
 	var bannedWorkers []WorkerView
 	var bestShares []BestShare
@@ -2741,7 +2757,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 	var allWorkers []WorkerView
 	var workerDBStats WorkerDatabaseStats
-	allWorkers = s.snapshotWorkerViews(now)
+	allWorkers = s.snapshotWorkerViews(snapshotTime)
 	workers = make([]WorkerView, 0, len(allWorkers))
 	bannedWorkers = make([]WorkerView, 0, len(allWorkers))
 	seen := make(map[string]struct{}, len(allWorkers))
