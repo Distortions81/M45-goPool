@@ -42,7 +42,7 @@ const (
 	defaultReconnectBanWindowSeconds         = 60
 	defaultReconnectBanDurationSeconds       = 300
 	defaultMaxDifficulty                     = 65536
-	defaultMinDifficulty                     = 1024
+	defaultMinDifficulty                     = 512
 	defaultMinVersionBits                    = 1
 	defaultRefreshInterval                   = 10 * time.Second
 	defaultZMQReceiveTimeout                 = 15 * time.Second
