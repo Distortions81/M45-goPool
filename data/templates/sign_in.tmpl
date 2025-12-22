@@ -24,21 +24,20 @@
 		{{template "footer" .}}
 	</div>
 
-	<script async crossorigin="anonymous"
-		src="https://cdn.clerk.com/clerk.js"
-		data-clerk-publishable-key="{{.ClerkPublishableKey}}"></script>
 	<script>
 	(function() {
 		const target = document.getElementById('clerk-sign-in');
 		if (!target) return;
+		const publishableKey = {{printf "%q" .ClerkPublishableKey}};
 		const afterSignInUrl = {{printf "%q" .AfterSignInURL}};
 		const afterSignUpUrl = {{printf "%q" .AfterSignUpURL}};
 
-		async function mount() {
-			if (!window.Clerk) {
-				target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">Sign-in failed to load. Please try again.</p>';
-				return;
-			}
+		const fail = (msg) => {
+			target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">' + msg + '</p>';
+		};
+
+		async function mountClerk() {
+			if (!window.Clerk) return fail('Clerk failed to load. Check ad blockers or network restrictions.');
 			try {
 				await window.Clerk.load();
 				window.Clerk.mountSignIn(target, {
@@ -47,15 +46,28 @@
 				});
 			} catch (err) {
 				console.error('Clerk sign-in load failed', err);
-				target.innerHTML = '<p class="text-sm" style="color:#f88d8d;">Sign-in failed to load. Please try again.</p>';
+				fail('Clerk failed to initialize. Verify your Clerk domain configuration and publishable key.');
 			}
 		}
 
-		if (document.readyState === 'complete') {
-			mount();
-		} else {
-			window.addEventListener('load', mount);
-		}
+		const timeout = window.setTimeout(() => {
+			fail('Sign-in timed out loading. Check ad blockers or try another network.');
+		}, 15000);
+
+		const script = document.createElement('script');
+		script.async = true;
+		script.crossOrigin = 'anonymous';
+		script.src = 'https://cdn.clerk.com/clerk.js';
+		script.setAttribute('data-clerk-publishable-key', publishableKey);
+		script.onload = async () => {
+			window.clearTimeout(timeout);
+			await mountClerk();
+		};
+		script.onerror = () => {
+			window.clearTimeout(timeout);
+			fail('Failed to download Clerk. Check Content Security Policy, ad blockers, or network.');
+		};
+		document.head.appendChild(script);
 	})();
 	</script>
 </body>
