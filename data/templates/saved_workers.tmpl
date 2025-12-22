@@ -10,57 +10,88 @@
 	{{template "header" .}}
 	<div class="page">
 		{{if .ClerkUser}}
-		<div class="card">
-			<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
-				<div>
-					<h2 style="margin-top:0;">
-						{{if eq .SavedWorkersCount 0}}
-							Add your first worker!
-						{{else}}
-							Add workers
-						{{end}}
-					</h2>
+		<div class="panel-stack">
+			<div class="card">
+				<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+					<div>
+						<h2 style="margin-top:0;">
+							{{if eq .SavedWorkersCount 0}}
+								Add your first worker!
+							{{else}}
+								Add workers
+							{{end}}
+						</h2>
+					</div>
+					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+							<polyline points="16 17 21 12 16 7"></polyline>
+							<line x1="21" y1="12" x2="9" y2="12"></line>
+						</svg>
+						<span>Sign out</span>
+					</a>
 				</div>
-				<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-						<polyline points="16 17 21 12 16 7"></polyline>
-						<line x1="21" y1="12" x2="9" y2="12"></line>
-					</svg>
-					<span>Sign out</span>
-				</a>
+				<form method="post" action="/worker/save" style="margin-top:12px;">
+					<div class="input-row">
+						<input class="input" type="text" name="worker" placeholder="wallet.worker">
+						<button class="btn" type="submit">Add</button>
+					</div>
+				</form>
 			</div>
-			<form method="post" action="/worker/save" style="margin-top:12px;">
-				<div class="input-row">
-					<input class="input" type="text" name="worker" placeholder="wallet.worker">
-					<button class="btn" type="submit">Add</button>
-				</div>
-			</form>
-		</div>
 
-		<div class="card">
-			<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-				<h2 style="margin-top:0;">Your workers</h2>
-				<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-					<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
-					<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
-					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
-						<span id="privacyToggleIcon" aria-hidden="true">
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
-								<circle cx="12" cy="12" r="3"></circle>
-								<line x1="4" y1="20" x2="20" y2="4"></line>
-							</svg>
-						</span>
-						<span id="privacyToggleText">Privacy</span>
-					</button>
+			{{$offlineCount := len .OfflineWorkerEntries}}
+			<div class="card offline-card" id="offlineSection">
+				<div class="offline-card-header">
+					<h2 style="margin:0;">Offline Workers</h2>
+					<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
+						{{$offlineCount}} offline
+					</span>
+				</div>
+				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
+					{{range .OfflineWorkerEntries}}
+						<li>
+							<span class="mono sensitive-worker" data-worker-name="{{.Name}}"></span>
+							<span class="badge badge-danger">Offline</span>
+						</li>
+					{{end}}
+				</ul>
+				<p id="offlineEmptyMessage" class="text-sm" style="color:var(--text-muted); margin-top:10px; {{if gt $offlineCount 0}}display:none;{{end}}">
+					All saved workers are currently online.
+				</p>
+			</div>
+
+			<div class="card graph-card">
+				<div class="graph-card-header">
+					<h2 style="margin:0;">Total Hashrate</h2>
+					<p class="text-sm graph-card-description">
+						Live sum of your saved workers’ hashrate and shares rate over the last five minutes.
+					</p>
+				</div>
+				<div style="margin-top:12px;">
+					<canvas id="savedWorkersHashrateChart" style="width:100%;height:180px;"></canvas>
 				</div>
 			</div>
-			<div style="margin-top:12px;">
-				<canvas id="savedWorkersHashrateChart" style="width:100%;height:160px;"></canvas>
-			</div>
-			<div style="overflow-x:auto; margin-top:12px;">
-				<table class="table">
+
+			<div class="card">
+				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+					<h2 style="margin-top:0;">Your workers</h2>
+					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+						<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
+						<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
+						<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
+							<span id="privacyToggleIcon" aria-hidden="true">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+									<circle cx="12" cy="12" r="3"></circle>
+									<line x1="4" y1="20" x2="20" y2="4"></line>
+								</svg>
+							</span>
+							<span id="privacyToggleText">Privacy</span>
+						</button>
+					</div>
+				</div>
+				<div style="overflow-x:auto; margin-top:12px;">
+					<table class="table">
 						<thead>
 							<tr>
 								<th>Worker</th>
@@ -100,26 +131,8 @@
 								<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>
 							{{end}}
 						</tbody>
-				</table>
-			</div>
-
-			{{$offlineCount := len .OfflineWorkerEntries}}
-			<div id="offlineSection" {{if not .OfflineWorkerEntries}}style="display:none;"{{end}}>
-				<div style="border-top:1px solid var(--card-border); margin:18px 0 0;"></div>
-				<h2 style="margin-top:18px; margin-bottom:10px;">
-					OFFLINE
-					{{if gt $offlineCount 0}}
-						<span class="badge badge-danger" style="margin-left:8px;">{{$offlineCount}} offline</span>
-					{{end}}
-				</h2>
-				<ul class="text-sm" style="margin-top:8px;" id="offlineWorkersList">
-					{{range .OfflineWorkerEntries}}
-						<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
-							<span class="sensitive-worker" data-worker-name="{{.Name}}"></span>
-							<span class="badge badge-danger">Offline</span>
-						</li>
-					{{end}}
-				</ul>
+					</table>
+				</div>
 			</div>
 		</div>
 		{{else}}
@@ -405,17 +418,29 @@
 
 				const offlineList = document.getElementById('offlineWorkersList');
 				const offlineSection = document.getElementById('offlineSection');
-				if (offlineList && offlineSection) {
+				const offlineEmptyMessage = document.getElementById('offlineEmptyMessage');
+				const offlineCountBadge = document.getElementById('offlineCountBadge');
+				if (offlineList && offlineSection && offlineEmptyMessage) {
 					const offline = Array.isArray(data.offline_workers) ? data.offline_workers : [];
+					offlineSection.style.display = '';
 					if (offline.length === 0) {
 						offlineList.innerHTML = '';
-						offlineSection.style.display = 'none';
+						offlineList.style.display = 'none';
+						offlineEmptyMessage.style.display = '';
+						if (offlineCountBadge) {
+							offlineCountBadge.style.display = 'none';
+						}
 					} else {
-						offlineSection.style.display = '';
+						offlineEmptyMessage.style.display = 'none';
+						offlineList.style.display = '';
+						if (offlineCountBadge) {
+							offlineCountBadge.style.display = '';
+							offlineCountBadge.textContent = `${offline.length} offline`;
+						}
 						offlineList.innerHTML = offline.map(w => `
-							<li class="mono" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0;">
-								<span class="sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></span>
-								<span class="badge">Offline</span>
+							<li>
+								<span class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></span>
+								<span class="badge badge-danger">Offline</span>
 							</li>
 						`).join('');
 						applyWorkerNameCensoring(offlineList);
