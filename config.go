@@ -62,6 +62,10 @@ type Config struct {
 	// ClerkSecretKey is the Clerk backend secret key (sk_test_... / sk_live_...).
 	// This should be stored in secrets.toml, not config.toml.
 	ClerkSecretKey string
+	// ClerkPublishableKey is the Clerk publishable key (pk_test_... / pk_live_...)
+	// used for rendering the embedded Clerk sign-in UI. Stored in secrets.toml
+	// to keep deployments consistent (even though it's not a secret).
+	ClerkPublishableKey string
 	RPCURL         string // e.g. "http://127.0.0.1:8332"
 	RPCUser        string
 	RPCPass        string
@@ -524,9 +528,10 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 // Both rpc_user and rpc_pass are required for the pool to communicate with
 // bitcoind and must be set in secrets.toml.
 type secretsConfig struct {
-	RPCUser        string `toml:"rpc_user"`
-	RPCPass        string `toml:"rpc_pass"`
-	ClerkSecretKey string `toml:"clerk_secret_key"`
+	RPCUser             string `toml:"rpc_user"`
+	RPCPass             string `toml:"rpc_pass"`
+	ClerkSecretKey      string `toml:"clerk_secret_key"`
+	ClerkPublishableKey string `toml:"clerk_publishable_key"`
 }
 
 func loadConfig(configPath, secretsPath string) Config {
@@ -972,6 +977,9 @@ func applySecretsConfig(cfg *Config, sc secretsConfig) {
 	}
 	if sc.ClerkSecretKey != "" {
 		cfg.ClerkSecretKey = sc.ClerkSecretKey
+	}
+	if sc.ClerkPublishableKey != "" {
+		cfg.ClerkPublishableKey = strings.TrimSpace(sc.ClerkPublishableKey)
 	}
 }
 

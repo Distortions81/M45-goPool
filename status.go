@@ -2122,12 +2122,12 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	base := s.baseTemplateData(start)
 
-	pk := strings.TrimSpace(os.Getenv("CLERK_PUBLISHABLE_KEY"))
+	pk := strings.TrimSpace(s.Config().ClerkPublishableKey)
 	if pk == "" {
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Sign-in misconfigured",
 			"Sign-in is not configured on this server.",
-			"Missing environment variable CLERK_PUBLISHABLE_KEY (expected pk_live_... or pk_test_...).")
+			"Missing secrets.toml value clerk_publishable_key (expected pk_live_... or pk_test_...).")
 		return
 	}
 
