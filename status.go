@@ -275,10 +275,10 @@ func buildNodePeerInfos(peers []cachedPeerInfo) []NodePeerInfo {
 }
 
 func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]struct{} {
-	if !s.cfg.PeerCleanupEnabled || s.rpc == nil {
+	if !s.Config().PeerCleanupEnabled || s.rpc == nil {
 		return nil
 	}
-	minPeers := s.cfg.PeerCleanupMinPeers
+	minPeers := s.Config().PeerCleanupMinPeers
 	if minPeers <= 0 {
 		minPeers = 20
 	}
@@ -286,7 +286,7 @@ func (s *StatusServer) cleanupHighPingPeers(peers []peerDisplayInfo) map[string]
 	if totalPeers <= minPeers {
 		return nil
 	}
-	maxPingMs := s.cfg.PeerCleanupMaxPingMs
+	maxPingMs := s.Config().PeerCleanupMaxPingMs
 	if maxPingMs <= 0 {
 		return nil
 	}
@@ -352,7 +352,7 @@ type StatusServer struct {
 	registry            *MinerRegistry
 	accounting          *AccountStore
 	rpc                 *RPCClient
-	cfg                 Config
+	cfg                 atomic.Value
 	ctx                 context.Context
 	clerk               *ClerkVerifier
 	start               time.Time
@@ -394,6 +394,22 @@ type cachedWorkerPage struct {
 	payload   []byte
 	updatedAt time.Time
 	expiresAt time.Time
+}
+
+func (s *StatusServer) Config() Config {
+	if s == nil {
+		return Config{}
+	}
+	if v := s.cfg.Load(); v != nil {
+		if cfg, ok := v.(Config); ok {
+			return cfg
+		}
+	}
+	return Config{}
+}
+
+func (s *StatusServer) UpdateConfig(cfg Config) {
+	s.cfg.Store(cfg)
 }
 
 // shortDisplayID returns a sanitized, shortened version of s suitable for
@@ -1244,7 +1260,6 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		registry:            registry,
 		accounting:          accounting,
 		rpc:                 rpc,
-		cfg:                 cfg,
 		ctx:                 ctx,
 		start:               start,
 		clerk:               clerk,
@@ -1253,6 +1268,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
 	}
+	server.UpdateConfig(cfg)
 	server.scheduleNodeInfoRefresh()
 	return server
 }
@@ -1265,7 +1281,7 @@ func (s *StatusServer) ReloadTemplates() error {
 		return fmt.Errorf("status server is nil")
 	}
 
-	tmpl, err := loadTemplates(s.cfg.DataDir)
+	tmpl, err := loadTemplates(s.Config().DataDir)
 	if err != nil {
 		return err
 	}
@@ -1912,7 +1928,7 @@ func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
 	}
 	redirectURL := s.clerkRedirectURL(r, redirect)
 	if s.clerk != nil {
-		login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.cfg.ClerkFrontendAPIURL)
+		login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.Config().ClerkFrontendAPIURL)
 		if redirect == "" {
 			return login
 		}
@@ -1923,13 +1939,13 @@ func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
 		return login + sep + "redirect=" + url.QueryEscape(redirect)
 	}
 
-	base := strings.TrimSpace(s.cfg.ClerkSignInURL)
+	base := strings.TrimSpace(s.Config().ClerkSignInURL)
 	if base == "" {
 		base = defaultClerkSignInURL
 	}
 	values := url.Values{}
 	values.Set("redirect_url", redirectURL)
-	if frontendAPI := strings.TrimSpace(s.cfg.ClerkFrontendAPIURL); frontendAPI != "" {
+	if frontendAPI := strings.TrimSpace(s.Config().ClerkFrontendAPIURL); frontendAPI != "" {
 		values.Set("frontend_api", frontendAPI)
 	}
 	return base + "?" + values.Encode()
@@ -2253,7 +2269,7 @@ func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request)
 	if redirect == "" {
 		redirect = "/worker"
 	}
-	cookieName := strings.TrimSpace(s.cfg.ClerkSessionCookieName)
+	cookieName := strings.TrimSpace(s.Config().ClerkSessionCookieName)
 	if s.clerk != nil {
 		cookieName = strings.TrimSpace(s.clerk.SessionCookieName())
 	}
@@ -2288,7 +2304,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	// label coinbase outputs by destination. Errors are treated as
 	// "unknown" and do not affect normal worker stats rendering.
 	var poolScriptHex string
-	addr := strings.TrimSpace(s.cfg.PayoutAddress)
+	addr := strings.TrimSpace(s.Config().PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
 			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
@@ -2297,8 +2313,8 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 	// Best-effort derivation of the donation script for 3-way payout display.
 	var donationScriptHex string
-	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
-	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+	donationAddr := strings.TrimSpace(s.Config().OperatorDonationAddress)
+	if donationAddr != "" && s.Config().OperatorDonationPercent > 0 {
 		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
 			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
@@ -2308,7 +2324,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	var btcPrice float64
 	var btcPriceUpdated string
 	if s.priceSvc != nil {
-		if price, err := s.priceSvc.BTCPrice(s.cfg.FiatCurrency); err == nil && price > 0 {
+		if price, err := s.priceSvc.BTCPrice(s.Config().FiatCurrency); err == nil && price > 0 {
 			btcPrice = price
 			if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
 				btcPriceUpdated = ts.UTC().Format("2006-01-02 15:04:05 MST")
@@ -2482,7 +2498,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	// label coinbase outputs by destination. Errors are treated as
 	// "unknown" and do not affect normal worker stats rendering.
 	var poolScriptHex string
-	addr := strings.TrimSpace(s.cfg.PayoutAddress)
+	addr := strings.TrimSpace(s.Config().PayoutAddress)
 	if addr != "" {
 		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
 			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
@@ -2491,8 +2507,8 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 
 	// Best-effort derivation of the donation script for 3-way payout display.
 	var donationScriptHex string
-	donationAddr := strings.TrimSpace(s.cfg.OperatorDonationAddress)
-	if donationAddr != "" && s.cfg.OperatorDonationPercent > 0 {
+	donationAddr := strings.TrimSpace(s.Config().OperatorDonationAddress)
+	if donationAddr != "" && s.Config().OperatorDonationPercent > 0 {
 		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
 			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
 		}
@@ -2752,7 +2768,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 
-	foundBlocks := loadFoundBlocks(s.cfg.DataDir, 10)
+	foundBlocks := loadFoundBlocks(s.Config().DataDir, 10)
 
 	// Aggregate workers by miner type for a "miner types" summary near the
 	// bottom of the status page, grouping versions per miner type.
@@ -2900,7 +2916,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var btcPrice float64
 	var btcPriceUpdated string
 	if s.priceSvc != nil {
-		if price, err := s.priceSvc.BTCPrice(s.cfg.FiatCurrency); err == nil && price > 0 {
+		if price, err := s.priceSvc.BTCPrice(s.Config().FiatCurrency); err == nil && price > 0 {
 			btcPrice = price
 			if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
 				btcPriceUpdated = ts.UTC().Format("2006-01-02 15:04:05 MST")
@@ -2962,11 +2978,11 @@ func (s *StatusServer) buildStatusData() StatusData {
 		jobFeed.ErrorHistory = fs.ErrorHistory
 	}
 
-	brandName := strings.TrimSpace(s.cfg.StatusBrandName)
+	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {
 		brandName = "Solo Pool"
 	}
-	brandDomain := strings.TrimSpace(s.cfg.StatusBrandDomain)
+	brandDomain := strings.TrimSpace(s.Config().StatusBrandDomain)
 
 	activeMiners := 0
 	if s.jobMgr != nil {
@@ -2986,9 +3002,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		bt = "(dev build)"
 	}
 
-	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	expectedGenesis := ""
 	if nodeNetwork != "" {
@@ -3002,10 +3018,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 	// Collect configuration warnings for potentially risky or surprising
 	// setups so the UI can show a prominent banner.
 	var warnings []string
-	if s.cfg.PoolFeePercent > 10 {
+	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if strings.EqualFold(nodeNetwork, "mainnet") && s.cfg.MinDifficulty < 1 {
+	if strings.EqualFold(nodeNetwork, "mainnet") && s.Config().MinDifficulty < 1 {
 		warnings = append(warnings, "Minimum difficulty is configured below 1 on mainnet. This can flood the pool and node with tiny shares; verify you really need CPU-style difficulties on mainnet.")
 	}
 	if nodeNetwork != "" && !strings.EqualFold(nodeNetwork, "mainnet") {
@@ -3014,36 +3030,36 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if expectedGenesis != "" && genesisHash != "" && !genesisMatch {
 		warnings = append(warnings, "Connected node's genesis hash does not match the expected Bitcoin genesis for network "+nodeNetwork+". Verify the node is on the genuine Bitcoin chain, not a fork or alt network.")
 	}
-	if s.cfg.MaxAcceptsPerSecond == 0 && s.cfg.MaxConns == 0 {
+	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
 	return StatusData{
-		ListenAddr:                     s.cfg.ListenAddr,
-		StratumTLSListen:               s.cfg.StratumTLSListen,
+		ListenAddr:                     s.Config().ListenAddr,
+		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
-		Tagline:                        s.cfg.StatusTagline,
-		FiatCurrency:                   s.cfg.FiatCurrency,
+		Tagline:                        s.Config().StatusTagline,
+		FiatCurrency:                   s.Config().FiatCurrency,
 		BTCPriceFiat:                   btcPrice,
 		BTCPriceUpdatedAt:              btcPriceUpdated,
-		PoolDonationAddress:            s.cfg.PoolDonationAddress,
-		DiscordURL:                     s.cfg.DiscordURL,
-		GitHubURL:                      s.cfg.GitHubURL,
+		PoolDonationAddress:            s.Config().PoolDonationAddress,
+		DiscordURL:                     s.Config().DiscordURL,
+		GitHubURL:                      s.Config().GitHubURL,
 		NodeNetwork:                    nodeNetwork,
 		NodeSubversion:                 nodeSubversion,
 		NodeBlocks:                     nodeBlocks,
 		NodeHeaders:                    nodeHeaders,
 		NodeInitialBlockDownload:       nodeIBD,
-		NodeRPCURL:                     s.cfg.RPCURL,
-		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
-		PayoutAddress:                  s.cfg.PayoutAddress,
-		PoolFeePercent:                 s.cfg.PoolFeePercent,
-		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
-		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
-		OperatorDonationName:           s.cfg.OperatorDonationName,
-		OperatorDonationURL:            s.cfg.OperatorDonationURL,
-		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		NodeRPCURL:                     s.Config().RPCURL,
+		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		PayoutAddress:                  s.Config().PayoutAddress,
+		PoolFeePercent:                 s.Config().PoolFeePercent,
+		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
+		OperatorDonationAddress:        s.Config().OperatorDonationAddress,
+		OperatorDonationName:           s.Config().OperatorDonationName,
+		OperatorDonationURL:            s.Config().OperatorDonationURL,
+		CoinbaseMessage:                s.Config().CoinbaseMsg,
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
@@ -3053,9 +3069,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodePeerInfos:                  buildNodePeerInfos(nodePeers),
 		NodePruned:                     nodePruned,
 		NodeSizeOnDiskBytes:            nodeSizeOnDisk,
-		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
-		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
-		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
+		NodePeerCleanupEnabled:         s.Config().PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.Config().PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.Config().PeerCleanupMinPeers,
 		GenesisHash:                    genesisHash,
 		GenesisExpected:                expectedGenesis,
 		GenesisMatch:                   genesisMatch,
@@ -3114,13 +3130,13 @@ func (s *StatusServer) buildStatusData() StatusData {
 		SystemLoad1:                    load1,
 		SystemLoad5:                    load5,
 		SystemLoad15:                   load15,
-		MaxConns:                       s.cfg.MaxConns,
-		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
-		MinDifficulty:                  s.cfg.MinDifficulty,
-		MaxDifficulty:                  s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
+		MaxConns:                       s.Config().MaxConns,
+		MaxAcceptsPerSecond:            s.Config().MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.Config().MaxAcceptBurst,
+		MinDifficulty:                  s.Config().MinDifficulty,
+		MaxDifficulty:                  s.Config().MaxDifficulty,
+		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
 		WorkerDatabase:                 workerDBStats,
 		Warnings:                       warnings,
 	}
@@ -3131,69 +3147,69 @@ func (s *StatusServer) buildStatusData() StatusData {
 // hitting the expensive statusData/metrics paths so that HTML pages rely on
 // cached JSON endpoints for dynamic data.
 func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
-	brandName := strings.TrimSpace(s.cfg.StatusBrandName)
+	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {
 		brandName = "Solo Pool"
 	}
-	brandDomain := strings.TrimSpace(s.cfg.StatusBrandDomain)
+	brandDomain := strings.TrimSpace(s.Config().StatusBrandDomain)
 
 	bt := strings.TrimSpace(buildTime)
 	if bt == "" {
 		bt = "(dev build)"
 	}
 
-	displayPayout := shortDisplayID(s.cfg.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayDonation := shortDisplayID(s.cfg.OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
-	displayCoinbase := shortDisplayID(s.cfg.CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
+	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
 
 	var warnings []string
-	if s.cfg.PoolFeePercent > 10 {
+	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if s.cfg.MaxAcceptsPerSecond == 0 && s.cfg.MaxConns == 0 {
+	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
 	return StatusData{
-		ListenAddr:                     s.cfg.ListenAddr,
-		StratumTLSListen:               s.cfg.StratumTLSListen,
+		ListenAddr:                     s.Config().ListenAddr,
+		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
-		Tagline:                        s.cfg.StatusTagline,
-		ServerLocation:                 s.cfg.ServerLocation,
-		FiatCurrency:                   s.cfg.FiatCurrency,
-		PoolDonationAddress:            s.cfg.PoolDonationAddress,
-		DiscordURL:                     s.cfg.DiscordURL,
-		GitHubURL:                      s.cfg.GitHubURL,
-		NodeRPCURL:                     s.cfg.RPCURL,
-		NodeZMQAddr:                    s.cfg.ZMQBlockAddr,
-		PayoutAddress:                  s.cfg.PayoutAddress,
-		PoolFeePercent:                 s.cfg.PoolFeePercent,
-		OperatorDonationPercent:        s.cfg.OperatorDonationPercent,
-		OperatorDonationAddress:        s.cfg.OperatorDonationAddress,
-		OperatorDonationName:           s.cfg.OperatorDonationName,
-		OperatorDonationURL:            s.cfg.OperatorDonationURL,
-		CoinbaseMessage:                s.cfg.CoinbaseMsg,
+		Tagline:                        s.Config().StatusTagline,
+		ServerLocation:                 s.Config().ServerLocation,
+		FiatCurrency:                   s.Config().FiatCurrency,
+		PoolDonationAddress:            s.Config().PoolDonationAddress,
+		DiscordURL:                     s.Config().DiscordURL,
+		GitHubURL:                      s.Config().GitHubURL,
+		NodeRPCURL:                     s.Config().RPCURL,
+		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		PayoutAddress:                  s.Config().PayoutAddress,
+		PoolFeePercent:                 s.Config().PoolFeePercent,
+		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
+		OperatorDonationAddress:        s.Config().OperatorDonationAddress,
+		OperatorDonationName:           s.Config().OperatorDonationName,
+		OperatorDonationURL:            s.Config().OperatorDonationURL,
+		CoinbaseMessage:                s.Config().CoinbaseMsg,
 		DisplayPayoutAddress:           displayPayout,
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
 		PoolSoftware:                   poolSoftwareName,
 		BuildTime:                      bt,
-		MaxConns:                       s.cfg.MaxConns,
-		MaxAcceptsPerSecond:            s.cfg.MaxAcceptsPerSecond,
-		MaxAcceptBurst:                 s.cfg.MaxAcceptBurst,
-		MinDifficulty:                  s.cfg.MinDifficulty,
-		MaxDifficulty:                  s.cfg.MaxDifficulty,
-		LockSuggestedDifficulty:        s.cfg.LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.cfg.KickDuplicateWorkerNames,
-		HashrateEMATauSeconds:          s.cfg.HashrateEMATauSeconds,
-		HashrateEMAMinShares:           s.cfg.HashrateEMAMinShares,
-		NTimeForwardSlackSec:           s.cfg.NTimeForwardSlackSeconds,
+		MaxConns:                       s.Config().MaxConns,
+		MaxAcceptsPerSecond:            s.Config().MaxAcceptsPerSecond,
+		MaxAcceptBurst:                 s.Config().MaxAcceptBurst,
+		MinDifficulty:                  s.Config().MinDifficulty,
+		MaxDifficulty:                  s.Config().MaxDifficulty,
+		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
+		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
+		HashrateEMAMinShares:           s.Config().HashrateEMAMinShares,
+		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,
-		NodePeerCleanupEnabled:         s.cfg.PeerCleanupEnabled,
-		NodePeerCleanupMaxPingMs:       s.cfg.PeerCleanupMaxPingMs,
-		NodePeerCleanupMinPeers:        s.cfg.PeerCleanupMinPeers,
+		NodePeerCleanupEnabled:         s.Config().PeerCleanupEnabled,
+		NodePeerCleanupMaxPingMs:       s.Config().PeerCleanupMaxPingMs,
+		NodePeerCleanupMinPeers:        s.Config().PeerCleanupMinPeers,
 	}
 }
 

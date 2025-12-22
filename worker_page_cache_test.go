@@ -13,9 +13,9 @@ import (
 // the cached payload without re-rendering the template.
 func TestWorkerPageCacheHitReturnsCachedPayload(t *testing.T) {
 	s := &StatusServer{
-		cfg:             Config{},
 		workerPageCache: make(map[string]cachedWorkerPage),
 	}
+	s.UpdateConfig(Config{})
 
 	hash := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	cacheKey := hash + "|priv" // default privacy mode is on
@@ -47,6 +47,7 @@ func TestCacheWorkerPageEvictsExpiredWhenAtCapacity(t *testing.T) {
 	s := &StatusServer{
 		workerPageCache: make(map[string]cachedWorkerPage),
 	}
+	s.UpdateConfig(Config{})
 	now := time.Now()
 
 	// Seed the cache with workerPageCacheLimit entries, one of which is expired.
