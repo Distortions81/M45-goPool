@@ -697,6 +697,9 @@ func main() {
 	mux.HandleFunc("/pool", statusServer.handlePoolInfo)
 	mux.HandleFunc("/server", statusServer.handleServerInfoPage)
 	mux.HandleFunc("/about", statusServer.handleAboutPage)
+	// Static legal pages
+	mux.HandleFunc("/privacy", statusServer.handleStaticFile("privacy.html"))
+	mux.HandleFunc("/terms", statusServer.handleStaticFile("terms.html"))
 	// Alternative worker lookup URLs (SHA256-based)
 	mux.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/user")
