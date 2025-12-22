@@ -1013,6 +1013,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		ShareRate:           accRate,
 		ConnectionID:        mc.connectionIDString(),
 		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
+		ConnectedAt:         mc.connectedAt,
 		WalletValidated:     valid,
 	}
 }
@@ -2168,13 +2169,14 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	start := time.Now()
 	base := s.baseTemplateData(start)
 
-	type savedWorkerEntry struct {
-		Name       string
-		Hashrate   float64
-		ShareRate  float64
-		Accepted   uint64
-		Difficulty float64
-	}
+type savedWorkerEntry struct {
+	Name       string
+	Hashrate   float64
+	ShareRate  float64
+	Accepted   uint64
+	Difficulty float64
+	ConnectedDuration time.Duration
+}
 	data := struct {
 		StatusData
 		OnlineWorkerEntries  []savedWorkerEntry
@@ -2199,12 +2201,17 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
 		}
+		duration := time.Since(view.ConnectedAt)
+		if duration < 0 {
+			duration = 0
+		}
 		entry := savedWorkerEntry{
 			Name:       worker,
 			Hashrate:   hashrate,
 			ShareRate:  view.ShareRate,
 			Accepted:   view.Accepted,
 			Difficulty: view.Difficulty,
+			ConnectedDuration: duration,
 		}
 		if online {
 			data.SavedWorkersOnline++
@@ -2244,15 +2251,16 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	type entry struct {
-		Name            string  `json:"name"`
-		Online          bool    `json:"online"`
-		Hashrate        float64 `json:"hashrate"`
-		SharesPerMinute float64 `json:"shares_per_minute"`
-		Accepted        uint64  `json:"accepted"`
-		Difficulty      float64 `json:"difficulty"`
-		ConnectionSeq   uint64  `json:"connection_seq,omitempty"`
-	}
+type entry struct {
+	Name            string  `json:"name"`
+	Online          bool    `json:"online"`
+	Hashrate        float64 `json:"hashrate"`
+	SharesPerMinute float64 `json:"shares_per_minute"`
+	Accepted        uint64  `json:"accepted"`
+	Difficulty      float64 `json:"difficulty"`
+	ConnectionSeq   uint64  `json:"connection_seq,omitempty"`
+	ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
+}
 	now := time.Now()
 	resp := struct {
 		UpdatedAt      string  `json:"updated_at"`
@@ -2273,6 +2281,13 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
 		}
+		connectionDurationSeconds := 0.0
+		if online && !view.ConnectedAt.IsZero() {
+			connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()
+			if connectionDurationSeconds < 0 {
+				connectionDurationSeconds = 0
+			}
+		}
 		e := entry{
 			Name:            worker,
 			Online:          online,
@@ -2281,6 +2296,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 			Accepted:        view.Accepted,
 			Difficulty:      view.Difficulty,
 			ConnectionSeq:   view.ConnectionSeq,
+			ConnectionDurationSeconds: connectionDurationSeconds,
 		}
 		if online {
 			resp.OnlineCount++

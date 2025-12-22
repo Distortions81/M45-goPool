@@ -50,6 +50,7 @@ type WorkerView struct {
 	ShareRate           float64      `json:"share_rate"`
 	ConnectionID        string       `json:"connection_id,omitempty"`
 	ConnectionSeq       uint64       `json:"connection_seq,omitempty"`
+	ConnectedAt         time.Time    `json:"connected_at,omitempty"`
 	WalletValidated     bool         `json:"wallet_validated,omitempty"`
 }
 

@@ -120,6 +120,7 @@
 								<th>Diff</th>
 								<th>Shares/min</th>
 								<th>Accepted</th>
+								<th>Connected</th>
 								<th></th>
 							</tr>
 						</thead>
@@ -132,6 +133,7 @@
 									<td>{{formatDiff .Difficulty}}</td>
 									<td>{{formatShareRate .ShareRate}}</td>
 									<td>{{.Accepted}}</td>
+									<td>{{humanDuration .ConnectedDuration}}</td>
 									<td style="text-align:right;">
 										<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
 											<input type="hidden" name="worker" value="{{.Name}}">
@@ -149,7 +151,7 @@
 								</tr>
 								{{end}}
 							{{else}}
-								<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>
+								<tr><td colspan="7" class="text-sm">No saved workers online right now.</td></tr>
 							{{end}}
 						</tbody>
 					</table>
@@ -205,6 +207,27 @@
 			if (val >= 100) return `${val.toFixed(0)} ${unit}`;
 			if (val >= 10) return `${val.toFixed(1)} ${unit}`;
 			return `${val.toFixed(2)} ${unit}`;
+		}
+
+		function formatDurationShort(seconds) {
+			let remaining = Math.floor(Math.max(0, Number(seconds) || 0));
+			if (remaining <= 0) return '0s';
+			const units = [
+				{ label: 'd', value: 86400 },
+				{ label: 'h', value: 3600 },
+				{ label: 'm', value: 60 },
+				{ label: 's', value: 1 },
+			];
+			const parts = [];
+			for (const unit of units) {
+				if (remaining >= unit.value) {
+					const amount = Math.floor(remaining / unit.value);
+					parts.push(`${amount}${unit.label}`);
+					remaining -= amount * unit.value;
+				}
+				if (parts.length >= 2) break;
+			}
+			return parts.length ? parts.join(' ') : '0s';
 		}
 
 		function drawHashrateGraph() {
@@ -398,7 +421,7 @@
 			if (!onlineBody) return;
 			const sorted = sortWorkers(lastOnlineWorkers);
 			if (sorted.length === 0) {
-				onlineBody.innerHTML = '<tr><td colspan="6" class="text-sm">No saved workers online right now.</td></tr>';
+				onlineBody.innerHTML = '<tr><td colspan="7" class="text-sm">No saved workers online right now.</td></tr>';
 				return;
 			}
 			onlineBody.innerHTML = sorted.map(w => `
@@ -408,6 +431,7 @@
 					<td>${formatDiffShort(Number(w.difficulty || 0))}</td>
 					<td>${formatShareRatePerMin(Number(w.shares_per_minute || 0))}</td>
 					<td>${Number(w.accepted || 0)}</td>
+					<td>${formatDurationShort(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
 						<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
 							<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
