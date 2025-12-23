@@ -29,7 +29,7 @@
 						<div class="connect-step-body">
 							<div class="connect-copy-row">
 								<button type="button" class="copy-pill stratum-copy" data-copy-scheme="stratum+tcp://" data-copy-port="{{addrPort .ListenAddr}}" aria-label="Copy pool URL">
-									<span class="copy-pill-action">Copy</span>
+									<span class="copy-pill-action">Click to copy</span>
 									<span class="copy-pill-value">stratum+tcp://<span data-stratum-host></span>:{{addrPort .ListenAddr}}</span>
 								</button>
 								<span class="copy-feedback" aria-live="polite"></span>
@@ -41,7 +41,7 @@
 									<p class="text-sm connect-hint">Use this only if your miner supports Stratum TLS.</p>
 									<div class="connect-copy-row">
 										<button type="button" class="copy-pill stratum-copy" data-copy-scheme="stratum+tls://" data-copy-port="{{addrPort .StratumTLSListen}}" aria-label="Copy encrypted pool URL (TLS)">
-											<span class="copy-pill-action">Copy</span>
+											<span class="copy-pill-action">Click to copy</span>
 											<span class="copy-pill-value">stratum+tls://<span data-stratum-host></span>:{{addrPort .StratumTLSListen}}</span>
 										</button>
 										<span class="copy-feedback" aria-live="polite"></span>
