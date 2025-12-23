@@ -1945,11 +1945,26 @@ func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 	}
 }
 
+func (s *StatusServer) clerkUIEnabled() bool {
+	if forceClerkLoginUIForTesting {
+		return true
+	}
+	if s == nil || s.clerk == nil {
+		return false
+	}
+	// The worker login page's embedded sign-in experience requires a publishable
+	// key from secrets.toml; when it's missing, hide the sign-in box.
+	return strings.TrimSpace(s.Config().ClerkPublishableKey) != ""
+}
+
 func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusData) {
-	if s == nil || data == nil || s.clerk == nil {
+	if s == nil || data == nil {
 		return
 	}
-	data.ClerkEnabled = forceClerkLoginUIForTesting || s.clerk != nil
+	data.ClerkEnabled = s.clerkUIEnabled()
+	if !data.ClerkEnabled {
+		return
+	}
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
 		redirect = "/saved-workers"
@@ -2148,11 +2163,11 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	clerkJSURL := clerkJSHost + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
 
 	data := SignInPageData{
-		StatusData:           base,
-		ClerkPublishableKey:  pk,
-		ClerkJSURL:           clerkJSURL,
-		AfterSignInURL:       redirect,
-		AfterSignUpURL:       redirect,
+		StatusData:          base,
+		ClerkPublishableKey: pk,
+		ClerkJSURL:          clerkJSURL,
+		AfterSignInURL:      redirect,
+		AfterSignUpURL:      redirect,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2169,14 +2184,14 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	start := time.Now()
 	base := s.baseTemplateData(start)
 
-type savedWorkerEntry struct {
-	Name       string
-	Hashrate   float64
-	ShareRate  float64
-	Accepted   uint64
-	Difficulty float64
-	ConnectedDuration time.Duration
-}
+	type savedWorkerEntry struct {
+		Name              string
+		Hashrate          float64
+		ShareRate         float64
+		Accepted          uint64
+		Difficulty        float64
+		ConnectedDuration time.Duration
+	}
 	data := struct {
 		StatusData
 		OnlineWorkerEntries  []savedWorkerEntry
@@ -2206,11 +2221,11 @@ type savedWorkerEntry struct {
 			duration = 0
 		}
 		entry := savedWorkerEntry{
-			Name:       worker,
-			Hashrate:   hashrate,
-			ShareRate:  view.ShareRate,
-			Accepted:   view.Accepted,
-			Difficulty: view.Difficulty,
+			Name:              worker,
+			Hashrate:          hashrate,
+			ShareRate:         view.ShareRate,
+			Accepted:          view.Accepted,
+			Difficulty:        view.Difficulty,
 			ConnectedDuration: duration,
 		}
 		if online {
@@ -2251,16 +2266,16 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-type entry struct {
-	Name            string  `json:"name"`
-	Online          bool    `json:"online"`
-	Hashrate        float64 `json:"hashrate"`
-	SharesPerMinute float64 `json:"shares_per_minute"`
-	Accepted        uint64  `json:"accepted"`
-	Difficulty      float64 `json:"difficulty"`
-	ConnectionSeq   uint64  `json:"connection_seq,omitempty"`
-	ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
-}
+	type entry struct {
+		Name                      string  `json:"name"`
+		Online                    bool    `json:"online"`
+		Hashrate                  float64 `json:"hashrate"`
+		SharesPerMinute           float64 `json:"shares_per_minute"`
+		Accepted                  uint64  `json:"accepted"`
+		Difficulty                float64 `json:"difficulty"`
+		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
+		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
+	}
 	now := time.Now()
 	resp := struct {
 		UpdatedAt      string  `json:"updated_at"`
@@ -2289,13 +2304,13 @@ type entry struct {
 			}
 		}
 		e := entry{
-			Name:            worker,
-			Online:          online,
-			Hashrate:        hashrate,
-			SharesPerMinute: view.ShareRate,
-			Accepted:        view.Accepted,
-			Difficulty:      view.Difficulty,
-			ConnectionSeq:   view.ConnectionSeq,
+			Name:                      worker,
+			Online:                    online,
+			Hashrate:                  hashrate,
+			SharesPerMinute:           view.ShareRate,
+			Accepted:                  view.Accepted,
+			Difficulty:                view.Difficulty,
+			ConnectionSeq:             view.ConnectionSeq,
 			ConnectionDurationSeconds: connectionDurationSeconds,
 		}
 		if online {

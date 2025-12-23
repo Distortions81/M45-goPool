@@ -76,14 +76,14 @@ type workerWalletState struct {
 }
 
 var defaultVarDiff = VarDiffConfig{
-	MinDiff:            512,
-	MaxDiff:            65536,
-	TargetSharesPerMin: 6, // aim for roughly one share every 12s
-	AdjustmentWindow:   90 * time.Second,
-	Step:               2,
-	MaxBurstShares:     600, // throttle spammy submitters
-	BurstWindow:        60 * time.Second,
-	DampingFactor:      0.5, // move 50% toward target to reduce overshoot
+	MinDiff:            defaultMinDifficulty,
+	MaxDiff:            defaultMaxDifficulty,
+	TargetSharesPerMin: defaultVarDiffTargetSharesPerMin, // aim for roughly one share every 12s
+	AdjustmentWindow:   defaultVarDiffAdjustmentWindow,
+	Step:               defaultVarDiffStep,
+	MaxBurstShares:     defaultVarDiffMaxBurstShares, // throttle spammy submitters
+	BurstWindow:        defaultVarDiffBurstWindow,
+	DampingFactor:      defaultVarDiffDampingFactor, // move 50% toward target to reduce overshoot
 }
 
 var nextConnectionID uint64
