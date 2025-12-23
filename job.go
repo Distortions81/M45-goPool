@@ -98,6 +98,8 @@ type JobFeedPayloadStatus struct {
 	LastRawTxAt       time.Time
 	LastRawTxBytes    int
 	BlockTip          ZMQBlockTip
+	RecentBlockTimes  []time.Time // Last 3 block times
+	BlockTimerActive  bool        // Whether block timer should count down (only after first new block)
 }
 
 type ZMQBlockTip struct {
@@ -233,8 +235,30 @@ func (jm *JobManager) recordRawBlockPayload(size int) {
 
 func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	jm.zmqPayloadMu.Lock()
+	defer jm.zmqPayloadMu.Unlock()
+
+	// Check if this is a new block (different from current block tip)
+	isNewBlock := jm.zmqPayload.BlockTip.Height == 0 ||
+		(tip.Height > jm.zmqPayload.BlockTip.Height) ||
+		(tip.Hash != "" && tip.Hash != jm.zmqPayload.BlockTip.Hash)
+
 	jm.zmqPayload.BlockTip = tip
-	jm.zmqPayloadMu.Unlock()
+
+	// Track recent block times (keep last 3)
+	if !tip.Time.IsZero() {
+		// Only add if this is a new block (different from the last one)
+		if len(jm.zmqPayload.RecentBlockTimes) == 0 ||
+			!jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-1].Equal(tip.Time) {
+			jm.zmqPayload.RecentBlockTimes = append(jm.zmqPayload.RecentBlockTimes, tip.Time)
+			if len(jm.zmqPayload.RecentBlockTimes) > 3 {
+				jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-3:]
+			}
+			// Activate the block timer when we see a new block
+			if isNewBlock {
+				jm.zmqPayload.BlockTimerActive = true
+			}
+		}
+	}
 }
 
 func (jm *JobManager) recordHashTx(hash string) {
@@ -260,10 +284,72 @@ func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
 	return jm.zmqPayload
 }
 
+// fetchInitialBlockInfo queries the node for the current block header and previous 3 blocks
+// to initialize the block tip with blockchain timestamp data and historical block times.
+func (jm *JobManager) fetchInitialBlockInfo(ctx context.Context) {
+	if jm.rpc == nil {
+		return
+	}
+
+	// Get the current best block hash
+	hash, err := jm.rpc.GetBestBlockHash(ctx)
+	if err != nil {
+		logger.Warn("failed to fetch best block hash on startup", "error", err)
+		return
+	}
+
+	// Get the block header for the current tip
+	header, err := jm.rpc.GetBlockHeader(ctx, hash)
+	if err != nil {
+		logger.Warn("failed to fetch block header on startup", "error", err)
+		return
+	}
+
+	// Convert to ZMQBlockTip format
+	tip := ZMQBlockTip{
+		Hash:       header.Hash,
+		Height:     header.Height,
+		Time:       time.Unix(header.Time, 0).UTC(),
+		Bits:       header.Bits,
+		Difficulty: header.Difficulty,
+	}
+
+	// Fetch the previous 3 block times for historical data
+	recentTimes := []time.Time{tip.Time}
+	prevHash := header.PreviousBlockHash
+	for i := 0; i < 3 && prevHash != ""; i++ {
+		prevHeader, err := jm.rpc.GetBlockHeader(ctx, prevHash)
+		if err != nil {
+			logger.Warn("failed to fetch previous block header", "height", header.Height-int64(i+1), "error", err)
+			break
+		}
+		recentTimes = append([]time.Time{time.Unix(prevHeader.Time, 0).UTC()}, recentTimes...)
+		prevHash = prevHeader.PreviousBlockHash
+	}
+
+	// Keep only the last 3 timestamps (current + up to 2 previous)
+	if len(recentTimes) > 3 {
+		recentTimes = recentTimes[len(recentTimes)-3:]
+	}
+
+	// Record this as the initial block tip and activate the timer
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.BlockTip = tip
+	jm.zmqPayload.RecentBlockTimes = recentTimes
+	jm.zmqPayload.BlockTimerActive = true
+	jm.zmqPayloadMu.Unlock()
+
+	logger.Info("initialized block tip from blockchain", "height", tip.Height, "hash", tip.Hash[:16]+"...", "historical_blocks", len(recentTimes)-1)
+}
+
 func (jm *JobManager) Start(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// Fetch initial block info from the blockchain to start the timer immediately
+	jm.fetchInitialBlockInfo(ctx)
+
 	if err := jm.refreshJobCtx(ctx); err != nil {
 		logger.Error("initial job refresh error", "error", err)
 	}

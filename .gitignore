@@ -9,3 +9,4 @@ data/logs/
 data/banlist.json
 
 scripts/bitcoin-node
+gopool-test

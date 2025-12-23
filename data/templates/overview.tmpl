@@ -111,6 +111,7 @@
 			<div class="card">
 				<div class="label">Time left for block</div>
 				<div class="value mono" id="status-block-time-left">--</div>
+				<div class="card-context" id="status-block-history">--</div>
 			</div>
 			<div class="card">
 				<div class="label">BTC price (USD)</div>
@@ -740,7 +741,10 @@
 		const blockHeightEl = document.getElementById('status-block-height');
 		const blockDifficultyEl = document.getElementById('status-block-difficulty');
 		const blockTimeLeftEl = document.getElementById('status-block-time-left');
-		let cachedRecentBlockTimes = null;
+		const blockHistoryEl = document.getElementById('status-block-history');
+		let blockTimeLeftSec = null;
+		let blockTimeOverdueSec = 0;
+		let isBlockTimeOverdue = false;
 		if (!valueEl) {
 			return;
 		}
@@ -817,23 +821,31 @@
 			return parsed;
 		}
 
-		function renderBlockTimeLeft(recentBlockTimes) {
+		function renderBlockTimeLeft() {
 			if (!blockTimeLeftEl) {
 				return;
 			}
-			if (!recentBlockTimes || recentBlockTimes.length === 0) {
+			if (isBlockTimeOverdue) {
+				blockTimeLeftEl.textContent = `overdue ${formatDuration(blockTimeOverdueSec)}`;
+				return;
+			}
+			if (typeof blockTimeLeftSec !== 'number') {
 				blockTimeLeftEl.textContent = '--';
 				return;
 			}
+			blockTimeLeftEl.textContent = formatDuration(blockTimeLeftSec);
+		}
 
-			const now = Date.now();
+		function renderBlockHistory(recentBlockTimes) {
+			if (!blockHistoryEl) {
+				return;
+			}
+			if (!recentBlockTimes || recentBlockTimes.length === 0) {
+				blockHistoryEl.textContent = '--';
+				return;
+			}
 
-			// Calculate time since last block (primary display)
-			const lastBlockTime = new Date(recentBlockTimes[recentBlockTimes.length - 1]).getTime();
-			const timeSinceLastBlock = Math.floor((now - lastBlockTime) / 1000);
-			const primaryDisplay = formatDurationDetailed(timeSinceLastBlock);
-
-			// Calculate historical block times (secondary)
+			// Calculate historical block times
 			const durations = [];
 			for (let i = recentBlockTimes.length - 1; i > 0; i--) {
 				const prev = new Date(recentBlockTimes[i - 1]).getTime();
@@ -843,9 +855,9 @@
 			}
 
 			if (durations.length === 0) {
-				blockTimeLeftEl.textContent = primaryDisplay;
+				blockHistoryEl.textContent = '--';
 			} else {
-				blockTimeLeftEl.textContent = primaryDisplay + ' (' + durations.join(', ') + ')';
+				blockHistoryEl.textContent = durations.join(', ');
 			}
 		}
 
@@ -878,8 +890,33 @@
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
 					}
-					if (blockTimeLeftEl && data.recent_block_times) {
-						renderBlockTimeLeft(data.recent_block_times);
+					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
+						// If block_time_left_sec is -1, it means the timer hasn't started yet (waiting for first new block)
+						if (data.block_time_left_sec < 0) {
+							blockTimeLeftSec = null;
+							isBlockTimeOverdue = false;
+							blockTimeOverdueSec = 0;
+						} else {
+							let secondsLeft = data.block_time_left_sec;
+							const updatedMillis = getUpdatedAtMillis(updatedAt || data.updated_at);
+							if (updatedMillis !== null) {
+								const ageSec = Math.max(0, (Date.now() - updatedMillis) / 1000);
+								secondsLeft = secondsLeft - ageSec;
+							}
+							if (secondsLeft <= 0) {
+								blockTimeLeftSec = 0;
+								isBlockTimeOverdue = true;
+								blockTimeOverdueSec = Math.floor(Math.max(0, -secondsLeft));
+							} else {
+								blockTimeLeftSec = secondsLeft;
+								isBlockTimeOverdue = false;
+								blockTimeOverdueSec = 0;
+							}
+						}
+						renderBlockTimeLeft();
+					}
+					if (data.recent_block_times) {
+						renderBlockHistory(data.recent_block_times);
 					}
 				})
 				.catch(err => {
@@ -889,6 +926,22 @@
 
 		fetchHashrate();
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
+		setInterval(() => {
+			if (typeof blockTimeLeftSec !== 'number') {
+				return;
+			}
+			if (isBlockTimeOverdue) {
+				blockTimeOverdueSec += 1;
+			} else {
+				blockTimeLeftSec -= 1;
+				if (blockTimeLeftSec <= 0) {
+					blockTimeLeftSec = 0;
+					isBlockTimeOverdue = true;
+					blockTimeOverdueSec = 0;
+				}
+			}
+			renderBlockTimeLeft();
+		}, 1000);
 	})();
 	</script>
 	<script>

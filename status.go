@@ -1889,6 +1889,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			return -int64((overdue + time.Second - 1) / time.Second)
 		}
 
+		var recentBlockTimes []string
 		if s.jobMgr != nil {
 			fs := s.jobMgr.FeedStatus()
 			blockTip := fs.Payload.BlockTip
@@ -1898,12 +1899,13 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			if blockTip.Difficulty > 0 {
 				blockDifficulty = blockTip.Difficulty
 			}
-			if !blockTip.Time.IsZero() {
+			// Only calculate time left if the block timer has been activated (after first new block)
+			if fs.Payload.BlockTimerActive && !blockTip.Time.IsZero() {
 				const targetBlockInterval = 10 * time.Minute
 				remaining := blockTip.Time.Add(targetBlockInterval).Sub(now)
 				blockTimeLeftSec = signedCeilSeconds(remaining)
 			}
-			if blockHeight == 0 || blockDifficulty == 0 || blockTimeLeftSec < 0 {
+			if blockHeight == 0 || blockDifficulty == 0 || (blockTimeLeftSec < 0 && !fs.Payload.BlockTimerActive) {
 				if job := s.jobMgr.CurrentJob(); job != nil {
 					tpl := job.Template
 					if blockHeight == 0 && tpl.Height > 0 {
@@ -1914,27 +1916,32 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 							blockDifficulty = difficultyFromBits(uint32(bits))
 						}
 					}
-					if blockTimeLeftSec < 0 && tpl.CurTime > 0 {
-						const targetBlockInterval = 10 * time.Minute
-						remaining := time.Unix(tpl.CurTime, 0).Add(targetBlockInterval).Sub(now)
-						blockTimeLeftSec = signedCeilSeconds(remaining)
+					// Don't calculate time left from template if timer isn't active yet
+					if blockTimeLeftSec < 0 && !fs.Payload.BlockTimerActive && tpl.CurTime > 0 {
+						// Keep blockTimeLeftSec at -1 to indicate timer not started
 					}
 				}
 			}
+			// Get recent block times (formatted as ISO8601)
+			for _, bt := range fs.Payload.RecentBlockTimes {
+				recentBlockTimes = append(recentBlockTimes, bt.Format(time.RFC3339))
+			}
 		}
 		data := struct {
-			APIVersion       string  `json:"api_version"`
-			PoolHashrate     float64 `json:"pool_hashrate"`
-			BlockHeight      int64   `json:"block_height"`
-			BlockDifficulty  float64 `json:"block_difficulty"`
-			BlockTimeLeftSec int64   `json:"block_time_left_sec"`
-			UpdatedAt        string  `json:"updated_at"`
+			APIVersion       string   `json:"api_version"`
+			PoolHashrate     float64  `json:"pool_hashrate"`
+			BlockHeight      int64    `json:"block_height"`
+			BlockDifficulty  float64  `json:"block_difficulty"`
+			BlockTimeLeftSec int64    `json:"block_time_left_sec"`
+			RecentBlockTimes []string `json:"recent_block_times"`
+			UpdatedAt        string   `json:"updated_at"`
 		}{
 			APIVersion:       apiVersion,
 			PoolHashrate:     s.computePoolHashrate(),
 			BlockHeight:      blockHeight,
 			BlockDifficulty:  blockDifficulty,
 			BlockTimeLeftSec: blockTimeLeftSec,
+			RecentBlockTimes: recentBlockTimes,
 			UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
 		}
 		return sonic.Marshal(data)

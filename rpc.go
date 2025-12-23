@@ -285,6 +285,50 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// BlockHeader represents a Bitcoin block header from getblockheader RPC
+type BlockHeader struct {
+	Hash              string  `json:"hash"`
+	Confirmations     int64   `json:"confirmations"`
+	Height            int64   `json:"height"`
+	Version           int32   `json:"version"`
+	VersionHex        string  `json:"versionHex"`
+	MerkleRoot        string  `json:"merkleroot"`
+	Time              int64   `json:"time"`
+	MedianTime        int64   `json:"mediantime"`
+	Nonce             uint32  `json:"nonce"`
+	Bits              string  `json:"bits"`
+	Difficulty        float64 `json:"difficulty"`
+	ChainWork         string  `json:"chainwork"`
+	NTx               int     `json:"nTx"`
+	PreviousBlockHash string  `json:"previousblockhash"`
+	NextBlockHash     string  `json:"nextblockhash"`
+}
+
+// GetBestBlockHash returns the hash of the best (tip) block in the longest blockchain
+func (c *RPCClient) GetBestBlockHash(ctx context.Context) (string, error) {
+	var hash string
+	err := c.callCtx(ctx, "getbestblockhash", nil, &hash)
+	return hash, err
+}
+
+// GetBlockHash returns the hash of the block at the given height
+func (c *RPCClient) GetBlockHash(ctx context.Context, height int64) (string, error) {
+	var hash string
+	err := c.callCtx(ctx, "getblockhash", []interface{}{height}, &hash)
+	return hash, err
+}
+
+// GetBlockHeader returns the block header for the given block hash
+func (c *RPCClient) GetBlockHeader(ctx context.Context, hash string) (*BlockHeader, error) {
+	var header BlockHeader
+	// verbose=true to get JSON instead of hex
+	err := c.callCtx(ctx, "getblockheader", []interface{}{hash, true}, &header)
+	if err != nil {
+		return nil, err
+	}
+	return &header, nil
+}
+
 // Fetch the scriptPubKey for the payout address using local address
 // validation instead of relying on bitcoind wallet RPCs. This avoids extra
 // RPC calls and does not require the node's wallet to know about the
