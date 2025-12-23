@@ -1098,6 +1098,29 @@ func buildTemplateFuncs() template.FuncMap {
 			if d <= 0 {
 				return "0"
 			}
+			if d < 1 {
+				// Display small difficulties as decimals (e.g. 0.5) instead of rounding to 0.
+				//
+				// We intentionally truncate instead of round so values slightly below 1 don't
+				// display as "1" due to formatting.
+				prec := int(math.Ceil(-math.Log10(d))) + 2
+				if prec < 3 {
+					prec = 3
+				}
+				if prec > 8 {
+					prec = 8
+				}
+				scale := math.Pow10(prec)
+				trunc := math.Trunc(d*scale) / scale
+				s := strconv.FormatFloat(trunc, 'f', prec, 64)
+				s = strings.TrimRight(s, "0")
+				s = strings.TrimRight(s, ".")
+				if s == "" || s == "0" {
+					// Extremely small values may truncate to 0 at our precision cap.
+					return strconv.FormatFloat(d, 'g', 3, 64)
+				}
+				return s
+			}
 			if d < 1_000_000 {
 				return fmt.Sprintf("%.0f", math.Round(d))
 			}

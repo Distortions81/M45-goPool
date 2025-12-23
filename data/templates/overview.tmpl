@@ -455,6 +455,16 @@
 
 		function formatDiff(d) {
 			if (!d) return '—';
+			if (d < 1) {
+				let prec = Math.ceil(-Math.log10(d)) + 2;
+				prec = Math.min(8, Math.max(3, prec));
+				const scale = 10 ** prec;
+				const trunc = Math.floor(d * scale) / scale;
+				let s = trunc.toFixed(prec);
+				s = s.replace(/\.?0+$/, '');
+				if (s === '0') return d.toExponential(3);
+				return s;
+			}
 			if (d < 1000000) return d.toFixed(0);
 			if (d >= 1000000000000) {
 				return (d / 1000000000000).toFixed(1) + 'P';
