@@ -11,7 +11,7 @@
 # The script will:
 #   1. Set up Certbot with webroot authentication using goPool's www directory
 #   2. Obtain an initial certificate (or renew existing one)
-#   3. Copy certificates to goPool's expected locations
+#   3. Link certificates into goPool's expected locations
 #   4. Set up a cron job for automatic renewal
 #
 
@@ -114,6 +114,18 @@ fi
 DATA_DIR=$(cd "$DATA_DIR" 2>/dev/null && pwd || echo "$DATA_DIR")
 
 # Define paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if command -v realpath >/dev/null 2>&1; then
+    LINK_CERTS_SCRIPT="$(realpath "$SCRIPT_DIR/link-certs.sh")"
+else
+    LINK_CERTS_SCRIPT="$SCRIPT_DIR/link-certs.sh"
+fi
+
+if [[ ! -f "$LINK_CERTS_SCRIPT" ]]; then
+    print_error "Link helper not found: $LINK_CERTS_SCRIPT"
+    exit 1
+fi
+
 WWW_DIR="$DATA_DIR/www"
 WELLKNOWN_DIR="$WWW_DIR/.well-known/acme-challenge"
 CERT_PATH="$DATA_DIR/tls_cert.pem"
@@ -199,7 +211,7 @@ fi
 
 print_info "Certificate obtained successfully!"
 
-# Create deployment hook script that copies certs to goPool's location
+# Create deployment hook script that links certs into goPool's location
 DEPLOY_HOOK="/etc/letsencrypt/renewal-hooks/deploy/gopool-deploy.sh"
 print_info "Creating deployment hook at $DEPLOY_HOOK..."
 
@@ -207,24 +219,18 @@ mkdir -p /etc/letsencrypt/renewal-hooks/deploy
 
 cat > "$DEPLOY_HOOK" << HOOK_EOF
 #!/bin/bash
-# Certbot deployment hook for goPool
-# Automatically runs after successful certificate renewal
+set -e
+LINK_CERTS_SCRIPT="$LINK_CERTS_SCRIPT"
 
+# Certbot deployment hook for goPool
 DOMAIN="$DOMAIN"
 DATA_DIR="$DATA_DIR"
-CERT_PATH="$DATA_DIR/tls_cert.pem"
-KEY_PATH="$DATA_DIR/tls_key.pem"
 
-# Copy the renewed certificates to goPool's data directory
-cp "/etc/letsencrypt/live/\$DOMAIN/fullchain.pem" "\$CERT_PATH"
-cp "/etc/letsencrypt/live/\$DOMAIN/privkey.pem" "\$KEY_PATH"
-
-# Set appropriate permissions
-chmod 644 "\$CERT_PATH"
-chmod 600 "\$KEY_PATH"
+# Ensure the helper can run even if the hook is executed from elsewhere
+bash "\$LINK_CERTS_SCRIPT" "\$DOMAIN" "\$DATA_DIR"
 
 # Log the renewal
-echo "\$(date): Certificate renewed and deployed to \$DATA_DIR" >> "\$DATA_DIR/cert-renewal.log"
+echo "\$(date): Certificate renewed and linked into \$DATA_DIR" >> "\$DATA_DIR/cert-renewal.log"
 
 # goPool's certReloader will automatically detect the change within 1 hour
 # No need to restart the service
@@ -232,18 +238,10 @@ HOOK_EOF
 
 chmod +x "$DEPLOY_HOOK"
 
-# Copy initial certificates
-print_info "Copying certificates to goPool data directory..."
-if [[ -f "$LETSENCRYPT_LIVE/fullchain.pem" ]] && [[ -f "$LETSENCRYPT_LIVE/privkey.pem" ]]; then
-    cp "$LETSENCRYPT_LIVE/fullchain.pem" "$CERT_PATH"
-    cp "$LETSENCRYPT_LIVE/privkey.pem" "$KEY_PATH"
-    chmod 644 "$CERT_PATH"
-    chmod 600 "$KEY_PATH"
-    print_info "Certificates copied successfully"
-else
-    print_error "Certificate files not found in $LETSENCRYPT_LIVE"
-    exit 1
-fi
+# Link initial certificates
+print_info "Linking certificates to goPool data directory..."
+bash "$LINK_CERTS_SCRIPT" "$DOMAIN" "$DATA_DIR"
+print_info "Certificates linked successfully"
 
 # Set up automatic renewal cron job
 print_info "Setting up automatic renewal..."
