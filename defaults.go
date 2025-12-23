@@ -14,6 +14,8 @@ func defaultConfig() Config {
 		StatusBrandName:     "",
 		StatusBrandDomain:   "",
 		StatusTagline:       defaultStatusTagline,
+		StatusConnectMinerTitleExtra:    "",
+		StatusConnectMinerTitleExtraURL: "",
 		FiatCurrency:        defaultFiatCurrency,
 		PoolDonationAddress: "",
 		DiscordURL:          "",

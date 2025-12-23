@@ -591,6 +591,8 @@ type StatusData struct {
 	BrandName                      string            `json:"brand_name"`
 	BrandDomain                    string            `json:"brand_domain"`
 	Tagline                        string            `json:"tagline,omitempty"`
+	ConnectMinerTitleExtra         string            `json:"connect_miner_title_extra,omitempty"`
+	ConnectMinerTitleExtraURL      string            `json:"connect_miner_title_extra_url,omitempty"`
 	ServerLocation                 string            `json:"server_location,omitempty"`
 	FiatCurrency                   string            `json:"fiat_currency,omitempty"`
 	BTCPriceFiat                   float64           `json:"btc_price_fiat,omitempty"`
@@ -1875,6 +1877,18 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		var blockDifficulty float64
 		blockTimeLeftSec := int64(-1)
 		now := time.Now()
+
+		signedCeilSeconds := func(d time.Duration) int64 {
+			if d == 0 {
+				return 0
+			}
+			if d > 0 {
+				return int64((d + time.Second - 1) / time.Second)
+			}
+			overdue := -d
+			return -int64((overdue + time.Second - 1) / time.Second)
+		}
+
 		if s.jobMgr != nil {
 			fs := s.jobMgr.FeedStatus()
 			blockTip := fs.Payload.BlockTip
@@ -1887,10 +1901,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			if !blockTip.Time.IsZero() {
 				const targetBlockInterval = 10 * time.Minute
 				remaining := blockTip.Time.Add(targetBlockInterval).Sub(now)
-				if remaining < 0 {
-					remaining = 0
-				}
-				blockTimeLeftSec = int64(remaining.Seconds())
+				blockTimeLeftSec = signedCeilSeconds(remaining)
 			}
 			if blockHeight == 0 || blockDifficulty == 0 || blockTimeLeftSec < 0 {
 				if job := s.jobMgr.CurrentJob(); job != nil {
@@ -1906,10 +1917,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 					if blockTimeLeftSec < 0 && tpl.CurTime > 0 {
 						const targetBlockInterval = 10 * time.Minute
 						remaining := time.Unix(tpl.CurTime, 0).Add(targetBlockInterval).Sub(now)
-						if remaining < 0 {
-							remaining = 0
-						}
-						blockTimeLeftSec = int64(remaining.Seconds())
+						blockTimeLeftSec = signedCeilSeconds(remaining)
 					}
 				}
 			}
@@ -2209,6 +2217,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 
 	type savedWorkerEntry struct {
 		Name              string
+		Hash              string
 		Hashrate          float64
 		ShareRate         float64
 		Accepted          uint64
@@ -2243,8 +2252,10 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		if duration < 0 {
 			duration = 0
 		}
+		hashSum := sha256Sum([]byte(worker))
 		entry := savedWorkerEntry{
 			Name:              worker,
+			Hash:              fmt.Sprintf("%x", hashSum[:]),
 			Hashrate:          hashrate,
 			ShareRate:         view.ShareRate,
 			Accepted:          view.Accepted,
@@ -2291,6 +2302,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 
 	type entry struct {
 		Name                      string  `json:"name"`
+		Hash                      string  `json:"hash"`
 		Online                    bool    `json:"online"`
 		Hashrate                  float64 `json:"hashrate"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
@@ -2319,6 +2331,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
 		}
+		hashSum := sha256Sum([]byte(worker))
 		connectionDurationSeconds := 0.0
 		if online && !view.ConnectedAt.IsZero() {
 			connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()
@@ -2328,6 +2341,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		}
 		e := entry{
 			Name:                      worker,
+			Hash:                      fmt.Sprintf("%x", hashSum[:]),
 			Online:                    online,
 			Hashrate:                  hashrate,
 			SharesPerMinute:           view.ShareRate,
@@ -3179,6 +3193,8 @@ func (s *StatusServer) buildStatusData() StatusData {
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
 		Tagline:                        s.Config().StatusTagline,
+		ConnectMinerTitleExtra:         strings.TrimSpace(s.Config().StatusConnectMinerTitleExtra),
+		ConnectMinerTitleExtraURL:      strings.TrimSpace(s.Config().StatusConnectMinerTitleExtraURL),
 		FiatCurrency:                   s.Config().FiatCurrency,
 		BTCPriceFiat:                   btcPrice,
 		BTCPriceUpdatedAt:              btcPriceUpdated,
@@ -3315,6 +3331,8 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
 		Tagline:                        s.Config().StatusTagline,
+		ConnectMinerTitleExtra:         strings.TrimSpace(s.Config().StatusConnectMinerTitleExtra),
+		ConnectMinerTitleExtraURL:      strings.TrimSpace(s.Config().StatusConnectMinerTitleExtraURL),
 		ServerLocation:                 s.Config().ServerLocation,
 		FiatCurrency:                   s.Config().FiatCurrency,
 		PoolDonationAddress:            s.Config().PoolDonationAddress,

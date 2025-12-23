@@ -30,6 +30,12 @@ type Config struct {
 	StatusBrandName   string
 	StatusBrandDomain string
 	StatusTagline     string
+	// StatusConnectMinerTitleExtra is optional extra text appended to the
+	// "Connect your miner" header on the overview page.
+	StatusConnectMinerTitleExtra string
+	// StatusConnectMinerTitleExtraURL optionally turns the extra text into
+	// a hyperlink when set.
+	StatusConnectMinerTitleExtraURL string
 	// FiatCurrency controls which fiat currency (e.g. "usd") is used
 	// when displaying approximate BTC prices on the status UI. It is
 	// only used for display and never affects payouts or accounting.
@@ -208,6 +214,8 @@ type EffectiveConfig struct {
 	StatusBrandName                   string  `json:"status_brand_name,omitempty"`
 	StatusBrandDomain                 string  `json:"status_brand_domain,omitempty"`
 	StatusTagline                     string  `json:"status_tagline,omitempty"`
+	StatusConnectMinerTitleExtra      string  `json:"status_connect_miner_title_extra,omitempty"`
+	StatusConnectMinerTitleExtraURL   string  `json:"status_connect_miner_title_extra_url,omitempty"`
 	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
 	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
 	DiscordURL                        string  `json:"discord_url,omitempty"`
@@ -279,14 +287,16 @@ type serverConfig struct {
 }
 
 type brandingConfig struct {
-	StatusBrandName     string `toml:"status_brand_name"`
-	StatusBrandDomain   string `toml:"status_brand_domain"`
-	StatusTagline       string `toml:"status_tagline"`
-	FiatCurrency        string `toml:"fiat_currency"`
-	PoolDonationAddress string `toml:"pool_donation_address"`
-	DiscordURL          string `toml:"discord_url"`
-	GitHubURL           string `toml:"github_url"`
-	ServerLocation      string `toml:"server_location"`
+	StatusBrandName                 string `toml:"status_brand_name"`
+	StatusBrandDomain               string `toml:"status_brand_domain"`
+	StatusTagline                   string `toml:"status_tagline"`
+	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra"`
+	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url"`
+	FiatCurrency                    string `toml:"fiat_currency"`
+	PoolDonationAddress             string `toml:"pool_donation_address"`
+	DiscordURL                      string `toml:"discord_url"`
+	GitHubURL                       string `toml:"github_url"`
+	ServerLocation                  string `toml:"server_location"`
 }
 
 type stratumConfig struct {
@@ -425,14 +435,16 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StatusTLSListen: cfg.StatusTLSAddr,
 		},
 		Branding: brandingConfig{
-			StatusBrandName:     cfg.StatusBrandName,
-			StatusBrandDomain:   cfg.StatusBrandDomain,
-			StatusTagline:       cfg.StatusTagline,
-			FiatCurrency:        cfg.FiatCurrency,
-			PoolDonationAddress: cfg.PoolDonationAddress,
-			DiscordURL:          cfg.DiscordURL,
-			GitHubURL:           cfg.GitHubURL,
-			ServerLocation:      cfg.ServerLocation,
+			StatusBrandName:                 cfg.StatusBrandName,
+			StatusBrandDomain:               cfg.StatusBrandDomain,
+			StatusTagline:                   cfg.StatusTagline,
+			StatusConnectMinerTitleExtra:    cfg.StatusConnectMinerTitleExtra,
+			StatusConnectMinerTitleExtraURL: cfg.StatusConnectMinerTitleExtraURL,
+			FiatCurrency:                    cfg.FiatCurrency,
+			PoolDonationAddress:             cfg.PoolDonationAddress,
+			DiscordURL:                      cfg.DiscordURL,
+			GitHubURL:                       cfg.GitHubURL,
+			ServerLocation:                  cfg.ServerLocation,
 		},
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
@@ -784,6 +796,12 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Branding.StatusTagline != "" {
 		cfg.StatusTagline = fc.Branding.StatusTagline
+	}
+	if fc.Branding.StatusConnectMinerTitleExtra != "" {
+		cfg.StatusConnectMinerTitleExtra = strings.TrimSpace(fc.Branding.StatusConnectMinerTitleExtra)
+	}
+	if fc.Branding.StatusConnectMinerTitleExtraURL != "" {
+		cfg.StatusConnectMinerTitleExtraURL = strings.TrimSpace(fc.Branding.StatusConnectMinerTitleExtraURL)
 	}
 	if fc.Branding.FiatCurrency != "" {
 		cfg.FiatCurrency = strings.ToLower(strings.TrimSpace(fc.Branding.FiatCurrency))

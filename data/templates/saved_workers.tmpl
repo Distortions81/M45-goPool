@@ -50,7 +50,7 @@
 				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
 					{{range .OfflineWorkerEntries}}
 						<li>
-							<span class="mono sensitive-worker" data-worker-name="{{.Name}}"></span>
+							<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
 							<span class="badge badge-danger">Offline</span>
 							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
 								<input type="hidden" name="worker" value="{{.Name}}">
@@ -128,7 +128,7 @@
 							{{if .OnlineWorkerEntries}}
 								{{range .OnlineWorkerEntries}}
 								<tr>
-									<td class="mono sensitive-worker" data-worker-name="{{.Name}}"></td>
+									<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
 									<td>{{if gt .Hashrate 0.0}}{{formatHashrate .Hashrate}}{{else}}—{{end}}</td>
 									<td>{{formatDiff .Difficulty}}</td>
 									<td>{{formatShareRate .ShareRate}}</td>
@@ -426,7 +426,7 @@
 			}
 			onlineBody.innerHTML = sorted.map(w => `
 				<tr>
-					<td class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></td>
+					<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
 					<td>${Number(w.hashrate || 0) > 0 ? formatHashrate(Number(w.hashrate || 0)) : '—'}</td>
 					<td>${formatDiffShort(Number(w.difficulty || 0))}</td>
 					<td>${formatShareRatePerMin(Number(w.shares_per_minute || 0))}</td>
@@ -539,7 +539,7 @@
 						}
 						offlineList.innerHTML = offline.map(w => `
 							<li>
-								<span class="mono sensitive-worker" data-worker-name="${escapeAttr(w.name || '')}"></span>
+								<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
 								<span class="badge badge-danger">Offline</span>
 								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
 									<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">

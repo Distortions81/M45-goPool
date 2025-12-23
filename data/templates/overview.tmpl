@@ -13,7 +13,9 @@
 			<div class="connect-panel">
 				<div class="connect-panel-header">
 					<div class="connect-panel-intro">
-						<p class="connect-panel-title">Connect your miner</p>
+						<p class="connect-panel-title">
+							Connect your miner{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
+						</p>
 						<p class="connect-panel-subtitle">Copy these settings into your mining software.</p>
 					</div>
 					</div>
