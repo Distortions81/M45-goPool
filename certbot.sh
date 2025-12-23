@@ -39,4 +39,4 @@ chmod 600 "$KEY_OUT"
 
 echo "✅ TLS certificate generated!"
 echo "Certificate: $CERT_OUT"
-echo "Private Key: $KEY_OUT"`
+echo "Private Key: $KEY_OUT"
