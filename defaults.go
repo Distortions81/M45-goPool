@@ -2,50 +2,6 @@ package main
 
 import (
 	"path/filepath"
-	"time"
-)
-
-const (
-	defaultListenAddr                        = ":3333"
-	defaultStatusAddr                        = ":80"
-	defaultStatusTLSAddr                     = ":443"
-	defaultStatusTagline                     = "Solo Mining Pool"
-	defaultFiatCurrency                      = "usd"
-	defaultGitHubURL                         = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
-	defaultStratumTLSListen                  = ":4333"
-	defaultRPCURL                            = "http://127.0.0.1:8332"
-	defaultRPCUser                           = "bitcoinrpc"
-	defaultRPCPass                           = "password"
-	defaultExtranonce2Size                   = 4
-	defaultTemplateExtraNonce2Size           = 8
-	defaultPoolFeePercent                    = 2.0
-	defaultRecentJobs                        = 3
-	defaultConnectionTimeout                 = 60 * time.Second
-	defaultMaxAcceptsPerSecond               = 500
-	defaultMaxAcceptBurst                    = 1000
-	defaultAcceptReconnectWindow             = 15
-	defaultAcceptBurstWindow                 = 5
-	defaultAcceptSteadyStateWindow           = 100
-	defaultAcceptSteadyStateRate             = 50
-	defaultAcceptSteadyStateReconnectPercent = 5.0
-	defaultAcceptSteadyStateReconnectWindow  = 60
-	defaultCoinbaseSuffixBytes               = 4
-	maxCoinbaseSuffixBytes                   = 32
-	defaultCoinbaseScriptSigMaxBytes         = 100
-	defaultReplayLimit                       = int64(16 << 20)
-	defaultMaxConns                          = 10000
-	defaultNTimeForwardSlackSeconds          = 7000
-	defaultBanInvalidSubmissionsAfter        = 60
-	defaultBanInvalidSubmissionsWindow       = time.Minute
-	defaultBanInvalidSubmissionsDuration     = 15 * time.Minute
-	defaultReconnectBanThreshold             = 0
-	defaultReconnectBanWindowSeconds         = 60
-	defaultReconnectBanDurationSeconds       = 300
-	defaultMaxDifficulty                     = 65536
-	defaultMinDifficulty                     = 512
-	defaultMinVersionBits                    = 1
-	defaultRefreshInterval                   = 10 * time.Second
-	defaultZMQReceiveTimeout                 = 15 * time.Second
 )
 
 // defaultConfig returns a Config populated with built-in defaults that act
@@ -77,7 +33,7 @@ func defaultConfig() Config {
 		CoinbasePoolTag:         generatePoolTag(),
 		PayoutAddress:           "",
 		PoolFeePercent:          defaultPoolFeePercent,
-		OperatorDonationPercent: 0.0,
+		OperatorDonationPercent: defaultOperatorDonationPercent,
 		OperatorDonationAddress: "",
 		OperatorDonationName:    "",
 		OperatorDonationURL:     "",
@@ -87,15 +43,15 @@ func defaultConfig() Config {
 		CoinbaseSuffixBytes:               defaultCoinbaseSuffixBytes,
 		CoinbaseMsg:                       poolSoftwareName,
 		CoinbaseScriptSigMaxBytes:         defaultCoinbaseScriptSigMaxBytes,
-		ZMQBlockAddr:                      "tcp://127.0.0.1:28332",
+		ZMQBlockAddr:                      defaultZMQBlockAddr,
 		DataDir:                           defaultDataDir,
-		ShareLogBufferBytes:               0,
-		FsyncShareLog:                     false,
+		ShareLogBufferBytes:               defaultShareLogBufferBytes,
+		FsyncShareLog:                     defaultFsyncShareLog,
 		ShareLogReplayBytes:               defaultReplayLimit,
 		MaxConns:                          defaultMaxConns,
 		MaxAcceptsPerSecond:               defaultMaxAcceptsPerSecond,
 		MaxAcceptBurst:                    defaultMaxAcceptBurst,
-		AutoAcceptRateLimits:              true,
+		AutoAcceptRateLimits:              defaultAutoAcceptRateLimits,
 		AcceptReconnectWindow:             defaultAcceptReconnectWindow,
 		AcceptBurstWindow:                 defaultAcceptBurstWindow,
 		AcceptSteadyStateWindow:           defaultAcceptSteadyStateWindow,
@@ -106,8 +62,7 @@ func defaultConfig() Config {
 		ConnectionTimeout:                 defaultConnectionTimeout,
 		VersionMask:                       defaultVersionMask,
 		MinVersionBits:                    defaultMinVersionBits,
-		// Default difficulty range: 512–16000 so all live targets are powers
-		// of two within a practical range for typical ASICs.
+		// Default difficulty range is bounded and power-of-two quantized.
 		MaxDifficulty:                 defaultMaxDifficulty,
 		MinDifficulty:                 defaultMinDifficulty,
 		LockSuggestedDifficulty:       false,
@@ -120,9 +75,9 @@ func defaultConfig() Config {
 		ReconnectBanThreshold:         defaultReconnectBanThreshold,
 		ReconnectBanWindowSeconds:     defaultReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:   defaultReconnectBanDurationSeconds,
-		PeerCleanupEnabled:            true,
-		PeerCleanupMaxPingMs:          150,
-		PeerCleanupMinPeers:           20,
+		PeerCleanupEnabled:            defaultPeerCleanupEnabled,
+		PeerCleanupMaxPingMs:          defaultPeerCleanupMaxPingMs,
+		PeerCleanupMinPeers:           defaultPeerCleanupMinPeers,
 	}
 }
 
