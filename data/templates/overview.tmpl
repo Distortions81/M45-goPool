@@ -841,23 +841,30 @@
 				return;
 			}
 			if (!recentBlockTimes || recentBlockTimes.length === 0) {
-				blockHistoryEl.textContent = '--';
+				blockHistoryEl.innerHTML = '--';
 				return;
 			}
 
-			// Calculate historical block times
+			// Calculate previous block durations from timestamps
+			// With 4 timestamps [t0, t1, t2, t3], we show the 3 previous block durations:
+			// - (t3 - t2): most recent previous block
+			// - (t2 - t1): 2nd previous
+			// - (t1 - t0): 3rd previous
 			const durations = [];
-			for (let i = recentBlockTimes.length - 1; i > 0; i--) {
+			for (let i = recentBlockTimes.length - 1; i >= 1; i--) {
 				const prev = new Date(recentBlockTimes[i - 1]).getTime();
 				const curr = new Date(recentBlockTimes[i]).getTime();
 				const durationSec = Math.floor((curr - prev) / 1000);
 				durations.push(formatDurationDetailed(durationSec));
+				// Stop after 3 durations
+				if (durations.length >= 3) break;
 			}
 
 			if (durations.length === 0) {
-				blockHistoryEl.textContent = '--';
+				blockHistoryEl.innerHTML = '--';
 			} else {
-				blockHistoryEl.textContent = durations.join(', ');
+				// Display each previous block duration on its own line
+				blockHistoryEl.innerHTML = durations.join('<br>');
 			}
 		}
 
@@ -890,28 +897,38 @@
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
 					}
-					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
-						// If block_time_left_sec is -1, it means the timer hasn't started yet (waiting for first new block)
-						if (data.block_time_left_sec < 0) {
-							blockTimeLeftSec = null;
-							isBlockTimeOverdue = false;
-							blockTimeOverdueSec = 0;
-						} else {
-							let secondsLeft = data.block_time_left_sec;
+					if (blockTimeLeftEl) {
+						let secondsLeft = null;
+
+						// Try to use block_time_left_sec from server if available
+						if (typeof data.block_time_left_sec === 'number' && data.block_time_left_sec >= 0) {
+							secondsLeft = data.block_time_left_sec;
 							const updatedMillis = getUpdatedAtMillis(updatedAt || data.updated_at);
 							if (updatedMillis !== null) {
 								const ageSec = Math.max(0, (Date.now() - updatedMillis) / 1000);
 								secondsLeft = secondsLeft - ageSec;
 							}
-							if (secondsLeft <= 0) {
-								blockTimeLeftSec = 0;
-								isBlockTimeOverdue = true;
-								blockTimeOverdueSec = Math.floor(Math.max(0, -secondsLeft));
-							} else {
-								blockTimeLeftSec = secondsLeft;
-								isBlockTimeOverdue = false;
-								blockTimeOverdueSec = 0;
-							}
+						}
+						// Fall back to calculating from most recent block timestamp
+						else if (data.recent_block_times && data.recent_block_times.length > 0) {
+							const mostRecentBlockTime = new Date(data.recent_block_times[data.recent_block_times.length - 1]).getTime();
+							const targetInterval = 10 * 60 * 1000; // 10 minutes in ms
+							const expectedEndTime = mostRecentBlockTime + targetInterval;
+							secondsLeft = Math.floor((expectedEndTime - Date.now()) / 1000);
+						}
+
+						if (secondsLeft === null) {
+							blockTimeLeftSec = null;
+							isBlockTimeOverdue = false;
+							blockTimeOverdueSec = 0;
+						} else if (secondsLeft <= 0) {
+							blockTimeLeftSec = 0;
+							isBlockTimeOverdue = true;
+							blockTimeOverdueSec = Math.floor(Math.max(0, -secondsLeft));
+						} else {
+							blockTimeLeftSec = secondsLeft;
+							isBlockTimeOverdue = false;
+							blockTimeOverdueSec = 0;
 						}
 						renderBlockTimeLeft();
 					}

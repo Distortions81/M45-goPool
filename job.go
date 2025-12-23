@@ -98,7 +98,7 @@ type JobFeedPayloadStatus struct {
 	LastRawTxAt       time.Time
 	LastRawTxBytes    int
 	BlockTip          ZMQBlockTip
-	RecentBlockTimes  []time.Time // Last 3 block times
+	RecentBlockTimes  []time.Time // Last 4 block times
 	BlockTimerActive  bool        // Whether block timer should count down (only after first new block)
 }
 
@@ -244,14 +244,14 @@ func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 
 	jm.zmqPayload.BlockTip = tip
 
-	// Track recent block times (keep last 3)
+	// Track recent block times (keep last 4)
 	if !tip.Time.IsZero() {
 		// Only add if this is a new block (different from the last one)
 		if len(jm.zmqPayload.RecentBlockTimes) == 0 ||
 			!jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-1].Equal(tip.Time) {
 			jm.zmqPayload.RecentBlockTimes = append(jm.zmqPayload.RecentBlockTimes, tip.Time)
-			if len(jm.zmqPayload.RecentBlockTimes) > 3 {
-				jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-3:]
+			if len(jm.zmqPayload.RecentBlockTimes) > 4 {
+				jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-4:]
 			}
 			// Activate the block timer when we see a new block
 			if isNewBlock {
