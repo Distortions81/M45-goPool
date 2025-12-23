@@ -16,7 +16,6 @@
 						<p class="connect-panel-title">
 							Connect your miner{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
 						</p>
-						<p class="connect-panel-subtitle">Copy these settings into your mining software.</p>
 					</div>
 					</div>
 
@@ -112,7 +111,6 @@
 			<div class="card">
 				<div class="label">Time left for block</div>
 				<div class="value mono" id="status-block-time-left">--</div>
-				<div class="card-context">Estimated until next block</div>
 			</div>
 			<div class="card">
 				<div class="label">BTC price (USD)</div>
@@ -742,9 +740,7 @@
 		const blockHeightEl = document.getElementById('status-block-height');
 		const blockDifficultyEl = document.getElementById('status-block-difficulty');
 		const blockTimeLeftEl = document.getElementById('status-block-time-left');
-		let blockTimeLeftSec = null;
-		let blockTimeOverdueSec = 0;
-		let isBlockTimeOverdue = false;
+		let cachedRecentBlockTimes = null;
 		if (!valueEl) {
 			return;
 		}
@@ -794,6 +790,22 @@
 			return `${secs}s`;
 		}
 
+		function formatDurationDetailed(seconds) {
+			const total = Math.max(0, Math.floor(seconds ?? 0));
+			const days = Math.floor(total / 86400);
+			const hours = Math.floor((total % 86400) / 3600);
+			const minutes = Math.floor((total % 3600) / 60);
+			const secs = total % 60;
+
+			const parts = [];
+			if (days > 0) parts.push(`${days}d`);
+			if (hours > 0) parts.push(`${hours}h`);
+			if (minutes > 0) parts.push(`${minutes}m`);
+			if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+			return parts.slice(0, 3).join(' ');
+		}
+
 		function getUpdatedAtMillis(value) {
 			if (!value) {
 				return null;
@@ -805,19 +817,36 @@
 			return parsed;
 		}
 
-		function renderBlockTimeLeft() {
+		function renderBlockTimeLeft(recentBlockTimes) {
 			if (!blockTimeLeftEl) {
 				return;
 			}
-			if (isBlockTimeOverdue) {
-				blockTimeLeftEl.textContent = `overdue ${formatDuration(blockTimeOverdueSec)}`;
-				return;
-			}
-			if (typeof blockTimeLeftSec !== 'number') {
+			if (!recentBlockTimes || recentBlockTimes.length === 0) {
 				blockTimeLeftEl.textContent = '--';
 				return;
 			}
-			blockTimeLeftEl.textContent = formatDuration(blockTimeLeftSec);
+
+			const now = Date.now();
+
+			// Calculate time since last block (primary display)
+			const lastBlockTime = new Date(recentBlockTimes[recentBlockTimes.length - 1]).getTime();
+			const timeSinceLastBlock = Math.floor((now - lastBlockTime) / 1000);
+			const primaryDisplay = formatDurationDetailed(timeSinceLastBlock);
+
+			// Calculate historical block times (secondary)
+			const durations = [];
+			for (let i = recentBlockTimes.length - 1; i > 0; i--) {
+				const prev = new Date(recentBlockTimes[i - 1]).getTime();
+				const curr = new Date(recentBlockTimes[i]).getTime();
+				const durationSec = Math.floor((curr - prev) / 1000);
+				durations.push(formatDurationDetailed(durationSec));
+			}
+
+			if (durations.length === 0) {
+				blockTimeLeftEl.textContent = primaryDisplay;
+			} else {
+				blockTimeLeftEl.textContent = primaryDisplay + ' (' + durations.join(', ') + ')';
+			}
 		}
 
 		function updateHashrateDisplay(rate) {
@@ -849,23 +878,8 @@
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
 					}
-					if (blockTimeLeftEl && typeof data.block_time_left_sec === 'number') {
-						let secondsLeft = data.block_time_left_sec;
-						const updatedMillis = getUpdatedAtMillis(updatedAt || data.updated_at);
-						if (updatedMillis !== null) {
-							const ageSec = Math.max(0, (Date.now() - updatedMillis) / 1000);
-							secondsLeft = secondsLeft - ageSec;
-						}
-						if (secondsLeft <= 0) {
-							blockTimeLeftSec = 0;
-							isBlockTimeOverdue = true;
-							blockTimeOverdueSec = Math.floor(Math.max(0, -secondsLeft));
-						} else {
-							blockTimeLeftSec = secondsLeft;
-							isBlockTimeOverdue = false;
-							blockTimeOverdueSec = 0;
-						}
-						renderBlockTimeLeft();
+					if (blockTimeLeftEl && data.recent_block_times) {
+						renderBlockTimeLeft(data.recent_block_times);
 					}
 				})
 				.catch(err => {
@@ -875,22 +889,6 @@
 
 		fetchHashrate();
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
-		setInterval(() => {
-			if (typeof blockTimeLeftSec !== 'number') {
-				return;
-			}
-			if (isBlockTimeOverdue) {
-				blockTimeOverdueSec += 1;
-			} else {
-				blockTimeLeftSec -= 1;
-				if (blockTimeLeftSec <= 0) {
-					blockTimeLeftSec = 0;
-					isBlockTimeOverdue = true;
-					blockTimeOverdueSec = 0;
-				}
-			}
-			renderBlockTimeLeft();
-		}, 1000);
 	})();
 	</script>
 	<script>
