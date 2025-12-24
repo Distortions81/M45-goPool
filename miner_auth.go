@@ -102,7 +102,9 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	worker := ""
 	if len(req.Params) > 0 {
-		worker, _ = req.Params[0].(string)
+		if w, ok := req.Params[0].(string); ok {
+			worker = w
+		}
 	}
 
 	// Validate worker name length to prevent abuse
@@ -251,7 +253,9 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	}
 	var opts map[string]interface{}
 	if len(req.Params) > 1 {
-		opts, _ = req.Params[1].(map[string]interface{})
+		if o, ok := req.Params[1].(map[string]interface{}); ok {
+			opts = o
+		}
 	}
 
 	result := make(map[string]interface{})

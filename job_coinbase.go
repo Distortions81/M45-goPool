@@ -350,6 +350,10 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 	}
 
 	// Keep the same log payload as before for easier operational debugging.
+	// Verify FeeSlices has at least one element before accessing.
+	if len(breakdown.FeeSlices) == 0 {
+		return nil, nil, fmt.Errorf("breakdown.FeeSlices is empty")
+	}
 	totalPoolFee := breakdown.FeeSlices[0].FeeTotal
 	poolFee := breakdown.FeeSlices[0].ParentValue
 	donationValue := int64(0)

@@ -178,6 +178,7 @@ zmqLoop:
 				}
 				break
 			}
+			// Ensure we have at least topic and payload frames
 			if len(frames) < 2 {
 				logger.Warn("zmq notification malformed", "frames", len(frames))
 				continue
