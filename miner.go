@@ -479,7 +479,7 @@ func (mc *MinerConn) setWorkerWallet(worker, addr string, script []byte) {
 	}
 	mc.walletMu.Lock()
 	if mc.workerWallets == nil {
-		mc.workerWallets = make(map[string]workerWalletState)
+		mc.workerWallets = make(map[string]workerWalletState, 4) // Pre-allocate for typical worker count
 	}
 	mc.workerWallets[worker] = workerWalletState{
 		address:   addr,
@@ -667,11 +667,11 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		metrics:         metrics,
 		accounting:      accounting,
 		workerRegistry:  workerRegistry,
-		activeJobs:      make(map[string]*Job),
+		activeJobs:      make(map[string]*Job, maxRecentJobs),                // Pre-allocate for expected job count
 		connectedAt:     now,
 		lastActivity:    now,
-		jobDifficulty:   make(map[string]float64),
-		shareCache:      make(map[string]*duplicateShareSet),
+		jobDifficulty:   make(map[string]float64, maxRecentJobs),           // Pre-allocate for expected job count
+		shareCache:      make(map[string]*duplicateShareSet, maxRecentJobs), // Pre-allocate for expected job count
 		maxRecentJobs:   maxRecentJobs,
 		lastPenalty:     time.Now(),
 		versionRoll:     false,
