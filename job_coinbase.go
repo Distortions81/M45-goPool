@@ -15,6 +15,42 @@ type coinbasePayoutOutput struct {
 	Value  int64
 }
 
+type coinbasePayoutPlan struct {
+	TotalValue               int64
+	RemainderScript          []byte
+	FeeSlices                []coinbaseFeeSlice
+	RequireRemainderPositive bool
+}
+
+// coinbaseFeeSlice describes a percentage-based deduction from the total block
+// reward. The computed fee amount is optionally sub-split into additional
+// outputs (e.g. a donation from the pool fee), with the remainder going to the
+// slice's Script.
+type coinbaseFeeSlice struct {
+	Script    []byte
+	Percent   float64
+	SubSlices []coinbaseFeeSubSlice
+}
+
+// coinbaseFeeSubSlice describes a percentage-based split of a fee slice amount.
+// The percentage is applied to the parent fee slice amount (not the total).
+type coinbaseFeeSubSlice struct {
+	Script  []byte
+	Percent float64
+}
+
+type coinbasePayoutBreakdown struct {
+	TotalValue     int64
+	RemainderValue int64
+	FeeSlices      []coinbaseFeeSliceBreakdown
+}
+
+type coinbaseFeeSliceBreakdown struct {
+	FeeTotal    int64
+	ParentValue int64
+	SubValues   []int64
+}
+
 const maxCoinbasePayoutOutputs = 32
 
 func validateCoinbasePayoutOutputs(outputs []coinbasePayoutOutput) error {
@@ -33,6 +69,95 @@ func validateCoinbasePayoutOutputs(outputs []coinbasePayoutOutput) error {
 		}
 	}
 	return nil
+}
+
+func computeCoinbasePayouts(plan coinbasePayoutPlan) ([]coinbasePayoutOutput, *coinbasePayoutBreakdown, error) {
+	if plan.TotalValue <= 0 {
+		return nil, nil, fmt.Errorf("total coinbase value must be positive")
+	}
+	if len(plan.RemainderScript) == 0 {
+		return nil, nil, fmt.Errorf("remainder payout script required")
+	}
+	remaining := plan.TotalValue
+	payouts := make([]coinbasePayoutOutput, 0, 1+len(plan.FeeSlices))
+
+	breakdown := &coinbasePayoutBreakdown{
+		TotalValue: plan.TotalValue,
+		FeeSlices:  make([]coinbaseFeeSliceBreakdown, 0, len(plan.FeeSlices)),
+	}
+
+	for i, fee := range plan.FeeSlices {
+		if len(fee.Script) == 0 {
+			return nil, nil, fmt.Errorf("fee slice %d script required", i)
+		}
+
+		feePct := fee.Percent
+		if feePct < 0 {
+			feePct = 0
+		}
+		if feePct > 99.99 {
+			feePct = 99.99
+		}
+
+		feeTotal := int64(math.Round(float64(plan.TotalValue) * feePct / 100.0))
+		if feeTotal < 0 {
+			feeTotal = 0
+		}
+		if feeTotal > remaining {
+			feeTotal = remaining
+		}
+		remaining -= feeTotal
+
+		feeRemaining := feeTotal
+		subValues := make([]int64, 0, len(fee.SubSlices))
+		subPayouts := make([]coinbasePayoutOutput, 0, len(fee.SubSlices))
+		for j, sub := range fee.SubSlices {
+			if len(sub.Script) == 0 {
+				return nil, nil, fmt.Errorf("fee slice %d subslice %d script required", i, j)
+			}
+			subPct := sub.Percent
+			if subPct < 0 {
+				subPct = 0
+			}
+			if subPct > 100 {
+				subPct = 100
+			}
+
+			subAmt := int64(math.Round(float64(feeTotal) * subPct / 100.0))
+			if subAmt < 0 {
+				subAmt = 0
+			}
+			if subAmt > feeRemaining {
+				subAmt = feeRemaining
+			}
+			feeRemaining -= subAmt
+
+			subValues = append(subValues, subAmt)
+			subPayouts = append(subPayouts, coinbasePayoutOutput{Script: sub.Script, Value: subAmt})
+		}
+
+		// Preserve historical ordering: the parent slice output comes first,
+		// followed by any subslice outputs.
+		payouts = append(payouts, coinbasePayoutOutput{Script: fee.Script, Value: feeRemaining})
+		payouts = append(payouts, subPayouts...)
+
+		breakdown.FeeSlices = append(breakdown.FeeSlices, coinbaseFeeSliceBreakdown{
+			FeeTotal:    feeTotal,
+			ParentValue: feeRemaining,
+			SubValues:   subValues,
+		})
+	}
+
+	breakdown.RemainderValue = remaining
+	if plan.RequireRemainderPositive && remaining <= 0 {
+		return nil, nil, fmt.Errorf("remainder payout must be positive after applying fees")
+	}
+	payouts = append(payouts, coinbasePayoutOutput{Script: plan.RemainderScript, Value: remaining})
+
+	if err := validateCoinbasePayoutOutputs(payouts); err != nil {
+		return nil, nil, err
+	}
+	return payouts, breakdown, nil
 }
 
 func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutput) ([]byte, error) {
@@ -164,32 +289,15 @@ func serializeDualCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []
 	if len(poolScript) == 0 || len(workerScript) == 0 {
 		return nil, nil, fmt.Errorf("both pool and worker payout scripts are required")
 	}
-	if totalValue <= 0 {
-		return nil, nil, fmt.Errorf("total coinbase value must be positive")
+	plan := coinbasePayoutPlan{
+		TotalValue:               totalValue,
+		RemainderScript:          workerScript,
+		FeeSlices:                []coinbaseFeeSlice{{Script: poolScript, Percent: feePercent}},
+		RequireRemainderPositive: true,
 	}
-
-	// Split total value into pool fee and worker payout.
-	if feePercent < 0 {
-		feePercent = 0
-	}
-	if feePercent > 99.99 {
-		feePercent = 99.99
-	}
-	poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
-	if poolFee < 0 {
-		poolFee = 0
-	}
-	if poolFee > totalValue {
-		poolFee = totalValue
-	}
-	workerValue := totalValue - poolFee
-	if workerValue <= 0 {
-		return nil, nil, fmt.Errorf("worker payout must be positive after applying pool fee")
-	}
-
-	payouts := []coinbasePayoutOutput{
-		{Script: poolScript, Value: poolFee},
-		{Script: workerScript, Value: workerValue},
+	payouts, _, err := computeCoinbasePayouts(plan)
+	if err != nil {
+		return nil, nil, err
 	}
 	return serializeCoinbaseTxPayoutsPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payouts, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
 }
@@ -222,45 +330,24 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 	if len(poolScript) == 0 || len(donationScript) == 0 || len(workerScript) == 0 {
 		return nil, nil, fmt.Errorf("pool, donation, and worker payout scripts are all required")
 	}
-	if totalValue <= 0 {
-		return nil, nil, fmt.Errorf("total coinbase value must be positive")
+	plan := coinbasePayoutPlan{
+		TotalValue:               totalValue,
+		RemainderScript:          workerScript,
+		FeeSlices:                []coinbaseFeeSlice{{Script: poolScript, Percent: poolFeePercent, SubSlices: []coinbaseFeeSubSlice{{Script: donationScript, Percent: donationFeePercent}}}},
+		RequireRemainderPositive: true,
+	}
+	payouts, breakdown, err := computeCoinbasePayouts(plan)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// Split total value: first pool fee, then donation from pool fee, then worker
-	if poolFeePercent < 0 {
-		poolFeePercent = 0
+	// Keep the same log payload as before for easier operational debugging.
+	totalPoolFee := breakdown.FeeSlices[0].FeeTotal
+	poolFee := breakdown.FeeSlices[0].ParentValue
+	donationValue := int64(0)
+	if len(breakdown.FeeSlices[0].SubValues) > 0 {
+		donationValue = breakdown.FeeSlices[0].SubValues[0]
 	}
-	if poolFeePercent > 99.99 {
-		poolFeePercent = 99.99
-	}
-	if donationFeePercent < 0 {
-		donationFeePercent = 0
-	}
-	if donationFeePercent > 100 {
-		donationFeePercent = 100
-	}
-
-	// Calculate pool fee from total value
-	totalPoolFee := int64(math.Round(float64(totalValue) * poolFeePercent / 100.0))
-	if totalPoolFee < 0 {
-		totalPoolFee = 0
-	}
-	if totalPoolFee > totalValue {
-		totalPoolFee = totalValue
-	}
-
-	// Calculate donation from pool fee
-	donationValue := int64(math.Round(float64(totalPoolFee) * donationFeePercent / 100.0))
-	if donationValue < 0 {
-		donationValue = 0
-	}
-	if donationValue > totalPoolFee {
-		donationValue = totalPoolFee
-	}
-
-	// Remaining pool fee after donation
-	poolFee := totalPoolFee - donationValue
-
 	logger.Info("triple coinbase split",
 		"total_sats", totalValue,
 		"pool_fee_pct", poolFeePercent,
@@ -268,19 +355,8 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 		"donation_pct", donationFeePercent,
 		"donation_sats", donationValue,
 		"pool_keeps_sats", poolFee,
-		"worker_sats", totalValue-totalPoolFee)
+		"worker_sats", breakdown.RemainderValue)
 
-	// Worker gets the rest
-	workerValue := totalValue - totalPoolFee
-	if workerValue <= 0 {
-		return nil, nil, fmt.Errorf("worker payout must be positive after applying pool fee")
-	}
-
-	payouts := []coinbasePayoutOutput{
-		{Script: poolScript, Value: poolFee},
-		{Script: donationScript, Value: donationValue},
-		{Script: workerScript, Value: workerValue},
-	}
 	return serializeCoinbaseTxPayoutsPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payouts, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
 }
 
@@ -472,31 +548,15 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 	if len(poolScript) == 0 || len(workerScript) == 0 {
 		return "", "", fmt.Errorf("both pool and worker payout scripts are required")
 	}
-	// Split total value into pool fee and worker payout.
-	if totalValue <= 0 {
-		return "", "", fmt.Errorf("total coinbase value must be positive")
+	plan := coinbasePayoutPlan{
+		TotalValue:               totalValue,
+		RemainderScript:          workerScript,
+		FeeSlices:                []coinbaseFeeSlice{{Script: poolScript, Percent: feePercent}},
+		RequireRemainderPositive: true,
 	}
-	if feePercent < 0 {
-		feePercent = 0
-	}
-	if feePercent > 99.99 {
-		feePercent = 99.99
-	}
-	poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
-	if poolFee < 0 {
-		poolFee = 0
-	}
-	if poolFee > totalValue {
-		poolFee = totalValue
-	}
-	workerValue := totalValue - poolFee
-	if workerValue <= 0 {
-		return "", "", fmt.Errorf("worker payout must be positive after applying pool fee")
-	}
-
-	payouts := []coinbasePayoutOutput{
-		{Script: poolScript, Value: poolFee},
-		{Script: workerScript, Value: workerValue},
+	payouts, _, err := computeCoinbasePayouts(plan)
+	if err != nil {
+		return "", "", err
 	}
 	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
 }
@@ -509,54 +569,15 @@ func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce
 	if len(poolScript) == 0 || len(donationScript) == 0 || len(workerScript) == 0 {
 		return "", "", fmt.Errorf("pool, donation, and worker payout scripts are all required")
 	}
-	// Split total value: first pool fee, then donation from pool fee, then worker
-	if totalValue <= 0 {
-		return "", "", fmt.Errorf("total coinbase value must be positive")
+	plan := coinbasePayoutPlan{
+		TotalValue:               totalValue,
+		RemainderScript:          workerScript,
+		FeeSlices:                []coinbaseFeeSlice{{Script: poolScript, Percent: poolFeePercent, SubSlices: []coinbaseFeeSubSlice{{Script: donationScript, Percent: donationFeePercent}}}},
+		RequireRemainderPositive: true,
 	}
-	if poolFeePercent < 0 {
-		poolFeePercent = 0
-	}
-	if poolFeePercent > 99.99 {
-		poolFeePercent = 99.99
-	}
-	if donationFeePercent < 0 {
-		donationFeePercent = 0
-	}
-	if donationFeePercent > 100 {
-		donationFeePercent = 100
-	}
-
-	// Calculate pool fee from total value
-	totalPoolFee := int64(math.Round(float64(totalValue) * poolFeePercent / 100.0))
-	if totalPoolFee < 0 {
-		totalPoolFee = 0
-	}
-	if totalPoolFee > totalValue {
-		totalPoolFee = totalValue
-	}
-
-	// Calculate donation from pool fee
-	donationValue := int64(math.Round(float64(totalPoolFee) * donationFeePercent / 100.0))
-	if donationValue < 0 {
-		donationValue = 0
-	}
-	if donationValue > totalPoolFee {
-		donationValue = totalPoolFee
-	}
-
-	// Remaining pool fee after donation
-	poolFee := totalPoolFee - donationValue
-
-	// Worker gets the rest
-	workerValue := totalValue - totalPoolFee
-	if workerValue <= 0 {
-		return "", "", fmt.Errorf("worker payout must be positive after applying pool fee")
-	}
-
-	payouts := []coinbasePayoutOutput{
-		{Script: poolScript, Value: poolFee},
-		{Script: donationScript, Value: donationValue},
-		{Script: workerScript, Value: workerValue},
+	payouts, _, err := computeCoinbasePayouts(plan)
+	if err != nil {
+		return "", "", err
 	}
 	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
 }
