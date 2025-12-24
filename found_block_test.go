@@ -149,9 +149,7 @@ func TestFoundBlockSubmission_BtcdCompat(t *testing.T) {
 // TestFoundBlockSubmission_DualPayout tests block submission with dual-payout
 // (pool fee + worker payout) and verifies the coinbase outputs are correct.
 func TestFoundBlockSubmission_DualPayout(t *testing.T) {
-	tmpDir := t.TempDir()
 	cfg := Config{
-		DataDir:        tmpDir,
 		PoolFeePercent: 2.0,
 	}
 
@@ -187,7 +185,6 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 	feePercent := cfg.PoolFeePercent
 
 	job := &Job{
-		JobID: "dual-payout-test",
 		Template: GetBlockTemplateResult{
 			Height:        200,
 			CurTime:       1700000100,
@@ -195,10 +192,7 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 			Previous:      "0000000000000000000000000000000000000000000000000000000000000000",
 			CoinbaseValue: totalValue,
 		},
-		Extranonce2Size:         4,
 		TemplateExtraNonce2Size: 8,
-		PayoutScript:            poolScript,
-		CoinbaseValue:           totalValue,
 	}
 
 	extranonce1 := []byte{0x01, 0x02, 0x03, 0x04}

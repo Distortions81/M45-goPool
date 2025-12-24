@@ -513,14 +513,14 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		return
 	}
 
-	mc.handleBlockShare(req, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, header, merkleRoot, cbTx, cbTxid, now)
+	mc.handleBlockShare(req, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
 // builds the full block (reusing any dual-payout header/coinbase when
 // available), submits it via RPC, logs the reward split and found-block
 // record, and sends the final Stratum response.
-func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, header []byte, merkleRoot []byte, cbTx []byte, cbTxid []byte, now time.Time) {
+func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
 	var (
 		blockHex  string
 		submitRes interface{}

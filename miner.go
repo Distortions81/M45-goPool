@@ -203,12 +203,12 @@ type MinerConn struct {
 	shareTarget         atomic.Pointer[big.Int]
 	lastDiffChange      atomic.Int64 // Unix nanos
 	stateMu             sync.Mutex
-	listenerOn   bool
-	stats        MinerStats
-	statsMu      sync.Mutex
-	statsUpdates chan statsUpdate // Buffered channel for async stats updates
-	statsWg      sync.WaitGroup   // Wait for stats worker to finish
-	vardiff      VarDiffConfig
+	listenerOn          bool
+	stats               MinerStats
+	statsMu             sync.Mutex
+	statsUpdates        chan statsUpdate // Buffered channel for async stats updates
+	statsWg             sync.WaitGroup   // Wait for stats worker to finish
+	vardiff             VarDiffConfig
 	metrics             *PoolMetrics
 	accounting          *AccountStore
 	workerRegistry      *workerConnectionRegistry
@@ -667,10 +667,10 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		metrics:         metrics,
 		accounting:      accounting,
 		workerRegistry:  workerRegistry,
-		activeJobs:      make(map[string]*Job, maxRecentJobs),                // Pre-allocate for expected job count
+		activeJobs:      make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
 		connectedAt:     now,
 		lastActivity:    now,
-		jobDifficulty:   make(map[string]float64, maxRecentJobs),           // Pre-allocate for expected job count
+		jobDifficulty:   make(map[string]float64, maxRecentJobs),            // Pre-allocate for expected job count
 		shareCache:      make(map[string]*duplicateShareSet, maxRecentJobs), // Pre-allocate for expected job count
 		maxRecentJobs:   maxRecentJobs,
 		lastPenalty:     time.Now(),
@@ -710,7 +710,7 @@ func (mc *MinerConn) handle() {
 			logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
 			return
 		}
-		deadline := now.Add(mc.currentReadTimeout(now))
+		deadline := now.Add(mc.currentReadTimeout())
 		if err := mc.conn.SetReadDeadline(deadline); err != nil {
 			if mc.ctx.Err() != nil {
 				return
@@ -812,7 +812,7 @@ func (mc *MinerConn) writeJSON(v interface{}) error {
 // connections get a short timeout to protect against floods; once a miner
 // has submitted a few valid shares we switch to the configured, longer
 // timeout.
-func (mc *MinerConn) currentReadTimeout(now time.Time) time.Duration {
+func (mc *MinerConn) currentReadTimeout() time.Duration {
 	base := mc.cfg.ConnectionTimeout
 	if base <= 0 {
 		base = defaultConnectionTimeout

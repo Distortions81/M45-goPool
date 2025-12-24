@@ -929,7 +929,7 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 			jm.subsMu.Unlock()
 
 			if blocked > 0 {
-				logger.Warn("job broadcast blocked; dropping update", "subscribers", subscriberCount, "blocked", blocked)
+				logger.Warn("job broadcast blocked; dropping update", "worker", workerID, "subscribers", subscriberCount, "blocked", blocked)
 			}
 		}
 	}
