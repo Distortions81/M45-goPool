@@ -10,11 +10,14 @@ func buildMerkleBranches(txids [][]byte) []string {
 	if len(txids) == 0 {
 		return []string{}
 	}
-	layer := make([][]byte, 0, len(txids)+1)
-	layer = append(layer, nil)
-	layer = append(layer, txids...)
+	// Pre-allocate with exact size: nil placeholder + all txids
+	layer := make([][]byte, 1+len(txids))
+	layer[0] = nil
+	copy(layer[1:], txids)
 
-	var steps []string
+	// Pre-allocate steps slice - merkle tree depth is log2(txcount)
+	// For 4000 txs, depth is ~12. Pre-allocate 16 to be safe.
+	steps := make([]string, 0, 16)
 	L := len(layer)
 	for L > 1 {
 		steps = append(steps, hex.EncodeToString(layer[1]))

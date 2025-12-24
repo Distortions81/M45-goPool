@@ -44,7 +44,8 @@ func TestDifficultyFromHashCompatWithBtcdWork(t *testing.T) {
 			// the target exactly. difficultyFromHash reverses the hash bytes
 			// before feeding them to big.Int, so we provide the little-endian
 			// form of the target here.
-			targetBE := target.FillBytes(make([]byte, 32))
+			var targetBuf [32]byte
+			targetBE := target.FillBytes(targetBuf[:])
 			hash := reverseBytes(targetBE)
 
 			gotDiff := difficultyFromHash(hash)

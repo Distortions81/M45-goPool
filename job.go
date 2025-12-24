@@ -713,7 +713,7 @@ func validateWitnessCommitment(commitment string) error {
 }
 
 func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
-	txids := make([][]byte, 0, len(txs))
+	txids := make([][]byte, len(txs)) // Pre-allocate exact size since we know we'll add all txs
 	for i, tx := range txs {
 		if len(tx.Txid) != 64 {
 			return nil, fmt.Errorf("tx %d has invalid txid length: %d bytes", i, len(tx.Txid)/2)
@@ -763,7 +763,7 @@ func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
 			}
 		}
 
-		txids = append(txids, reverseBytes(computedRaw))
+		txids[i] = reverseBytes(computedRaw)
 	}
 	return txids, nil
 }
@@ -841,9 +841,9 @@ func (jm *JobManager) Ready() bool {
 
 func (jm *JobManager) NextExtranonce1() []byte {
 	id := atomic.AddUint32(&jm.extraID, 1)
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, id)
-	return buf
+	var buf [4]byte // Use fixed-size array instead of slice allocation
+	binary.BigEndian.PutUint32(buf[:], id)
+	return buf[:]
 }
 
 func (jm *JobManager) Subscribe() chan *Job {
