@@ -912,18 +912,12 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			// Take a snapshot of subscribers to minimize lock hold time
+			// Send directly to all subscribers - no snapshot needed since
+			// the send operations are non-blocking (select/default)
 			jm.subsMu.Lock()
-			snapshot := make([]chan *Job, 0, len(jm.subs))
-			for ch := range jm.subs {
-				snapshot = append(snapshot, ch)
-			}
-			subscriberCount := len(jm.subs)
-			jm.subsMu.Unlock()
-
-			// Send to all subscribers without holding the lock
 			blocked := 0
-			for _, ch := range snapshot {
+			subscriberCount := len(jm.subs)
+			for ch := range jm.subs {
 				select {
 				case ch <- job:
 					// Successfully sent
@@ -932,6 +926,7 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 					blocked++
 				}
 			}
+			jm.subsMu.Unlock()
 
 			if blocked > 0 {
 				logger.Warn("job broadcast blocked; dropping update", "subscribers", subscriberCount, "blocked", blocked)
