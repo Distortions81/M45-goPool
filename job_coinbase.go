@@ -8,33 +8,60 @@ import (
 	"strings"
 )
 
-func serializeCoinbaseTx(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
-	var flagsBytes []byte
-	if coinbaseFlags != "" {
-		b, err := hex.DecodeString(coinbaseFlags)
-		if err != nil {
-			return nil, nil, fmt.Errorf("decode coinbase flags: %w", err)
-		}
-		flagsBytes = b
-	}
-	var commitmentScript []byte
-	if witnessCommitment != "" {
-		b, err := hex.DecodeString(witnessCommitment)
-		if err != nil {
-			return nil, nil, fmt.Errorf("decode witness commitment: %w", err)
-		}
-		commitmentScript = b
-	}
-	return serializeCoinbaseTxPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payoutScript, coinbaseValue, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
+// coinbasePayoutOutput describes a single non-witness-commitment output in a
+// coinbase transaction.
+type coinbasePayoutOutput struct {
+	Script []byte
+	Value  int64
 }
 
-// serializeCoinbaseTxPredecoded is the hot-path variant that reuses
-// pre-decoded flags/commitment bytes.
-func serializeCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
-	if len(payoutScript) == 0 {
-		return nil, nil, fmt.Errorf("payout script required")
+const maxCoinbasePayoutOutputs = 32
+
+func validateCoinbasePayoutOutputs(outputs []coinbasePayoutOutput) error {
+	if len(outputs) == 0 {
+		return fmt.Errorf("at least one payout output is required")
+	}
+	if len(outputs) > maxCoinbasePayoutOutputs {
+		return fmt.Errorf("too many payout outputs: %d > %d", len(outputs), maxCoinbasePayoutOutputs)
+	}
+	for i, o := range outputs {
+		if len(o.Script) == 0 {
+			return fmt.Errorf("payout output %d script required", i)
+		}
+		if o.Value < 0 {
+			return fmt.Errorf("payout output %d value cannot be negative", i)
+		}
+	}
+	return nil
+}
+
+func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutput) ([]byte, error) {
+	if err := validateCoinbasePayoutOutputs(payouts); err != nil {
+		return nil, err
 	}
 
+	var outputs bytes.Buffer
+	outputCount := uint64(len(payouts))
+	if len(commitmentScript) > 0 {
+		outputCount++
+	}
+	writeVarInt(&outputs, outputCount)
+	if len(commitmentScript) > 0 {
+		writeUint64LE(&outputs, 0)
+		writeVarInt(&outputs, uint64(len(commitmentScript)))
+		outputs.Write(commitmentScript)
+	}
+	for _, o := range payouts {
+		writeUint64LE(&outputs, uint64(o.Value))
+		writeVarInt(&outputs, uint64(len(o.Script)))
+		outputs.Write(o.Script)
+	}
+	return outputs.Bytes(), nil
+}
+
+// serializeCoinbaseTxPayoutsPredecoded is the shared hot-path coinbase builder.
+// It supports 1..N payout outputs plus an optional witness commitment output.
+func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payouts []coinbasePayoutOutput, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
 	padLen := templateExtraNonce2Size - len(extranonce2)
 	if padLen < 0 {
 		padLen = 0
@@ -66,29 +93,46 @@ func serializeCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte
 	vin.Write(scriptSigPart2)
 	writeUint32LE(&vin, 0) // sequence
 
-	var outputs bytes.Buffer
-	outputCount := uint64(1)
-	if len(commitmentScript) > 0 {
-		outputCount++
+	outputs, err := buildCoinbaseOutputs(commitmentScript, payouts)
+	if err != nil {
+		return nil, nil, err
 	}
-	writeVarInt(&outputs, outputCount)
-	if len(commitmentScript) > 0 {
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
-	}
-	writeUint64LE(&outputs, uint64(coinbaseValue))
-	writeVarInt(&outputs, uint64(len(payoutScript)))
-	outputs.Write(payoutScript)
 
 	var tx bytes.Buffer
 	writeUint32LE(&tx, 1) // version
 	tx.Write(vin.Bytes())
-	tx.Write(outputs.Bytes())
+	tx.Write(outputs)
 	writeUint32LE(&tx, 0) // locktime
 
 	txid := doubleSHA256(tx.Bytes())
 	return tx.Bytes(), txid, nil
+}
+
+func serializeCoinbaseTx(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
+	var flagsBytes []byte
+	if coinbaseFlags != "" {
+		b, err := hex.DecodeString(coinbaseFlags)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode coinbase flags: %w", err)
+		}
+		flagsBytes = b
+	}
+	var commitmentScript []byte
+	if witnessCommitment != "" {
+		b, err := hex.DecodeString(witnessCommitment)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode witness commitment: %w", err)
+		}
+		commitmentScript = b
+	}
+	return serializeCoinbaseTxPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payoutScript, coinbaseValue, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
+}
+
+// serializeCoinbaseTxPredecoded is the hot-path variant that reuses
+// pre-decoded flags/commitment bytes.
+func serializeCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
+	payouts := []coinbasePayoutOutput{{Script: payoutScript, Value: coinbaseValue}}
+	return serializeCoinbaseTxPayoutsPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payouts, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
 }
 
 // serializeDualCoinbaseTx builds a coinbase transaction that splits the block
@@ -124,37 +168,6 @@ func serializeDualCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []
 		return nil, nil, fmt.Errorf("total coinbase value must be positive")
 	}
 
-	padLen := templateExtraNonce2Size - len(extranonce2)
-	if padLen < 0 {
-		padLen = 0
-	}
-	placeholderLen := len(extranonce1) + len(extranonce2) + padLen
-	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, placeholderLen)
-
-	scriptSigPart1 := bytes.Join([][]byte{
-		serializeNumberScript(height),
-		flagsBytes,
-		serializeNumberScript(scriptTime),
-		{byte(len(extraNoncePlaceholder))},
-	}, nil)
-	msg := normalizeCoinbaseMessage(coinbaseMsg)
-	scriptSigPart2 := serializeStringScript(msg)
-	scriptSigLen := len(scriptSigPart1) + padLen + len(extranonce1) + len(extranonce2) + len(scriptSigPart2)
-
-	var vin bytes.Buffer
-	writeVarInt(&vin, 1)
-	vin.Write(bytes.Repeat([]byte{0x00}, 32))
-	writeUint32LE(&vin, 0xffffffff)
-	writeVarInt(&vin, uint64(scriptSigLen))
-	vin.Write(scriptSigPart1)
-	if padLen > 0 {
-		vin.Write(bytes.Repeat([]byte{0x00}, padLen))
-	}
-	vin.Write(extranonce1)
-	vin.Write(extranonce2)
-	vin.Write(scriptSigPart2)
-	writeUint32LE(&vin, 0)
-
 	// Split total value into pool fee and worker payout.
 	if feePercent < 0 {
 		feePercent = 0
@@ -174,34 +187,11 @@ func serializeDualCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 []
 		return nil, nil, fmt.Errorf("worker payout must be positive after applying pool fee")
 	}
 
-	var outputs bytes.Buffer
-	outputCount := uint64(2) // pool + worker
-	if len(commitmentScript) > 0 {
-		outputCount++
+	payouts := []coinbasePayoutOutput{
+		{Script: poolScript, Value: poolFee},
+		{Script: workerScript, Value: workerValue},
 	}
-	writeVarInt(&outputs, outputCount)
-	if len(commitmentScript) > 0 {
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
-	}
-	// Pool fee output.
-	writeUint64LE(&outputs, uint64(poolFee))
-	writeVarInt(&outputs, uint64(len(poolScript)))
-	outputs.Write(poolScript)
-	// Worker payout output.
-	writeUint64LE(&outputs, uint64(workerValue))
-	writeVarInt(&outputs, uint64(len(workerScript)))
-	outputs.Write(workerScript)
-
-	var tx bytes.Buffer
-	writeUint32LE(&tx, 1)
-	tx.Write(vin.Bytes())
-	tx.Write(outputs.Bytes())
-	writeUint32LE(&tx, 0)
-
-	txid := doubleSHA256(tx.Bytes())
-	return tx.Bytes(), txid, nil
+	return serializeCoinbaseTxPayoutsPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payouts, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
 }
 
 // serializeTripleCoinbaseTx builds a coinbase transaction that splits the block
@@ -235,37 +225,6 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 	if totalValue <= 0 {
 		return nil, nil, fmt.Errorf("total coinbase value must be positive")
 	}
-
-	padLen := templateExtraNonce2Size - len(extranonce2)
-	if padLen < 0 {
-		padLen = 0
-	}
-	placeholderLen := len(extranonce1) + len(extranonce2) + padLen
-	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, placeholderLen)
-
-	scriptSigPart1 := bytes.Join([][]byte{
-		serializeNumberScript(height),
-		flagsBytes,
-		serializeNumberScript(scriptTime),
-		{byte(len(extraNoncePlaceholder))},
-	}, nil)
-	msg := normalizeCoinbaseMessage(coinbaseMsg)
-	scriptSigPart2 := serializeStringScript(msg)
-	scriptSigLen := len(scriptSigPart1) + padLen + len(extranonce1) + len(extranonce2) + len(scriptSigPart2)
-
-	var vin bytes.Buffer
-	writeVarInt(&vin, 1)
-	vin.Write(bytes.Repeat([]byte{0x00}, 32))
-	writeUint32LE(&vin, 0xffffffff)
-	writeVarInt(&vin, uint64(scriptSigLen))
-	vin.Write(scriptSigPart1)
-	if padLen > 0 {
-		vin.Write(bytes.Repeat([]byte{0x00}, padLen))
-	}
-	vin.Write(extranonce1)
-	vin.Write(extranonce2)
-	vin.Write(scriptSigPart2)
-	writeUint32LE(&vin, 0)
 
 	// Split total value: first pool fee, then donation from pool fee, then worker
 	if poolFeePercent < 0 {
@@ -317,38 +276,12 @@ func serializeTripleCoinbaseTxPredecoded(height int64, extranonce1, extranonce2 
 		return nil, nil, fmt.Errorf("worker payout must be positive after applying pool fee")
 	}
 
-	var outputs bytes.Buffer
-	outputCount := uint64(3) // pool + donation + worker
-	if len(commitmentScript) > 0 {
-		outputCount++
+	payouts := []coinbasePayoutOutput{
+		{Script: poolScript, Value: poolFee},
+		{Script: donationScript, Value: donationValue},
+		{Script: workerScript, Value: workerValue},
 	}
-	writeVarInt(&outputs, outputCount)
-	if len(commitmentScript) > 0 {
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
-	}
-	// Pool fee output (after donation).
-	writeUint64LE(&outputs, uint64(poolFee))
-	writeVarInt(&outputs, uint64(len(poolScript)))
-	outputs.Write(poolScript)
-	// Donation output.
-	writeUint64LE(&outputs, uint64(donationValue))
-	writeVarInt(&outputs, uint64(len(donationScript)))
-	outputs.Write(donationScript)
-	// Worker payout output.
-	writeUint64LE(&outputs, uint64(workerValue))
-	writeVarInt(&outputs, uint64(len(workerScript)))
-	outputs.Write(workerScript)
-
-	var tx bytes.Buffer
-	writeUint32LE(&tx, 1)
-	tx.Write(vin.Bytes())
-	tx.Write(outputs.Bytes())
-	writeUint32LE(&tx, 0)
-
-	txid := doubleSHA256(tx.Bytes())
-	return tx.Bytes(), txid, nil
+	return serializeCoinbaseTxPayoutsPredecoded(height, extranonce1, extranonce2, templateExtraNonce2Size, payouts, commitmentScript, flagsBytes, coinbaseMsg, scriptTime)
 }
 
 func serializeNumberScript(n int64) []byte {
@@ -459,6 +392,11 @@ func clampCoinbaseMessage(message string, limit int, height int64, scriptTime in
 // buildCoinbaseParts constructs coinb1/coinb2 for the stratum protocol.
 // The trailing string in the scriptSig is the pool's coinbase message.
 func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) (string, string, error) {
+	payouts := []coinbasePayoutOutput{{Script: payoutScript, Value: coinbaseValue}}
+	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
+}
+
+func buildCoinbasePartsPayouts(height int64, extranonce1 []byte, extranonce2Size int, templateExtraNonce2Size int, payouts []coinbasePayoutOutput, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) (string, string, error) {
 	if extranonce2Size <= 0 {
 		extranonce2Size = 4
 	}
@@ -497,30 +435,24 @@ func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, t
 	p1.Write(scriptSigPart1)
 
 	// Outputs
-	var outputs bytes.Buffer
-	outputCount := uint64(1)
+	var commitmentScript []byte
 	if witnessCommitment != "" {
-		outputCount++
-	}
-	writeVarInt(&outputs, outputCount)
-	if witnessCommitment != "" {
-		commitmentScript, err := hex.DecodeString(witnessCommitment)
+		b, err := hex.DecodeString(witnessCommitment)
 		if err != nil {
 			return "", "", fmt.Errorf("decode witness commitment: %w", err)
 		}
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
+		commitmentScript = b
 	}
-	writeUint64LE(&outputs, uint64(coinbaseValue))
-	writeVarInt(&outputs, uint64(len(payoutScript)))
-	outputs.Write(payoutScript)
+	outputs, err := buildCoinbaseOutputs(commitmentScript, payouts)
+	if err != nil {
+		return "", "", err
+	}
 
 	// p2: scriptSig_part2 || sequence || outputs || locktime
 	var p2 bytes.Buffer
 	p2.Write(scriptSigPart2)
 	writeUint32LE(&p2, 0) // sequence
-	p2.Write(outputs.Bytes())
+	p2.Write(outputs)
 	writeUint32LE(&p2, 0) // locktime
 
 	coinb1 := hex.EncodeToString(p1.Bytes())
@@ -540,43 +472,6 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 	if len(poolScript) == 0 || len(workerScript) == 0 {
 		return "", "", fmt.Errorf("both pool and worker payout scripts are required")
 	}
-	if extranonce2Size <= 0 {
-		extranonce2Size = 4
-	}
-	if templateExtraNonce2Size < extranonce2Size {
-		templateExtraNonce2Size = extranonce2Size
-	}
-	templatePlaceholderLen := len(extranonce1) + templateExtraNonce2Size
-	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
-	padLen := templateExtraNonce2Size - extranonce2Size
-
-	var flagsBytes []byte
-	if coinbaseFlags != "" {
-		var err error
-		flagsBytes, err = hex.DecodeString(coinbaseFlags)
-		if err != nil {
-			return "", "", fmt.Errorf("decode coinbase flags: %w", err)
-		}
-	}
-
-	scriptSigPart1 := bytes.Join([][]byte{
-		serializeNumberScript(height),
-		flagsBytes, // coinbaseaux.flags from bitcoind
-		serializeNumberScript(scriptTime),
-		{byte(len(extraNoncePlaceholder))},
-	}, nil)
-	msg := normalizeCoinbaseMessage(coinbaseMsg)
-	scriptSigPart2 := serializeStringScript(msg)
-
-	// p1: version || input count || prevout || scriptsig length || scriptsig_part1
-	var p1 bytes.Buffer
-	writeUint32LE(&p1, 1) // tx version
-	writeVarInt(&p1, 1)
-	p1.Write(bytes.Repeat([]byte{0x00}, 32)) // prev hash
-	writeUint32LE(&p1, 0xffffffff)           // prev index
-	writeVarInt(&p1, uint64(len(scriptSigPart1)+len(extraNoncePlaceholder)+len(scriptSigPart2)))
-	p1.Write(scriptSigPart1)
-
 	// Split total value into pool fee and worker payout.
 	if totalValue <= 0 {
 		return "", "", fmt.Errorf("total coinbase value must be positive")
@@ -599,44 +494,11 @@ func buildDualPayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce2S
 		return "", "", fmt.Errorf("worker payout must be positive after applying pool fee")
 	}
 
-	// Outputs: optional witness commitment, then pool-fee output, then worker output.
-	var outputs bytes.Buffer
-	outputCount := uint64(2) // pool + worker
-	if witnessCommitment != "" {
-		outputCount++
+	payouts := []coinbasePayoutOutput{
+		{Script: poolScript, Value: poolFee},
+		{Script: workerScript, Value: workerValue},
 	}
-	writeVarInt(&outputs, outputCount)
-	if witnessCommitment != "" {
-		commitmentScript, err := hex.DecodeString(witnessCommitment)
-		if err != nil {
-			return "", "", fmt.Errorf("decode witness commitment: %w", err)
-		}
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
-	}
-	// Pool fee output.
-	writeUint64LE(&outputs, uint64(poolFee))
-	writeVarInt(&outputs, uint64(len(poolScript)))
-	outputs.Write(poolScript)
-	// Worker payout output.
-	writeUint64LE(&outputs, uint64(workerValue))
-	writeVarInt(&outputs, uint64(len(workerScript)))
-	outputs.Write(workerScript)
-
-	// p2: scriptSig_part2 || sequence || outputs || locktime
-	var p2 bytes.Buffer
-	p2.Write(scriptSigPart2)
-	writeUint32LE(&p2, 0) // sequence
-	p2.Write(outputs.Bytes())
-	writeUint32LE(&p2, 0) // locktime
-
-	coinb1 := hex.EncodeToString(p1.Bytes())
-	if padLen > 0 {
-		coinb1 += strings.Repeat("00", padLen)
-	}
-	coinb2 := hex.EncodeToString(p2.Bytes())
-	return coinb1, coinb2, nil
+	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
 }
 
 // buildTriplePayoutCoinbaseParts constructs coinbase parts for a triple-payout
@@ -647,43 +509,6 @@ func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce
 	if len(poolScript) == 0 || len(donationScript) == 0 || len(workerScript) == 0 {
 		return "", "", fmt.Errorf("pool, donation, and worker payout scripts are all required")
 	}
-	if extranonce2Size <= 0 {
-		extranonce2Size = 4
-	}
-	if templateExtraNonce2Size < extranonce2Size {
-		templateExtraNonce2Size = extranonce2Size
-	}
-	templatePlaceholderLen := len(extranonce1) + templateExtraNonce2Size
-	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, templatePlaceholderLen)
-	padLen := templateExtraNonce2Size - extranonce2Size
-
-	var flagsBytes []byte
-	if coinbaseFlags != "" {
-		var err error
-		flagsBytes, err = hex.DecodeString(coinbaseFlags)
-		if err != nil {
-			return "", "", fmt.Errorf("decode coinbase flags: %w", err)
-		}
-	}
-
-	scriptSigPart1 := bytes.Join([][]byte{
-		serializeNumberScript(height),
-		flagsBytes, // coinbaseaux.flags from bitcoind
-		serializeNumberScript(scriptTime),
-		{byte(len(extraNoncePlaceholder))},
-	}, nil)
-	msg := normalizeCoinbaseMessage(coinbaseMsg)
-	scriptSigPart2 := serializeStringScript(msg)
-
-	// p1: version || input count || prevout || scriptsig length || scriptsig_part1
-	var p1 bytes.Buffer
-	writeUint32LE(&p1, 1) // tx version
-	writeVarInt(&p1, 1)
-	p1.Write(bytes.Repeat([]byte{0x00}, 32)) // prev hash
-	writeUint32LE(&p1, 0xffffffff)           // prev index
-	writeVarInt(&p1, uint64(len(scriptSigPart1)+len(extraNoncePlaceholder)+len(scriptSigPart2)))
-	p1.Write(scriptSigPart1)
-
 	// Split total value: first pool fee, then donation from pool fee, then worker
 	if totalValue <= 0 {
 		return "", "", fmt.Errorf("total coinbase value must be positive")
@@ -728,46 +553,10 @@ func buildTriplePayoutCoinbaseParts(height int64, extranonce1 []byte, extranonce
 		return "", "", fmt.Errorf("worker payout must be positive after applying pool fee")
 	}
 
-	// Outputs: optional witness commitment, then pool-fee output, then donation output, then worker output.
-	var outputs bytes.Buffer
-	outputCount := uint64(3) // pool + donation + worker
-	if witnessCommitment != "" {
-		outputCount++
+	payouts := []coinbasePayoutOutput{
+		{Script: poolScript, Value: poolFee},
+		{Script: donationScript, Value: donationValue},
+		{Script: workerScript, Value: workerValue},
 	}
-	writeVarInt(&outputs, outputCount)
-	if witnessCommitment != "" {
-		commitmentScript, err := hex.DecodeString(witnessCommitment)
-		if err != nil {
-			return "", "", fmt.Errorf("decode witness commitment: %w", err)
-		}
-		writeUint64LE(&outputs, 0)
-		writeVarInt(&outputs, uint64(len(commitmentScript)))
-		outputs.Write(commitmentScript)
-	}
-	// Pool fee output (after donation).
-	writeUint64LE(&outputs, uint64(poolFee))
-	writeVarInt(&outputs, uint64(len(poolScript)))
-	outputs.Write(poolScript)
-	// Donation output.
-	writeUint64LE(&outputs, uint64(donationValue))
-	writeVarInt(&outputs, uint64(len(donationScript)))
-	outputs.Write(donationScript)
-	// Worker payout output.
-	writeUint64LE(&outputs, uint64(workerValue))
-	writeVarInt(&outputs, uint64(len(workerScript)))
-	outputs.Write(workerScript)
-
-	// p2: scriptSig_part2 || sequence || outputs || locktime
-	var p2 bytes.Buffer
-	p2.Write(scriptSigPart2)
-	writeUint32LE(&p2, 0) // sequence
-	p2.Write(outputs.Bytes())
-	writeUint32LE(&p2, 0) // locktime
-
-	coinb1 := hex.EncodeToString(p1.Bytes())
-	if padLen > 0 {
-		coinb1 += strings.Repeat("00", padLen)
-	}
-	coinb2 := hex.EncodeToString(p2.Bytes())
-	return coinb1, coinb2, nil
+	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
 }
