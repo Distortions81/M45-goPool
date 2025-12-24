@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"math"
 	"math/big"
 	"math/bits"
 	"net"
@@ -23,6 +24,15 @@ var (
 		},
 	}
 )
+
+// Helper functions for atomic float64 operations (stored as uint64 bits)
+func atomicLoadFloat64(addr *atomic.Uint64) float64 {
+	return math.Float64frombits(addr.Load())
+}
+
+func atomicStoreFloat64(addr *atomic.Uint64, val float64) {
+	addr.Store(math.Float64bits(val))
+}
 
 type StratumRequest struct {
 	ID     interface{}   `json:"id"`
@@ -178,11 +188,10 @@ type MinerConn struct {
 	cfg                 Config
 	extranonce1         []byte
 	jobCh               chan *Job
-	difficulty          float64
-	previousDifficulty  float64
-	shareTarget         *big.Int
-	diffMu              sync.Mutex
-	lastDiffChange      time.Time
+	difficulty          atomic.Uint64 // float64 stored as bits
+	previousDifficulty  atomic.Uint64 // float64 stored as bits
+	shareTarget         atomic.Pointer[big.Int]
+	lastDiffChange      atomic.Int64 // Unix nanos
 	stateMu             sync.Mutex
 	listenerOn   bool
 	stats        MinerStats
@@ -644,8 +653,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		cfg:             cfg,
 		extranonce1:     en1,
 		jobCh:           jobCh,
-		difficulty:      initialDiff,
-		shareTarget:     targetFromDifficulty(initialDiff),
 		vardiff:         vdiff,
 		metrics:         metrics,
 		accounting:      accounting,
@@ -666,6 +673,10 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		isTLSConnection: isTLS,
 		statsUpdates:    make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
 	}
+
+	// Initialize atomic fields
+	atomicStoreFloat64(&mc.difficulty, initialDiff)
+	mc.shareTarget.Store(targetFromDifficulty(initialDiff))
 
 	// Start stats worker goroutine
 	mc.statsWg.Add(1)

@@ -224,18 +224,15 @@ func (mc *MinerConn) shareRates(now time.Time) (float64, float64) {
 }
 
 func (mc *MinerConn) currentDifficulty() float64 {
-	mc.diffMu.Lock()
-	defer mc.diffMu.Unlock()
-	return mc.difficulty
+	return atomicLoadFloat64(&mc.difficulty)
 }
 
 func (mc *MinerConn) currentShareTarget() *big.Int {
-	mc.diffMu.Lock()
-	defer mc.diffMu.Unlock()
-	if mc.shareTarget == nil || mc.shareTarget.Sign() <= 0 {
+	target := mc.shareTarget.Load()
+	if target == nil || target.Sign() <= 0 {
 		return nil
 	}
-	return new(big.Int).Set(mc.shareTarget)
+	return new(big.Int).Set(target)
 }
 
 func (mc *MinerConn) shareTargetOrDefault() *big.Int {
@@ -245,11 +242,10 @@ func (mc *MinerConn) shareTargetOrDefault() *big.Int {
 	}
 	// Fall back to the pool minimum difficulty.
 	fallback := targetFromDifficulty(mc.cfg.MinDifficulty)
-	mc.diffMu.Lock()
-	if mc.shareTarget == nil || mc.shareTarget.Sign() <= 0 {
-		mc.shareTarget = new(big.Int).Set(fallback)
+	oldTarget := mc.shareTarget.Load()
+	if oldTarget == nil || oldTarget.Sign() <= 0 {
+		mc.shareTarget.CompareAndSwap(oldTarget, new(big.Int).Set(fallback))
 	}
-	mc.diffMu.Unlock()
 	return fallback
 }
 
@@ -426,9 +422,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	snap := mc.snapshotShareInfo()
 	newDiff := mc.suggestedVardiff(now, snap)
 
-	mc.diffMu.Lock()
-	currentDiff := mc.difficulty
-	mc.diffMu.Unlock()
+	currentDiff := atomicLoadFloat64(&mc.difficulty)
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return false
@@ -464,10 +458,8 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	windowAccepted := snap.Stats.WindowAccepted
 	windowSubmissions := snap.Stats.WindowSubmissions
 
-	mc.diffMu.Lock()
-	lastChange := mc.lastDiffChange
-	currentDiff := mc.difficulty
-	mc.diffMu.Unlock()
+	lastChange := time.Unix(0, mc.lastDiffChange.Load())
+	currentDiff := atomicLoadFloat64(&mc.difficulty)
 
 	if currentDiff <= 0 {
 		currentDiff = mc.vardiff.MinDiff
@@ -622,19 +614,21 @@ func (mc *MinerConn) clampDifficulty(diff float64) float64 {
 func (mc *MinerConn) setDifficulty(diff float64) {
 	requested := diff
 	diff = mc.clampDifficulty(diff)
-	mc.diffMu.Lock()
 	now := time.Now()
-	mc.previousDifficulty = mc.difficulty // Save old difficulty before changing
-	mc.difficulty = diff
-	mc.shareTarget = targetFromDifficulty(diff)
-	mc.lastDiffChange = now
-	mc.diffMu.Unlock()
 
+	// Atomically update difficulty fields
+	oldDiff := atomicLoadFloat64(&mc.difficulty)
+	atomicStoreFloat64(&mc.previousDifficulty, oldDiff)
+	atomicStoreFloat64(&mc.difficulty, diff)
+	mc.shareTarget.Store(targetFromDifficulty(diff))
+	mc.lastDiffChange.Store(now.UnixNano())
+
+	target := mc.shareTarget.Load()
 	logger.Info("set difficulty",
 		"miner", mc.minerName(""),
 		"requested_diff", requested,
 		"clamped_diff", diff,
-		"share_target", fmt.Sprintf("%064x", mc.shareTarget),
+		"share_target", fmt.Sprintf("%064x", target),
 	)
 
 	msg := map[string]interface{}{

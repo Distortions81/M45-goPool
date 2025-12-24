@@ -203,10 +203,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	// If we just restored a recent difficulty for this worker on a short
 	// reconnect, ignore suggested-difficulty overrides and keep the
 	// existing difficulty so we don't fight the remembered setting.
-	mc.diffMu.Lock()
-	restored := mc.restoredRecentDiff
-	mc.diffMu.Unlock()
-	if restored {
+	if mc.restoredRecentDiff {
 		return
 	}
 
