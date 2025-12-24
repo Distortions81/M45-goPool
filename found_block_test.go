@@ -270,19 +270,40 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 	poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
 	workerValue := totalValue - poolFee
 
-	if coinbase.TxOut[0].Value != poolFee {
-		t.Errorf("pool output value mismatch: got %d, want %d", coinbase.TxOut[0].Value, poolFee)
+	var (
+		gotPoolValue    *int64
+		gotWorkerValue  *int64
+		gotPoolScript   []byte
+		gotWorkerScript []byte
+	)
+	for _, o := range coinbase.TxOut {
+		switch {
+		case bytes.Equal(o.PkScript, poolScript):
+			v := o.Value
+			gotPoolValue = &v
+			gotPoolScript = o.PkScript
+		case bytes.Equal(o.PkScript, workerScript):
+			v := o.Value
+			gotWorkerValue = &v
+			gotWorkerScript = o.PkScript
+		}
 	}
-
-	if coinbase.TxOut[1].Value != workerValue {
-		t.Errorf("worker output value mismatch: got %d, want %d", coinbase.TxOut[1].Value, workerValue)
+	if gotPoolValue == nil {
+		t.Fatalf("pool output not found by script")
 	}
-
-	if !bytes.Equal(coinbase.TxOut[0].PkScript, poolScript) {
+	if gotWorkerValue == nil {
+		t.Fatalf("worker output not found by script")
+	}
+	if *gotPoolValue != poolFee {
+		t.Errorf("pool output value mismatch: got %d, want %d", *gotPoolValue, poolFee)
+	}
+	if *gotWorkerValue != workerValue {
+		t.Errorf("worker output value mismatch: got %d, want %d", *gotWorkerValue, workerValue)
+	}
+	if !bytes.Equal(gotPoolScript, poolScript) {
 		t.Errorf("pool script mismatch")
 	}
-
-	if !bytes.Equal(coinbase.TxOut[1].PkScript, workerScript) {
+	if !bytes.Equal(gotWorkerScript, workerScript) {
 		t.Errorf("worker script mismatch")
 	}
 
