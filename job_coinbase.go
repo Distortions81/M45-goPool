@@ -137,8 +137,8 @@ func computeCoinbasePayouts(plan coinbasePayoutPlan) ([]coinbasePayoutOutput, *c
 			subPayouts = append(subPayouts, coinbasePayoutOutput{Script: sub.Script, Value: subAmt})
 		}
 
-		// Preserve historical ordering: the parent slice output comes first,
-		// followed by any subslice outputs.
+		// The builder emits fee slice outputs first (then subslices). Final
+		// on-wire ordering is handled by buildCoinbaseOutputs.
 		payouts = append(payouts, coinbasePayoutOutput{Script: fee.Script, Value: feeRemaining})
 		payouts = append(payouts, subPayouts...)
 
@@ -166,9 +166,7 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 		return nil, err
 	}
 
-	// Always encode payouts from largest to smallest so output ordering is
-	// deterministic and matches expected "share ordering". Stable sort preserves
-	// caller ordering for ties.
+	// Encode payouts from largest to smallest; stable sort preserves tie order.
 	orderedPayouts := append([]coinbasePayoutOutput(nil), payouts...)
 	sort.SliceStable(orderedPayouts, func(i, j int) bool {
 		return orderedPayouts[i].Value > orderedPayouts[j].Value
@@ -193,8 +191,9 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 	return outputs.Bytes(), nil
 }
 
-// serializeCoinbaseTxPayoutsPredecoded is the shared hot-path coinbase builder.
-// It supports 1..N payout outputs plus an optional witness commitment output.
+// serializeCoinbaseTxPayoutsPredecoded builds a coinbase tx with 1..N payout
+// outputs plus an optional witness commitment output. Payout outputs are
+// encoded largest-to-smallest by value.
 func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payouts []coinbasePayoutOutput, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
 	padLen := templateExtraNonce2Size - len(extranonce2)
 	if padLen < 0 {
@@ -225,7 +224,7 @@ func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2
 	vin.Write(extranonce1)
 	vin.Write(extranonce2)
 	vin.Write(scriptSigPart2)
-	writeUint32LE(&vin, 0) // sequence
+	writeUint32LE(&vin, 0)
 
 	outputs, err := buildCoinbaseOutputs(commitmentScript, payouts)
 	if err != nil {
@@ -233,10 +232,10 @@ func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2
 	}
 
 	var tx bytes.Buffer
-	writeUint32LE(&tx, 1) // version
+	writeUint32LE(&tx, 1)
 	tx.Write(vin.Bytes())
 	tx.Write(outputs)
-	writeUint32LE(&tx, 0) // locktime
+	writeUint32LE(&tx, 0)
 
 	txid := doubleSHA256(tx.Bytes())
 	return tx.Bytes(), txid, nil
@@ -388,15 +387,12 @@ func serializeNumberScript(n int64) []byte {
 // normalizeCoinbaseMessage trims spaces and ensures the message has '/' prefix and suffix.
 // If the message is empty after trimming, returns the default "/nodeStratum/" tag.
 func normalizeCoinbaseMessage(msg string) string {
-	// Trim spaces
 	msg = strings.TrimSpace(msg)
 	if msg == "" {
 		return "/nodeStratum/"
 	}
-	// Remove existing '/' prefix and suffix
 	msg = strings.TrimPrefix(msg, "/")
 	msg = strings.TrimSuffix(msg, "/")
-	// Add '/' prefix and suffix
 	return "/" + msg + "/"
 }
 
@@ -474,8 +470,7 @@ func clampCoinbaseMessage(message string, limit int, height int64, scriptTime in
 	return "", true, nil
 }
 
-// buildCoinbaseParts constructs coinb1/coinb2 for the stratum protocol.
-// The trailing string in the scriptSig is the pool's coinbase message.
+// buildCoinbaseParts constructs coinb1/coinb2 for Stratum notify.
 func buildCoinbaseParts(height int64, extranonce1 []byte, extranonce2Size int, templateExtraNonce2Size int, payoutScript []byte, coinbaseValue int64, witnessCommitment string, coinbaseFlags string, coinbaseMsg string, scriptTime int64) (string, string, error) {
 	payouts := []coinbasePayoutOutput{{Script: payoutScript, Value: coinbaseValue}}
 	return buildCoinbasePartsPayouts(height, extranonce1, extranonce2Size, templateExtraNonce2Size, payouts, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
@@ -512,10 +507,10 @@ func buildCoinbasePartsPayouts(height int64, extranonce1 []byte, extranonce2Size
 
 	// p1: version || input count || prevout || scriptsig length || scriptsig_part1
 	var p1 bytes.Buffer
-	writeUint32LE(&p1, 1) // tx version
+	writeUint32LE(&p1, 1)
 	writeVarInt(&p1, 1)
-	p1.Write(bytes.Repeat([]byte{0x00}, 32)) // prev hash
-	writeUint32LE(&p1, 0xffffffff)           // prev index
+	p1.Write(bytes.Repeat([]byte{0x00}, 32))
+	writeUint32LE(&p1, 0xffffffff)
 	writeVarInt(&p1, uint64(len(scriptSigPart1)+len(extraNoncePlaceholder)+len(scriptSigPart2)))
 	p1.Write(scriptSigPart1)
 
@@ -536,9 +531,9 @@ func buildCoinbasePartsPayouts(height int64, extranonce1 []byte, extranonce2Size
 	// p2: scriptSig_part2 || sequence || outputs || locktime
 	var p2 bytes.Buffer
 	p2.Write(scriptSigPart2)
-	writeUint32LE(&p2, 0) // sequence
+	writeUint32LE(&p2, 0)
 	p2.Write(outputs)
-	writeUint32LE(&p2, 0) // locktime
+	writeUint32LE(&p2, 0)
 
 	coinb1 := hex.EncodeToString(p1.Bytes())
 	if padLen > 0 {

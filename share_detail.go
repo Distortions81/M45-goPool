@@ -38,7 +38,6 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, ha
 
 	var cbTx []byte
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
-		// Check if donation is enabled and we should use triple payout
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, _, err = serializeTripleCoinbaseTx(
 				job.Template.Height,

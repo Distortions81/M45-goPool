@@ -296,7 +296,6 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// most rejects without constructing a full block. This avoids per-share
 	// hex decode/encode of all transactions when the share is not a block.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		// Check if donation is enabled and we should use triple payout
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
@@ -532,7 +531,6 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
 		var cbTx, cbTxid []byte
 		var err error
-		// Check if donation is enabled and we should use triple payout
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
