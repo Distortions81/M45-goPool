@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -165,8 +166,16 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 		return nil, err
 	}
 
+	// Always encode payouts from largest to smallest so output ordering is
+	// deterministic and matches expected "share ordering". Stable sort preserves
+	// caller ordering for ties.
+	orderedPayouts := append([]coinbasePayoutOutput(nil), payouts...)
+	sort.SliceStable(orderedPayouts, func(i, j int) bool {
+		return orderedPayouts[i].Value > orderedPayouts[j].Value
+	})
+
 	var outputs bytes.Buffer
-	outputCount := uint64(len(payouts))
+	outputCount := uint64(len(orderedPayouts))
 	if len(commitmentScript) > 0 {
 		outputCount++
 	}
@@ -176,7 +185,7 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 		writeVarInt(&outputs, uint64(len(commitmentScript)))
 		outputs.Write(commitmentScript)
 	}
-	for _, o := range payouts {
+	for _, o := range orderedPayouts {
 		writeUint64LE(&outputs, uint64(o.Value))
 		writeVarInt(&outputs, uint64(len(o.Script)))
 		outputs.Write(o.Script)
