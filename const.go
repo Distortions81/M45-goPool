@@ -3,6 +3,19 @@ package main
 import "time"
 
 const (
+	// poolSoftwareName is the name of the pool software used throughout the codebase
+	// for branding, coinbase messages, and certificates.
+	poolSoftwareName = "goPool"
+
+	// duplicateShareHistory controls how many recent submissions per job are
+	// tracked for duplicate-share detection. It is implemented as a fixed-size
+	// ring so memory usage is bounded and independent of share rate.
+	duplicateShareHistory = 100
+
+	// workerPageCacheLimit bounds the number of cached worker_status pages kept
+	// in memory. Entries also expire after overviewRefreshInterval.
+	workerPageCacheLimit = 100
+
 	// Config defaults (used for example config + runtime defaults).
 	defaultListenAddr    = ":3333"
 	defaultStatusAddr    = ":80"
