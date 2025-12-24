@@ -66,6 +66,8 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 
 	if !mc.listenerOn {
 		mc.listenerOn = true
+		// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
+		// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
 		go mc.listenJobs()
 	}
 
@@ -261,7 +263,10 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	result := make(map[string]interface{})
 	shouldSendVersionMask := false
 	for _, ext := range rawExts {
-		name, _ := ext.(string)
+		name, ok := ext.(string)
+		if !ok {
+			continue
+		}
 		switch name {
 		case "version-rolling":
 			// BIP310 version-rolling negotiation (docs/protocols/bip-0310.mediawiki).

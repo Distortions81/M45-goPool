@@ -64,6 +64,7 @@ func scriptToAddress(script []byte, params *chaincfg.Params) string {
 	}
 
 	// P2PKH: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG
+	// Length check protects all index accesses (0-24)
 	if len(script) == 25 &&
 		script[0] == 0x76 && script[1] == 0xa9 &&
 		script[2] == 0x14 && script[23] == 0x88 && script[24] == 0xac {
@@ -72,6 +73,7 @@ func scriptToAddress(script []byte, params *chaincfg.Params) string {
 	}
 
 	// P2SH: OP_HASH160 <20> <hash> OP_EQUAL
+	// Length check protects all index accesses (0-22)
 	if len(script) == 23 &&
 		script[0] == 0xa9 && script[1] == 0x14 && script[22] == 0x87 {
 		hash := script[2:22]
