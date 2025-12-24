@@ -346,7 +346,8 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastJob = job
 	mc.lastClean = clean
 
-	for len(mc.jobOrder) > mc.maxRecentJobs {
+	// Evict oldest jobs if we exceed the max limit
+	for len(mc.jobOrder) > mc.maxRecentJobs && len(mc.jobOrder) > 0 {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
 		delete(mc.activeJobs, oldest)
