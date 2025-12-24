@@ -8,10 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/remeh/sizedwaitgroup"
 )
 
 // GetBlockTemplateResult mirrors BIP22/23 getblocktemplate fields.
@@ -129,6 +132,9 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
+	// Async notification queue
+	notifyQueue chan *Job
+	notifyWg    sizedwaitgroup.SizedWaitGroup
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScript []byte) *JobManager {
@@ -138,6 +144,7 @@ func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScri
 		payoutScript:   payoutScript,
 		donationScript: donationScript,
 		subs:           make(map[chan *Job]struct{}),
+		notifyQueue:    make(chan *Job, 100), // Buffered queue for async notifications
 	}
 }
 
@@ -340,6 +347,16 @@ func (jm *JobManager) Start(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// Start notification workers for async job distribution
+	// Use runtime.NumCPU() workers to handle fanout efficiently across available cores
+	numWorkers := runtime.NumCPU()
+	jm.notifyWg = sizedwaitgroup.New(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		jm.notifyWg.Add()
+		go jm.notificationWorker(ctx, i)
+	}
+	logger.Info("started async notification workers", "count", numWorkers)
 
 	// Fetch initial block info from the blockchain to start the timer immediately
 	jm.fetchInitialBlockInfo(ctx)
@@ -852,6 +869,19 @@ func (jm *JobManager) ActiveMiners() int {
 }
 
 func (jm *JobManager) broadcastJob(job *Job) {
+	// Queue the job for async distribution instead of blocking here
+	select {
+	case jm.notifyQueue <- job:
+		// Successfully queued for async processing
+	default:
+		// Queue is full, fall back to synchronous broadcast
+		logger.Warn("notification queue full, falling back to sync broadcast")
+		jm.broadcastJobSync(job)
+	}
+}
+
+// broadcastJobSync performs synchronous job notification (fallback only)
+func (jm *JobManager) broadcastJobSync(job *Job) {
 	jm.subsMu.Lock()
 	blocked := 0
 	subscribers := len(jm.subs)
@@ -866,5 +896,46 @@ func (jm *JobManager) broadcastJob(job *Job) {
 
 	if blocked > 0 {
 		logger.Warn("job broadcast blocked; dropping update", "subscribers", subscribers, "blocked", blocked)
+	}
+}
+
+// notificationWorker processes job notifications asynchronously
+func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
+	defer jm.notifyWg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job, ok := <-jm.notifyQueue:
+			if !ok {
+				return
+			}
+
+			// Take a snapshot of subscribers to minimize lock hold time
+			jm.subsMu.Lock()
+			snapshot := make([]chan *Job, 0, len(jm.subs))
+			for ch := range jm.subs {
+				snapshot = append(snapshot, ch)
+			}
+			subscriberCount := len(jm.subs)
+			jm.subsMu.Unlock()
+
+			// Send to all subscribers without holding the lock
+			blocked := 0
+			for _, ch := range snapshot {
+				select {
+				case ch <- job:
+					// Successfully sent
+				default:
+					// Channel full, drop the notification
+					blocked++
+				}
+			}
+
+			if blocked > 0 {
+				logger.Warn("job broadcast blocked; dropping update", "subscribers", subscriberCount, "blocked", blocked)
+			}
+		}
 	}
 }
