@@ -23,6 +23,13 @@ var (
 			return new(big.Int)
 		},
 	}
+
+	// responseBufferPool reuses buffers for Stratum JSON response marshaling
+	responseBufferPool = sync.Pool{
+		New: func() interface{} {
+			return new(bytes.Buffer)
+		},
+	}
 )
 
 // Helper functions for atomic float64 operations (stored as uint64 bits)
@@ -115,10 +122,11 @@ type duplicateShareKey struct {
 	buf [maxDuplicateShareKeyBytes]byte
 }
 
-type duplicateShareRing struct {
-	keys  [duplicateShareHistory]duplicateShareKey
+// duplicateShareSet is a hash-based duplicate detection cache with bounded size.
+// When full, it clears and restarts (simple eviction strategy).
+type duplicateShareSet struct {
+	m     map[duplicateShareKey]struct{}
 	count int
-	idx   int
 }
 
 func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, versionHex string) {
@@ -155,25 +163,27 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, ve
 	}
 }
 
-// seenOrAdd reports whether key has already been seen in the ring, and
-// records it if not. It maintains up to duplicateShareHistory entries and
-// overwrites the oldest when full.
-func (r *duplicateShareRing) seenOrAdd(key duplicateShareKey) bool {
-	for i := 0; i < r.count; i++ {
-		if r.keys[i] == key {
-			return true
-		}
+// seenOrAdd reports whether key has already been seen, and records it if not.
+// O(1) lookup via hash map. Clears map when reaching duplicateShareHistory limit.
+func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
+	if s.m == nil {
+		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
 	}
-	if r.count < duplicateShareHistory {
-		r.keys[r.count] = key
-		r.count++
-		return false
+
+	if _, seen := s.m[key]; seen {
+		return true
 	}
-	r.keys[r.idx] = key
-	r.idx++
-	if r.idx >= duplicateShareHistory {
-		r.idx = 0
+
+	// Add new key
+	s.m[key] = struct{}{}
+	s.count++
+
+	// Clear map when full (simple eviction strategy)
+	if s.count >= duplicateShareHistory {
+		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
+		s.count = 0
 	}
+
 	return false
 }
 
@@ -207,7 +217,7 @@ type MinerConn struct {
 	activeJobs          map[string]*Job
 	jobOrder            []string
 	maxRecentJobs       int
-	shareCache          map[string]*duplicateShareRing
+	shareCache          map[string]*duplicateShareSet
 	lastJob             *Job
 	lastClean           bool
 	banUntil            time.Time
@@ -661,7 +671,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		connectedAt:     now,
 		lastActivity:    now,
 		jobDifficulty:   make(map[string]float64),
-		shareCache:      make(map[string]*duplicateShareRing),
+		shareCache:      make(map[string]*duplicateShareSet),
 		maxRecentJobs:   maxRecentJobs,
 		lastPenalty:     time.Now(),
 		versionRoll:     false,

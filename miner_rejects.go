@@ -335,7 +335,7 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	defer mc.jobMu.Unlock()
 	if clean {
 		mc.activeJobs = make(map[string]*Job)
-		mc.shareCache = make(map[string]*duplicateShareRing)
+		mc.shareCache = make(map[string]*duplicateShareSet)
 		mc.jobOrder = mc.jobOrder[:0]
 		mc.jobDifficulty = make(map[string]float64)
 	}
@@ -405,7 +405,7 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionH
 	defer mc.jobMu.Unlock()
 	cache := mc.shareCache[jobID]
 	if cache == nil {
-		cache = &duplicateShareRing{}
+		cache = &duplicateShareSet{}
 		mc.shareCache[jobID] = cache
 	}
 	var dk duplicateShareKey
