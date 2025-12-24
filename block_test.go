@@ -219,16 +219,30 @@ func TestDualVsSinglePayoutBlocks(t *testing.T) {
 		t.Fatalf("dual-payout worker value <= 0")
 	}
 
-	if coinbase.TxOut[0].Value != poolFee {
-		t.Fatalf("dual-payout pool output value mismatch: got %d, want %d", coinbase.TxOut[0].Value, poolFee)
+	var (
+		gotPoolValue   *int64
+		gotWorkerValue *int64
+	)
+	for _, o := range coinbase.TxOut {
+		switch {
+		case bytes.Equal(o.PkScript, poolScript):
+			v := o.Value
+			gotPoolValue = &v
+		case bytes.Equal(o.PkScript, workerScript):
+			v := o.Value
+			gotWorkerValue = &v
+		}
 	}
-	if !bytes.Equal(coinbase.TxOut[0].PkScript, poolScript) {
-		t.Fatalf("dual-payout pool script mismatch: got %x, want %x", coinbase.TxOut[0].PkScript, poolScript)
+	if gotPoolValue == nil {
+		t.Fatalf("dual-payout pool output not found by script")
 	}
-	if coinbase.TxOut[1].Value != workerValue {
-		t.Fatalf("dual-payout worker output value mismatch: got %d, want %d", coinbase.TxOut[1].Value, workerValue)
+	if gotWorkerValue == nil {
+		t.Fatalf("dual-payout worker output not found by script")
 	}
-	if !bytes.Equal(coinbase.TxOut[1].PkScript, workerScript) {
-		t.Fatalf("dual-payout worker script mismatch: got %x, want %x", coinbase.TxOut[1].PkScript, workerScript)
+	if *gotPoolValue != poolFee {
+		t.Fatalf("dual-payout pool output value mismatch: got %d, want %d", *gotPoolValue, poolFee)
+	}
+	if *gotWorkerValue != workerValue {
+		t.Fatalf("dual-payout worker output value mismatch: got %d, want %d", *gotWorkerValue, workerValue)
 	}
 }

@@ -147,6 +147,7 @@ func decodeCoinbaseHeight(script []byte) int64 {
 		return 0
 	}
 	op := int(script[0])
+	// Bounds check: ensure we have enough bytes (1+op ensures script[1+i] is safe for i < op)
 	if op < 1 || op > 4 || 1+op > len(script) {
 		return 0
 	}

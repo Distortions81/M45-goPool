@@ -15,7 +15,7 @@ Solo Bitcoin pool uses `bitcoind` over JSON-RPC + ZMQ and offers Stratum v1, opt
 - Memory safety.
 - Extensive tests in [TESTING.md](https://github.com/Distortions81/M45-Core-goPool/blob/main/TESTING.md) (`go test ./...`, scripts, `go test -cover`, etc.), ensuring regressions are caught before release.
 - Compatibility tests run against [btcd](https://github.com/btcsuite/btcd) and [pogolo](https://github.com/pogodev/pogolo) (see `cross_impl_sanity_test.go`) to sanity check everything.
-- The codebase currently spans ~15,900 lines of code, backed by ~7,000 lines of tests.
+- The codebase currently spans ~16,000 lines of code, backed by ~7,000 lines of tests.
 
 Continuous integration runs on GitHub Actions to verify `go test ./...` and ensure code quality, plus a dedicated `Go Vulncheck` workflow runs `govulncheck ./...` to keep dependency vulnerabilities in check.
 

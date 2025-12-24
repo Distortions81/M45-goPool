@@ -22,7 +22,8 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, ha
 		detail.MerkleBranches = append([]string{}, job.MerkleBranches...)
 
 		if target != nil {
-			detail.Target = hex.EncodeToString(target.FillBytes(make([]byte, 32)))
+			var targetBuf [32]byte // Use fixed-size array
+			detail.Target = hex.EncodeToString(target.FillBytes(targetBuf[:]))
 		}
 		if len(merkleRoot) == 32 {
 			detail.MerkleRootBE = hex.EncodeToString(merkleRoot)
@@ -38,7 +39,6 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, ha
 
 	var cbTx []byte
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
-		// Check if donation is enabled and we should use triple payout
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, _, err = serializeTripleCoinbaseTx(
 				job.Template.Height,

@@ -120,30 +120,54 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 				workerValue := totalValue - poolFee
 
 				// Verify pool output
-				if tx.TxOut[0].Value != poolFee {
-					t.Errorf("pool output value mismatch: got %d, want %d", tx.TxOut[0].Value, poolFee)
-				}
-				if !bytes.Equal(tx.TxOut[0].PkScript, poolScript) {
-					t.Errorf("pool script mismatch:\ngot:  %x\nwant: %x", tx.TxOut[0].PkScript, poolScript)
-				}
-
-				// Verify worker output
-				if tx.TxOut[1].Value != workerValue {
-					t.Errorf("worker output value mismatch: got %d, want %d", tx.TxOut[1].Value, workerValue)
-				}
-				if !bytes.Equal(tx.TxOut[1].PkScript, workerScript) {
-					t.Errorf("worker script mismatch:\ngot:  %x\nwant: %x", tx.TxOut[1].PkScript, workerScript)
+				var (
+					poolOut   *wire.TxOut
+					workerOut *wire.TxOut
+				)
+				if bytes.Equal(poolScript, workerScript) {
+					// When pool and worker scripts are identical, outputs are only
+					// distinguishable by value. The coinbase encoder orders payouts
+					// from largest to smallest.
+					if tx.TxOut[0].Value != workerValue || tx.TxOut[1].Value != poolFee {
+						t.Errorf("dual outputs mismatch for identical scripts: got [%d,%d], want [%d,%d]", tx.TxOut[0].Value, tx.TxOut[1].Value, workerValue, poolFee)
+					}
+					if !bytes.Equal(tx.TxOut[0].PkScript, poolScript) || !bytes.Equal(tx.TxOut[1].PkScript, poolScript) {
+						t.Errorf("expected both outputs to use the same script")
+					}
+					poolOut = tx.TxOut[1]
+					workerOut = tx.TxOut[0]
+				} else {
+					for _, o := range tx.TxOut {
+						switch {
+						case bytes.Equal(o.PkScript, poolScript):
+							poolOut = o
+						case bytes.Equal(o.PkScript, workerScript):
+							workerOut = o
+						}
+					}
+					if poolOut == nil {
+						t.Fatalf("pool output not found by script")
+					}
+					if workerOut == nil {
+						t.Fatalf("worker output not found by script")
+					}
+					if poolOut.Value != poolFee {
+						t.Errorf("pool output value mismatch: got %d, want %d", poolOut.Value, poolFee)
+					}
+					if workerOut.Value != workerValue {
+						t.Errorf("worker output value mismatch: got %d, want %d", workerOut.Value, workerValue)
+					}
 				}
 
 				// Verify total adds up
-				totalOut := tx.TxOut[0].Value + tx.TxOut[1].Value
+				totalOut := poolOut.Value + workerOut.Value
 				if totalOut != totalValue {
 					t.Errorf("total output mismatch: got %d, want %d", totalOut, totalValue)
 				}
 
 				// Verify scripts can be decoded back to addresses
-				poolAddr := scriptToAddress(tx.TxOut[0].PkScript, params)
-				workerAddr := scriptToAddress(tx.TxOut[1].PkScript, params)
+				poolAddr := scriptToAddress(poolOut.PkScript, params)
+				workerAddr := scriptToAddress(workerOut.PkScript, params)
 
 				if poolAddr != poolWallet.address {
 					t.Errorf("pool address round-trip failed:\ngot:  %s\nwant: %s", poolAddr, poolWallet.address)
@@ -375,9 +399,28 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 				t.Fatalf("expected 2 outputs, got %d", len(tx.TxOut))
 			}
 
+			var (
+				poolOut   *wire.TxOut
+				workerOut *wire.TxOut
+			)
+			for _, o := range tx.TxOut {
+				switch {
+				case bytes.Equal(o.PkScript, poolScript):
+					poolOut = o
+				case bytes.Equal(o.PkScript, workerScript):
+					workerOut = o
+				}
+			}
+			if poolOut == nil {
+				t.Fatalf("pool output not found by script")
+			}
+			if workerOut == nil {
+				t.Fatalf("worker output not found by script")
+			}
+
 			// Verify addresses match
-			poolAddrOut := scriptToAddress(tx.TxOut[0].PkScript, params)
-			workerAddrOut := scriptToAddress(tx.TxOut[1].PkScript, params)
+			poolAddrOut := scriptToAddress(poolOut.PkScript, params)
+			workerAddrOut := scriptToAddress(workerOut.PkScript, params)
 
 			if poolAddrOut != tc.poolAddr {
 				t.Errorf("pool address mismatch:\ngot:  %s\nwant: %s", poolAddrOut, tc.poolAddr)
@@ -387,8 +430,8 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 			}
 
 			t.Logf("✓ %s", tc.description)
-			t.Logf("  Pool:   %s (%d sats)", tc.poolAddr, tx.TxOut[0].Value)
-			t.Logf("  Worker: %s (%d sats)", tc.workerAddr, tx.TxOut[1].Value)
+			t.Logf("  Pool:   %s (%d sats)", tc.poolAddr, poolOut.Value)
+			t.Logf("  Worker: %s (%d sats)", tc.workerAddr, workerOut.Value)
 		})
 	}
 }

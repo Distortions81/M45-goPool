@@ -106,18 +106,31 @@ func TestSerializeDualCoinbaseTx_DualOutputs(t *testing.T) {
 		t.Fatalf("computed workerValue <= 0")
 	}
 
-	if tx.TxOut[0].Value != poolFee {
-		t.Fatalf("pool output value mismatch: got %d, want %d", tx.TxOut[0].Value, poolFee)
+	var (
+		gotPoolValue   *int64
+		gotWorkerValue *int64
+	)
+	for _, o := range tx.TxOut {
+		switch {
+		case bytes.Equal(o.PkScript, poolScript):
+			v := o.Value
+			gotPoolValue = &v
+		case bytes.Equal(o.PkScript, workerScript):
+			v := o.Value
+			gotWorkerValue = &v
+		}
 	}
-	if !bytes.Equal(tx.TxOut[0].PkScript, poolScript) {
-		t.Fatalf("pool script mismatch: got %x, want %x", tx.TxOut[0].PkScript, poolScript)
+	if gotPoolValue == nil {
+		t.Fatalf("pool output not found by script")
 	}
-
-	if tx.TxOut[1].Value != workerValue {
-		t.Fatalf("worker output value mismatch: got %d, want %d", tx.TxOut[1].Value, workerValue)
+	if gotWorkerValue == nil {
+		t.Fatalf("worker output not found by script")
 	}
-	if !bytes.Equal(tx.TxOut[1].PkScript, workerScript) {
-		t.Fatalf("worker script mismatch: got %x, want %x", tx.TxOut[1].PkScript, workerScript)
+	if *gotPoolValue != poolFee {
+		t.Fatalf("pool output value mismatch: got %d, want %d", *gotPoolValue, poolFee)
+	}
+	if *gotWorkerValue != workerValue {
+		t.Fatalf("worker output value mismatch: got %d, want %d", *gotWorkerValue, workerValue)
 	}
 
 	if len(tx.TxIn[0].SignatureScript) == 0 || len(tx.TxIn[0].SignatureScript) > 100 {

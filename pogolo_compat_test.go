@@ -314,7 +314,7 @@ func TestShareValidationFlow(t *testing.T) {
 		// Test that duplicate detection works
 		// Both pools should reject shares with identical parameters
 
-		ring := &duplicateShareRing{}
+		ring := &duplicateShareSet{}
 
 		// Create a share key
 		var key1 duplicateShareKey
