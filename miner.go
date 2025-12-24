@@ -66,6 +66,18 @@ type MinerStats struct {
 	WindowSubmissions int
 }
 
+// statsUpdate represents a stats modification to be processed asynchronously
+type statsUpdate struct {
+	worker       string
+	accepted     bool
+	creditedDiff float64
+	shareDiff    float64
+	reason       string
+	shareHash    string
+	detail       *ShareDetail
+	timestamp    time.Time
+}
+
 type workerWalletState struct {
 	address   string
 	script    []byte
@@ -172,10 +184,12 @@ type MinerConn struct {
 	diffMu              sync.Mutex
 	lastDiffChange      time.Time
 	stateMu             sync.Mutex
-	listenerOn          bool
-	stats               MinerStats
-	statsMu             sync.Mutex
-	vardiff             VarDiffConfig
+	listenerOn   bool
+	stats        MinerStats
+	statsMu      sync.Mutex
+	statsUpdates chan statsUpdate // Buffered channel for async stats updates
+	statsWg      sync.WaitGroup   // Wait for stats worker to finish
+	vardiff      VarDiffConfig
 	metrics             *PoolMetrics
 	accounting          *AccountStore
 	workerRegistry      *workerConnectionRegistry
@@ -322,9 +336,52 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 	}
 }
 
+// statsWorker processes stats updates asynchronously from a buffered channel.
+// This eliminates lock contention on the hot path (share submission).
+func (mc *MinerConn) statsWorker() {
+	defer mc.statsWg.Done()
+
+	for update := range mc.statsUpdates {
+		mc.statsMu.Lock()
+		mc.ensureWindowLocked(update.timestamp)
+
+		if update.worker != "" {
+			mc.stats.Worker = update.worker
+		}
+
+		mc.stats.WindowSubmissions++
+		if update.accepted {
+			mc.stats.Accepted++
+			mc.stats.WindowAccepted++
+			if update.creditedDiff >= 0 {
+				mc.stats.TotalDifficulty += update.creditedDiff
+				mc.stats.WindowDifficulty += update.creditedDiff
+				mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
+			}
+		} else {
+			mc.stats.Rejected++
+		}
+		mc.stats.LastShare = update.timestamp
+
+		mc.lastShareHash = update.shareHash
+		mc.lastShareAccepted = update.accepted
+		mc.lastShareDifficulty = update.shareDiff
+		mc.lastShareDetail = update.detail
+		if !update.accepted && update.reason != "" {
+			mc.lastRejectReason = update.reason
+		}
+		mc.statsMu.Unlock()
+	}
+}
+
 func (mc *MinerConn) cleanup() {
 	mc.cleanupOnce.Do(func() {
 		mc.unregisterRegisteredWorker()
+
+		// Close stats channel and wait for worker to finish processing
+		close(mc.statsUpdates)
+		mc.statsWg.Wait()
+
 		mc.statsMu.Lock()
 		mc.stats.WindowStart = time.Time{}
 		mc.stats.WindowAccepted = 0
@@ -607,7 +664,13 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		minVerBits:      minBits,
 		bootstrapDone:   false,
 		isTLSConnection: isTLS,
+		statsUpdates:    make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
 	}
+
+	// Start stats worker goroutine
+	mc.statsWg.Add(1)
+	go mc.statsWorker()
+
 	return mc
 }
 
@@ -807,38 +870,60 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 // display/detail). They may differ when vardiff changed between notify and
 // submit; we always want hashrate to use the assigned target.
 func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, detail *ShareDetail, now time.Time) {
-	mc.statsMu.Lock()
-	mc.ensureWindowLocked(now)
-	if worker != "" {
-		mc.stats.Worker = worker
+	// Send update to async stats worker instead of blocking on mutex
+	update := statsUpdate{
+		worker:       worker,
+		accepted:     accepted,
+		creditedDiff: creditedDiff,
+		shareDiff:    shareDiff,
+		reason:       reason,
+		shareHash:    shareHash,
+		detail:       detail,
+		timestamp:    now,
 	}
-	mc.stats.WindowSubmissions++
-	if accepted {
-		mc.stats.Accepted++
-		mc.stats.WindowAccepted++
-		if creditedDiff < 0 {
-			creditedDiff = 0
-		}
-		mc.stats.TotalDifficulty += creditedDiff
-		mc.stats.WindowDifficulty += creditedDiff
-		mc.updateHashrateLocked(creditedDiff, now)
-	} else {
-		mc.stats.Rejected++
-	}
-	mc.stats.LastShare = now
 
-	mc.lastShareHash = shareHash
-	mc.lastShareAccepted = accepted
-	mc.lastShareDifficulty = shareDiff
-	mc.lastShareDetail = detail
-	if !accepted && reason != "" {
-		mc.lastRejectReason = reason
+	select {
+	case mc.statsUpdates <- update:
+		// Successfully queued for async processing
+	default:
+		// Channel full, process synchronously as fallback
+		mc.recordShareSync(update)
 	}
-	mc.statsMu.Unlock()
 
 	if mc.metrics != nil {
 		mc.metrics.RecordShare(accepted, reason)
 	}
+}
+
+// recordShareSync is the fallback synchronous stats update (only when channel is full)
+func (mc *MinerConn) recordShareSync(update statsUpdate) {
+	mc.statsMu.Lock()
+	mc.ensureWindowLocked(update.timestamp)
+	if update.worker != "" {
+		mc.stats.Worker = update.worker
+	}
+	mc.stats.WindowSubmissions++
+	if update.accepted {
+		mc.stats.Accepted++
+		mc.stats.WindowAccepted++
+		if update.creditedDiff >= 0 {
+			mc.stats.TotalDifficulty += update.creditedDiff
+			mc.stats.WindowDifficulty += update.creditedDiff
+			mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
+		}
+	} else {
+		mc.stats.Rejected++
+	}
+	mc.stats.LastShare = update.timestamp
+
+	mc.lastShareHash = update.shareHash
+	mc.lastShareAccepted = update.accepted
+	mc.lastShareDifficulty = update.shareDiff
+	mc.lastShareDetail = update.detail
+	if !update.accepted && update.reason != "" {
+		mc.lastRejectReason = update.reason
+	}
+	mc.statsMu.Unlock()
 }
 
 func (mc *MinerConn) trackBestShare(worker, hash string, difficulty float64, now time.Time) {
