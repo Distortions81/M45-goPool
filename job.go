@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -227,6 +228,34 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 	}
 }
 
+func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
+	if !jm.shouldUseLongpollFallback() {
+		return
+	}
+	if tpl.Height <= 0 {
+		return
+	}
+
+	jm.zmqPayloadMu.Lock()
+	defer jm.zmqPayloadMu.Unlock()
+
+	tip := jm.zmqPayload.BlockTip
+	if tip.Height == 0 || tpl.Height > tip.Height {
+		tip.Height = tpl.Height
+	}
+	if tpl.CurTime > 0 {
+		tip.Time = time.Unix(tpl.CurTime, 0).UTC()
+	}
+	if bits := strings.TrimSpace(tpl.Bits); bits != "" {
+		tip.Bits = bits
+		if parsed, err := strconv.ParseUint(bits, 16, 32); err == nil {
+			tip.Bits = fmt.Sprintf("%08x", uint32(parsed))
+			tip.Difficulty = difficultyFromBits(uint32(parsed))
+		}
+	}
+	jm.zmqPayload.BlockTip = tip
+}
+
 func (jm *JobManager) recordRawBlockPayload(size int) {
 	jm.zmqPayloadMu.Lock()
 	jm.zmqPayload.LastRawBlockAt = time.Now()
@@ -417,6 +446,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.mu.Unlock()
 
 	jm.recordJobSuccess(job)
+	jm.updateBlockTipFromTemplate(tpl)
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
 	jm.broadcastJob(job)
 	return nil
