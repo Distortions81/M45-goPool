@@ -476,6 +476,14 @@
 			return (d / 1000000).toFixed(1) + 'M';
 		}
 
+		function formatBestShareDiff(d) {
+			if (!d) return '—';
+			if (d >= 1 && d < 100) {
+				return d.toFixed(2);
+			}
+			return formatDiff(d);
+		}
+
 		function formatTimeAgo(value) {
 			if (!value) return '—';
 			const date = new Date(value);
@@ -539,7 +547,7 @@
 			const rows = bestShares.map(share => `
 				<tr>
 					<td class="mono">${share.display_worker || share.worker || '—'}</td>
-					<td>${formatDiff(share.difficulty)}</td>
+					<td>${formatBestShareDiff(share.difficulty)}</td>
 					<td>${formatTimeAgo(share.timestamp)}</td>
 					<td class="mono">${share.display_hash || share.hash || '—'}</td>
 				</tr>
