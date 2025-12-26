@@ -36,14 +36,34 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		CREATE TABLE IF NOT EXISTS saved_workers (
 			user_id TEXT NOT NULL,
 			worker TEXT NOT NULL,
+			worker_hash TEXT,
 			PRIMARY KEY(user_id, worker)
 		)
 	`); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := addSavedWorkersHashColumn(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS saved_workers_hash_idx ON saved_workers (user_id, worker_hash)`); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	return &workerListStore{db: db}, nil
+}
+
+func addSavedWorkersHashColumn(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("ALTER TABLE saved_workers ADD COLUMN worker_hash TEXT")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	return nil
 }
 
 func (s *workerListStore) Add(userID, worker string) error {
@@ -67,11 +87,15 @@ func (s *workerListStore) Add(userID, worker string) error {
 		return nil
 	}
 
-	_, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker) VALUES (?, ?)", userID, worker)
+	hash := workerNameHash(worker)
+	if _, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash) VALUES (?, ?, ?)", userID, worker, hash); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ? AND (worker_hash IS NULL OR worker_hash = '')", hash, userID, worker)
 	return err
 }
 
-func (s *workerListStore) List(userID string) ([]string, error) {
+func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
@@ -79,19 +103,26 @@ func (s *workerListStore) List(userID string) ([]string, error) {
 	if userID == "" {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT worker FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	rows, err := s.db.Query("SELECT worker, worker_hash FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var workers []string
+	var workers []SavedWorkerEntry
 	for rows.Next() {
-		var worker string
-		if err := rows.Scan(&worker); err != nil {
+		var entry SavedWorkerEntry
+		if err := rows.Scan(&entry.Name, &entry.Hash); err != nil {
 			return nil, err
 		}
-		workers = append(workers, worker)
+		entry.Hash = strings.TrimSpace(entry.Hash)
+		if entry.Hash == "" {
+			entry.Hash = workerNameHash(entry.Name)
+			if entry.Hash != "" {
+				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+			}
+		}
+		workers = append(workers, entry)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -110,6 +141,11 @@ func (s *workerListStore) Remove(userID, worker string) error {
 	}
 	if len(worker) > workerLookupMaxBytes {
 		return nil
+	}
+	hash := workerNameHash(worker)
+	if hash != "" {
+		_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker_hash = ?", userID, hash)
+		return err
 	}
 	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker)
 	return err

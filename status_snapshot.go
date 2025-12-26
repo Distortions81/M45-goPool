@@ -128,22 +128,20 @@ func (s *StatusServer) findWorkerViewByName(name string, now time.Time) (WorkerV
 	if name == "" {
 		return WorkerView{}, false
 	}
-	for _, w := range s.snapshotWorkerViews(now) {
-		if w.Name == name {
-			return w, true
-		}
-	}
-	return WorkerView{}, false
+	return s.findWorkerViewByHash(workerNameHash(name), now)
 }
 
 func (s *StatusServer) findWorkerViewByHash(hash string, now time.Time) (WorkerView, bool) {
 	if hash == "" {
 		return WorkerView{}, false
 	}
-	for _, w := range s.snapshotWorkerViews(now) {
-		if w.WorkerSHA256 == hash {
-			return w, true
-		}
+	data := s.statusData()
+	lookup := workerLookupFromStatusData(data)
+	if lookup == nil {
+		return WorkerView{}, false
+	}
+	if w, ok := lookup[hash]; ok {
+		return w, true
 	}
 	return WorkerView{}, false
 }
