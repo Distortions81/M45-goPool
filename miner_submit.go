@@ -503,6 +503,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 
 	if isBlock {
 		mc.handleBlockShare(reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
+		mc.trackBestShare(workerName, shareHash, shareDiff, now)
 		return
 	}
 
@@ -525,7 +526,6 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		"submit_rate_per_min", subRate,
 	)
 	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
-	return
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
