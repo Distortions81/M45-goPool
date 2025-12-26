@@ -271,6 +271,37 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		return
 	}
 
+	task := submissionTask{
+		mc:               mc,
+		reqID:            req.ID,
+		job:              job,
+		jobID:            jobID,
+		workerName:       workerName,
+		extranonce2:      extranonce2,
+		extranonce2Bytes: en2,
+		ntime:            ntime,
+		nonce:            nonce,
+		versionHex:       versionHex,
+		useVersion:       useVersion,
+		receivedAt:       now,
+	}
+	ensureSubmissionWorkerPool()
+	submissionWorkers.submit(task)
+}
+
+func (mc *MinerConn) processSubmissionTask(task submissionTask) {
+	job := task.job
+	workerName := task.workerName
+	jobID := task.jobID
+	extranonce2 := task.extranonce2
+	en2 := task.extranonce2Bytes
+	ntime := task.ntime
+	nonce := task.nonce
+	versionHex := task.versionHex
+	useVersion := task.useVersion
+	reqID := task.reqID
+	now := task.receivedAt
+
 	if debugLogging || verboseLogging {
 		logger.Info("submit received",
 			"remote", mc.id,
@@ -290,11 +321,9 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		cbTx             []byte
 		cbTxid           []byte
 		usedDualCoinbase bool
+		err              error
 	)
 
-	// Build only the header and merkle root first so we can validate PoW and
-	// most rejects without constructing a full block. This avoids per-share
-	// hex decode/encode of all transactions when the share is not a block.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
@@ -338,8 +367,6 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		}
 	}
 
-	// Fallback to single-output header/coinbase when dual-payout header
-	// construction fails.
 	if header == nil || merkleRoot == nil || err != nil || len(cbTxid) != 32 {
 		if err != nil && usedDualCoinbase {
 			logger.Warn("dual-payout header build failed, falling back to single-output header",
@@ -363,7 +390,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			logger.Warn("submit coinbase rebuild failed", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, rejectInvalidCoinbase.String(), "", nil, now)
 			mc.writeResponse(StratumResponse{
-				ID:     req.ID,
+				ID:     reqID,
 				Result: false,
 				Error:  newStratumError(20, "invalid coinbase"),
 			})
@@ -376,9 +403,9 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
-				mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 			} else {
-				mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
 			}
 			return
 		}
@@ -399,54 +426,37 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
 			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 		} else {
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid merkle")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
 		}
 		return
 	}
 
-	// Bitcoin PoW: hash bytes from SHA256 are BE, but Bitcoin compares as LE-interpreted number.
-	// To emulate JS bignum.fromBuffer(hash, {endian:'little'}), we reverse then SetBytes.
-	// Use array-based hash to avoid allocation in hot path
 	headerHashArray := doubleSHA256Array(header)
 	headerHash = headerHashArray[:]
 
-	// Reverse in-place for little-endian interpretation
 	var headerHashLE [32]byte
 	copy(headerHashLE[:], headerHashArray[:])
 	reverseBytes32(&headerHashLE)
 
-	// Use pooled big.Int to avoid allocation
 	hashNum := bigIntPool.Get().(*big.Int)
 	hashNum.SetBytes(headerHashLE[:])
 	defer bigIntPool.Put(hashNum)
 
-	hashLE := headerHashLE[:] // LE bytes for display
+	hashLE := headerHashLE[:]
 	shareDiff := difficultyFromHash(headerHash)
-	hashHex := hex.EncodeToString(hashLE) // log the canonical display form
+	hashHex := hex.EncodeToString(hashLE)
 	assignedDiff := mc.assignedDifficulty(jobID)
 	currentDiff := mc.currentDifficulty()
-	// For debugging and correct accounting, credit the full target
-	// difficulty we assigned for this share (or fall back to current
-	// difficulty). Do not cap to the realized share difficulty so we
-	// can see when miners return higher/lower-diff shares.
 	creditedDiff := assignedDiff
 	if creditedDiff <= 0 {
 		creditedDiff = currentDiff
 	}
 
-	// Treat shares as valid if their computed difficulty is within ~1% of
-	// the assigned target difficulty, with low-diff rejects handled via the
-	// standard invalid-share path. The block check compares the LE header
-	// integer directly to the network target from bits.
 	isBlock := hashNum.Cmp(job.Target) <= 0
 
 	lowDiff := false
-	// Treat low-diff strictly relative to the difficulty that was in effect
-	// when this job was sent (assignedDiff), so vardiff moves after notify
-	// do not cause old jobs to be unfairly rejected. Fall back to the current
-	// difficulty only when we have no per-job assignment.
 	thresholdDiff := assignedDiff
 	if thresholdDiff <= 0 {
 		thresholdDiff = currentDiff
@@ -477,10 +487,10 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
 			mc.logBan(rejectLowDiff.String(), workerName, invalids)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 		} else {
 			mc.writeResponse(StratumResponse{
-				ID:     req.ID,
+				ID:     reqID,
 				Result: false,
 				Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
 			})
@@ -509,18 +519,18 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			"accept_rate_per_min", accRate,
 			"submit_rate_per_min", subRate,
 		)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
 		return
 	}
 
-	mc.handleBlockShare(req, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
+	mc.handleBlockShare(reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
 // builds the full block (reusing any dual-payout header/coinbase when
 // available), submits it via RPC, logs the reward split and found-block
 // record, and sends the final Stratum response.
-func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
+func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
 	var (
 		blockHex  string
 		submitRes interface{}
@@ -600,7 +610,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 				mc.metrics.RecordErrorEvent("submitblock", err.Error(), now)
 			}
 			logger.Error("submitblock build error", "remote", mc.id, "error", err)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
 			return
 		}
 	}
@@ -621,7 +631,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		// that the block was accepted; it only preserves the data needed for
 		// a later submitblock attempt.
 		mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, err.Error())})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
 		return
 	}
 	if mc.metrics != nil {
@@ -671,7 +681,7 @@ func (mc *MinerConn) handleBlockShare(req *StratumRequest, job *Job, workerName 
 		"rejected_total", stats.Rejected,
 		"worker_difficulty", stats.TotalDifficulty,
 	)
-	mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
+	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
 }
 
 // logFoundBlock appends a JSON line describing a found block to a log file in

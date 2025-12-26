@@ -192,6 +192,7 @@ type MinerConn struct {
 	ctx                 context.Context
 	conn                net.Conn
 	writer              *bufio.Writer
+	writeMu             sync.Mutex
 	reader              *bufio.Reader
 	jobMgr              *JobManager
 	rpc                 rpcCaller
@@ -792,6 +793,9 @@ func (mc *MinerConn) handle() {
 }
 
 func (mc *MinerConn) writeJSON(v interface{}) error {
+	mc.writeMu.Lock()
+	defer mc.writeMu.Unlock()
+
 	if err := mc.conn.SetWriteDeadline(time.Now().Add(stratumWriteTimeout)); err != nil {
 		return err
 	}
