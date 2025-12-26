@@ -500,30 +500,32 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 
 	shareHash := hashHex
 	detail := mc.buildShareDetail(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+
+	if isBlock {
+		mc.handleBlockShare(reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
+		return
+	}
+
 	mc.recordShare(workerName, true, creditedDiff, shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, shareDiff, now)
 	if mc.maybeAdjustDifficulty(now) {
 		mc.sendNotifyFor(job, true)
 	}
 
-	if !isBlock {
-		accRate, subRate := mc.shareRates(now)
-		stats := mc.snapshotStats()
-		logger.Info("share accepted",
-			"miner", mc.minerName(workerName),
-			"difficulty", shareDiff,
-			"hash", hashHex,
-			"accepted_total", stats.Accepted,
-			"rejected_total", stats.Rejected,
-			"worker_difficulty", stats.TotalDifficulty,
-			"accept_rate_per_min", accRate,
-			"submit_rate_per_min", subRate,
-		)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
-		return
-	}
-
-	mc.handleBlockShare(reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
+	accRate, subRate := mc.shareRates(now)
+	stats := mc.snapshotStats()
+	logger.Info("share accepted",
+		"miner", mc.minerName(workerName),
+		"difficulty", shareDiff,
+		"hash", hashHex,
+		"accepted_total", stats.Accepted,
+		"rejected_total", stats.Rejected,
+		"worker_difficulty", stats.TotalDifficulty,
+		"accept_rate_per_min", accRate,
+		"submit_rate_per_min", subRate,
+	)
+	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
+	return
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
