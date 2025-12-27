@@ -492,7 +492,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 			mc.writeResponse(StratumResponse{
 				ID:     reqID,
 				Result: false,
-				Error:  []interface{}{23, fmt.Sprintf("low difficulty share of %.8f", shareDiff), nil},
+				Error:  []interface{}{23, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", shareDiff, assignedDiff), nil},
 			})
 		}
 		return

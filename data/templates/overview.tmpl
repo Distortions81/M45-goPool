@@ -300,15 +300,17 @@
 				return;
 			}
 
-			// Find min/max for scaling with minimum scale of 0 to 10 TH/s
-			const minScale = 0;
-			const maxScale = 10e12; // 10 TH/s in H/s
+			// Find min/max for scaling, with headroom so peaks don't peg the top.
+			// Keep a minimum Y-axis floor so low-hashrate pools aren't rendered
+			// against an always-zero baseline.
+			const minScale = 1e6; // 1 MH/s in H/s
 			const dataMax = Math.max(...hashrateData);
-			const dataMin = Math.min(...hashrateData);
 
-			const maxHashrate = Math.max(dataMax, maxScale);
+			const headroomFactor = 2.0;
+			const defaultMaxScale = 100e6; // 100 MH/s in H/s
+			const maxHashrate = Math.max(dataMax * headroomFactor, defaultMaxScale);
 			const minHashrate = minScale;
-			const range = maxHashrate - minHashrate;
+			const range = Math.max(1, maxHashrate - minHashrate);
 
 			// Draw grid lines
 			ctx.strokeStyle = '#2a2f3a';
