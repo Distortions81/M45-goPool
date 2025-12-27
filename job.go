@@ -243,7 +243,9 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 	if tip.Height == 0 || tpl.Height > tip.Height {
 		tip.Height = tpl.Height
 	}
-	if tpl.CurTime > 0 {
+	// Note: tpl.CurTime is template time (node wall-clock), not a block header
+	// timestamp; keep any existing blockchain-derived tip time instead.
+	if tip.Time.IsZero() && tpl.CurTime > 0 {
 		tip.Time = time.Unix(tpl.CurTime, 0).UTC()
 	}
 	if bits := strings.TrimSpace(tpl.Bits); bits != "" {
@@ -254,6 +256,64 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 		}
 	}
 	jm.zmqPayload.BlockTip = tip
+}
+
+func (jm *JobManager) blockTipHeight() int64 {
+	jm.zmqPayloadMu.RLock()
+	defer jm.zmqPayloadMu.RUnlock()
+	return jm.zmqPayload.BlockTip.Height
+}
+
+func (jm *JobManager) refreshBlockHistoryFromRPC(ctx context.Context) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !jm.shouldUseLongpollFallback() || jm.rpc == nil {
+		return false
+	}
+
+	hash, err := jm.rpc.GetBestBlockHash(ctx)
+	if err != nil {
+		logger.Warn("failed to fetch best block hash for block history", "error", err)
+		return false
+	}
+
+	header, err := jm.rpc.GetBlockHeader(ctx, hash)
+	if err != nil {
+		logger.Warn("failed to fetch best block header for block history", "error", err)
+		return false
+	}
+
+	tip := ZMQBlockTip{
+		Hash:       header.Hash,
+		Height:     header.Height,
+		Time:       time.Unix(header.Time, 0).UTC(),
+		Bits:       header.Bits,
+		Difficulty: header.Difficulty,
+	}
+
+	recentTimes := []time.Time{tip.Time}
+	prevHash := header.PreviousBlockHash
+	for i := 0; i < 3 && prevHash != ""; i++ {
+		prevHeader, err := jm.rpc.GetBlockHeader(ctx, prevHash)
+		if err != nil {
+			logger.Warn("failed to fetch previous block header for block history", "height", header.Height-int64(i+1), "error", err)
+			break
+		}
+		recentTimes = append([]time.Time{time.Unix(prevHeader.Time, 0).UTC()}, recentTimes...)
+		prevHash = prevHeader.PreviousBlockHash
+	}
+
+	if len(recentTimes) > 4 {
+		recentTimes = recentTimes[len(recentTimes)-4:]
+	}
+
+	jm.zmqPayloadMu.Lock()
+	jm.zmqPayload.BlockTip = tip
+	jm.zmqPayload.RecentBlockTimes = recentTimes
+	jm.zmqPayload.BlockTimerActive = true
+	jm.zmqPayloadMu.Unlock()
+	return true
 }
 
 func (jm *JobManager) recordRawBlockPayload(size int) {
@@ -275,19 +335,13 @@ func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	jm.zmqPayload.BlockTip = tip
 
 	// Track recent block times (keep last 4)
-	if !tip.Time.IsZero() {
-		// Only add if this is a new block (different from the last one)
-		if len(jm.zmqPayload.RecentBlockTimes) == 0 ||
-			!jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-1].Equal(tip.Time) {
-			jm.zmqPayload.RecentBlockTimes = append(jm.zmqPayload.RecentBlockTimes, tip.Time)
-			if len(jm.zmqPayload.RecentBlockTimes) > 4 {
-				jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-4:]
-			}
-			// Activate the block timer when we see a new block
-			if isNewBlock {
-				jm.zmqPayload.BlockTimerActive = true
-			}
+	if isNewBlock && !tip.Time.IsZero() {
+		// Append even if timestamps repeat (multiple blocks can share the same header time).
+		jm.zmqPayload.RecentBlockTimes = append(jm.zmqPayload.RecentBlockTimes, tip.Time)
+		if len(jm.zmqPayload.RecentBlockTimes) > 4 {
+			jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-4:]
 		}
+		jm.zmqPayload.BlockTimerActive = true
 	}
 }
 
@@ -357,9 +411,9 @@ func (jm *JobManager) fetchInitialBlockInfo(ctx context.Context) {
 		prevHash = prevHeader.PreviousBlockHash
 	}
 
-	// Keep only the last 3 timestamps (current + up to 2 previous)
-	if len(recentTimes) > 3 {
-		recentTimes = recentTimes[len(recentTimes)-3:]
+	// Keep only the last 4 timestamps (current + up to 3 previous)
+	if len(recentTimes) > 4 {
+		recentTimes = recentTimes[len(recentTimes)-4:]
 	}
 
 	// Record this as the initial block tip and activate the timer
@@ -445,8 +499,13 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.curJob = job
 	jm.mu.Unlock()
 
+	prevHeight := jm.blockTipHeight()
+
 	jm.recordJobSuccess(job)
 	jm.updateBlockTipFromTemplate(tpl)
+	if jm.shouldUseLongpollFallback() && tpl.Height > prevHeight {
+		jm.refreshBlockHistoryFromRPC(ctx)
+	}
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
 	jm.broadcastJob(job)
 	return nil
