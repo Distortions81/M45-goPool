@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/pelletier/go-toml"
 )
 
@@ -902,7 +902,7 @@ func loadRPCredentialsFromSecrets(cfg *Config, secretsPath string) error {
 	return nil
 }
 
-func printRPCSecretHint(cfg Config, secretsPath string) {
+func printRPCSecretHint(cfg *Config, secretsPath string) {
 	secretsExamplePath := filepath.Join(cfg.DataDir, "config", "examples", "secrets.toml.example")
 	fmt.Printf("\n🔐 RPC credentials are required when node.rpc_cookie_path is not configured.\n\n")
 	fmt.Printf("   To configure RPC credentials:\n")

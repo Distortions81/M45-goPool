@@ -736,7 +736,7 @@ func main() {
 }
 
 func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides) (Config, error) {
-	cfg, secretsPath = loadConfig(cfgPath, secretsPath)
+	cfg, secretsPath := loadConfig(cfgPath, secretsPath)
 	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
 		return Config{}, err
 	}

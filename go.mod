@@ -6,7 +6,6 @@ require (
 	github.com/btcsuite/btcd v0.25.0
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
-	github.com/btcsuite/btcutil v1.0.2
 	github.com/bytedance/sonic v1.14.2
 	github.com/clerk/clerk-sdk-go/v2 v2.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
