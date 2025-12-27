@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/hako/durafmt"
 )
 
 func (s *StatusServer) SetJobManager(jm *JobManager) {
@@ -105,6 +106,12 @@ type NodePeerInfo struct {
 	Display     string  `json:"display"`
 	PingMs      float64 `json:"ping_ms"`
 	ConnectedAt int64   `json:"connected_at"`
+}
+
+type nextDifficultyRetarget struct {
+	Height           int64  `json:"height"`
+	BlocksAway       int64  `json:"blocks_away"`
+	DurationEstimate string `json:"duration_estimate,omitempty"`
 }
 
 func (s *StatusServer) cachedJSONResponse(key string, ttl time.Duration, build func() ([]byte, error)) ([]byte, time.Time, time.Time, error) {
@@ -404,6 +411,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		var blockHeight int64
 		var blockDifficulty float64
 		blockTimeLeftSec := int64(-1)
+		const targetBlockInterval = 10 * time.Minute
 		now := time.Now()
 
 		signedCeilSeconds := func(d time.Duration) int64 {
@@ -429,7 +437,6 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 			// Only calculate time left if the block timer has been activated (after first new block)
 			if fs.Payload.BlockTimerActive && !blockTip.Time.IsZero() {
-				const targetBlockInterval = 10 * time.Minute
 				remaining := blockTip.Time.Add(targetBlockInterval).Sub(now)
 				blockTimeLeftSec = signedCeilSeconds(remaining)
 			}
@@ -455,22 +462,41 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 				recentBlockTimes = append(recentBlockTimes, bt.Format(time.RFC3339))
 			}
 		}
+		var nextRetarget *nextDifficultyRetarget
+		if blockHeight > 0 {
+			const retargetInterval = 2016
+			next := ((blockHeight / retargetInterval) + 1) * retargetInterval
+			remaining := next - blockHeight
+			if remaining < 0 {
+				remaining = 0
+			}
+			nextRetarget = &nextDifficultyRetarget{
+				Height:     next,
+				BlocksAway: remaining,
+			}
+			if remaining > 0 {
+				duration := time.Duration(int64(targetBlockInterval) * remaining)
+				nextRetarget.DurationEstimate = durafmt.Parse(duration).LimitFirstN(2).String()
+			}
+		}
 		data := struct {
-			APIVersion       string   `json:"api_version"`
-			PoolHashrate     float64  `json:"pool_hashrate"`
-			BlockHeight      int64    `json:"block_height"`
-			BlockDifficulty  float64  `json:"block_difficulty"`
-			BlockTimeLeftSec int64    `json:"block_time_left_sec"`
-			RecentBlockTimes []string `json:"recent_block_times"`
-			UpdatedAt        string   `json:"updated_at"`
+			APIVersion             string                  `json:"api_version"`
+			PoolHashrate           float64                 `json:"pool_hashrate"`
+			BlockHeight            int64                   `json:"block_height"`
+			BlockDifficulty        float64                 `json:"block_difficulty"`
+			BlockTimeLeftSec       int64                   `json:"block_time_left_sec"`
+			RecentBlockTimes       []string                `json:"recent_block_times"`
+			NextDifficultyRetarget *nextDifficultyRetarget `json:"next_difficulty_retarget,omitempty"`
+			UpdatedAt              string                  `json:"updated_at"`
 		}{
-			APIVersion:       apiVersion,
-			PoolHashrate:     s.computePoolHashrate(),
-			BlockHeight:      blockHeight,
-			BlockDifficulty:  blockDifficulty,
-			BlockTimeLeftSec: blockTimeLeftSec,
-			RecentBlockTimes: recentBlockTimes,
-			UpdatedAt:        time.Now().UTC().Format(time.RFC3339),
+			APIVersion:             apiVersion,
+			PoolHashrate:           s.computePoolHashrate(),
+			BlockHeight:            blockHeight,
+			BlockDifficulty:        blockDifficulty,
+			BlockTimeLeftSec:       blockTimeLeftSec,
+			RecentBlockTimes:       recentBlockTimes,
+			NextDifficultyRetarget: nextRetarget,
+			UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
 		}
 		return sonic.Marshal(data)
 	})

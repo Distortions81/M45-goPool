@@ -111,6 +111,7 @@
 				<div class="label">Annual block odds</div>
 				<div class="value mono" id="status-block-chance">--</div>
 				<div class="card-context">Odds of finding a block in a year</div>
+				<div class="card-context">(For one worker on the pool at present speed and difficulty)</div>
 			</div>
 			<div class="card">
 				<div class="label">Network stats</div>
@@ -790,9 +791,25 @@
 				return '1 in ∞';
 			}
 			const ratio = 1 / chance;
-			if (!Number.isFinite(ratio) || ratio > 1e12) {
-				return '1 in 1,000,000,000,000+';
+			if (!Number.isFinite(ratio)) {
+				return '1 in ∞';
 			}
+
+			const largeUnits = [
+				{ value: 1e12, label: 'trillion' },
+				{ value: 1e9, label: 'billion' },
+				{ value: 1e6, label: 'million' },
+			];
+
+			for (const { value, label } of largeUnits) {
+				if (ratio >= value) {
+					const scaled = ratio / value;
+					const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+					const formatted = scaled.toFixed(precision).replace(/\.?0+$/, '');
+					return `1 in ${formatted} ${label}`;
+				}
+			}
+
 			const rounded = Math.max(1, Math.round(ratio));
 			return `1 in ${rounded.toLocaleString()}`;
 		}
@@ -941,14 +958,31 @@
 						const height = data.block_height;
 						blockHeightEl.textContent = height.toLocaleString();
 						if (blockHeightContextEl) {
-						const interval = 2016;
-						const next = (Math.floor(height / interval) + 1) * interval;
-						const remaining = Math.max(0, next - height);
-						blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks)`;
-					}
-				} else if (blockHeightEl) {
-					blockHeightEl.textContent = '--';
-					if (blockHeightContextEl) {
+							const retarget = data.next_difficulty_retarget;
+								if (retarget && typeof retarget.height === 'number' && retarget.height > 0) {
+									const parts = [];
+									if (typeof retarget.blocks_away === 'number') {
+										parts.push(`${retarget.blocks_away.toLocaleString()} blocks away`);
+									}
+									if (retarget.duration_estimate) {
+										parts.push(`short duration estimate ~${retarget.duration_estimate}`);
+									}
+									if (parts.length === 0) {
+										parts.push('blocks away');
+									}
+									blockHeightContextEl.innerHTML = `Next difficulty retarget: ${retarget.height.toLocaleString()}<br>(${parts.join(' · ')})`;
+							} else {
+								const interval = 2016;
+								const next = (Math.floor(height / interval) + 1) * interval;
+								const remaining = Math.max(0, next - height);
+								const durationSeconds = remaining * 10 * 60;
+								const durationText = formatDuration(durationSeconds);
+								blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks away · short duration estimate ~${durationText})`;
+							}
+						}
+					} else if (blockHeightEl) {
+						blockHeightEl.textContent = '--';
+						if (blockHeightContextEl) {
 							blockHeightContextEl.textContent = 'Current chain tip';
 						}
 					}
