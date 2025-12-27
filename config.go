@@ -880,24 +880,24 @@ func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bo
 				if len(tried) > 0 {
 					pathsDesc = strings.Join(tried, ", ")
 				}
-				logger.Warn("rpc cookie not present yet; will keep watching", "path", auto, "tried_paths", pathsDesc)
+				warnCookieMissing("rpc cookie not present yet; will keep watching", "path", auto, "tried_paths", pathsDesc)
 			}
 		} else {
 			pathsDesc := "none"
 			if len(tried) > 0 {
 				pathsDesc = strings.Join(tried, ", ")
 			}
-			logger.Warn("rpc cookie autodetect failed", "tried_paths", pathsDesc)
+			warnCookieMissing("rpc cookie autodetect failed", "tried_paths", pathsDesc)
 			return fmt.Errorf("node.rpc_cookie_path is required when RPC credentials are not forced; configure it to use bitcoind's auth cookie (autodetect checked: %s)", pathsDesc)
 		}
 	}
 	cfg.rpcCookieWatch = strings.TrimSpace(cfg.RPCCookiePath) != ""
 	if cfg.rpcCookieWatch {
-		if loaded, err := applyRPCCookieCredentials(cfg); err != nil {
+		if loaded, _, err := applyRPCCookieCredentials(cfg); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				logger.Warn("rpc cookie missing; will keep watching", "path", cfg.RPCCookiePath)
+				warnCookieMissing("rpc cookie missing; will keep watching", "path", cfg.RPCCookiePath)
 			} else {
-				logger.Warn("failed to read rpc cookie", "path", cfg.RPCCookiePath, "error", err)
+				warnCookieMissing("failed to read rpc cookie", "path", cfg.RPCCookiePath, "error", err)
 			}
 		} else if loaded {
 			logger.Info("rpc cookie loaded", "path", cfg.RPCCookiePath)
@@ -935,18 +935,52 @@ func printRPCSecretHint(cfg *Config, secretsPath string) {
 	fmt.Printf("   4. Restart goPool\n\n")
 }
 
-func applyRPCCookieCredentials(cfg *Config) (bool, error) {
+func applyRPCCookieCredentials(cfg *Config) (bool, string, error) {
 	path := strings.TrimSpace(cfg.RPCCookiePath)
 	if path == "" {
-		return false, nil
+		return false, path, nil
 	}
-	user, pass, err := readRPCCookie(path)
+	actualPath, user, pass, err := readRPCCookieWithFallback(path)
+	if actualPath != "" {
+		cfg.RPCCookiePath = actualPath
+	}
 	if err != nil {
-		return false, err
+		return false, actualPath, err
 	}
 	cfg.RPCUser = strings.TrimSpace(user)
 	cfg.RPCPass = strings.TrimSpace(pass)
-	return true, nil
+	return true, actualPath, nil
+}
+
+func readRPCCookieWithFallback(basePath string) (string, string, string, error) {
+	candidates := []string{basePath}
+	if !strings.HasSuffix(basePath, ".cookie") {
+		candidates = append(candidates, filepath.Join(basePath, ".cookie"))
+	}
+	var lastErr error
+	for _, candidate := range candidates {
+		data, err := os.ReadFile(candidate)
+		if err != nil {
+			lastErr = fmt.Errorf("read %s: %w", candidate, err)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return candidate, "", "", lastErr
+		}
+		token := strings.TrimSpace(string(data))
+		parts := strings.SplitN(token, ":", 2)
+		if len(parts) != 2 {
+			return candidate, "", "", fmt.Errorf("unexpected cookie format")
+		}
+		return candidate, strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	}
+	if len(candidates) == 0 {
+		return "", "", "", fmt.Errorf("invalid cookie path")
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("read %s: %w", candidates[len(candidates)-1], os.ErrNotExist)
+	}
+	return candidates[len(candidates)-1], "", "", lastErr
 }
 
 func readRPCCookie(path string) (string, string, error) {
@@ -991,6 +1025,16 @@ func autodetectRPCCookiePath() (string, bool, []string) {
 		return tried[0], false, tried
 	}
 	return "", false, tried
+}
+
+func warnCookieMissing(msg string, attrs ...any) {
+	logger.Warn(msg, attrs...)
+	entry := msg
+	if formatted := formatAttrs(attrs); formatted != "" {
+		entry += " " + formatted
+	}
+	entry += "\n"
+	_, _ = os.Stdout.Write([]byte(entry))
 }
 
 func linuxCookieCandidates() []string {
