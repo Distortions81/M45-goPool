@@ -77,7 +77,8 @@ type Config struct {
 	RPCPass             string
 	// RPCCookiePath optionally points at bitcoind's auth cookie file when RPC
 	// credentials are not set in secrets.toml.
-	RPCCookiePath string
+	RPCCookiePath  string
+	rpcCookieWatch bool
 	// AllowPublicRPC lets goPool connect to nodes that intentionally expose RPC
 	// without any authentication (useful for public/testing nodes). Defaults to
 	// false for security.
@@ -869,16 +870,38 @@ func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bo
 	}
 
 	if strings.TrimSpace(cfg.RPCCookiePath) == "" {
-		if auto := autodetectRPCCookiePath(); auto != "" {
+		auto, found, tried := autodetectRPCCookiePath()
+		if auto != "" {
 			cfg.RPCCookiePath = auto
-			logger.Info("autodetected bitcoind rpc cookie", "path", auto)
+			if found {
+				logger.Info("autodetected bitcoind rpc cookie", "path", auto)
+			} else {
+				pathsDesc := "none"
+				if len(tried) > 0 {
+					pathsDesc = strings.Join(tried, ", ")
+				}
+				logger.Warn("rpc cookie not present yet; will keep watching", "path", auto, "tried_paths", pathsDesc)
+			}
+		} else {
+			pathsDesc := "none"
+			if len(tried) > 0 {
+				pathsDesc = strings.Join(tried, ", ")
+			}
+			logger.Warn("rpc cookie autodetect failed", "tried_paths", pathsDesc)
+			return fmt.Errorf("node.rpc_cookie_path is required when RPC credentials are not forced; configure it to use bitcoind's auth cookie (autodetect checked: %s)", pathsDesc)
 		}
 	}
-	if strings.TrimSpace(cfg.RPCCookiePath) == "" {
-		return fmt.Errorf("node.rpc_cookie_path is required when RPC credentials are not forced; configure it to use bitcoind's auth cookie")
-	}
-	if err := applyRPCCookieCredentials(cfg); err != nil {
-		return err
+	cfg.rpcCookieWatch = strings.TrimSpace(cfg.RPCCookiePath) != ""
+	if cfg.rpcCookieWatch {
+		if loaded, err := applyRPCCookieCredentials(cfg); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				logger.Warn("rpc cookie missing; will keep watching", "path", cfg.RPCCookiePath)
+			} else {
+				logger.Warn("failed to read rpc cookie", "path", cfg.RPCCookiePath, "error", err)
+			}
+		} else if loaded {
+			logger.Info("rpc cookie loaded", "path", cfg.RPCCookiePath)
+		}
 	}
 	return nil
 }
@@ -912,18 +935,18 @@ func printRPCSecretHint(cfg *Config, secretsPath string) {
 	fmt.Printf("   4. Restart goPool\n\n")
 }
 
-func applyRPCCookieCredentials(cfg *Config) error {
+func applyRPCCookieCredentials(cfg *Config) (bool, error) {
 	path := strings.TrimSpace(cfg.RPCCookiePath)
 	if path == "" {
-		return nil
+		return false, nil
 	}
 	user, pass, err := readRPCCookie(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	cfg.RPCUser = strings.TrimSpace(user)
 	cfg.RPCPass = strings.TrimSpace(pass)
-	return nil
+	return true, nil
 }
 
 func readRPCCookie(path string) (string, string, error) {
@@ -939,28 +962,35 @@ func readRPCCookie(path string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func autodetectRPCCookiePath() string {
+func rpcCookieCandidates() []string {
+	var candidates []string
 	if envDir := strings.TrimSpace(os.Getenv("BITCOIN_DATADIR")); envDir != "" {
-		if p := filepath.Join(envDir, ".cookie"); fileExists(p) {
-			return p
-		}
+		candidates = append(candidates, filepath.Join(envDir, ".cookie"))
 		for _, net := range []string{"regtest", "testnet3", "signet"} {
-			if p := filepath.Join(envDir, net, ".cookie"); fileExists(p) {
-				return p
-			}
+			candidates = append(candidates, filepath.Join(envDir, net, ".cookie"))
 		}
 	}
-	for _, candidate := range btcdCookieCandidates() {
+	candidates = append(candidates, btcdCookieCandidates()...)
+	candidates = append(candidates, linuxCookieCandidates()...)
+	return candidates
+}
+
+func autodetectRPCCookiePath() (string, bool, []string) {
+	candidates := rpcCookieCandidates()
+	tried := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		tried = append(tried, candidate)
 		if fileExists(candidate) {
-			return candidate
+			return candidate, true, tried
 		}
 	}
-	for _, candidate := range linuxCookieCandidates() {
-		if fileExists(candidate) {
-			return candidate
-		}
+	if len(tried) > 0 {
+		return tried[0], false, tried
 	}
-	return ""
+	return "", false, tried
 }
 
 func linuxCookieCandidates() []string {

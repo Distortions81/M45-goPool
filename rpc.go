@@ -311,7 +311,9 @@ func (c *RPCClient) shouldRetry(err error) bool {
 	}
 	var statusErr *httpStatusError
 	if errors.As(err, &statusErr) {
-		return statusErr.StatusCode >= 500
+		if statusErr.StatusCode >= 500 || statusErr.StatusCode == http.StatusUnauthorized {
+			return true
+		}
 	}
 	return false
 }
