@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -62,6 +64,11 @@ type RPCClient struct {
 	nextID  int
 	metrics *PoolMetrics
 
+	authMu        sync.RWMutex
+	cookiePath    string
+	cookieModTime time.Time
+	cookieSize    int64
+
 	lastErrMu sync.RWMutex
 	lastErr   error
 
@@ -85,7 +92,7 @@ func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
-	return &RPCClient{
+	c := &RPCClient{
 		url:     cfg.RPCURL,
 		user:    cfg.RPCUser,
 		pass:    cfg.RPCPass,
@@ -98,8 +105,54 @@ func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
 			Timeout:   0, // longpoll waits for bitcoind to respond on new blocks
 			Transport: transport,
 		},
-		nextID: 1,
+		nextID:     1,
+		cookiePath: strings.TrimSpace(cfg.RPCCookiePath),
 	}
+	c.initCookieStat()
+	return c
+}
+
+func (c *RPCClient) initCookieStat() {
+	if c.cookiePath == "" {
+		return
+	}
+	info, err := os.Stat(c.cookiePath)
+	if err != nil {
+		return
+	}
+	c.authMu.Lock()
+	c.cookieModTime = info.ModTime()
+	c.cookieSize = info.Size()
+	c.authMu.Unlock()
+}
+
+func (c *RPCClient) reloadCookieIfChanged() {
+	if c.cookiePath == "" {
+		return
+	}
+	info, err := os.Stat(c.cookiePath)
+	if err != nil {
+		return
+	}
+	c.authMu.RLock()
+	modTime := c.cookieModTime
+	size := c.cookieSize
+	c.authMu.RUnlock()
+	if info.ModTime().Equal(modTime) && info.Size() == size {
+		return
+	}
+	user, pass, err := readRPCCookie(c.cookiePath)
+	if err != nil {
+		logger.Warn("reload rpc cookie", "path", c.cookiePath, "error", err)
+		return
+	}
+	c.authMu.Lock()
+	c.user = strings.TrimSpace(user)
+	c.pass = strings.TrimSpace(pass)
+	c.cookieModTime = info.ModTime()
+	c.cookieSize = info.Size()
+	c.authMu.Unlock()
+	logger.Info("rpc cookie reloaded", "path", c.cookiePath)
 }
 
 // SetResultHook registers a callback that is invoked after every successful
@@ -142,12 +195,14 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 		if c.metrics != nil {
 			c.metrics.RecordRPCError(err)
 		}
-		if !c.shouldRetry(err) {
-			return err
+		if c.shouldRetry(err) {
+			c.reloadCookieIfChanged()
+			if err := sleepContext(ctx, rpcRetryDelay); err != nil {
+				return err
+			}
+			continue
 		}
-		if err := sleepContext(ctx, rpcRetryDelay); err != nil {
-			return err
-		}
+		return err
 	}
 }
 
@@ -176,7 +231,12 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 	if ctx != nil {
 		req = req.WithContext(ctx)
 	}
-	req.SetBasicAuth(c.user, c.pass)
+	c.authMu.RLock()
+	user, pass := c.user, c.pass
+	c.authMu.RUnlock()
+	if user != "" || pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	start := time.Now()
@@ -251,7 +311,9 @@ func (c *RPCClient) shouldRetry(err error) bool {
 	}
 	var statusErr *httpStatusError
 	if errors.As(err, &statusErr) {
-		return statusErr.StatusCode >= 500
+		if statusErr.StatusCode >= 500 || statusErr.StatusCode == http.StatusUnauthorized {
+			return true
+		}
 	}
 	return false
 }

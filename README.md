@@ -27,5 +27,11 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and ensu
    # or
    go build -o goPool && ./goPool
    ```
-2. Edit configuration under `data/config/config.toml` and `data/config/secrets.toml` (see `operations.md` for deployment and tuning guidance).
+2. Edit configuration under `data/config/config.toml` (and `data/config/secrets.toml` only if you plan to force RPC credentials via `-allow-rpc-credentials`, otherwise point `node.rpc_cookie_path` at bitcoind's `.cookie` or let goPool auto-detect it through `$BITCOIN_DATADIR`, btcd's default `AppDataDir("btcd", false)/data` layout (per `btcsuite/btcd/rpcclient`), and the standard Linux locations). If you just want to override the auth cookie location for a single launch, use the `-rpc-cookie-path` flag instead of editing config files. To test against an open RPC endpoint such as `https://bitcoin-rpc.publicnode.com`, set `node.allow_public_rpc = true` alongside the desired `node.rpc_url`. See `operations.md` for deployment and tuning guidance.
+3. Configure ZMQ block notifications so goPool can react to new tips without polling:
+   ```toml
+   node.zmq_block_addr = "tcp://<bitcoind-host>:28332"
+   ```
+   Bitcoind writes blocks to ZMQ from the default port `28332`; point `node.zmq_block_addr` at the same interface (use `127.0.0.1` when the node is local). Restart bitcoind with `zmqpubrawblock=tcp://0.0.0.0:28332` (or whichever interface you prefer) if that option is missing from your `bitcoin.conf`. goPool logs `watching ZMQ block notifications` when the connection succeeds and tracks disconnect/reconnect counts in the status endpoints, so check those logs if the feed ever degrades.
+4. Point your miner at the Stratum listen address.
 3. Point your miner at the Stratum listen address.

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/pelletier/go-toml"
 )
 
@@ -19,6 +20,7 @@ rpc_pass = "password"
 # This is needed to exchange the development __clerk_db_jwt query param into a
 # first-party __session cookie on localhost. Do NOT use this in production.
 # clerk_secret_key = "sk_test_..."
+# clerk_publishable_key = "pk_test_..."
 `)
 
 type Config struct {
@@ -73,7 +75,15 @@ type Config struct {
 	RPCURL              string // e.g. "http://127.0.0.1:8332"
 	RPCUser             string
 	RPCPass             string
-	PayoutAddress       string
+	// RPCCookiePath optionally points at bitcoind's auth cookie file when RPC
+	// credentials are not set in secrets.toml.
+	RPCCookiePath  string
+	rpcCookieWatch bool
+	// AllowPublicRPC lets goPool connect to nodes that intentionally expose RPC
+	// without any authentication (useful for public/testing nodes). Defaults to
+	// false for security.
+	AllowPublicRPC bool
+	PayoutAddress  string
 	// PayoutScript is reserved for future internal overrides and is not
 	// populated from or written to config.toml.
 	PayoutScript   string
@@ -306,10 +316,12 @@ type authConfig struct {
 }
 
 type nodeConfig struct {
-	RPCURL        string `toml:"rpc_url"`
-	PayoutAddress string `toml:"payout_address"`
-	DataDir       string `toml:"data_dir"`
-	ZMQBlockAddr  string `toml:"zmq_block_addr"`
+	RPCURL         string `toml:"rpc_url"`
+	PayoutAddress  string `toml:"payout_address"`
+	DataDir        string `toml:"data_dir"`
+	ZMQBlockAddr   string `toml:"zmq_block_addr"`
+	RPCCookiePath  string `toml:"rpc_cookie_path"`
+	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
 type miningConfig struct {
@@ -438,10 +450,12 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
 		Node: nodeConfig{
-			RPCURL:        cfg.RPCURL,
-			PayoutAddress: cfg.PayoutAddress,
-			DataDir:       cfg.DataDir,
-			ZMQBlockAddr:  cfg.ZMQBlockAddr,
+			RPCURL:         cfg.RPCURL,
+			PayoutAddress:  cfg.PayoutAddress,
+			DataDir:        cfg.DataDir,
+			ZMQBlockAddr:   cfg.ZMQBlockAddr,
+			RPCCookiePath:  cfg.RPCCookiePath,
+			AllowPublicRPC: cfg.AllowPublicRPC,
 		},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
@@ -518,12 +532,8 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 	}
 }
 
-// secretsConfig holds sensitive RPC credentials required for pool operation.
-// These values are kept in a separate file (secrets.toml) so the main
-// config.toml can be checked into version control or shared without exposing
-// credentials.
-// Both rpc_user and rpc_pass are required for the pool to communicate with
-// bitcoind and must be set in secrets.toml.
+// secretsConfig holds values from secrets.toml: Clerk secrets and (when enabled)
+// RPC user/password for fallback authentication.
 type secretsConfig struct {
 	RPCUser             string `toml:"rpc_user"`
 	RPCPass             string `toml:"rpc_pass"`
@@ -531,7 +541,7 @@ type secretsConfig struct {
 	ClerkPublishableKey string `toml:"clerk_publishable_key"`
 }
 
-func loadConfig(configPath, secretsPath string) Config {
+func loadConfig(configPath, secretsPath string) (Config, string) {
 	cfg := defaultConfig()
 
 	if configPath == "" {
@@ -571,9 +581,6 @@ func loadConfig(configPath, secretsPath string) Config {
 		}
 	}
 
-	// Load secrets file: RPC credentials are required for pool operation.
-	// Secrets are kept in a separate file so the main config can be shared
-	// or version-controlled without exposing sensitive credentials.
 	if secretsPath == "" {
 		secretsPath = filepath.Join(cfg.DataDir, "config", "secrets.toml")
 	}
@@ -581,16 +588,6 @@ func loadConfig(configPath, secretsPath string) Config {
 		fatal("secrets file", err, "path", secretsPath)
 	} else if ok {
 		applySecretsConfig(&cfg, *sc)
-	} else {
-		secretsExamplePath := filepath.Join(cfg.DataDir, "config", "examples", "secrets.toml.example")
-		fmt.Printf("\n🔐 Secrets file is missing. RPC credentials are required.\n\n")
-		fmt.Printf("   To configure:\n")
-		fmt.Printf("   1. Copy example: %s\n", secretsExamplePath)
-		fmt.Printf("   2. To:           %s\n", secretsPath)
-		fmt.Printf("   3. Edit the file and set your rpc_user and rpc_pass\n")
-		fmt.Printf("   4. Restart goPool\n\n")
-
-		os.Exit(1)
 	}
 
 	// Optional advanced/tuning overlay: if data_dir/config/tuning.toml exists,
@@ -617,7 +614,7 @@ func loadConfig(configPath, secretsPath string) Config {
 	// smoothly after pool restarts without hitting rate limits.
 	autoConfigureAcceptRateLimits(&cfg, tuningOverrides, tuningConfigLoaded)
 
-	return cfg
+	return cfg, secretsPath
 }
 
 func loadTOMLFile[T any](path string) (*T, bool, error) {
@@ -725,6 +722,12 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Node.ZMQBlockAddr != "" {
 		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
+	}
+	if fc.Node.RPCCookiePath != "" {
+		cfg.RPCCookiePath = strings.TrimSpace(fc.Node.RPCCookiePath)
+	}
+	if fc.Node.AllowPublicRPC {
+		cfg.AllowPublicRPC = true
 	}
 	if fc.Mining.PoolFeePercent != nil {
 		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
@@ -854,13 +857,240 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 }
 
+func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bool) error {
+	if forceCredentials {
+		if err := loadRPCredentialsFromSecrets(cfg, secretsPath); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if cfg.AllowPublicRPC && strings.TrimSpace(cfg.RPCCookiePath) == "" {
+		return nil
+	}
+
+	if strings.TrimSpace(cfg.RPCCookiePath) == "" {
+		auto, found, tried := autodetectRPCCookiePath()
+		if auto != "" {
+			cfg.RPCCookiePath = auto
+			if found {
+				logger.Info("autodetected bitcoind rpc cookie", "path", auto)
+			} else {
+				pathsDesc := "none"
+				if len(tried) > 0 {
+					pathsDesc = strings.Join(tried, ", ")
+				}
+				warnCookieMissing("rpc cookie not present yet; will keep watching", "path", auto, "tried_paths", pathsDesc)
+			}
+		} else {
+			pathsDesc := "none"
+			if len(tried) > 0 {
+				pathsDesc = strings.Join(tried, ", ")
+			}
+			warnCookieMissing("rpc cookie autodetect failed", "tried_paths", pathsDesc)
+			return fmt.Errorf("node.rpc_cookie_path is required when RPC credentials are not forced; configure it to use bitcoind's auth cookie (autodetect checked: %s)", pathsDesc)
+		}
+	}
+	cfg.rpcCookieWatch = strings.TrimSpace(cfg.RPCCookiePath) != ""
+	if cfg.rpcCookieWatch {
+		if loaded, _, err := applyRPCCookieCredentials(cfg); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				warnCookieMissing("rpc cookie missing; will keep watching", "path", cfg.RPCCookiePath)
+			} else {
+				warnCookieMissing("failed to read rpc cookie", "path", cfg.RPCCookiePath, "error", err)
+			}
+		} else if loaded {
+			logger.Info("rpc cookie loaded", "path", cfg.RPCCookiePath)
+		}
+	}
+	return nil
+}
+
+func loadRPCredentialsFromSecrets(cfg *Config, secretsPath string) error {
+	sc, ok, err := loadSecretsFile(secretsPath)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		printRPCSecretHint(cfg, secretsPath)
+		return fmt.Errorf("secrets file missing: %s", secretsPath)
+	}
+	user := strings.TrimSpace(sc.RPCUser)
+	pass := strings.TrimSpace(sc.RPCPass)
+	if user == "" || pass == "" {
+		return fmt.Errorf("secrets file %s must include rpc_user and rpc_pass", secretsPath)
+	}
+	cfg.RPCUser = user
+	cfg.RPCPass = pass
+	return nil
+}
+
+func printRPCSecretHint(cfg *Config, secretsPath string) {
+	secretsExamplePath := filepath.Join(cfg.DataDir, "config", "examples", "secrets.toml.example")
+	fmt.Printf("\n🔐 RPC credentials are required when node.rpc_cookie_path is not configured.\n\n")
+	fmt.Printf("   To configure RPC credentials:\n")
+	fmt.Printf("   1. Copy the example: %s\n", secretsExamplePath)
+	fmt.Printf("   2. To:                 %s\n", secretsPath)
+	fmt.Printf("   3. Edit the file and set your rpc_user and rpc_pass\n")
+	fmt.Printf("   4. Restart goPool\n\n")
+}
+
+func applyRPCCookieCredentials(cfg *Config) (bool, string, error) {
+	path := strings.TrimSpace(cfg.RPCCookiePath)
+	if path == "" {
+		return false, path, nil
+	}
+	actualPath, user, pass, err := readRPCCookieWithFallback(path)
+	if actualPath != "" {
+		cfg.RPCCookiePath = actualPath
+	}
+	if err != nil {
+		return false, actualPath, err
+	}
+	cfg.RPCUser = strings.TrimSpace(user)
+	cfg.RPCPass = strings.TrimSpace(pass)
+	return true, actualPath, nil
+}
+
+func readRPCCookieWithFallback(basePath string) (string, string, string, error) {
+	candidates := []string{basePath}
+	if !strings.HasSuffix(basePath, ".cookie") {
+		candidates = append(candidates, filepath.Join(basePath, ".cookie"))
+	}
+	var lastErr error
+	for _, candidate := range candidates {
+		data, err := os.ReadFile(candidate)
+		if err != nil {
+			lastErr = fmt.Errorf("read %s: %w", candidate, err)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return candidate, "", "", lastErr
+		}
+		token := strings.TrimSpace(string(data))
+		parts := strings.SplitN(token, ":", 2)
+		if len(parts) != 2 {
+			return candidate, "", "", fmt.Errorf("unexpected cookie format")
+		}
+		return candidate, strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	}
+	if len(candidates) == 0 {
+		return "", "", "", fmt.Errorf("invalid cookie path")
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("read %s: %w", candidates[len(candidates)-1], os.ErrNotExist)
+	}
+	return candidates[len(candidates)-1], "", "", lastErr
+}
+
+func readRPCCookie(path string) (string, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", fmt.Errorf("read %s: %w", path, err)
+	}
+	token := strings.TrimSpace(string(data))
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("unexpected cookie format")
+	}
+	return parts[0], parts[1], nil
+}
+
+func rpcCookieCandidates() []string {
+	var candidates []string
+	if envDir := strings.TrimSpace(os.Getenv("BITCOIN_DATADIR")); envDir != "" {
+		candidates = append(candidates, filepath.Join(envDir, ".cookie"))
+		for _, net := range []string{"regtest", "testnet3", "signet"} {
+			candidates = append(candidates, filepath.Join(envDir, net, ".cookie"))
+		}
+	}
+	candidates = append(candidates, btcdCookieCandidates()...)
+	candidates = append(candidates, linuxCookieCandidates()...)
+	return candidates
+}
+
+func autodetectRPCCookiePath() (string, bool, []string) {
+	candidates := rpcCookieCandidates()
+	tried := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		tried = append(tried, candidate)
+		if fileExists(candidate) {
+			return candidate, true, tried
+		}
+	}
+	if len(tried) > 0 {
+		return tried[0], false, tried
+	}
+	return "", false, tried
+}
+
+func warnCookieMissing(msg string, attrs ...any) {
+	logger.Warn(msg, attrs...)
+	entry := msg
+	if formatted := formatAttrs(attrs); formatted != "" {
+		entry += " " + formatted
+	}
+	entry += "\n"
+	_, _ = os.Stdout.Write([]byte(entry))
+}
+
+func linuxCookieCandidates() []string {
+	home, _ := os.UserHomeDir()
+	h := func(p string) string {
+		if strings.HasPrefix(p, "~/") && home != "" {
+			return filepath.Join(home, p[2:])
+		}
+		return p
+	}
+	return []string{
+		h("~/.bitcoin/.cookie"),
+		h("~/.bitcoin/regtest/.cookie"),
+		h("~/.bitcoin/testnet3/.cookie"),
+		h("~/.bitcoin/signet/.cookie"),
+		"/var/lib/bitcoin/.cookie",
+		"/var/lib/bitcoin/regtest/.cookie",
+		"/var/lib/bitcoin/testnet3/.cookie",
+		"/var/lib/bitcoin/signet/.cookie",
+		"/home/bitcoin/.bitcoin/.cookie",
+		"/home/bitcoin/.bitcoin/regtest/.cookie",
+		"/home/bitcoin/.bitcoin/testnet3/.cookie",
+		"/home/bitcoin/.bitcoin/signet/.cookie",
+		"/etc/bitcoin/.cookie",
+	}
+}
+
+// btcdCookieCandidates mirrors btcsuite/btcd/rpcclient's layout for btcd's default
+// datadir so we can reuse the same cookie locations before falling back to the
+// general linux list.
+func btcdCookieCandidates() []string {
+	home := btcutil.AppDataDir("btcd", false)
+	if home == "" {
+		return nil
+	}
+	dataDir := filepath.Join(home, "data")
+	networks := []string{"regtest", "testnet3", "testnet4", "signet", "simnet"}
+	candidates := make([]string, 0, len(networks)+1)
+	candidates = append(candidates, filepath.Join(dataDir, ".cookie"))
+	for _, net := range networks {
+		candidates = append(candidates, filepath.Join(dataDir, net, ".cookie"))
+	}
+	return candidates
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
+}
+
 func applySecretsConfig(cfg *Config, sc secretsConfig) {
-	if sc.RPCUser != "" {
-		cfg.RPCUser = sc.RPCUser
-	}
-	if sc.RPCPass != "" {
-		cfg.RPCPass = sc.RPCPass
-	}
 	if sc.ClerkSecretKey != "" {
 		cfg.ClerkSecretKey = sc.ClerkSecretKey
 	}

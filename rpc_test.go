@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -83,6 +85,32 @@ func TestFetchPayoutScriptValidateAddressFallback(t *testing.T) {
 	}
 	if len(script) == 0 {
 		t.Fatalf("expected non-empty script")
+	}
+}
+
+func TestRPCClientReloadsCookieOnModification(t *testing.T) {
+	dir := t.TempDir()
+	cookiePath := filepath.Join(dir, ".cookie")
+	if err := os.WriteFile(cookiePath, []byte("first:token"), 0o600); err != nil {
+		t.Fatalf("write initial cookie: %v", err)
+	}
+	client := &RPCClient{
+		user:       "first",
+		pass:       "token",
+		cookiePath: cookiePath,
+	}
+	client.initCookieStat()
+	if err := os.WriteFile(cookiePath, []byte("second:secret"), 0o600); err != nil {
+		t.Fatalf("rewrite cookie: %v", err)
+	}
+	client.reloadCookieIfChanged()
+
+	client.authMu.RLock()
+	user, pass := client.user, client.pass
+	client.authMu.RUnlock()
+
+	if user != "second" || pass != "secret" {
+		t.Fatalf("expected credentials reloaded, got %q/%q", user, pass)
 	}
 }
 

@@ -147,8 +147,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:8332\""
-    echo "  rpc_user: \"${RPC_USER}\""
-    echo "  rpc_pass: \"${RPC_PASS}\""
+    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
+    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   testnet)
     echo
@@ -157,8 +157,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:18332\""
-    echo "  rpc_user: \"${RPC_USER}\""
-    echo "  rpc_pass: \"${RPC_PASS}\""
+    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
+    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   signet)
     echo
@@ -167,8 +167,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:38332\""
-    echo "  rpc_user: \"${RPC_USER}\""
-    echo "  rpc_pass: \"${RPC_PASS}\""
+    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
+    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   regtest)
     echo
@@ -177,48 +177,29 @@ case "${NETWORK}" in
     echo
     echo "Example pool config (matches config.toml.example in this repo):"
     echo "  rpc_url:  \"http://127.0.0.1:18443\""
-    echo "  rpc_user: \"${RPC_USER}\""
-    echo "  rpc_pass: \"${RPC_PASS}\""
+    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
+    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
 esac
 
 echo
-echo "To run the pool against this node, you can either set env vars or pass flags."
+echo "To run the pool against this node:"
 case "${NETWORK}" in
   mainnet)
-    POOL_RPC_URL="http://127.0.0.1:8332"
+    echo "  go run main.go -mainnet -verbose"
     ;;
   testnet)
-    POOL_RPC_URL="http://127.0.0.1:18332"
+    echo "  go run main.go -testnet -verbose"
     ;;
   signet)
-    POOL_RPC_URL="http://127.0.0.1:38332"
+    echo "  go run main.go -signet -verbose"
     ;;
   regtest)
-    POOL_RPC_URL="http://127.0.0.1:18443"
+    echo "  go run main.go -regtest -verbose"
     ;;
 esac
-echo "Env-style:"
-echo "  export RPC_URL=${POOL_RPC_URL}"
-echo "  export RPC_USER=${RPC_USER}"
-echo "  export RPC_PASS=${RPC_PASS}"
-echo "  export DATA_DIR=./data"
-echo
-echo "Or start the pool with flags (example):"
-case "${NETWORK}" in
-  mainnet)
-    echo "  go run main.go -mainnet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
-    ;;
-  testnet)
-    echo "  go run main.go -testnet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
-    ;;
-  signet)
-    echo "  go run main.go -signet -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
-    ;;
-  regtest)
-    echo "  go run main.go -regtest -rpc-user=${RPC_USER} -rpc-pass=${RPC_PASS} -verbose"
-    ;;
-esac
+echo "  # Ensure node.rpc_cookie_path in data/config/config.toml points to ${NODE_DATA}/.cookie."
+echo "  # If you prefer rpc_user/rpc_pass, fill data/config/secrets.toml and launch with -allow-rpc-credentials."
 echo
 echo "Remember to generate a payout address from the chosen network's wallet"
 echo "and set it as PAYOUT_ADDRESS / payout_address in the pool config."

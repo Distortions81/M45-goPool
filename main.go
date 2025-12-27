@@ -39,7 +39,9 @@ func main() {
 
 	bindFlag := flag.String("bind", "", "bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100)")
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL (e.g. http://127.0.0.1:8332)")
+	rpcCookiePathFlag := flag.String("rpc-cookie-path", "", "override node RPC cookie path (skips autodetection when set)")
 	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/config)")
+	allowRPCCredentialsFlag := flag.Bool("allow-rpc-credentials", false, "allow loading rpc_user/rpc_pass from secrets.toml when node.rpc_cookie_path is not set")
 	floodFlag := flag.Bool("flood", false, "enable flood-test mode (force min/max difficulty to 0.01)")
 	mainnetFlag := flag.Bool("mainnet", false, "force mainnet defaults for RPC/ZMQ ports")
 	testnetFlag := flag.Bool("testnet", false, "force testnet defaults for RPC/ZMQ ports")
@@ -54,14 +56,16 @@ func main() {
 	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
 	flag.Parse()
 	overrides := runtimeOverrides{
-		bind:    *bindFlag,
-		rpcURL:  *rpcURLFlag,
-		flood:   *floodFlag,
-		noZMQ:   *noZMQFlag,
-		mainnet: *mainnetFlag,
-		testnet: *testnetFlag,
-		signet:  *signetFlag,
-		regtest: *regtestFlag,
+		bind:                *bindFlag,
+		rpcURL:              *rpcURLFlag,
+		rpcCookiePath:       *rpcCookiePathFlag,
+		allowRPCCredentials: *allowRPCCredentialsFlag,
+		flood:               *floodFlag,
+		noZMQ:               *noZMQFlag,
+		mainnet:             *mainnetFlag,
+		testnet:             *testnetFlag,
+		signet:              *signetFlag,
+		regtest:             *regtestFlag,
 	}
 	cleanBansOnStartup := !*noCleanBansFlag
 
@@ -107,11 +111,17 @@ func main() {
 	signal.Notify(reloadChan, syscall.SIGUSR1, syscall.SIGUSR2)
 
 	cfgPath := defaultConfigPath()
-	cfg := loadConfig(cfgPath, *secretsPathFlag)
-	if err := validateConfig(cfg); err != nil {
+	cfg, secretsPath := loadConfig(cfgPath, *secretsPathFlag)
+	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
 		fatal("config", err)
 	}
-	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
+	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials); err != nil {
+		fatal("rpc auth", err)
+	}
+	if overrides.allowRPCCredentials {
+		logger.Warn("rpc credentials forced from secrets.toml instead of node.rpc_cookie_path (deprecated and insecure)", "hint", "configure bitcoind's auth cookie via node.rpc_cookie_path instead")
+	}
+	if err := validateConfig(cfg); err != nil {
 		fatal("config", err)
 	}
 
@@ -726,8 +736,11 @@ func main() {
 }
 
 func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides) (Config, error) {
-	cfg := loadConfig(cfgPath, secretsPath)
+	cfg, secretsPath := loadConfig(cfgPath, secretsPath)
 	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
+		return Config{}, err
+	}
+	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials); err != nil {
 		return Config{}, err
 	}
 
