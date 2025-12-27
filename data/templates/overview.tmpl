@@ -98,7 +98,7 @@
 				<div class="label">Estimated pool hashrate</div>
 				<div class="value" id="status-pool-hashrate">--</div>
 				<div class="card-context">
-					Estimated network hashrate:
+					Network hashrate:
 					<span id="status-network-hashrate">--</span>
 				</div>
 			</div>
@@ -110,7 +110,7 @@
 			<div class="card">
 				<div class="label">Annual block odds</div>
 				<div class="value mono" id="status-block-chance">--</div>
-				<div class="card-context">Odds of finding ≥1 block in a year</div>
+				<div class="card-context">Odds of finding a block in a year</div>
 			</div>
 			<div class="card">
 				<div class="label">Network stats</div>
@@ -941,14 +941,14 @@
 						const height = data.block_height;
 						blockHeightEl.textContent = height.toLocaleString();
 						if (blockHeightContextEl) {
-							const interval = 2016;
-							const next = (Math.floor(height / interval) + 1) * interval;
-							const remaining = Math.max(0, next - height);
-							blockHeightContextEl.textContent = `Next difficulty retarget: ${next.toLocaleString()} (${remaining.toLocaleString()} blocks)`;
-						}
-					} else if (blockHeightEl) {
-						blockHeightEl.textContent = '--';
-						if (blockHeightContextEl) {
+						const interval = 2016;
+						const next = (Math.floor(height / interval) + 1) * interval;
+						const remaining = Math.max(0, next - height);
+						blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks)`;
+					}
+				} else if (blockHeightEl) {
+					blockHeightEl.textContent = '--';
+					if (blockHeightContextEl) {
 							blockHeightContextEl.textContent = 'Current chain tip';
 						}
 					}
