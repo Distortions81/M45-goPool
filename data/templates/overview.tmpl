@@ -689,29 +689,6 @@
 							window.updateHashrateGraph(newData.pool_hashrate);
 						}
 						break;
-					case 'BTC price (USD)':
-						{
-							const priceEl = document.getElementById('status-btc-price');
-							const updatedEl = document.getElementById('status-btc-price-updated');
-							const price = Number(newData.btc_price_usd ?? 0);
-							if (priceEl) {
-								priceEl.textContent = price > 0 ? ('$' + price.toFixed(2)) : '--';
-							}
-							if (updatedEl) {
-								const ts = newData.btc_price_updated_at;
-								if (ts) {
-									try {
-										const d = new Date(ts);
-										updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-									} catch (_) {
-										updatedEl.textContent = 'Updated --';
-									}
-								} else {
-									updatedEl.textContent = 'Updated --';
-								}
-							}
-						}
-						break;
 				}
 			});
 		}
@@ -723,9 +700,33 @@
 			renderTimeEl.textContent = ms.toFixed(2) + 'ms';
 		}
 
+		function updateBTCPrice(newData) {
+			if (!newData) return;
+			const priceEl = document.getElementById('status-btc-price');
+			const updatedEl = document.getElementById('status-btc-price-updated');
+			const price = Number(newData.btc_price_usd ?? 0);
+			if (priceEl) {
+				priceEl.textContent = price > 0 ? ('$' + price.toFixed(2)) : '--';
+			}
+			if (updatedEl) {
+				const ts = newData.btc_price_updated_at;
+				if (ts) {
+					try {
+						const d = new Date(ts);
+						updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+					} catch (_) {
+						updatedEl.textContent = 'Updated --';
+					}
+				} else {
+					updatedEl.textContent = 'Updated --';
+				}
+			}
+		}
+
 		function updateDOM(newData) {
 			if (!newData) return;
 			updateGridCards(newData);
+			updateBTCPrice(newData);
 			renderWorkersTable(newData.workers);
 			renderBestSharesTable(newData.best_shares);
 			renderFoundBlocksTable(newData.found_blocks);
