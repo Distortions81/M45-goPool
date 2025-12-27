@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcutil"
 	"github.com/pelletier/go-toml"
 )
 
@@ -855,6 +856,12 @@ func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bo
 	}
 
 	if strings.TrimSpace(cfg.RPCCookiePath) == "" {
+		if auto := autodetectRPCCookiePath(); auto != "" {
+			cfg.RPCCookiePath = auto
+			logger.Info("autodetected bitcoind rpc cookie", "path", auto)
+		}
+	}
+	if strings.TrimSpace(cfg.RPCCookiePath) == "" {
 		return fmt.Errorf("node.rpc_cookie_path is required when RPC credentials are not forced; configure it to use bitcoind's auth cookie")
 	}
 	if err := applyRPCCookieCredentials(cfg); err != nil {
@@ -917,6 +924,83 @@ func readRPCCookie(path string) (string, string, error) {
 		return "", "", fmt.Errorf("unexpected cookie format")
 	}
 	return parts[0], parts[1], nil
+}
+
+func autodetectRPCCookiePath() string {
+	if envDir := strings.TrimSpace(os.Getenv("BITCOIN_DATADIR")); envDir != "" {
+		if p := filepath.Join(envDir, ".cookie"); fileExists(p) {
+			return p
+		}
+		for _, net := range []string{"regtest", "testnet3", "signet"} {
+			if p := filepath.Join(envDir, net, ".cookie"); fileExists(p) {
+				return p
+			}
+		}
+	}
+	for _, candidate := range btcdCookieCandidates() {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	for _, candidate := range linuxCookieCandidates() {
+		if fileExists(candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func linuxCookieCandidates() []string {
+	home, _ := os.UserHomeDir()
+	h := func(p string) string {
+		if strings.HasPrefix(p, "~/") && home != "" {
+			return filepath.Join(home, p[2:])
+		}
+		return p
+	}
+	return []string{
+		h("~/.bitcoin/.cookie"),
+		h("~/.bitcoin/regtest/.cookie"),
+		h("~/.bitcoin/testnet3/.cookie"),
+		h("~/.bitcoin/signet/.cookie"),
+		"/var/lib/bitcoin/.cookie",
+		"/var/lib/bitcoin/regtest/.cookie",
+		"/var/lib/bitcoin/testnet3/.cookie",
+		"/var/lib/bitcoin/signet/.cookie",
+		"/home/bitcoin/.bitcoin/.cookie",
+		"/home/bitcoin/.bitcoin/regtest/.cookie",
+		"/home/bitcoin/.bitcoin/testnet3/.cookie",
+		"/home/bitcoin/.bitcoin/signet/.cookie",
+		"/etc/bitcoin/.cookie",
+	}
+}
+
+// btcdCookieCandidates mirrors btcsuite/btcd/rpcclient's layout for btcd's default
+// datadir so we can reuse the same cookie locations before falling back to the
+// general linux list.
+func btcdCookieCandidates() []string {
+	home := btcutil.AppDataDir("btcd", false)
+	if home == "" {
+		return nil
+	}
+	dataDir := filepath.Join(home, "data")
+	networks := []string{"regtest", "testnet3", "testnet4", "signet", "simnet"}
+	candidates := make([]string, 0, len(networks)+1)
+	candidates = append(candidates, filepath.Join(dataDir, ".cookie"))
+	for _, net := range networks {
+		candidates = append(candidates, filepath.Join(dataDir, net, ".cookie"))
+	}
+	return candidates
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
 }
 
 func applySecretsConfig(cfg *Config, sc secretsConfig) {
