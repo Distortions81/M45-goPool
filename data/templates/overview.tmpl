@@ -108,6 +108,11 @@
 				<div class="card-context" id="status-block-height-context">Current chain tip</div>
 			</div>
 			<div class="card">
+				<div class="label">Annual block odds</div>
+				<div class="value mono" id="status-block-chance">--</div>
+				<div class="card-context">Odds of finding ≥1 block in a year</div>
+			</div>
+			<div class="card">
 				<div class="label">Network stats</div>
 				<div class="card-metrics-grid">
 					<div>
@@ -771,11 +776,25 @@
 		const blockTimeLeftEl = document.getElementById('status-block-time-left');
 		const blockHistoryEl = document.getElementById('status-block-history');
 		const networkHashrateEl = document.getElementById('status-network-hashrate');
+		const blockChanceEl = document.getElementById('status-block-chance');
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
+		const BLOCKS_PER_YEAR = 52560;
 		if (!valueEl) {
 			return;
+		}
+
+		function formatOddsText(chance) {
+			if (!chance || chance <= 0) {
+				return '1 in ∞';
+			}
+			const ratio = 1 / chance;
+			if (!Number.isFinite(ratio) || ratio > 1e12) {
+				return '1 in 1,000,000,000,000+';
+			}
+			const rounded = Math.max(1, Math.round(ratio));
+			return `1 in ${rounded.toLocaleString()}`;
 		}
 
 		function formatHashrate(value) {
@@ -933,16 +952,23 @@
 							blockHeightContextEl.textContent = 'Current chain tip';
 						}
 					}
+					let networkHashrate = null;
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
+						networkHashrate = data.block_difficulty * 4294967296 / (10 * 60);
 					}
 					if (networkHashrateEl) {
-						let networkHashrateText = '--';
-						if (typeof data.block_difficulty === 'number' && data.block_difficulty > 0) {
-							const networkHashrate = data.block_difficulty * 4294967296 / (10 * 60);
-							networkHashrateText = formatHashrate(networkHashrate);
-						}
+						const networkHashrateText = networkHashrate ? formatHashrate(networkHashrate) : '--';
 						networkHashrateEl.textContent = networkHashrateText;
+					}
+					if (blockChanceEl) {
+						let chanceText = '--';
+						if (networkHashrate && typeof data.pool_hashrate === 'number' && data.pool_hashrate > 0) {
+							const share = Math.min(1, data.pool_hashrate / networkHashrate);
+							const chance = 1 - Math.pow(1 - share, BLOCKS_PER_YEAR);
+							chanceText = formatOddsText(chance);
+						}
+						blockChanceEl.textContent = chanceText;
 					}
 					if (blockTimeLeftEl) {
 						let secondsLeft = null;
