@@ -38,11 +38,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		name = mc.id
 	}
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
-	workerHash := ""
-	if stats.Worker != "" {
-		sum := sha256Sum([]byte(stats.Worker))
-		workerHash = fmt.Sprintf("%x", sum[:])
-	}
+	workerHash := strings.TrimSpace(stats.WorkerSHA256)
 	hashRate := snap.RollingHashrate
 	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
