@@ -305,20 +305,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 
-		// Convert full WorkerView to minimal RecentWorkView for the overview page
-		recentWork := make([]RecentWorkView, len(full.Workers))
-		for i, w := range full.Workers {
-			recentWork[i] = RecentWorkView{
-				Name:            w.Name,
-				DisplayName:     w.DisplayName,
-				RollingHashrate: w.RollingHashrate,
-				Difficulty:      w.Difficulty,
-				Vardiff:         w.Vardiff,
-				ShareRate:       w.ShareRate,
-				Accepted:        w.Accepted,
-				ConnectionID:    w.ConnectionID,
-			}
-		}
+		recentWork := full.RecentWork
 
 		data := OverviewPageData{
 			APIVersion:      apiVersion,

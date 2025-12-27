@@ -2,7 +2,7 @@ package main
 
 import "sync"
 
-// workerConnectionRegistry tracks active miner connections keyed by worker ID.
+// workerConnectionRegistry tracks current miner connections keyed by worker SHA256.
 type workerConnectionRegistry struct {
 	mu    sync.Mutex
 	conns map[string]*MinerConn
@@ -14,14 +14,15 @@ func newWorkerConnectionRegistry() *workerConnectionRegistry {
 	}
 }
 
-// register associates worker with mc and returns any previous connection for that worker.
-func (r *workerConnectionRegistry) register(worker string, mc *MinerConn) *MinerConn {
-	if worker == "" || mc == nil {
+// register associates the hashed worker name with mc and returns any previous
+// connection that owned that hash.
+func (r *workerConnectionRegistry) register(hash string, mc *MinerConn) *MinerConn {
+	if hash == "" || mc == nil {
 		return nil
 	}
 	r.mu.Lock()
-	prev := r.conns[worker]
-	r.conns[worker] = mc
+	prev := r.conns[hash]
+	r.conns[hash] = mc
 	r.mu.Unlock()
 	if prev == mc {
 		return nil
@@ -29,14 +30,14 @@ func (r *workerConnectionRegistry) register(worker string, mc *MinerConn) *Miner
 	return prev
 }
 
-// unregister removes mc from the worker entry only if it still owns the key.
-func (r *workerConnectionRegistry) unregister(worker string, mc *MinerConn) {
-	if worker == "" || mc == nil {
+// unregister removes mc from the registry for the given worker hash.
+func (r *workerConnectionRegistry) unregister(hash string, mc *MinerConn) {
+	if hash == "" || mc == nil {
 		return
 	}
 	r.mu.Lock()
-	if current, ok := r.conns[worker]; ok && current == mc {
-		delete(r.conns, worker)
+	if current, ok := r.conns[hash]; ok && current == mc {
+		delete(r.conns, hash)
 	}
 	r.mu.Unlock()
 }

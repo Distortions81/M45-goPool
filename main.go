@@ -181,6 +181,7 @@ func main() {
 		}
 	}
 	configureFileLogging(logPath, errorLogPath, debugLogPath, *stdoutLogFlag)
+	ensureSubmissionWorkerPool()
 	defer logger.Stop()
 
 	if !cleanBansOnStartup {

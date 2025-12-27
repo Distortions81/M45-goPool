@@ -155,7 +155,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 			mc.Close("wallet validation failed")
 			return
 		}
-		if prev := mc.registerWorker(workerName); prev != nil && prev != mc && mc.cfg.KickDuplicateWorkerNames {
+		if prev := mc.registerWorker(workerName); prev != nil && prev != mc {
 			logger.Info("closing previous connection for worker", "worker", workerName, "remote", prev.id)
 			prev.Close("duplicate worker connection")
 		}

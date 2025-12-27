@@ -188,59 +188,61 @@ func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
 }
 
 type MinerConn struct {
-	id                  string
-	ctx                 context.Context
-	conn                net.Conn
-	writer              *bufio.Writer
-	reader              *bufio.Reader
-	jobMgr              *JobManager
-	rpc                 rpcCaller
-	cfg                 Config
-	extranonce1         []byte
-	jobCh               chan *Job
-	difficulty          atomic.Uint64 // float64 stored as bits
-	previousDifficulty  atomic.Uint64 // float64 stored as bits
-	shareTarget         atomic.Pointer[big.Int]
-	lastDiffChange      atomic.Int64 // Unix nanos
-	stateMu             sync.Mutex
-	listenerOn          bool
-	stats               MinerStats
-	statsMu             sync.Mutex
-	statsUpdates        chan statsUpdate // Buffered channel for async stats updates
-	statsWg             sync.WaitGroup   // Wait for stats worker to finish
-	vardiff             VarDiffConfig
-	metrics             *PoolMetrics
-	accounting          *AccountStore
-	workerRegistry      *workerConnectionRegistry
-	registeredWorker    string
-	jobMu               sync.Mutex
-	activeJobs          map[string]*Job
-	jobOrder            []string
-	maxRecentJobs       int
-	shareCache          map[string]*duplicateShareSet
-	lastJob             *Job
-	lastClean           bool
-	banUntil            time.Time
-	banReason           string
-	lastPenalty         time.Time
-	invalidSubs         int
-	lastProtoViolation  time.Time
-	protoViolations     int
-	versionRoll         bool
-	versionMask         uint32
-	poolMask            uint32
-	minerMask           uint32
-	minVerBits          int
-	lastShareHash       string
-	lastShareAccepted   bool
-	lastShareDifficulty float64
-	lastShareDetail     *ShareDetail
-	lastRejectReason    string
-	walletMu            sync.Mutex
-	workerWallets       map[string]workerWalletState
-	subscribed          bool
-	authorized          bool
-	cleanupOnce         sync.Once
+	id                   string
+	ctx                  context.Context
+	conn                 net.Conn
+	writer               *bufio.Writer
+	writeMu              sync.Mutex
+	reader               *bufio.Reader
+	jobMgr               *JobManager
+	rpc                  rpcCaller
+	cfg                  Config
+	extranonce1          []byte
+	jobCh                chan *Job
+	difficulty           atomic.Uint64 // float64 stored as bits
+	previousDifficulty   atomic.Uint64 // float64 stored as bits
+	shareTarget          atomic.Pointer[big.Int]
+	lastDiffChange       atomic.Int64 // Unix nanos
+	stateMu              sync.Mutex
+	listenerOn           bool
+	stats                MinerStats
+	statsMu              sync.Mutex
+	statsUpdates         chan statsUpdate // Buffered channel for async stats updates
+	statsWg              sync.WaitGroup   // Wait for stats worker to finish
+	vardiff              VarDiffConfig
+	metrics              *PoolMetrics
+	accounting           *AccountStore
+	workerRegistry       *workerConnectionRegistry
+	registeredWorker     string
+	registeredWorkerHash string
+	jobMu                sync.Mutex
+	activeJobs           map[string]*Job
+	jobOrder             []string
+	maxRecentJobs        int
+	shareCache           map[string]*duplicateShareSet
+	lastJob              *Job
+	lastClean            bool
+	banUntil             time.Time
+	banReason            string
+	lastPenalty          time.Time
+	invalidSubs          int
+	lastProtoViolation   time.Time
+	protoViolations      int
+	versionRoll          bool
+	versionMask          uint32
+	poolMask             uint32
+	minerMask            uint32
+	minVerBits           int
+	lastShareHash        string
+	lastShareAccepted    bool
+	lastShareDifficulty  float64
+	lastShareDetail      *ShareDetail
+	lastRejectReason     string
+	walletMu             sync.Mutex
+	workerWallets        map[string]workerWalletState
+	subscribed           bool
+	authorized           bool
+	cleanupOnce          sync.Once
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
 	lockDifficulty bool
@@ -544,23 +546,29 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	if worker == "" || mc.workerRegistry == nil {
 		return nil
 	}
-	if mc.registeredWorker == worker {
+	hash := workerNameHash(worker)
+	if hash == "" {
 		return nil
 	}
-	if mc.registeredWorker != "" {
-		mc.workerRegistry.unregister(mc.registeredWorker, mc)
+	if mc.registeredWorkerHash == hash {
+		return nil
 	}
-	prev := mc.workerRegistry.register(worker, mc)
+	if mc.registeredWorkerHash != "" {
+		mc.workerRegistry.unregister(mc.registeredWorkerHash, mc)
+	}
+	prev := mc.workerRegistry.register(hash, mc)
 	mc.registeredWorker = worker
+	mc.registeredWorkerHash = hash
 	return prev
 }
 
 func (mc *MinerConn) unregisterRegisteredWorker() {
-	if mc.workerRegistry == nil || mc.registeredWorker == "" {
+	if mc.workerRegistry == nil || mc.registeredWorkerHash == "" {
 		return
 	}
-	mc.workerRegistry.unregister(mc.registeredWorker, mc)
+	mc.workerRegistry.unregister(mc.registeredWorkerHash, mc)
 	mc.registeredWorker = ""
+	mc.registeredWorkerHash = ""
 }
 
 // dualPayoutParams returns the pool and worker payout scripts and fee
@@ -792,6 +800,9 @@ func (mc *MinerConn) handle() {
 }
 
 func (mc *MinerConn) writeJSON(v interface{}) error {
+	mc.writeMu.Lock()
+	defer mc.writeMu.Unlock()
+
 	if err := mc.conn.SetWriteDeadline(time.Now().Add(stratumWriteTimeout)); err != nil {
 		return err
 	}

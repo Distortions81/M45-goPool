@@ -682,7 +682,7 @@ func (s *AccountStore) WorkerViewBySHA256(sha256Hash string) (WorkerView, bool) 
 		if entry.Until.IsZero() || now.After(entry.Until) {
 			continue
 		}
-		if strings.EqualFold(workerNameSHA256(entry.Worker), sha256Hash) {
+		if strings.EqualFold(workerNameHash(entry.Worker), sha256Hash) {
 			return bannedWorkerView(entry), true
 		}
 	}
@@ -692,20 +692,13 @@ func (s *AccountStore) WorkerViewBySHA256(sha256Hash string) (WorkerView, bool) 
 func bannedWorkerView(entry banEntry) WorkerView {
 	display := entry.Worker
 	return WorkerView{
-		Name:        entry.Worker,
-		DisplayName: shortWorkerName(display, workerNamePrefix, workerNameSuffix),
-		Banned:      true,
-		BannedUntil: entry.Until,
-		BanReason:   entry.Reason,
+		Name:         entry.Worker,
+		DisplayName:  shortWorkerName(display, workerNamePrefix, workerNameSuffix),
+		WorkerSHA256: workerNameHash(entry.Worker),
+		Banned:       true,
+		BannedUntil:  entry.Until,
+		BanReason:    entry.Reason,
 	}
-}
-
-func workerNameSHA256(name string) string {
-	if name == "" {
-		return ""
-	}
-	sum := sha256Sum([]byte(name))
-	return fmt.Sprintf("%x", sum[:])
 }
 
 func (s *AccountStore) WorkersSnapshot() []WorkerView {

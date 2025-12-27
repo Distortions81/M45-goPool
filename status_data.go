@@ -242,6 +242,20 @@ func (s *StatusServer) buildStatusData() StatusData {
 		workers = workers[:maxWorkersOnStatus]
 	}
 
+	recentWork := make([]RecentWorkView, 0, len(workers))
+	for _, w := range workers {
+		recentWork = append(recentWork, RecentWorkView{
+			Name:            w.Name,
+			DisplayName:     w.DisplayName,
+			RollingHashrate: w.RollingHashrate,
+			Difficulty:      w.Difficulty,
+			Vardiff:         w.Vardiff,
+			ShareRate:       w.ShareRate,
+			Accepted:        w.Accepted,
+			ConnectionID:    w.ConnectionID,
+		})
+	}
+
 	var rpcErr, acctErr string
 	if s.rpc != nil {
 		if err := s.rpc.LastError(); err != nil {
@@ -405,6 +419,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
+	workerLookup := buildWorkerLookupByHash(allWorkers, bannedWorkers)
 	return StatusData{
 		ListenAddr:                     s.Config().ListenAddr,
 		StratumTLSListen:               s.Config().StratumTLSListen,
@@ -466,6 +481,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		TemplateTime:                   templateTime,
 		Workers:                        workers,
 		BannedWorkers:                  bannedWorkers,
+		RecentWork:                     recentWork,
 		WindowAccepted:                 windowAccepted,
 		WindowSubmissions:              windowSubmissions,
 		WindowStart:                    windowStartStr,
@@ -475,6 +491,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		BestShares:                     bestShares,
 		FoundBlocks:                    foundBlocks,
 		MinerTypes:                     minerTypes,
+		WorkerLookup:                   workerLookup,
 		VardiffUp:                      vardiffUp,
 		VardiffDown:                    vardiffDown,
 		PoolHashrate:                   poolHashrate,

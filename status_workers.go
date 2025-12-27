@@ -26,6 +26,40 @@ func safeRedirectPath(value string) string {
 	return value
 }
 
+func buildWorkerLookupByHash(workers []WorkerView, banned []WorkerView) map[string]WorkerView {
+	if len(workers) == 0 && len(banned) == 0 {
+		return nil
+	}
+	lookup := make(map[string]WorkerView, len(workers)+len(banned))
+	add := func(w WorkerView) {
+		hash := strings.TrimSpace(w.WorkerSHA256)
+		if hash == "" {
+			return
+		}
+		if _, exists := lookup[hash]; exists {
+			return
+		}
+		lookup[hash] = w
+	}
+	for _, w := range workers {
+		add(w)
+	}
+	for _, w := range banned {
+		add(w)
+	}
+	if len(lookup) == 0 {
+		return nil
+	}
+	return lookup
+}
+
+func workerLookupFromStatusData(data StatusData) map[string]WorkerView {
+	if data.WorkerLookup != nil {
+		return data.WorkerLookup
+	}
+	return buildWorkerLookupByHash(data.Workers, data.BannedWorkers)
+}
+
 // handleWorkerStatus renders the worker login page.
 func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -186,9 +220,14 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 
 	data.SavedWorkersMax = maxSavedWorkersPerUser
 	data.SavedWorkersCount = len(data.SavedWorkers)
-	now := time.Now()
-	for _, worker := range data.SavedWorkers {
-		view, online := s.findWorkerViewByName(worker, now)
+	statusSnapshot := s.statusData()
+	workerLookup := workerLookupFromStatusData(statusSnapshot)
+	for _, saved := range data.SavedWorkers {
+		workerHash := saved.Hash
+		if workerHash == "" {
+			workerHash = workerNameHash(saved.Name)
+		}
+		view, online := workerLookup[workerHash]
 		hashrate := view.RollingHashrate
 		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
@@ -197,10 +236,9 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		if duration < 0 {
 			duration = 0
 		}
-		hashSum := sha256Sum([]byte(worker))
 		entry := savedWorkerEntry{
-			Name:              worker,
-			Hash:              fmt.Sprintf("%x", hashSum[:]),
+			Name:              saved.Name,
+			Hash:              workerHash,
 			Hashrate:          hashrate,
 			ShareRate:         view.ShareRate,
 			Accepted:          view.Accepted,
@@ -236,7 +274,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	saved := []string(nil)
+	saved := []SavedWorkerEntry(nil)
 	if s.workerLists != nil {
 		if list, err := s.workerLists.List(user.UserID); err == nil {
 			saved = list
@@ -256,6 +294,8 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
+	statusSnapshot := s.statusData()
+	workerLookup := workerLookupFromStatusData(statusSnapshot)
 	now := time.Now()
 	resp := struct {
 		UpdatedAt      string  `json:"updated_at"`
@@ -270,13 +310,16 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		SavedCount: len(saved),
 	}
 
-	for _, worker := range saved {
-		view, online := s.findWorkerViewByName(worker, now)
+	for _, savedEntry := range saved {
+		workerHash := savedEntry.Hash
+		if workerHash == "" {
+			workerHash = workerNameHash(savedEntry.Name)
+		}
+		view, online := workerLookup[workerHash]
 		hashrate := view.RollingHashrate
 		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
 		}
-		hashSum := sha256Sum([]byte(worker))
 		connectionDurationSeconds := 0.0
 		if online && !view.ConnectedAt.IsZero() {
 			connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()
@@ -285,8 +328,8 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		e := entry{
-			Name:                      worker,
-			Hash:                      fmt.Sprintf("%x", hashSum[:]),
+			Name:                      savedEntry.Name,
+			Hash:                      workerHash,
 			Online:                    online,
 			Hashrate:                  hashrate,
 			SharesPerMinute:           view.ShareRate,
@@ -599,7 +642,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	}
 
 	start := time.Now()
-	base := s.buildStatusData()
+	base := s.statusData()
 	base.RenderDuration = time.Since(start)
 
 	// Best-effort derivation of the pool payout script so the UI can
@@ -657,11 +700,11 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	data.QueriedWorker = workerID
 	now := time.Now()
 	found := false
-	if wv, ok := s.findWorkerViewByName(workerID, now); ok {
+	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash, now); ok {
 		setWorkerStatusView(&data, wv)
 		found = true
 	} else if s.accounting != nil {
-		if wv, ok := s.accounting.WorkerViewByName(workerID); ok {
+		if wv, ok := s.accounting.WorkerViewBySHA256(data.QueriedWorkerHash); ok {
 			setWorkerStatusView(&data, wv)
 			found = true
 		}
