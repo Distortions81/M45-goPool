@@ -73,6 +73,7 @@ type VarDiffConfig struct {
 
 type MinerStats struct {
 	Worker            string
+	WorkerSHA256      string
 	Accepted          int64
 	Rejected          int64
 	TotalDifficulty   float64
@@ -367,7 +368,12 @@ func (mc *MinerConn) statsWorker() {
 		mc.ensureWindowLocked(update.timestamp)
 
 		if update.worker != "" {
-			mc.stats.Worker = update.worker
+			if mc.stats.Worker != update.worker {
+				mc.stats.Worker = update.worker
+				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+			} else if mc.stats.WorkerSHA256 == "" {
+				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+			}
 		}
 
 		mc.stats.WindowSubmissions++
@@ -546,7 +552,15 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	if worker == "" || mc.workerRegistry == nil {
 		return nil
 	}
-	hash := workerNameHash(worker)
+	hash := ""
+	mc.statsMu.Lock()
+	if mc.stats.Worker == worker {
+		hash = strings.TrimSpace(mc.stats.WorkerSHA256)
+	}
+	mc.statsMu.Unlock()
+	if hash == "" {
+		hash = workerNameHash(worker)
+	}
 	if hash == "" {
 		return nil
 	}
@@ -877,6 +891,9 @@ func (mc *MinerConn) updateWorker(worker string) string {
 	mc.statsMu.Lock()
 	if mc.stats.Worker != worker {
 		mc.stats.Worker = worker
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
+	} else if mc.stats.WorkerSHA256 == "" {
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
 	}
 	mc.statsMu.Unlock()
 	return worker
@@ -932,7 +949,12 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 	mc.statsMu.Lock()
 	mc.ensureWindowLocked(update.timestamp)
 	if update.worker != "" {
-		mc.stats.Worker = update.worker
+		if mc.stats.Worker != update.worker {
+			mc.stats.Worker = update.worker
+			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+		} else if mc.stats.WorkerSHA256 == "" {
+			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+		}
 	}
 	mc.stats.WindowSubmissions++
 	if update.accepted {
