@@ -39,6 +39,7 @@ func main() {
 
 	bindFlag := flag.String("bind", "", "bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100)")
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL (e.g. http://127.0.0.1:8332)")
+	rpcCookiePathFlag := flag.String("rpc-cookie-path", "", "override node RPC cookie path (skips autodetection when set)")
 	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/config)")
 	allowRPCCredentialsFlag := flag.Bool("allow-rpc-credentials", false, "allow loading rpc_user/rpc_pass from secrets.toml when node.rpc_cookie_path is not set")
 	floodFlag := flag.Bool("flood", false, "enable flood-test mode (force min/max difficulty to 0.01)")
@@ -57,6 +58,7 @@ func main() {
 	overrides := runtimeOverrides{
 		bind:                *bindFlag,
 		rpcURL:              *rpcURLFlag,
+		rpcCookiePath:       *rpcCookiePathFlag,
 		allowRPCCredentials: *allowRPCCredentialsFlag,
 		flood:               *floodFlag,
 		noZMQ:               *noZMQFlag,

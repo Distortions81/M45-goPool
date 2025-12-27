@@ -9,6 +9,7 @@ import (
 type runtimeOverrides struct {
 	bind                string
 	rpcURL              string
+	rpcCookiePath       string
 	allowRPCCredentials bool
 	flood               bool
 	noZMQ               bool
@@ -52,6 +53,10 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 		case overrides.regtest:
 			cfg.RPCURL = "http://127.0.0.1:18443"
 		}
+	}
+
+	if overrides.rpcCookiePath != "" {
+		cfg.RPCCookiePath = overrides.rpcCookiePath
 	}
 
 	if overrides.bind != "" {
