@@ -656,7 +656,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	}
 
 	initialDiff := 1.0
-	if cfg.MinDifficulty > initialDiff {
+	if cfg.MinDifficulty > 0 {
 		initialDiff = cfg.MinDifficulty
 	}
 
