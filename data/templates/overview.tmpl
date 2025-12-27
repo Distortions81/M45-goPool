@@ -706,7 +706,7 @@
 			const updatedEl = document.getElementById('status-btc-price-updated');
 			const price = Number(newData.btc_price_usd ?? 0);
 			if (priceEl) {
-				priceEl.textContent = price > 0 ? ('$' + price.toFixed(2)) : '--';
+				priceEl.textContent = price > 0 ? ('BTC $' + Math.round(price).toLocaleString() + ' USD') : '--';
 			}
 			if (updatedEl) {
 				const ts = newData.btc_price_updated_at;
