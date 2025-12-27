@@ -27,5 +27,5 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and ensu
    # or
    go build -o goPool && ./goPool
    ```
-2. Edit configuration under `data/config/config.toml` and `data/config/secrets.toml` (see `operations.md` for deployment and tuning guidance).
+2. Edit configuration under `data/config/config.toml` (and `data/config/secrets.toml` only if you plan to force RPC credentials via `-allow-rpc-credentials`, otherwise point `node.rpc_cookie_path` at bitcoind's `.cookie`). See `operations.md` for deployment and tuning guidance.
 3. Point your miner at the Stratum listen address.

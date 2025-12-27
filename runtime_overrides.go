@@ -7,14 +7,15 @@ import (
 )
 
 type runtimeOverrides struct {
-	bind    string
-	rpcURL  string
-	flood   bool
-	noZMQ   bool
-	mainnet bool
-	testnet bool
-	signet  bool
-	regtest bool
+	bind                string
+	rpcURL              string
+	allowRPCCredentials bool
+	flood               bool
+	noZMQ               bool
+	mainnet             bool
+	testnet             bool
+	signet              bool
+	regtest             bool
 }
 
 func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {

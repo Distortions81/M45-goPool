@@ -26,9 +26,7 @@ const (
 	// StratumTLSListen is the default TLS listen address. Operators can disable
 	// TLS by setting this to an empty string in config.
 	defaultStratumTLSListen = ":4333"
-	defaultRPCURL           = "http://127.0.0.1:8332"
-	defaultRPCUser          = "bitcoinrpc"
-	defaultRPCPass          = "password"
+	defaultRPCURL = "http://127.0.0.1:8332"
 
 	defaultExtranonce2Size         = 4
 	defaultTemplateExtraNonce2Size = 8

@@ -27,3 +27,4 @@ The `tuning.toml` file is optional - only create it if you need to override adva
 - Example files are regenerated on each startup
 - Don't edit example files directly (your changes will be lost)
 - Your actual config files in `data/config/` are gitignored
+- RPC credentials in `secrets.toml.example` are only used when goPool runs with `-allow-rpc-credentials`; otherwise set `node.rpc_cookie_path` to bitcoind's `.cookie`.
