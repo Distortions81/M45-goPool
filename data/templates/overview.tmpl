@@ -962,7 +962,7 @@
 										parts.push(`${retarget.blocks_away.toLocaleString()} blocks away`);
 									}
 									if (retarget.duration_estimate) {
-										parts.push(`short duration estimate ~${retarget.duration_estimate}`);
+										parts.push(`~${retarget.duration_estimate}`);
 									}
 									if (parts.length === 0) {
 										parts.push('blocks away');
@@ -974,7 +974,7 @@
 								const remaining = Math.max(0, next - height);
 								const durationSeconds = remaining * 10 * 60;
 								const durationText = formatDuration(durationSeconds);
-								blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks away · short duration estimate ~${durationText})`;
+								blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks away · ~${durationText})`;
 							}
 						}
 					} else if (blockHeightEl) {
