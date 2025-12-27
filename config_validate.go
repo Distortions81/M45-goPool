@@ -17,8 +17,8 @@ func validateConfig(cfg Config) error {
 	if cfg.TemplateExtraNonce2Size < cfg.Extranonce2Size {
 		cfg.TemplateExtraNonce2Size = cfg.Extranonce2Size
 	}
-	if strings.TrimSpace(cfg.RPCUser) == "" || strings.TrimSpace(cfg.RPCPass) == "" {
-		return fmt.Errorf("rpc credentials are missing (set node.rpc_cookie_path or restart with -allow-rpc-credentials configured)")
+	if !cfg.AllowPublicRPC && (strings.TrimSpace(cfg.RPCUser) == "" || strings.TrimSpace(cfg.RPCPass) == "") {
+		return fmt.Errorf("rpc credentials are missing (set node.rpc_cookie_path, allow public RPC, or restart with -allow-rpc-credentials configured)")
 	}
 	if strings.TrimSpace(cfg.RPCURL) == "" {
 		return fmt.Errorf("rpc_url is required")

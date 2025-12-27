@@ -78,7 +78,11 @@ type Config struct {
 	// RPCCookiePath optionally points at bitcoind's auth cookie file when RPC
 	// credentials are not set in secrets.toml.
 	RPCCookiePath string
-	PayoutAddress string
+	// AllowPublicRPC lets goPool connect to nodes that intentionally expose RPC
+	// without any authentication (useful for public/testing nodes). Defaults to
+	// false for security.
+	AllowPublicRPC bool
+	PayoutAddress  string
 	// PayoutScript is reserved for future internal overrides and is not
 	// populated from or written to config.toml.
 	PayoutScript   string
@@ -311,11 +315,12 @@ type authConfig struct {
 }
 
 type nodeConfig struct {
-	RPCURL        string `toml:"rpc_url"`
-	PayoutAddress string `toml:"payout_address"`
-	DataDir       string `toml:"data_dir"`
-	ZMQBlockAddr  string `toml:"zmq_block_addr"`
-	RPCCookiePath string `toml:"rpc_cookie_path"`
+	RPCURL         string `toml:"rpc_url"`
+	PayoutAddress  string `toml:"payout_address"`
+	DataDir        string `toml:"data_dir"`
+	ZMQBlockAddr   string `toml:"zmq_block_addr"`
+	RPCCookiePath  string `toml:"rpc_cookie_path"`
+	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
 type miningConfig struct {
@@ -444,11 +449,12 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
 		Node: nodeConfig{
-			RPCURL:        cfg.RPCURL,
-			PayoutAddress: cfg.PayoutAddress,
-			DataDir:       cfg.DataDir,
-			ZMQBlockAddr:  cfg.ZMQBlockAddr,
-			RPCCookiePath: cfg.RPCCookiePath,
+			RPCURL:         cfg.RPCURL,
+			PayoutAddress:  cfg.PayoutAddress,
+			DataDir:        cfg.DataDir,
+			ZMQBlockAddr:   cfg.ZMQBlockAddr,
+			RPCCookiePath:  cfg.RPCCookiePath,
+			AllowPublicRPC: cfg.AllowPublicRPC,
 		},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
@@ -719,6 +725,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.RPCCookiePath != "" {
 		cfg.RPCCookiePath = strings.TrimSpace(fc.Node.RPCCookiePath)
 	}
+	if fc.Node.AllowPublicRPC {
+		cfg.AllowPublicRPC = true
+	}
 	if fc.Mining.PoolFeePercent != nil {
 		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
 	}
@@ -852,6 +861,10 @@ func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bo
 		if err := loadRPCredentialsFromSecrets(cfg, secretsPath); err != nil {
 			return err
 		}
+		return nil
+	}
+
+	if cfg.AllowPublicRPC && strings.TrimSpace(cfg.RPCCookiePath) == "" {
 		return nil
 	}
 

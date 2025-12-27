@@ -176,7 +176,9 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 	if ctx != nil {
 		req = req.WithContext(ctx)
 	}
-	req.SetBasicAuth(c.user, c.pass)
+	if c.user != "" || c.pass != "" {
+		req.SetBasicAuth(c.user, c.pass)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	start := time.Now()

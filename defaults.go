@@ -8,18 +8,18 @@ import (
 // as the base for both runtime config loading and example config generation.
 func defaultConfig() Config {
 	return Config{
-		ListenAddr:          defaultListenAddr,
-		StatusAddr:          defaultStatusAddr,
-		StatusTLSAddr:       defaultStatusTLSAddr,
-		StatusBrandName:     "",
-		StatusBrandDomain:   "",
-		StatusTagline:       defaultStatusTagline,
+		ListenAddr:                      defaultListenAddr,
+		StatusAddr:                      defaultStatusAddr,
+		StatusTLSAddr:                   defaultStatusTLSAddr,
+		StatusBrandName:                 "",
+		StatusBrandDomain:               "",
+		StatusTagline:                   defaultStatusTagline,
 		StatusConnectMinerTitleExtra:    "",
 		StatusConnectMinerTitleExtraURL: "",
-		FiatCurrency:        defaultFiatCurrency,
-		PoolDonationAddress: "",
-		DiscordURL:          "",
-		GitHubURL:           defaultGitHubURL,
+		FiatCurrency:                    defaultFiatCurrency,
+		PoolDonationAddress:             "",
+		DiscordURL:                      "",
+		GitHubURL:                       defaultGitHubURL,
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
 		StratumTLSListen:        defaultStratumTLSListen,
@@ -32,6 +32,7 @@ func defaultConfig() Config {
 		RPCURL:                  defaultRPCURL,
 		RPCUser:                 "",
 		RPCPass:                 "",
+		AllowPublicRPC:          false,
 		CoinbasePoolTag:         generatePoolTag(),
 		PayoutAddress:           "",
 		PoolFeePercent:          defaultPoolFeePercent,
