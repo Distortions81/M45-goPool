@@ -104,10 +104,68 @@ func (s *StatusServer) snapshotWorkerViews(now time.Time) []WorkerView {
 	for _, mc := range conns {
 		views = append(views, workerViewFromConn(mc, now))
 	}
+	views = mergeWorkerViewsByHash(views)
 	sort.Slice(views, func(i, j int) bool {
 		return views[i].LastShare.After(views[j].LastShare)
 	})
 	return views
+}
+
+func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
+	if len(views) <= 1 {
+		return views
+	}
+	merged := make(map[string]WorkerView, len(views))
+	order := make([]string, 0, len(views))
+	for _, w := range views {
+		key := w.WorkerSHA256
+		if key == "" {
+			key = "conn:" + w.ConnectionID
+		}
+		current, exists := merged[key]
+		if !exists {
+			merged[key] = w
+			order = append(order, key)
+			continue
+		}
+		current.Accepted += w.Accepted
+		current.Rejected += w.Rejected
+		current.BalanceSats += w.BalanceSats
+		current.RollingHashrate += w.RollingHashrate
+		current.WindowAccepted += w.WindowAccepted
+		current.WindowSubmissions += w.WindowSubmissions
+		current.ShareRate += w.ShareRate
+		if w.LastShare.After(current.LastShare) {
+			current.LastShare = w.LastShare
+			current.LastShareHash = w.LastShareHash
+			current.DisplayLastShare = w.DisplayLastShare
+			current.LastShareAccepted = w.LastShareAccepted
+			current.LastShareDifficulty = w.LastShareDifficulty
+			current.LastShareDetail = w.LastShareDetail
+			current.LastReject = w.LastReject
+			current.Difficulty = w.Difficulty
+			current.Vardiff = w.Vardiff
+		}
+		if w.Banned {
+			current.Banned = true
+			if w.BannedUntil.After(current.BannedUntil) {
+				current.BannedUntil = w.BannedUntil
+				current.BanReason = w.BanReason
+			}
+		}
+		if current.ConnectedAt.IsZero() || (!w.ConnectedAt.IsZero() && w.ConnectedAt.Before(current.ConnectedAt)) {
+			current.ConnectedAt = w.ConnectedAt
+		}
+		if w.ConnectionSeq > current.ConnectionSeq {
+			current.ConnectionSeq = w.ConnectionSeq
+		}
+		merged[key] = current
+	}
+	out := make([]WorkerView, 0, len(order))
+	for _, key := range order {
+		out = append(out, merged[key])
+	}
+	return out
 }
 
 func (s *StatusServer) computePoolHashrate() float64 {

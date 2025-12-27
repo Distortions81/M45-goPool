@@ -159,10 +159,6 @@ type Config struct {
 	// If true, workers that call mining.suggest_difficulty will be kept at
 	// that difficulty (clamped to min/max) and VarDiff will not adjust them.
 	LockSuggestedDifficulty bool
-	// KickDuplicateWorkerNames controls whether reconnecting with the same
-	// worker name closes its prior connection once wallet validation succeeds.
-	// Default false allows multiple connections with the same name.
-	KickDuplicateWorkerNames bool
 	// HashrateEMATauSeconds controls the time constant (in seconds) for the
 	// per-connection hashrate exponential moving average.
 	HashrateEMATauSeconds float64
@@ -263,7 +259,6 @@ type EffectiveConfig struct {
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
-	KickDuplicateWorkerNames          bool    `json:"kick_duplicate_worker_names,omitempty"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
 	HashrateEMAMinShares              int     `json:"hashrate_ema_min_shares,omitempty"`
 	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
@@ -409,10 +404,6 @@ type versionTuning struct {
 	MinVersionBits *int `toml:"min_version_bits"`
 }
 
-type workerTuning struct {
-	KickDuplicateWorkerNames *bool `toml:"kick_duplicate_worker_names"`
-}
-
 type tuningFileConfig struct {
 	Logging      loggingTuning      `toml:"logging"`
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
@@ -422,7 +413,6 @@ type tuningFileConfig struct {
 	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
 	Bans         banTuning          `toml:"bans"`
 	Version      versionTuning      `toml:"version"`
-	Workers      workerTuning       `toml:"workers"`
 }
 
 func buildBaseFileConfig(cfg Config) baseFileConfig {
@@ -524,9 +514,6 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		},
 		Version: versionTuning{
 			MinVersionBits: intPtr(cfg.MinVersionBits),
-		},
-		Workers: workerTuning{
-			KickDuplicateWorkerNames: boolPtr(cfg.KickDuplicateWorkerNames),
 		},
 	}
 }
@@ -864,9 +851,6 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Version.MinVersionBits != nil {
 		cfg.MinVersionBits = *fc.Version.MinVersionBits
-	}
-	if fc.Workers.KickDuplicateWorkerNames != nil {
-		cfg.KickDuplicateWorkerNames = *fc.Workers.KickDuplicateWorkerNames
 	}
 }
 

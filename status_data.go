@@ -526,7 +526,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		MinDifficulty:                  s.Config().MinDifficulty,
 		MaxDifficulty:                  s.Config().MaxDifficulty,
 		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
 		WorkerDatabase:                 workerDBStats,
 		Warnings:                       warnings,
 	}
@@ -593,7 +592,6 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinDifficulty:                  s.Config().MinDifficulty,
 		MaxDifficulty:                  s.Config().MaxDifficulty,
 		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
-		KickDuplicateWorkerNames:       s.Config().KickDuplicateWorkerNames,
 		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
 		HashrateEMAMinShares:           s.Config().HashrateEMAMinShares,
 		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,
