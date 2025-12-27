@@ -97,26 +97,33 @@
 			<div class="card">
 				<div class="label">Estimated pool hashrate</div>
 				<div class="value" id="status-pool-hashrate">--</div>
+				<div class="card-context">
+					Estimated network hashrate:
+					<span id="status-network-hashrate">--</span>
+				</div>
 			</div>
 			<div class="card">
 				<div class="label">Block height</div>
 				<div class="value mono" id="status-block-height">--</div>
-				<div class="card-context">Current chain tip</div>
+				<div class="card-context" id="status-block-height-context">Current chain tip</div>
 			</div>
 			<div class="card">
-				<div class="label">Bitcoin difficulty</div>
-				<div class="value mono" id="status-block-difficulty">--</div>
-				<div class="card-context">Network target difficulty</div>
+				<div class="label">Network stats</div>
+				<div class="card-metrics-grid">
+					<div>
+						<div class="value mono" id="status-block-difficulty">--</div>
+						<div class="card-context">Network target difficulty</div>
+					</div>
+					<div>
+						<div class="value mono" id="status-btc-price">--</div>
+						<div class="card-context" id="status-btc-price-updated">Updated --</div>
+					</div>
+				</div>
 			</div>
 			<div class="card">
 				<div class="label">Time left for block</div>
 				<div class="value mono" id="status-block-time-left">--</div>
 				<div class="card-context" id="status-block-history">--</div>
-			</div>
-			<div class="card">
-				<div class="label">BTC price (USD)</div>
-				<div class="value mono" id="status-btc-price">--</div>
-				<div class="card-context" id="status-btc-price-updated">Updated --</div>
 			</div>
 			<div class="card">
 				<div class="label">Pool fee</div>
@@ -303,7 +310,7 @@
 			// Find min/max for scaling, with headroom so peaks don't peg the top.
 			// Keep a minimum Y-axis floor so low-hashrate pools aren't rendered
 			// against an always-zero baseline.
-			const minScale = 1e6; // 1 MH/s in H/s
+			const minScale = 0;
 			const dataMax = Math.max(...hashrateData);
 
 			const headroomFactor = 2.0;
@@ -759,9 +766,11 @@
 		const REFRESH_INTERVAL = 5000;
 		const valueEl = document.getElementById('status-pool-hashrate');
 		const blockHeightEl = document.getElementById('status-block-height');
+		const blockHeightContextEl = document.getElementById('status-block-height-context');
 		const blockDifficultyEl = document.getElementById('status-block-difficulty');
 		const blockTimeLeftEl = document.getElementById('status-block-time-left');
 		const blockHistoryEl = document.getElementById('status-block-history');
+		const networkHashrateEl = document.getElementById('status-network-hashrate');
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
@@ -910,12 +919,30 @@
 						updateHashrateDisplay(data.pool_hashrate);
 					}
 					if (blockHeightEl && typeof data.block_height === 'number' && data.block_height > 0) {
-						blockHeightEl.textContent = data.block_height.toLocaleString();
+						const height = data.block_height;
+						blockHeightEl.textContent = height.toLocaleString();
+						if (blockHeightContextEl) {
+							const interval = 2016;
+							const next = (Math.floor(height / interval) + 1) * interval;
+							const remaining = Math.max(0, next - height);
+							blockHeightContextEl.textContent = `Next difficulty retarget: ${next.toLocaleString()} (${remaining.toLocaleString()} blocks)`;
+						}
 					} else if (blockHeightEl) {
 						blockHeightEl.textContent = '--';
+						if (blockHeightContextEl) {
+							blockHeightContextEl.textContent = 'Current chain tip';
+						}
 					}
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
+					}
+					if (networkHashrateEl) {
+						let networkHashrateText = '--';
+						if (typeof data.block_difficulty === 'number' && data.block_difficulty > 0) {
+							const networkHashrate = data.block_difficulty * 4294967296 / (10 * 60);
+							networkHashrateText = formatHashrate(networkHashrate);
+						}
+						networkHashrateEl.textContent = networkHashrateText;
 					}
 					if (blockTimeLeftEl) {
 						let secondsLeft = null;
