@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/bits"
+	"net/url"
 	"strings"
 )
 
@@ -21,6 +22,17 @@ func validateConfig(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.RPCPass) == "" {
 		return fmt.Errorf("rpc_pass is required")
+	}
+	if strings.TrimSpace(cfg.RPCURL) == "" {
+		return fmt.Errorf("rpc_url is required")
+	}
+	if parsedRPC, err := url.Parse(cfg.RPCURL); err != nil {
+		return fmt.Errorf("rpc_url parse error: %w", err)
+	} else if parsedRPC.Scheme != "http" && parsedRPC.Scheme != "https" {
+		if parsedRPC.Scheme == "" {
+			return fmt.Errorf("rpc_url %q missing protocol scheme (http/https)", cfg.RPCURL)
+		}
+		return fmt.Errorf("rpc_url %q must use http or https scheme", cfg.RPCURL)
 	}
 	if strings.TrimSpace(cfg.PayoutAddress) == "" {
 		return fmt.Errorf("payout_address is required for coinbase outputs")
