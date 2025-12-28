@@ -199,6 +199,12 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	if redirect == "" {
 		redirect = "/saved-workers"
 	}
+	// If the user already has a valid session cookie, don't render the sign-in
+	// UI (which can lead to an extra click). Just send them to the target page.
+	if s.clerk != nil && s.clerkUserFromRequest(r) != nil {
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
 
 	clerkJSHost := strings.TrimRight(strings.TrimSpace(s.Config().ClerkFrontendAPIURL), "/")
 	if clerkJSHost == "" {
