@@ -136,6 +136,8 @@ type JobManager struct {
 	// Async notification queue
 	notifyQueue chan *Job
 	notifyWg    sizedwaitgroup.SizedWaitGroup
+	// Callback for new block notifications
+	onNewBlock func()
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScript []byte) *JobManager {
@@ -237,10 +239,10 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 	}
 
 	jm.zmqPayloadMu.Lock()
-	defer jm.zmqPayloadMu.Unlock()
 
 	tip := jm.zmqPayload.BlockTip
-	if tip.Height == 0 || tpl.Height > tip.Height {
+	isNewBlock := tip.Height == 0 || tpl.Height > tip.Height
+	if isNewBlock {
 		tip.Height = tpl.Height
 	}
 	// Note: tpl.CurTime is template time (node wall-clock), not a block header
@@ -256,6 +258,13 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 		}
 	}
 	jm.zmqPayload.BlockTip = tip
+
+	jm.zmqPayloadMu.Unlock()
+
+	// Notify status cache of new block (outside lock to avoid holding lock during callback)
+	if isNewBlock && jm.onNewBlock != nil {
+		jm.onNewBlock()
+	}
 }
 
 func (jm *JobManager) blockTipHeight() int64 {
@@ -325,7 +334,6 @@ func (jm *JobManager) recordRawBlockPayload(size int) {
 
 func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	jm.zmqPayloadMu.Lock()
-	defer jm.zmqPayloadMu.Unlock()
 
 	// Check if this is a new block (different from current block tip)
 	isNewBlock := jm.zmqPayload.BlockTip.Height == 0 ||
@@ -342,6 +350,13 @@ func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 			jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-4:]
 		}
 		jm.zmqPayload.BlockTimerActive = true
+	}
+
+	jm.zmqPayloadMu.Unlock()
+
+	// Notify status cache of new block (outside lock to avoid holding lock during callback)
+	if isNewBlock && !tip.Time.IsZero() && jm.onNewBlock != nil {
+		jm.onNewBlock()
 	}
 }
 

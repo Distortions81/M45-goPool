@@ -337,6 +337,7 @@ type StatusServer struct {
 	jobMgr              *JobManager
 	metrics             *PoolMetrics
 	registry            *MinerRegistry
+	workerRegistry      *workerConnectionRegistry
 	accounting          *AccountStore
 	rpc                 *RPCClient
 	cfg                 atomic.Value
@@ -802,6 +803,13 @@ type ServerPageData struct {
 	SystemLoad1         float64           `json:"system_load1"`
 	SystemLoad5         float64           `json:"system_load5"`
 	SystemLoad15        float64           `json:"system_load15"`
+}
+
+// invalidateStatusCache clears the status cache, forcing the next request to rebuild.
+func (s *StatusServer) invalidateStatusCache() {
+	s.statusMu.Lock()
+	s.lastStatusBuild = time.Time{}
+	s.statusMu.Unlock()
 }
 
 func (s *StatusServer) statusData() StatusData {
