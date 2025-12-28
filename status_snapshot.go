@@ -200,6 +200,27 @@ func (s *StatusServer) findWorkerViewByHash(hash string, now time.Time) (WorkerV
 	return WorkerView{}, false
 }
 
+// findAllWorkerViewsByHash returns all individual worker views for a given hash (unmerged).
+// This is useful for showing all connections for the same worker separately.
+func (s *StatusServer) findAllWorkerViewsByHash(hash string, now time.Time) []WorkerView {
+	if hash == "" || s.workerRegistry == nil {
+		return nil
+	}
+
+	// Use the efficient lookup to get only connections for this worker
+	conns := s.workerRegistry.getConnectionsByHash(hash)
+	if len(conns) == 0 {
+		return nil
+	}
+
+	views := make([]WorkerView, 0, len(conns))
+	for _, mc := range conns {
+		views = append(views, workerViewFromConn(mc, now))
+	}
+
+	return views
+}
+
 // buildTemplateFuncs returns the template.FuncMap used for all HTML templates.
 func buildTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
@@ -435,7 +456,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -452,6 +473,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		jobMgr:              jobMgr,
 		metrics:             metrics,
 		registry:            registry,
+		workerRegistry:      workerRegistry,
 		accounting:          accounting,
 		rpc:                 rpc,
 		ctx:                 ctx,

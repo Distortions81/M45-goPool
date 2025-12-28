@@ -14,6 +14,8 @@ import (
 
 func (s *StatusServer) SetJobManager(jm *JobManager) {
 	s.jobMgr = jm
+	// Set up callback to invalidate status cache when new blocks arrive
+	jm.onNewBlock = s.invalidateStatusCache
 }
 
 func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {

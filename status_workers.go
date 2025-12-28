@@ -202,6 +202,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		Accepted          uint64
 		Difficulty        float64
 		ConnectedDuration time.Duration
+		ConnectionID      string
+		ConnectionSeq     uint64
 	}
 	data := struct {
 		StatusData
@@ -220,36 +222,52 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 
 	data.SavedWorkersMax = maxSavedWorkersPerUser
 	data.SavedWorkersCount = len(data.SavedWorkers)
-	statusSnapshot := s.statusData()
-	workerLookup := workerLookupFromStatusData(statusSnapshot)
+	now := time.Now()
+
 	for _, saved := range data.SavedWorkers {
-		workerHash := saved.Hash
+		workerHash := strings.TrimSpace(saved.Hash)
+		if workerHash != "" {
+			workerHash = strings.ToLower(workerHash)
+		}
 		if workerHash == "" {
 			workerHash = workerNameHash(saved.Name)
 		}
-		view, online := workerLookup[workerHash]
-		hashrate := view.RollingHashrate
-		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
-			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
-		}
-		duration := time.Since(view.ConnectedAt)
-		if duration < 0 {
-			duration = 0
-		}
-		entry := savedWorkerEntry{
-			Name:              saved.Name,
-			Hash:              workerHash,
-			Hashrate:          hashrate,
-			ShareRate:         view.ShareRate,
-			Accepted:          view.Accepted,
-			Difficulty:        view.Difficulty,
-			ConnectedDuration: duration,
-		}
-		if online {
-			data.SavedWorkersOnline++
-			data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
-		} else {
+
+		// Get all individual connections for this worker
+		views := s.findAllWorkerViewsByHash(workerHash, now)
+
+		if len(views) == 0 {
+			// Worker is offline
+			entry := savedWorkerEntry{
+				Name: saved.Name,
+				Hash: workerHash,
+			}
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
+		} else {
+			// Worker is online, show each connection separately
+			for _, view := range views {
+				hashrate := view.RollingHashrate
+				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+				}
+				duration := now.Sub(view.ConnectedAt)
+				if duration < 0 {
+					duration = 0
+				}
+				entry := savedWorkerEntry{
+					Name:              saved.Name,
+					Hash:              workerHash,
+					Hashrate:          hashrate,
+					ShareRate:         view.ShareRate,
+					Accepted:          view.Accepted,
+					Difficulty:        view.Difficulty,
+					ConnectedDuration: duration,
+					ConnectionID:      view.ConnectionID,
+					ConnectionSeq:     view.ConnectionSeq,
+				}
+				data.SavedWorkersOnline++
+				data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
+			}
 		}
 	}
 
@@ -294,8 +312,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
-	statusSnapshot := s.statusData()
-	workerLookup := workerLookupFromStatusData(statusSnapshot)
 	now := time.Now()
 	resp := struct {
 		UpdatedAt      string  `json:"updated_at"`
@@ -311,38 +327,53 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 	}
 
 	for _, savedEntry := range saved {
-		workerHash := savedEntry.Hash
+		workerHash := strings.TrimSpace(savedEntry.Hash)
+		if workerHash != "" {
+			workerHash = strings.ToLower(workerHash)
+		}
 		if workerHash == "" {
 			workerHash = workerNameHash(savedEntry.Name)
 		}
-		view, online := workerLookup[workerHash]
-		hashrate := view.RollingHashrate
-		if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
-			hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
-		}
-		connectionDurationSeconds := 0.0
-		if online && !view.ConnectedAt.IsZero() {
-			connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()
-			if connectionDurationSeconds < 0 {
-				connectionDurationSeconds = 0
+
+		// Get all individual connections for this worker
+		views := s.findAllWorkerViewsByHash(workerHash, now)
+
+		if len(views) == 0 {
+			// Worker is offline
+			e := entry{
+				Name:   savedEntry.Name,
+				Hash:   workerHash,
+				Online: false,
 			}
-		}
-		e := entry{
-			Name:                      savedEntry.Name,
-			Hash:                      workerHash,
-			Online:                    online,
-			Hashrate:                  hashrate,
-			SharesPerMinute:           view.ShareRate,
-			Accepted:                  view.Accepted,
-			Difficulty:                view.Difficulty,
-			ConnectionSeq:             view.ConnectionSeq,
-			ConnectionDurationSeconds: connectionDurationSeconds,
-		}
-		if online {
-			resp.OnlineCount++
-			resp.OnlineWorkers = append(resp.OnlineWorkers, e)
-		} else {
 			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
+		} else {
+			// Worker is online, show each connection separately
+			for _, view := range views {
+				hashrate := view.RollingHashrate
+				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
+					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+				}
+				connectionDurationSeconds := 0.0
+				if !view.ConnectedAt.IsZero() {
+					connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()
+					if connectionDurationSeconds < 0 {
+						connectionDurationSeconds = 0
+					}
+				}
+				e := entry{
+					Name:                      savedEntry.Name,
+					Hash:                      workerHash,
+					Online:                    true,
+					Hashrate:                  hashrate,
+					SharesPerMinute:           view.ShareRate,
+					Accepted:                  view.Accepted,
+					Difficulty:                view.Difficulty,
+					ConnectionSeq:             view.ConnectionSeq,
+					ConnectionDurationSeconds: connectionDurationSeconds,
+				}
+				resp.OnlineCount++
+				resp.OnlineWorkers = append(resp.OnlineWorkers, e)
+			}
 		}
 	}
 

@@ -136,6 +136,8 @@ type JobManager struct {
 	// Async notification queue
 	notifyQueue chan *Job
 	notifyWg    sizedwaitgroup.SizedWaitGroup
+	// Callback for new block notifications
+	onNewBlock func()
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScript []byte) *JobManager {
@@ -229,19 +231,20 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 }
 
 func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
-	if !jm.shouldUseLongpollFallback() {
-		return
-	}
 	if tpl.Height <= 0 {
 		return
 	}
 
 	jm.zmqPayloadMu.Lock()
-	defer jm.zmqPayloadMu.Unlock()
 
 	tip := jm.zmqPayload.BlockTip
-	if tip.Height == 0 || tpl.Height > tip.Height {
+	oldHeight := tip.Height
+	isNewBlock := tip.Height == 0 || tpl.Height > tip.Height
+	if isNewBlock {
 		tip.Height = tpl.Height
+		if debugLogging {
+			logger.Debug("updateBlockTipFromTemplate: height updated", "old", oldHeight, "new", tpl.Height)
+		}
 	}
 	// Note: tpl.CurTime is template time (node wall-clock), not a block header
 	// timestamp; keep any existing blockchain-derived tip time instead.
@@ -256,6 +259,13 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 		}
 	}
 	jm.zmqPayload.BlockTip = tip
+
+	jm.zmqPayloadMu.Unlock()
+
+	// Notify status cache of new block (outside lock to avoid holding lock during callback)
+	if isNewBlock && jm.onNewBlock != nil {
+		jm.onNewBlock()
+	}
 }
 
 func (jm *JobManager) blockTipHeight() int64 {
@@ -268,7 +278,7 @@ func (jm *JobManager) refreshBlockHistoryFromRPC(ctx context.Context) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if !jm.shouldUseLongpollFallback() || jm.rpc == nil {
+	if jm.rpc == nil {
 		return false
 	}
 
@@ -325,7 +335,6 @@ func (jm *JobManager) recordRawBlockPayload(size int) {
 
 func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	jm.zmqPayloadMu.Lock()
-	defer jm.zmqPayloadMu.Unlock()
 
 	// Check if this is a new block (different from current block tip)
 	isNewBlock := jm.zmqPayload.BlockTip.Height == 0 ||
@@ -342,6 +351,13 @@ func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 			jm.zmqPayload.RecentBlockTimes = jm.zmqPayload.RecentBlockTimes[len(jm.zmqPayload.RecentBlockTimes)-4:]
 		}
 		jm.zmqPayload.BlockTimerActive = true
+	}
+
+	jm.zmqPayloadMu.Unlock()
+
+	// Notify status cache of new block (outside lock to avoid holding lock during callback)
+	if isNewBlock && !tip.Time.IsZero() && jm.onNewBlock != nil {
+		jm.onNewBlock()
 	}
 }
 
@@ -441,8 +457,10 @@ func (jm *JobManager) Start(ctx context.Context) {
 	}
 	logger.Info("started async notification workers", "count", numWorkers)
 
-	// Fetch initial block info from the blockchain to start the timer immediately
-	jm.fetchInitialBlockInfo(ctx)
+	// Fetch initial block info from the blockchain to start the timer immediately unless ZMQ is providing updates.
+	if jm.shouldUseLongpollFallback() {
+		jm.fetchInitialBlockInfo(ctx)
+	}
 
 	if err := jm.refreshJobCtx(ctx); err != nil {
 		logger.Error("initial job refresh error", "error", err)
@@ -499,12 +517,13 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.curJob = job
 	jm.mu.Unlock()
 
-	prevHeight := jm.blockTipHeight()
-
 	jm.recordJobSuccess(job)
-	jm.updateBlockTipFromTemplate(tpl)
-	if jm.shouldUseLongpollFallback() && tpl.Height > prevHeight {
-		jm.refreshBlockHistoryFromRPC(ctx)
+	if jm.shouldUseLongpollFallback() {
+		prevHeight := jm.blockTipHeight()
+		jm.updateBlockTipFromTemplate(tpl)
+		if tpl.Height > prevHeight {
+			jm.refreshBlockHistoryFromRPC(ctx)
+		}
 	}
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
 	jm.broadcastJob(job)
