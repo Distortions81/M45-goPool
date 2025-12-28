@@ -457,10 +457,9 @@ func (jm *JobManager) Start(ctx context.Context) {
 	}
 	logger.Info("started async notification workers", "count", numWorkers)
 
-	// Fetch initial block info from the blockchain to start the timer immediately unless ZMQ is providing updates.
-	if jm.shouldUseLongpollFallback() {
-		jm.fetchInitialBlockInfo(ctx)
-	}
+	// Fetch initial block info from the blockchain so the UI has a tip/time even
+	// if ZMQ isn't providing rawblock updates (or before the first ZMQ message).
+	jm.fetchInitialBlockInfo(ctx)
 
 	if err := jm.refreshJobCtx(ctx); err != nil {
 		logger.Error("initial job refresh error", "error", err)
@@ -517,13 +516,12 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.curJob = job
 	jm.mu.Unlock()
 
+	prevHeight := jm.blockTipHeight()
+
 	jm.recordJobSuccess(job)
-	if jm.shouldUseLongpollFallback() {
-		prevHeight := jm.blockTipHeight()
-		jm.updateBlockTipFromTemplate(tpl)
-		if tpl.Height > prevHeight {
-			jm.refreshBlockHistoryFromRPC(ctx)
-		}
+	jm.updateBlockTipFromTemplate(tpl)
+	if tpl.Height > prevHeight {
+		jm.refreshBlockHistoryFromRPC(ctx)
 	}
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
 	jm.broadcastJob(job)
