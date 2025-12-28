@@ -465,7 +465,9 @@ func (jm *JobManager) Start(ctx context.Context) {
 		logger.Error("initial job refresh error", "error", err)
 	}
 
-	go jm.longpollLoop(ctx)
+	if jm.shouldUseLongpollFallback() {
+		go jm.longpollLoop(ctx)
+	}
 	if jm.cfg.ZMQBlockAddr != "" {
 		go jm.zmqBlockLoop(ctx)
 	}

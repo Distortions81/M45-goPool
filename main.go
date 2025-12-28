@@ -48,6 +48,7 @@ func main() {
 	signetFlag := flag.Bool("signet", false, "force signet defaults for RPC/ZMQ ports")
 	regtestFlag := flag.Bool("regtest", false, "force regtest defaults for RPC/ZMQ ports")
 	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW)")
+	zmqLongpollFallbackFlag := flag.Bool("zmq-longpoll-fallback", false, "enable RPC longpoll fallback even when ZMQ is enabled (optional)")
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config file with effective settings on startup")
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
 	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
@@ -62,6 +63,7 @@ func main() {
 		allowRPCCredentials: *allowRPCCredentialsFlag,
 		flood:               *floodFlag,
 		noZMQ:               *noZMQFlag,
+		zmqLongpollFallback: *zmqLongpollFallbackFlag,
 		mainnet:             *mainnetFlag,
 		testnet:             *testnetFlag,
 		signet:              *signetFlag,
@@ -549,7 +551,11 @@ func main() {
 	jobMgr := NewJobManager(rpcClient, cfg, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
 	if cfg.ZMQBlockAddr != "" {
-		logger.Info("block updates via zmq", "addr", cfg.ZMQBlockAddr)
+		if cfg.ZMQLongpollFallback {
+			logger.Info("block updates via zmq (longpoll fallback enabled)", "addr", cfg.ZMQBlockAddr)
+		} else {
+			logger.Info("block updates via zmq", "addr", cfg.ZMQBlockAddr)
+		}
 	} else {
 		logger.Info("block updates via longpoll")
 	}
