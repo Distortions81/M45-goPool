@@ -101,6 +101,38 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 	}
 }
 
+func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, payload []byte) error {
+	switch topic {
+	case "hashblock":
+		blockHash := hex.EncodeToString(payload)
+		logger.Info("zmq block notification", "block_hash", blockHash)
+		jm.markZMQHealthy()
+		return jm.refreshJobCtx(ctx)
+	case "rawblock":
+		tip, err := parseRawBlockTip(payload)
+		if err != nil {
+			if debugLogging {
+				logger.Debug("parse raw block tip failed", "error", err)
+			}
+		} else {
+			jm.recordBlockTip(tip)
+		}
+		jm.recordRawBlockPayload(len(payload))
+		// Some deployments only publish rawblock and not hashblock; refresh the
+		// template on rawblock as well so job/tip advance on new blocks.
+		return jm.refreshJobCtx(ctx)
+	case "hashtx":
+		txHash := hex.EncodeToString(payload)
+		jm.recordHashTx(txHash)
+		return nil
+	case "rawtx":
+		jm.recordRawTxPayload(len(payload))
+		return nil
+	default:
+		return nil
+	}
+}
+
 // Prefer block notifications when bitcoind is configured with -zmqpubhashblock (docs/protocols/zmq.md).
 func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
 zmqLoop:
@@ -186,35 +218,12 @@ zmqLoop:
 
 			topic := string(frames[0])
 			payload := frames[1]
-			switch topic {
-			case "hashblock":
-				blockHash := hex.EncodeToString(payload)
-				logger.Info("zmq block notification", "block_hash", blockHash)
-				jm.markZMQHealthy()
-				if err := jm.refreshJobCtx(ctx); err != nil {
-					logger.Error("refresh after zmq block error", "error", err)
-					if err := sleepContext(ctx, jobRetryDelay); err != nil {
-						return
-					}
-					continue
+			if err := jm.handleZMQNotification(ctx, topic, payload); err != nil {
+				logger.Error("refresh after zmq notification error", "topic", topic, "error", err)
+				if err := sleepContext(ctx, jobRetryDelay); err != nil {
+					sub.Close()
+					return
 				}
-			case "rawblock":
-				tip, err := parseRawBlockTip(payload)
-				if err != nil {
-					if debugLogging {
-						logger.Debug("parse raw block tip failed", "error", err)
-					}
-				} else {
-					jm.recordBlockTip(tip)
-				}
-				jm.recordRawBlockPayload(len(payload))
-			case "hashtx":
-				txHash := hex.EncodeToString(payload)
-				jm.recordHashTx(txHash)
-			case "rawtx":
-				jm.recordRawTxPayload(len(payload))
-			default:
-				continue
 			}
 		}
 	}
