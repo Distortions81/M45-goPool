@@ -117,7 +117,7 @@ func main() {
 	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
 		fatal("config", err)
 	}
-	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials); err != nil {
+	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials, cfgPath); err != nil {
 		fatal("rpc auth", err)
 	}
 	if overrides.allowRPCCredentials {
@@ -746,7 +746,7 @@ func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides)
 	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
 		return Config{}, err
 	}
-	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials); err != nil {
+	if err := finalizeRPCCredentials(&cfg, secretsPath, overrides.allowRPCCredentials, cfgPath); err != nil {
 		return Config{}, err
 	}
 

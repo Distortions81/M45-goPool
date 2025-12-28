@@ -17,7 +17,9 @@
 - `-sha256-no-avx` (default `false`): disables the AVX-accelerated `sha256-simd` backend so the pool falls back to the platform-independent `crypto/sha256`.
 - `-allow-rpc-credentials` (default `false`): force goPool to use `rpc_user`/`rpc_pass` from `data/config/secrets.toml` instead of the auth cookie; this is deprecated and insecure, so avoid it whenever possible. The flag logs a warning each launch and is the only way to load credentials from secrets.toml.
 - If `node.rpc_cookie_path` is empty, goPool attempts to mimic `btcsuite/btcd/rpcclient`'s cookie autodetection: it first checks `$BITCOIN_DATADIR`, then btcd's `AppDataDir("btcd", false)/data` layout, and finally a collection of common Linux cookie locations (`~/.bitcoin/.cookie`, `/var/lib/bitcoin/.cookie`, `/home/bitcoin/.bitcoin/.cookie`, `/etc/bitcoin/.cookie`, plus the regtest/testnet3/testnet4/signet/simnet variants) before failing.
+- When a working RPC cookie is detected (either through autodetection or a manual `node.rpc_cookie_path` override), goPool rewrites `data/config/config.toml` so the discovered path is persisted for subsequent restarts.
 - `-rpc-cookie-path` (default empty): explicitly set the RPC cookie path at launch and skip autodetection. This is handy for temporary overrides or debugging when the cookie lives somewhere unusual.
+- `node.rpc_cookie_path` may point at a directory (for example, your Bitcoin datadir); goPool will look for a `.cookie` file inside that directory so you can stop worrying about the exact filename.
 - `node.allow_public_rpc` (default `false`): set this to `true` when connecting to intentionally unauthenticated RPC endpoints (only recommended for public/testing nodes such as `https://bitcoin-rpc.publicnode.com`). When enabled and `node.rpc_cookie_path` remains empty, goPool skips credential loading and connects without Basic auth, which lets you test the pool against services that offer open RPC access.
 
 ## Bitcoin Core ZMQ topics

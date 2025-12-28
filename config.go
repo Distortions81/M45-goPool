@@ -77,8 +77,9 @@ type Config struct {
 	RPCPass             string
 	// RPCCookiePath optionally points at bitcoind's auth cookie file when RPC
 	// credentials are not set in secrets.toml.
-	RPCCookiePath  string
-	rpcCookieWatch bool
+	RPCCookiePath           string
+	rpCCookiePathFromConfig string
+	rpcCookieWatch          bool
 	// AllowPublicRPC lets goPool connect to nodes that intentionally expose RPC
 	// without any authentication (useful for public/testing nodes). Defaults to
 	// false for security.
@@ -732,8 +733,10 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.ZMQLongpollFallback {
 		cfg.ZMQLongpollFallback = true
 	}
-	if fc.Node.RPCCookiePath != "" {
-		cfg.RPCCookiePath = strings.TrimSpace(fc.Node.RPCCookiePath)
+	cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
+	cfg.rpCCookiePathFromConfig = cookiePath
+	if cookiePath != "" {
+		cfg.RPCCookiePath = cookiePath
 	}
 	if fc.Node.AllowPublicRPC {
 		cfg.AllowPublicRPC = true
@@ -866,7 +869,7 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 }
 
-func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bool) error {
+func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bool, configPath string) error {
 	if forceCredentials {
 		if err := loadRPCredentialsFromSecrets(cfg, secretsPath); err != nil {
 			return err
@@ -910,6 +913,7 @@ func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bo
 			}
 		} else if loaded {
 			logger.Info("rpc cookie loaded", "path", cfg.RPCCookiePath)
+			persistRPCCookiePathIfNeeded(configPath, cfg)
 		}
 	}
 	return nil
@@ -961,10 +965,25 @@ func applyRPCCookieCredentials(cfg *Config) (bool, string, error) {
 	return true, actualPath, nil
 }
 
+func rpcCookiePathCandidates(basePath string) []string {
+	trimmed := strings.TrimSpace(basePath)
+	if trimmed == "" {
+		return nil
+	}
+	if info, err := os.Stat(trimmed); err == nil && info.IsDir() {
+		return []string{filepath.Join(trimmed, ".cookie")}
+	}
+	candidates := []string{trimmed}
+	if !strings.HasSuffix(trimmed, ".cookie") {
+		candidates = append(candidates, filepath.Join(trimmed, ".cookie"))
+	}
+	return candidates
+}
+
 func readRPCCookieWithFallback(basePath string) (string, string, string, error) {
-	candidates := []string{basePath}
-	if !strings.HasSuffix(basePath, ".cookie") {
-		candidates = append(candidates, filepath.Join(basePath, ".cookie"))
+	candidates := rpcCookiePathCandidates(basePath)
+	if len(candidates) == 0 {
+		return "", "", "", fmt.Errorf("invalid cookie path")
 	}
 	var lastErr error
 	for _, candidate := range candidates {
@@ -982,9 +1001,6 @@ func readRPCCookieWithFallback(basePath string) (string, string, string, error) 
 			return candidate, "", "", fmt.Errorf("unexpected cookie format")
 		}
 		return candidate, strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
-	}
-	if len(candidates) == 0 {
-		return "", "", "", fmt.Errorf("invalid cookie path")
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("read %s: %w", candidates[len(candidates)-1], os.ErrNotExist)
@@ -1044,6 +1060,22 @@ func warnCookieMissing(msg string, attrs ...any) {
 	}
 	entry += "\n"
 	_, _ = os.Stdout.Write([]byte(entry))
+}
+
+func persistRPCCookiePathIfNeeded(configPath string, cfg *Config) {
+	if configPath == "" {
+		return
+	}
+	path := strings.TrimSpace(cfg.RPCCookiePath)
+	if path == "" || cfg.rpCCookiePathFromConfig == path {
+		return
+	}
+	if err := rewriteConfigFile(configPath, *cfg); err != nil {
+		logger.Warn("persist rpc cookie path", "path", path, "error", err)
+		return
+	}
+	cfg.rpCCookiePathFromConfig = path
+	logger.Info("persisted rpc cookie path", "path", path, "config", configPath)
 }
 
 func linuxCookieCandidates() []string {

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/pelletier/go-toml"
 )
 
 func TestSanitizePayoutAddress(t *testing.T) {
@@ -677,5 +679,75 @@ func TestRewriteConfigFile_BackupAndAtomic(t *testing.T) {
 	}
 	if !bytes.Contains(secondBak, []byte(`payout_address = ""`)) {
 		t.Fatalf(".bak missing previous config content")
+	}
+}
+
+func TestPersistRPCCookiePathIfNeeded_WritesNewPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := defaultConfig()
+	cfg.RPCCookiePath = "/tmp/.cookie"
+	cfg.rpCCookiePathFromConfig = ""
+
+	persistRPCCookiePathIfNeeded(cfgPath, &cfg)
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	var fc baseFileConfig
+	if err := toml.Unmarshal(data, &fc); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if fc.Node.RPCCookiePath != cfg.RPCCookiePath {
+		t.Fatalf("node.rpc_cookie_path = %q, want %q", fc.Node.RPCCookiePath, cfg.RPCCookiePath)
+	}
+}
+
+func TestPersistRPCCookiePathIfNeeded_SkipsWhenUnchanged(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := defaultConfig()
+	cfg.RPCCookiePath = "/tmp/.cookie"
+	cfg.rpCCookiePathFromConfig = ""
+
+	persistRPCCookiePathIfNeeded(cfgPath, &cfg)
+
+	infoBefore, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+
+	persistRPCCookiePathIfNeeded(cfgPath, &cfg)
+
+	infoAfter, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("stat config again: %v", err)
+	}
+
+	if !infoAfter.ModTime().Equal(infoBefore.ModTime()) {
+		t.Fatalf("config rewritten despite unchanged cookie path")
+	}
+}
+
+func TestReadRPCCookieWithFallback_Directory(t *testing.T) {
+	tmpDir := t.TempDir()
+	cookiePath := filepath.Join(tmpDir, ".cookie")
+	if err := os.WriteFile(cookiePath, []byte("rpcuser:rpcpass"), 0o600); err != nil {
+		t.Fatalf("write cookie: %v", err)
+	}
+
+	actualPath, user, pass, err := readRPCCookieWithFallback(tmpDir)
+	if err != nil {
+		t.Fatalf("read cookie: %v", err)
+	}
+	if actualPath != cookiePath {
+		t.Fatalf("actual path = %q, want %q", actualPath, cookiePath)
+	}
+	if user != "rpcuser" || pass != "rpcpass" {
+		t.Fatalf("credentials = %q:%q, want rpcuser:rpcpass", user, pass)
 	}
 }
