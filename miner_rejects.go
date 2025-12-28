@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"sync/atomic"
 	"time"
 )
 
@@ -250,6 +251,8 @@ func (mc *MinerConn) shareTargetOrDefault() *big.Int {
 }
 
 func (mc *MinerConn) resetShareWindow(now time.Time) {
+	connSeq := atomic.LoadUint64(&mc.connectionSeq)
+
 	mc.statsMu.Lock()
 	mc.stats.WindowStart = now
 	mc.stats.WindowAccepted = 0
@@ -260,6 +263,10 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	mc.hashrateSampleCount = 0
 	mc.hashrateAccumulatedDiff = 0
 	mc.statsMu.Unlock()
+
+	if mc.metrics != nil && connSeq != 0 {
+		mc.metrics.UpdateConnectionHashrate(connSeq, 0)
+	}
 }
 
 // currentRollingHashrate returns the smoothed hashrate value derived from
@@ -328,6 +335,13 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 	mc.lastHashrateUpdate = shareTime
 	mc.hashrateSampleCount = 0
 	mc.hashrateAccumulatedDiff = 0
+
+	if mc.metrics != nil {
+		connSeq := atomic.LoadUint64(&mc.connectionSeq)
+		if connSeq != 0 {
+			mc.metrics.UpdateConnectionHashrate(connSeq, mc.rollingHashrateValue)
+		}
+	}
 }
 
 func (mc *MinerConn) trackJob(job *Job, clean bool) {

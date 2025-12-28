@@ -403,6 +403,11 @@ func (mc *MinerConn) statsWorker() {
 
 func (mc *MinerConn) cleanup() {
 	mc.cleanupOnce.Do(func() {
+		if mc.metrics != nil {
+			if connSeq := atomic.LoadUint64(&mc.connectionSeq); connSeq != 0 {
+				mc.metrics.RemoveConnectionHashrate(connSeq)
+			}
+		}
 		mc.unregisterRegisteredWorker()
 
 		// Close stats channel and wait for worker to finish processing

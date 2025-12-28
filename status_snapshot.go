@@ -165,6 +165,9 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 }
 
 func (s *StatusServer) computePoolHashrate() float64 {
+	if s.metrics != nil {
+		return s.metrics.PoolHashrate()
+	}
 	if s.registry == nil {
 		return 0
 	}
@@ -189,7 +192,7 @@ func (s *StatusServer) findWorkerViewByHash(hash string, now time.Time) (WorkerV
 	if hash == "" {
 		return WorkerView{}, false
 	}
-	data := s.statusData()
+	data := s.statusDataView()
 	lookup := workerLookupFromStatusData(data)
 	if lookup == nil {
 		return WorkerView{}, false

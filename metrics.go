@@ -1,11 +1,13 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -69,6 +71,9 @@ type PoolMetrics struct {
 	rpcGBTBuckets []latencyBucket
 
 	shareRateBuckets []shareRateBucket
+
+	poolHashrateBits uint64
+	connHashrates    map[uint64]float64
 }
 
 func NewPoolMetrics() *PoolMetrics {
@@ -77,6 +82,62 @@ func NewPoolMetrics() *PoolMetrics {
 	}
 	go m.bestShareWorker()
 	return m
+}
+
+// PoolHashrate returns the current aggregate pool hashrate estimate computed
+// from per-connection rolling hashrate updates. It is best-effort and intended
+// for UI/status display.
+func (m *PoolMetrics) PoolHashrate() float64 {
+	if m == nil {
+		return 0
+	}
+	return math.Float64frombits(atomic.LoadUint64(&m.poolHashrateBits))
+}
+
+// UpdateConnectionHashrate updates the tracked rolling hashrate for a specific
+// connection sequence number and updates the aggregate pool hashrate.
+func (m *PoolMetrics) UpdateConnectionHashrate(connSeq uint64, hashrate float64) {
+	if m == nil || connSeq == 0 {
+		return
+	}
+	if hashrate < 0 || math.IsNaN(hashrate) || math.IsInf(hashrate, 0) {
+		hashrate = 0
+	}
+	m.mu.Lock()
+	if m.connHashrates == nil {
+		m.connHashrates = make(map[uint64]float64, 1024)
+	}
+	prev := m.connHashrates[connSeq]
+	m.connHashrates[connSeq] = hashrate
+	total := math.Float64frombits(m.poolHashrateBits) - prev + hashrate
+	if total < 0 || math.IsNaN(total) || math.IsInf(total, 0) {
+		total = 0
+	}
+	atomic.StoreUint64(&m.poolHashrateBits, math.Float64bits(total))
+	m.mu.Unlock()
+}
+
+// RemoveConnectionHashrate removes a connection from the aggregate pool
+// hashrate tracking.
+func (m *PoolMetrics) RemoveConnectionHashrate(connSeq uint64) {
+	if m == nil || connSeq == 0 {
+		return
+	}
+	m.mu.Lock()
+	if m.connHashrates == nil {
+		m.mu.Unlock()
+		return
+	}
+	prev, ok := m.connHashrates[connSeq]
+	if ok {
+		delete(m.connHashrates, connSeq)
+		total := math.Float64frombits(m.poolHashrateBits) - prev
+		if total < 0 || math.IsNaN(total) || math.IsInf(total, 0) {
+			total = 0
+		}
+		atomic.StoreUint64(&m.poolHashrateBits, math.Float64bits(total))
+	}
+	m.mu.Unlock()
 }
 
 func (m *PoolMetrics) SetBestSharesFile(path string) {

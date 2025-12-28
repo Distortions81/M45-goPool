@@ -698,8 +698,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	}
 
 	start := time.Now()
-	base := s.statusData()
-	base.RenderDuration = time.Since(start)
+	base := s.statusDataView()
 
 	// Best-effort derivation of the pool payout script so the UI can
 	// label coinbase outputs by destination. Errors are treated as
@@ -728,6 +727,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 		DonationScriptHex: donationScriptHex,
 		PrivacyMode:       privacyMode,
 	}
+	data.RenderDuration = time.Since(start)
 
 	// Extract worker ID from path after the prefix
 	path := strings.TrimPrefix(r.URL.Path, prefix)
