@@ -33,8 +33,18 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and ensu
    node.zmq_block_addr = "tcp://<bitcoind-host>:28332"
    ```
    Bitcoind writes blocks to ZMQ from the default port `28332`; point `node.zmq_block_addr` at the same interface (use `127.0.0.1` when the node is local). Restart bitcoind with `zmqpubrawblock=tcp://0.0.0.0:28332` (or whichever interface you prefer) if that option is missing from your `bitcoin.conf`. goPool logs `watching ZMQ block notifications` when the connection succeeds and tracks disconnect/reconnect counts in the status endpoints, so check those logs if the feed ever degrades.
-   goPool subscribes to `hashblock`, `rawblock`, `hashtx`, and `rawtx` on that same socket to keep the block tip, recent block times, and raw transaction counters current without repeated RPC calls. When ZMQ is active, the pool no longer updates the block tip/history from RPC on every template refresh.
+   goPool subscribes to `hashblock`, `rawblock`, `hashtx`, and `rawtx` on that same socket. Only `rawblock` is required for mining; the tx topics are used for status/metrics. Bitcoin Core lets you publish each topic to a different ZMQ address/port, but goPool currently uses a single configured address (`node.zmq_block_addr`), so if you want tx stats you should publish `rawtx`/`hashtx` to the same endpoint as `rawblock`.
+   When ZMQ is active, the pool no longer updates the block tip/history from RPC on every template refresh.
    By default, goPool does not also run an RPC longpoll loop when ZMQ is enabled; to enable the fallback, set `node.zmq_longpoll_fallback = true` (or pass `-zmq-longpoll-fallback`).
+
+   Example `bitcoin.conf` (single endpoint for all topics):
+   ```conf
+   # ZMQ (miner-safe when bound to localhost / a trusted LAN)
+   zmqpubrawblock=tcp://127.0.0.1:28332
+   zmqpubhashblock=tcp://127.0.0.1:28332
+   zmqpubrawtx=tcp://127.0.0.1:28332
+   zmqpubhashtx=tcp://127.0.0.1:28332
+   ```
 
 4. Bitcoind ZMQ ports
    - `zmqpubrawblock=tcp://127.0.0.1:28332` (required to drive goPool’s `node.zmq_block_addr`)

@@ -96,7 +96,7 @@ rpcuser=${RPC_USER}
 rpcpassword=${RPC_PASS}
 rpcallowip=127.0.0.1
 
-# ZMQ for block notifications (used by the pool)
+# ZMQ (miner-safe when bound to localhost). goPool requires rawblock; rawtx is optional (status metrics).
 zmqpubrawblock=tcp://127.0.0.1:28332
 zmqpubrawtx=tcp://127.0.0.1:28333
 

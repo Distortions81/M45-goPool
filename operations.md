@@ -20,6 +20,16 @@
 - `-rpc-cookie-path` (default empty): explicitly set the RPC cookie path at launch and skip autodetection. This is handy for temporary overrides or debugging when the cookie lives somewhere unusual.
 - `node.allow_public_rpc` (default `false`): set this to `true` when connecting to intentionally unauthenticated RPC endpoints (only recommended for public/testing nodes such as `https://bitcoin-rpc.publicnode.com`). When enabled and `node.rpc_cookie_path` remains empty, goPool skips credential loading and connects without Basic auth, which lets you test the pool against services that offer open RPC access.
 
+## Bitcoin Core ZMQ topics
+
+goPool reads Bitcoin Core's ZMQ notifications from `node.zmq_block_addr` and subscribes to these topics:
+
+- `rawblock` (required): used to trigger job/template refresh on new blocks (mining still works with only this).
+- `hashblock` (optional): redundant refresh trigger; goPool can use either.
+- `rawtx` / `hashtx` (optional): used for status/metrics only.
+
+Bitcoin Core allows publishing each topic to a different ZMQ address/port (e.g. `zmqpubrawblock=...`, `zmqpubrawtx=...`). goPool currently expects all topics it subscribes to to be available on the single configured `node.zmq_block_addr`, so publish the optional tx topics to the same endpoint if you want those UI stats to populate.
+
 ## Status pages & API
 
 - HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/templates/`.
