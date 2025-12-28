@@ -225,7 +225,10 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 
 	for _, saved := range data.SavedWorkers {
-		workerHash := saved.Hash
+		workerHash := strings.TrimSpace(saved.Hash)
+		if workerHash != "" {
+			workerHash = strings.ToLower(workerHash)
+		}
 		if workerHash == "" {
 			workerHash = workerNameHash(saved.Name)
 		}
@@ -324,7 +327,10 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 	}
 
 	for _, savedEntry := range saved {
-		workerHash := savedEntry.Hash
+		workerHash := strings.TrimSpace(savedEntry.Hash)
+		if workerHash != "" {
+			workerHash = strings.ToLower(workerHash)
+		}
 		if workerHash == "" {
 			workerHash = workerNameHash(savedEntry.Name)
 		}

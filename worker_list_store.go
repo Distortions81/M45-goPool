@@ -121,6 +121,12 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 			if entry.Hash != "" {
 				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
 			}
+		} else {
+			lower := strings.ToLower(entry.Hash)
+			if lower != entry.Hash {
+				entry.Hash = lower
+				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+			}
 		}
 		workers = append(workers, entry)
 	}
