@@ -115,21 +115,48 @@ func benchmarkStatusServerWithWorkers(workerCount int) *StatusServer {
 }
 
 func buildOverviewPagePayloadForBench(s *StatusServer) ([]byte, error) {
-	full := s.buildCensoredStatusData()
+	view := s.statusDataView()
+	start := time.Now()
+
+	recentWork := make([]RecentWorkView, 0, len(view.RecentWork))
+	for _, wv := range view.RecentWork {
+		recentWork = append(recentWork, censorRecentWork(wv))
+	}
+
+	bestShares := make([]BestShare, 0, len(view.BestShares))
+	for _, bs := range view.BestShares {
+		bestShares = append(bestShares, censorBestShare(bs))
+	}
+
+	foundBlocks := make([]FoundBlockView, 0, len(view.FoundBlocks))
+	for _, fb := range view.FoundBlocks {
+		foundBlocks = append(foundBlocks, censorFoundBlock(fb))
+	}
+
+	const maxBannedOnOverview = 200
+	bannedWorkers := view.BannedWorkers
+	if len(bannedWorkers) > maxBannedOnOverview {
+		bannedWorkers = bannedWorkers[:maxBannedOnOverview]
+	}
+	censoredBanned := make([]WorkerView, 0, len(bannedWorkers))
+	for _, bw := range bannedWorkers {
+		censoredBanned = append(censoredBanned, censorWorkerView(bw))
+	}
+
 	data := OverviewPageData{
 		APIVersion:      apiVersion,
-		ActiveMiners:    full.ActiveMiners,
-		ActiveTLSMiners: full.ActiveTLSMiners,
-		SharesPerMinute: full.SharesPerMinute,
-		PoolHashrate:    full.PoolHashrate,
+		ActiveMiners:    view.ActiveMiners,
+		ActiveTLSMiners: view.ActiveTLSMiners,
+		SharesPerMinute: view.SharesPerMinute,
+		PoolHashrate:    view.PoolHashrate,
 		BTCPriceUSD:     0,
 		BTCPriceUpdated: "",
-		RenderDuration:  full.RenderDuration,
-		Workers:         full.RecentWork,
-		BannedWorkers:   full.BannedWorkers,
-		BestShares:      full.BestShares,
-		FoundBlocks:     full.FoundBlocks,
-		MinerTypes:      full.MinerTypes,
+		RenderDuration:  time.Since(start),
+		Workers:         recentWork,
+		BannedWorkers:   censoredBanned,
+		BestShares:      bestShares,
+		FoundBlocks:     foundBlocks,
+		MinerTypes:      view.MinerTypes,
 	}
 	return sonic.Marshal(data)
 }
@@ -139,6 +166,7 @@ func BenchmarkOverviewPagePayload(b *testing.B) {
 	for _, size := range workerSizes {
 		b.Run(fmt.Sprintf("%d_workers", size), func(b *testing.B) {
 			s := benchmarkStatusServerWithWorkers(size)
+			recentCount := len(s.statusDataView().RecentWork)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -150,10 +178,9 @@ func BenchmarkOverviewPagePayload(b *testing.B) {
 
 			if size > 0 && b.N > 0 {
 				nsPerOp := float64(b.Elapsed().Nanoseconds()) / float64(b.N)
-				nsPerWorker := nsPerOp / float64(size)
-				b.ReportMetric(nsPerWorker, "ns/worker")
-				if nsPerWorker > 0 {
-					b.ReportMetric(benchBudgetNS/nsPerWorker, "workers@10ms")
+				if recentCount > 0 {
+					nsPerRecentWorker := nsPerOp / float64(recentCount)
+					b.ReportMetric(nsPerRecentWorker, "ns/recent_worker")
 				}
 			}
 		})

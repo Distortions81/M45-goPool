@@ -163,46 +163,46 @@ func (s *StatusServer) serveCachedJSON(w http.ResponseWriter, key string, ttl ti
 func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Request) {
 	key := "pool_stats"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
+		view := s.statusDataView()
 		data := PoolStatsData{
 			APIVersion:              apiVersion,
-			BrandName:               full.BrandName,
-			BrandDomain:             full.BrandDomain,
-			ListenAddr:              full.ListenAddr,
-			StratumTLSListen:        full.StratumTLSListen,
-			PoolSoftware:            full.PoolSoftware,
-			BuildTime:               full.BuildTime,
-			Uptime:                  full.Uptime,
-			ActiveMiners:            full.ActiveMiners,
-			PoolHashrate:            full.PoolHashrate,
-			SharesPerSecond:         full.SharesPerSecond,
-			Accepted:                full.Accepted,
-			Rejected:                full.Rejected,
-			StaleShares:             full.StaleShares,
-			LowDiffShares:           full.LowDiffShares,
-			RejectReasons:           full.RejectReasons,
-			WindowAccepted:          full.WindowAccepted,
-			WindowSubmissions:       full.WindowSubmissions,
-			WindowStart:             full.WindowStart,
-			VardiffUp:               full.VardiffUp,
-			VardiffDown:             full.VardiffDown,
-			BlocksAccepted:          full.BlocksAccepted,
-			BlocksErrored:           full.BlocksErrored,
-			MinDifficulty:           full.MinDifficulty,
-			MaxDifficulty:           full.MaxDifficulty,
-			PoolFeePercent:          full.PoolFeePercent,
-			OperatorDonationPercent: full.OperatorDonationPercent,
-			OperatorDonationName:    full.OperatorDonationName,
-			OperatorDonationURL:     full.OperatorDonationURL,
+			BrandName:               view.BrandName,
+			BrandDomain:             view.BrandDomain,
+			ListenAddr:              view.ListenAddr,
+			StratumTLSListen:        view.StratumTLSListen,
+			PoolSoftware:            view.PoolSoftware,
+			BuildTime:               view.BuildTime,
+			Uptime:                  view.Uptime,
+			ActiveMiners:            view.ActiveMiners,
+			PoolHashrate:            view.PoolHashrate,
+			SharesPerSecond:         view.SharesPerSecond,
+			Accepted:                view.Accepted,
+			Rejected:                view.Rejected,
+			StaleShares:             view.StaleShares,
+			LowDiffShares:           view.LowDiffShares,
+			RejectReasons:           view.RejectReasons,
+			WindowAccepted:          view.WindowAccepted,
+			WindowSubmissions:       view.WindowSubmissions,
+			WindowStart:             view.WindowStart,
+			VardiffUp:               view.VardiffUp,
+			VardiffDown:             view.VardiffDown,
+			BlocksAccepted:          view.BlocksAccepted,
+			BlocksErrored:           view.BlocksErrored,
+			MinDifficulty:           view.MinDifficulty,
+			MaxDifficulty:           view.MaxDifficulty,
+			PoolFeePercent:          view.PoolFeePercent,
+			OperatorDonationPercent: view.OperatorDonationPercent,
+			OperatorDonationName:    view.OperatorDonationName,
+			OperatorDonationURL:     view.OperatorDonationURL,
 			CurrentJob:              nil, // Excluded for security
-			JobCreated:              full.JobCreated,
-			TemplateTime:            full.TemplateTime,
-			JobFeed:                 full.JobFeed,
-			BTCPriceFiat:            full.BTCPriceFiat,
-			BTCPriceUpdatedAt:       full.BTCPriceUpdatedAt,
-			FiatCurrency:            full.FiatCurrency,
-			WorkerDatabase:          full.WorkerDatabase,
-			Warnings:                full.Warnings,
+			JobCreated:              view.JobCreated,
+			TemplateTime:            view.TemplateTime,
+			JobFeed:                 view.JobFeed,
+			BTCPriceFiat:            view.BTCPriceFiat,
+			BTCPriceUpdatedAt:       view.BTCPriceUpdatedAt,
+			FiatCurrency:            view.FiatCurrency,
+			WorkerDatabase:          view.WorkerDatabase,
+			Warnings:                view.Warnings,
 		}
 		return sonic.Marshal(data)
 	})
@@ -212,27 +212,27 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request) {
 	key := "node_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
+		view := s.statusDataView()
 		data := NodePageData{
 			APIVersion:               apiVersion,
-			NodeNetwork:              full.NodeNetwork,
-			NodeSubversion:           full.NodeSubversion,
-			NodeBlocks:               full.NodeBlocks,
-			NodeHeaders:              full.NodeHeaders,
-			NodeInitialBlockDownload: full.NodeInitialBlockDownload,
-			NodeConnections:          full.NodeConnections,
-			NodeConnectionsIn:        full.NodeConnectionsIn,
-			NodeConnectionsOut:       full.NodeConnectionsOut,
-			NodePeers:                full.NodePeerInfos,
-			NodePruned:               full.NodePruned,
-			NodeSizeOnDiskBytes:      full.NodeSizeOnDiskBytes,
-			NodePeerCleanupEnabled:   full.NodePeerCleanupEnabled,
-			NodePeerCleanupMaxPingMs: full.NodePeerCleanupMaxPingMs,
-			NodePeerCleanupMinPeers:  full.NodePeerCleanupMinPeers,
-			GenesisHash:              full.GenesisHash,
-			GenesisExpected:          full.GenesisExpected,
-			GenesisMatch:             full.GenesisMatch,
-			BestBlockHash:            full.BestBlockHash,
+			NodeNetwork:              view.NodeNetwork,
+			NodeSubversion:           view.NodeSubversion,
+			NodeBlocks:               view.NodeBlocks,
+			NodeHeaders:              view.NodeHeaders,
+			NodeInitialBlockDownload: view.NodeInitialBlockDownload,
+			NodeConnections:          view.NodeConnections,
+			NodeConnectionsIn:        view.NodeConnectionsIn,
+			NodeConnectionsOut:       view.NodeConnectionsOut,
+			NodePeers:                view.NodePeerInfos,
+			NodePruned:               view.NodePruned,
+			NodeSizeOnDiskBytes:      view.NodeSizeOnDiskBytes,
+			NodePeerCleanupEnabled:   view.NodePeerCleanupEnabled,
+			NodePeerCleanupMaxPingMs: view.NodePeerCleanupMaxPingMs,
+			NodePeerCleanupMinPeers:  view.NodePeerCleanupMinPeers,
+			GenesisHash:              view.GenesisHash,
+			GenesisExpected:          view.GenesisExpected,
+			GenesisMatch:             view.GenesisMatch,
+			BestBlockHash:            view.BestBlockHash,
 		}
 		return sonic.Marshal(data)
 	})
@@ -278,6 +278,28 @@ func censorBestShare(b BestShare) BestShare {
 	return b
 }
 
+func censorRecentWork(w RecentWorkView) RecentWorkView {
+	if w.Name != "" {
+		w.Name = shortWorkerName(w.Name, workerNamePrefix, workerNameSuffix)
+	}
+	if w.DisplayName != "" {
+		w.DisplayName = shortWorkerName(w.DisplayName, workerNamePrefix, workerNameSuffix)
+	}
+	return w
+}
+
+func censorFoundBlock(b FoundBlockView) FoundBlockView {
+	if b.Hash != "" {
+		b.Hash = shortDisplayID(b.Hash, hashPrefix, hashSuffix)
+		b.DisplayHash = shortDisplayID(b.Hash, hashPrefix, hashSuffix)
+	}
+	if b.Worker != "" {
+		b.Worker = shortWorkerName(b.Worker, workerNamePrefix, workerNameSuffix)
+		b.DisplayWorker = shortWorkerName(b.Worker, workerNamePrefix, workerNameSuffix)
+	}
+	return b
+}
+
 // handleBlocksListJSON returns found blocks
 func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Request) {
 	limit := 10
@@ -289,12 +311,16 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 
 	key := fmt.Sprintf("blocks_%d", limit)
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
-		blocks := full.FoundBlocks
+		view := s.statusDataView()
+		blocks := view.FoundBlocks
 		if len(blocks) > limit {
 			blocks = blocks[:limit]
 		}
-		return sonic.Marshal(blocks)
+		out := make([]FoundBlockView, 0, len(blocks))
+		for _, b := range blocks {
+			out = append(out, censorFoundBlock(b))
+		}
+		return sonic.Marshal(out)
 	})
 }
 
@@ -302,7 +328,8 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Request) {
 	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
+		start := time.Now()
+		view := s.statusDataView()
 		var btcUSD float64
 		var btcUpdated string
 		if s.priceSvc != nil {
@@ -314,22 +341,46 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 
-		recentWork := full.RecentWork
+		recentWork := make([]RecentWorkView, 0, len(view.RecentWork))
+		for _, wv := range view.RecentWork {
+			recentWork = append(recentWork, censorRecentWork(wv))
+		}
+
+		bestShares := make([]BestShare, 0, len(view.BestShares))
+		for _, bs := range view.BestShares {
+			bestShares = append(bestShares, censorBestShare(bs))
+		}
+
+		foundBlocks := make([]FoundBlockView, 0, len(view.FoundBlocks))
+		for _, fb := range view.FoundBlocks {
+			foundBlocks = append(foundBlocks, censorFoundBlock(fb))
+		}
+
+		// Keep banned-worker payloads bounded; the UI only needs a small sample.
+		const maxBannedOnOverview = 200
+		bannedWorkers := view.BannedWorkers
+		if len(bannedWorkers) > maxBannedOnOverview {
+			bannedWorkers = bannedWorkers[:maxBannedOnOverview]
+		}
+		censoredBanned := make([]WorkerView, 0, len(bannedWorkers))
+		for _, bw := range bannedWorkers {
+			censoredBanned = append(censoredBanned, censorWorkerView(bw))
+		}
 
 		data := OverviewPageData{
 			APIVersion:      apiVersion,
-			ActiveMiners:    full.ActiveMiners,
-			ActiveTLSMiners: full.ActiveTLSMiners,
-			SharesPerMinute: full.SharesPerMinute,
-			PoolHashrate:    full.PoolHashrate,
+			ActiveMiners:    view.ActiveMiners,
+			ActiveTLSMiners: view.ActiveTLSMiners,
+			SharesPerMinute: view.SharesPerMinute,
+			PoolHashrate:    view.PoolHashrate,
 			BTCPriceUSD:     btcUSD,
 			BTCPriceUpdated: btcUpdated,
-			RenderDuration:  full.RenderDuration,
+			RenderDuration:  time.Since(start),
 			Workers:         recentWork,
-			BannedWorkers:   full.BannedWorkers,
-			BestShares:      full.BestShares,
-			FoundBlocks:     full.FoundBlocks,
-			MinerTypes:      full.MinerTypes,
+			BannedWorkers:   censoredBanned,
+			BestShares:      bestShares,
+			FoundBlocks:     foundBlocks,
+			MinerTypes:      view.MinerTypes,
 		}
 		return sonic.Marshal(data)
 	})
@@ -339,23 +390,23 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request) {
 	key := "pool_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
+		view := s.statusDataView()
 		data := PoolPageData{
 			APIVersion:       apiVersion,
-			BlocksAccepted:   full.BlocksAccepted,
-			BlocksErrored:    full.BlocksErrored,
-			RPCGBTLastSec:    full.RPCGBTLastSec,
-			RPCGBTMaxSec:     full.RPCGBTMaxSec,
-			RPCGBTCount:      full.RPCGBTCount,
-			RPCSubmitLastSec: full.RPCSubmitLastSec,
-			RPCSubmitMaxSec:  full.RPCSubmitMaxSec,
-			RPCSubmitCount:   full.RPCSubmitCount,
-			RPCErrors:        full.RPCErrors,
-			ShareErrors:      full.ShareErrors,
-			RPCGBTMin1hSec:   full.RPCGBTMin1hSec,
-			RPCGBTAvg1hSec:   full.RPCGBTAvg1hSec,
-			RPCGBTMax1hSec:   full.RPCGBTMax1hSec,
-			ErrorHistory:     full.ErrorHistory,
+			BlocksAccepted:   view.BlocksAccepted,
+			BlocksErrored:    view.BlocksErrored,
+			RPCGBTLastSec:    view.RPCGBTLastSec,
+			RPCGBTMaxSec:     view.RPCGBTMaxSec,
+			RPCGBTCount:      view.RPCGBTCount,
+			RPCSubmitLastSec: view.RPCSubmitLastSec,
+			RPCSubmitMaxSec:  view.RPCSubmitMaxSec,
+			RPCSubmitCount:   view.RPCSubmitCount,
+			RPCErrors:        view.RPCErrors,
+			ShareErrors:      view.ShareErrors,
+			RPCGBTMin1hSec:   view.RPCGBTMin1hSec,
+			RPCGBTAvg1hSec:   view.RPCGBTAvg1hSec,
+			RPCGBTMax1hSec:   view.RPCGBTMax1hSec,
+			ErrorHistory:     view.ErrorHistory,
 		}
 		return sonic.Marshal(data)
 	})
@@ -365,42 +416,42 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Request) {
 	key := "server_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		full := s.buildCensoredStatusData()
+		view := s.statusDataView()
 		data := ServerPageData{
 			APIVersion:      apiVersion,
-			Uptime:          full.Uptime,
-			RPCError:        full.RPCError,
-			AccountingError: full.AccountingError,
+			Uptime:          view.Uptime,
+			RPCError:        view.RPCError,
+			AccountingError: view.AccountingError,
 			JobFeed: ServerPageJobFeed{
-				LastError:         full.JobFeed.LastError,
-				LastErrorAt:       full.JobFeed.LastErrorAt,
-				ErrorHistory:      full.JobFeed.ErrorHistory,
-				ZMQHealthy:        full.JobFeed.ZMQHealthy,
-				ZMQDisconnects:    full.JobFeed.ZMQDisconnects,
-				ZMQReconnects:     full.JobFeed.ZMQReconnects,
-				LastRawBlockAt:    full.JobFeed.LastRawBlockAt,
-				LastRawBlockBytes: full.JobFeed.LastRawBlockBytes,
-				LastHashTx:        full.JobFeed.LastHashTx,
-				LastHashTxAt:      full.JobFeed.LastHashTxAt,
-				LastRawTxAt:       full.JobFeed.LastRawTxAt,
-				LastRawTxBytes:    full.JobFeed.LastRawTxBytes,
-				BlockHash:         full.JobFeed.BlockHash,
-				BlockHeight:       full.JobFeed.BlockHeight,
-				BlockTime:         full.JobFeed.BlockTime,
-				BlockBits:         full.JobFeed.BlockBits,
-				BlockDifficulty:   full.JobFeed.BlockDifficulty,
+				LastError:         view.JobFeed.LastError,
+				LastErrorAt:       view.JobFeed.LastErrorAt,
+				ErrorHistory:      view.JobFeed.ErrorHistory,
+				ZMQHealthy:        view.JobFeed.ZMQHealthy,
+				ZMQDisconnects:    view.JobFeed.ZMQDisconnects,
+				ZMQReconnects:     view.JobFeed.ZMQReconnects,
+				LastRawBlockAt:    view.JobFeed.LastRawBlockAt,
+				LastRawBlockBytes: view.JobFeed.LastRawBlockBytes,
+				LastHashTx:        view.JobFeed.LastHashTx,
+				LastHashTxAt:      view.JobFeed.LastHashTxAt,
+				LastRawTxAt:       view.JobFeed.LastRawTxAt,
+				LastRawTxBytes:    view.JobFeed.LastRawTxBytes,
+				BlockHash:         view.JobFeed.BlockHash,
+				BlockHeight:       view.JobFeed.BlockHeight,
+				BlockTime:         view.JobFeed.BlockTime,
+				BlockBits:         view.JobFeed.BlockBits,
+				BlockDifficulty:   view.JobFeed.BlockDifficulty,
 			},
-			ProcessGoroutines:   full.ProcessGoroutines,
-			ProcessCPUPercent:   full.ProcessCPUPercent,
-			GoMemAllocBytes:     full.GoMemAllocBytes,
-			GoMemSysBytes:       full.GoMemSysBytes,
-			ProcessRSSBytes:     full.ProcessRSSBytes,
-			SystemMemTotalBytes: full.SystemMemTotalBytes,
-			SystemMemFreeBytes:  full.SystemMemFreeBytes,
-			SystemMemUsedBytes:  full.SystemMemUsedBytes,
-			SystemLoad1:         full.SystemLoad1,
-			SystemLoad5:         full.SystemLoad5,
-			SystemLoad15:        full.SystemLoad15,
+			ProcessGoroutines:   view.ProcessGoroutines,
+			ProcessCPUPercent:   view.ProcessCPUPercent,
+			GoMemAllocBytes:     view.GoMemAllocBytes,
+			GoMemSysBytes:       view.GoMemSysBytes,
+			ProcessRSSBytes:     view.ProcessRSSBytes,
+			SystemMemTotalBytes: view.SystemMemTotalBytes,
+			SystemMemFreeBytes:  view.SystemMemFreeBytes,
+			SystemMemUsedBytes:  view.SystemMemUsedBytes,
+			SystemLoad1:         view.SystemLoad1,
+			SystemLoad5:         view.SystemLoad5,
+			SystemLoad15:        view.SystemLoad15,
 		}
 		return sonic.Marshal(data)
 	})
