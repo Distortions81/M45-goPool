@@ -870,7 +870,8 @@ func cloneStatusData(in StatusData) StatusData {
 	in.RejectReasons = cloneRejectReasons(in.RejectReasons)
 	in.Warnings = cloneStringSlice(in.Warnings)
 	in.SavedWorkers = cloneSavedWorkers(in.SavedWorkers)
-	in.WorkerLookup = cloneWorkerLookup(in.WorkerLookup)
+	// WorkerLookup is an internal cache; never expose it through cloned views.
+	in.WorkerLookup = nil
 	return in
 }
 
@@ -924,17 +925,6 @@ func cloneRejectReasons(src map[string]uint64) map[string]uint64 {
 		return nil
 	}
 	dst := make(map[string]uint64, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
-}
-
-func cloneWorkerLookup(src map[string]WorkerView) map[string]WorkerView {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]WorkerView, len(src))
 	for k, v := range src {
 		dst[k] = v
 	}
