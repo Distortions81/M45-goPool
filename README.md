@@ -33,5 +33,10 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and ensu
    node.zmq_block_addr = "tcp://<bitcoind-host>:28332"
    ```
    Bitcoind writes blocks to ZMQ from the default port `28332`; point `node.zmq_block_addr` at the same interface (use `127.0.0.1` when the node is local). Restart bitcoind with `zmqpubrawblock=tcp://0.0.0.0:28332` (or whichever interface you prefer) if that option is missing from your `bitcoin.conf`. goPool logs `watching ZMQ block notifications` when the connection succeeds and tracks disconnect/reconnect counts in the status endpoints, so check those logs if the feed ever degrades.
-4. Point your miner at the Stratum listen address.
-3. Point your miner at the Stratum listen address.
+   goPool subscribes to `hashblock`, `rawblock`, `hashtx`, and `rawtx` on that same socket to keep the block tip, recent block times, and raw transaction counters current without repeated RPC calls. When ZMQ is active, the pool no longer updates the block tip/history from RPC on every template refresh.
+
+4. Bitcoind ZMQ ports
+   - `zmqpubrawblock=tcp://127.0.0.1:28332` (required to drive goPool’s `node.zmq_block_addr`)
+   - `zmqpubrawtx=tcp://127.0.0.1:28333` (mirrors the raw tx feed the pool tracks for status metrics)
+   The helper script `scripts/install-bitcoind.sh` already injects those defaults when you bootstrap a node locally, so you can drop the generated `bitcoin.conf` into place and start mining immediately.
+5. Point your miner at the Stratum listen address.
