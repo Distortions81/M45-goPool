@@ -26,6 +26,43 @@ func safeRedirectPath(value string) string {
 	return value
 }
 
+func savedWorkerLookupHashes(savedName, savedHash string) (primary string, fallbacks []string) {
+	primary = strings.ToLower(strings.TrimSpace(savedHash))
+	if primary == "" {
+		primary = workerNameHash(savedName)
+	}
+	if primary == "" {
+		return "", nil
+	}
+
+	base := workerBaseAddress(savedName)
+	if base != "" && base != strings.TrimSpace(savedName) {
+		if baseHash := workerNameHash(base); baseHash != "" && baseHash != primary {
+			fallbacks = append(fallbacks, baseHash)
+		}
+	}
+	return primary, fallbacks
+}
+
+func (s *StatusServer) findSavedWorkerConnections(savedName, savedHash string, now time.Time) (views []WorkerView, queryHash string) {
+	if s == nil {
+		return nil, ""
+	}
+	primary, fallbacks := savedWorkerLookupHashes(savedName, savedHash)
+	if primary == "" {
+		return nil, ""
+	}
+	if views = s.findAllWorkerViewsByHash(primary, now); len(views) > 0 {
+		return views, primary
+	}
+	for _, h := range fallbacks {
+		if v := s.findAllWorkerViewsByHash(h, now); len(v) > 0 {
+			return v, h
+		}
+	}
+	return nil, primary
+}
+
 func buildWorkerLookupByHash(workers []WorkerView, banned []WorkerView) map[string]WorkerView {
 	if len(workers) == 0 && len(banned) == 0 {
 		return nil
@@ -225,22 +262,13 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 
 	for _, saved := range data.SavedWorkers {
-		workerHash := strings.TrimSpace(saved.Hash)
-		if workerHash != "" {
-			workerHash = strings.ToLower(workerHash)
-		}
-		if workerHash == "" {
-			workerHash = workerNameHash(saved.Name)
-		}
-
-		// Get all individual connections for this worker
-		views := s.findAllWorkerViewsByHash(workerHash, now)
+		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
 
 		if len(views) == 0 {
 			// Worker is offline
 			entry := savedWorkerEntry{
 				Name: saved.Name,
-				Hash: workerHash,
+				Hash: lookupHash,
 			}
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
 		} else {
@@ -256,7 +284,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				}
 				entry := savedWorkerEntry{
 					Name:              saved.Name,
-					Hash:              workerHash,
+					Hash:              view.WorkerSHA256,
 					Hashrate:          hashrate,
 					ShareRate:         view.ShareRate,
 					Accepted:          view.Accepted,
@@ -327,22 +355,13 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 	}
 
 	for _, savedEntry := range saved {
-		workerHash := strings.TrimSpace(savedEntry.Hash)
-		if workerHash != "" {
-			workerHash = strings.ToLower(workerHash)
-		}
-		if workerHash == "" {
-			workerHash = workerNameHash(savedEntry.Name)
-		}
-
-		// Get all individual connections for this worker
-		views := s.findAllWorkerViewsByHash(workerHash, now)
+		views, lookupHash := s.findSavedWorkerConnections(savedEntry.Name, savedEntry.Hash, now)
 
 		if len(views) == 0 {
 			// Worker is offline
 			e := entry{
 				Name:   savedEntry.Name,
-				Hash:   workerHash,
+				Hash:   lookupHash,
 				Online: false,
 			}
 			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
@@ -362,7 +381,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				}
 				e := entry{
 					Name:                      savedEntry.Name,
-					Hash:                      workerHash,
+					Hash:                      view.WorkerSHA256,
 					Online:                    true,
 					Hashrate:                  hashrate,
 					SharesPerMinute:           view.ShareRate,

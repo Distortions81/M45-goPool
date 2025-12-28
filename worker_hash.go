@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 func workerNameHash(name string) string {
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return ""
 	}

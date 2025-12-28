@@ -134,10 +134,10 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	workerName := mc.updateWorker(worker)
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style
-	// address so we can construct dual-payout coinbases. Invalid workers are
-	// rejected immediately.
-	if workerName != "" {
-		if _, _, ok := mc.ensureWorkerWallet(workerName); !ok {
+		// address so we can construct dual-payout coinbases. Invalid workers are
+		// rejected immediately.
+		if workerName != "" {
+			if _, _, ok := mc.ensureWorkerWallet(workerName); !ok {
 			addr := workerBaseAddress(workerName)
 			if addr == "" {
 				addr = "(invalid)"
@@ -152,17 +152,19 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 				Error:  newStratumError(20, "wallet worker validation failed"),
 			}
 			mc.writeResponse(resp)
-			mc.Close("wallet validation failed")
-			return
+				mc.Close("wallet validation failed")
+				return
+			}
+			// Assign a connection sequence before registering so the saved-workers
+			// dashboard can look up active connections via the worker registry.
+			mc.assignConnectionSeq()
+			mc.registerWorker(workerName)
 		}
-		mc.registerWorker(workerName)
-	}
 
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
-	mc.assignConnectionSeq()
-	mc.authorized = true
+		mc.authorized = true
 
 	resp := StratumResponse{
 		ID:     req.ID,
