@@ -610,7 +610,8 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 // buildCensoredStatusData builds status data with all sensitive information censored
 // for public API endpoints. This ensures censoring happens at the source.
 func (s *StatusServer) buildCensoredStatusData() StatusData {
-	data := s.statusData()
+	// Clone the cached status view so censoring doesn't mutate shared state.
+	data := cloneStatusData(s.statusDataView())
 
 	// Censor all workers
 	for i := range data.Workers {
