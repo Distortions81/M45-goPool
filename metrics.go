@@ -14,12 +14,18 @@ import (
 const defaultBestShareLimit = 12
 const poolErrorHistorySize = 6
 const rpcGBTRollingWindowSeconds = 24 * 60 * 60
+const shareRateWindowSeconds = 60
 const startupErrorIgnoreDuration = 2 * time.Minute
 
 type ErrorEvent struct {
 	At      time.Time
 	Type    string
 	Message string
+}
+
+type shareRateBucket struct {
+	sec      int64
+	accepted uint64
 }
 
 type latencyBucket struct {
@@ -61,6 +67,8 @@ type PoolMetrics struct {
 	rpcSubmitCount uint64
 
 	rpcGBTBuckets []latencyBucket
+
+	shareRateBuckets []shareRateBucket
 }
 
 func NewPoolMetrics() *PoolMetrics {
@@ -122,6 +130,7 @@ func (m *PoolMetrics) RecordShare(accepted bool, reason string) {
 	if accepted {
 		m.mu.Lock()
 		m.accepted++
+		m.observeAcceptedShareLocked(time.Now())
 		m.mu.Unlock()
 		return
 	}
@@ -141,6 +150,69 @@ func (m *PoolMetrics) RecordShare(accepted bool, reason string) {
 	m.mu.Unlock()
 
 	m.RecordSubmitError(reason)
+}
+
+func (m *PoolMetrics) observeAcceptedShareLocked(now time.Time) {
+	if m == nil {
+		return
+	}
+	if m.shareRateBuckets == nil {
+		m.shareRateBuckets = make([]shareRateBucket, shareRateWindowSeconds)
+	}
+	sec := now.Unix()
+	idx := int(sec % int64(len(m.shareRateBuckets)))
+	b := &m.shareRateBuckets[idx]
+	if b.sec != sec {
+		b.sec = sec
+		b.accepted = 0
+	}
+	b.accepted++
+}
+
+// SnapshotShareRates returns approximate pool-wide accepted share rates over the
+// last minute. It is a best-effort view meant for status/UI display only.
+func (m *PoolMetrics) SnapshotShareRates(now time.Time) (sharesPerSecond float64, sharesPerMinute float64) {
+	if m == nil {
+		return 0, 0
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	cutoff := now.Unix() - (shareRateWindowSeconds - 1)
+
+	m.mu.RLock()
+	buckets := m.shareRateBuckets
+	m.mu.RUnlock()
+	if len(buckets) == 0 {
+		return 0, 0
+	}
+
+	var (
+		total   uint64
+		minSec  int64
+		seenSec bool
+	)
+	for i := range buckets {
+		b := buckets[i]
+		if b.sec < cutoff || b.accepted == 0 {
+			continue
+		}
+		total += b.accepted
+		if !seenSec || b.sec < minSec {
+			minSec = b.sec
+			seenSec = true
+		}
+	}
+	if total == 0 || !seenSec {
+		return 0, 0
+	}
+	spanSeconds := float64(now.Unix() - minSec + 1)
+	if spanSeconds <= 0 {
+		return 0, 0
+	}
+	sharesPerSecond = float64(total) / spanSeconds
+	sharesPerMinute = sharesPerSecond * 60
+	return sharesPerSecond, sharesPerMinute
 }
 
 func (m *PoolMetrics) SetStartTime(start time.Time) {

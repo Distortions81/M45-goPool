@@ -209,12 +209,16 @@ func (s *StatusServer) buildStatusData() StatusData {
 		sharesPerMinute float64
 		sharesPerSecond float64
 	)
-	for _, w := range allWorkers {
-		if w.ShareRate > 0 {
-			sharesPerMinute += w.ShareRate
+	if s.metrics != nil {
+		sharesPerSecond, sharesPerMinute = s.metrics.SnapshotShareRates(now)
+	} else {
+		for _, w := range allWorkers {
+			if w.ShareRate > 0 {
+				sharesPerMinute += w.ShareRate
+			}
 		}
+		sharesPerSecond = sharesPerMinute / 60
 	}
-	sharesPerSecond = sharesPerMinute / 60
 	poolHashrate := s.computePoolHashrate()
 
 	// Limit the number of workers displayed on the main status page to
