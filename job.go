@@ -231,9 +231,6 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 }
 
 func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
-	if !jm.shouldUseLongpollFallback() {
-		return
-	}
 	if tpl.Height <= 0 {
 		return
 	}
@@ -241,9 +238,13 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 	jm.zmqPayloadMu.Lock()
 
 	tip := jm.zmqPayload.BlockTip
+	oldHeight := tip.Height
 	isNewBlock := tip.Height == 0 || tpl.Height > tip.Height
 	if isNewBlock {
 		tip.Height = tpl.Height
+		if debugLogging {
+			logger.Debug("updateBlockTipFromTemplate: height updated", "old", oldHeight, "new", tpl.Height)
+		}
 	}
 	// Note: tpl.CurTime is template time (node wall-clock), not a block header
 	// timestamp; keep any existing blockchain-derived tip time instead.
@@ -277,7 +278,7 @@ func (jm *JobManager) refreshBlockHistoryFromRPC(ctx context.Context) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if !jm.shouldUseLongpollFallback() || jm.rpc == nil {
+	if jm.rpc == nil {
 		return false
 	}
 
@@ -518,7 +519,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 
 	jm.recordJobSuccess(job)
 	jm.updateBlockTipFromTemplate(tpl)
-	if jm.shouldUseLongpollFallback() && tpl.Height > prevHeight {
+	if tpl.Height > prevHeight {
 		jm.refreshBlockHistoryFromRPC(ctx)
 	}
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
