@@ -34,6 +34,7 @@ Continuous integration runs on GitHub Actions to verify `go test ./...` and ensu
    ```
    Bitcoind writes blocks to ZMQ from the default port `28332`; point `node.zmq_block_addr` at the same interface (use `127.0.0.1` when the node is local). Restart bitcoind with `zmqpubrawblock=tcp://0.0.0.0:28332` (or whichever interface you prefer) if that option is missing from your `bitcoin.conf`. goPool logs `watching ZMQ block notifications` when the connection succeeds and tracks disconnect/reconnect counts in the status endpoints, so check those logs if the feed ever degrades.
    goPool subscribes to `hashblock`, `rawblock`, `hashtx`, and `rawtx` on that same socket to keep the block tip, recent block times, and raw transaction counters current without repeated RPC calls. When ZMQ is active, the pool no longer updates the block tip/history from RPC on every template refresh.
+   By default, goPool does not also run an RPC longpoll loop when ZMQ is enabled; to enable the fallback, set `node.zmq_longpoll_fallback = true` (or pass `-zmq-longpoll-fallback`).
 
 4. Bitcoind ZMQ ports
    - `zmqpubrawblock=tcp://127.0.0.1:28332` (required to drive goPool’s `node.zmq_block_addr`)
