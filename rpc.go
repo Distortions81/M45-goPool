@@ -311,8 +311,11 @@ func (c *RPCClient) shouldRetry(err error) bool {
 	}
 	var statusErr *httpStatusError
 	if errors.As(err, &statusErr) {
-		if statusErr.StatusCode >= 500 || statusErr.StatusCode == http.StatusUnauthorized {
-			return true
+		switch statusErr.StatusCode {
+		case http.StatusUnauthorized:
+			return c.cookiePath != ""
+		default:
+			return statusErr.StatusCode >= 500
 		}
 	}
 	return false
