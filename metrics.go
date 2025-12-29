@@ -540,14 +540,7 @@ func (m *PoolMetrics) TrackBestShare(worker, hash string, difficulty float64, ti
 	if difficulty <= 0 {
 		return
 	}
-	share := BestShare{
-		Worker:        worker,
-		DisplayWorker: shortWorkerName(worker, workerNamePrefix, workerNameSuffix),
-		Difficulty:    difficulty,
-		Timestamp:     timestamp,
-		Hash:          hash,
-		DisplayHash:   shortDisplayID(hash, hashPrefix, hashSuffix),
-	}
+
 	m.bestSharesMu.RLock()
 	count := m.bestShareCount
 	var worst float64
@@ -556,8 +549,18 @@ func (m *PoolMetrics) TrackBestShare(worker, hash string, difficulty float64, ti
 	}
 	m.bestSharesMu.RUnlock()
 
-	if count >= defaultBestShareLimit && share.Difficulty <= worst {
+	// Avoid allocations (display strings) if it can't possibly rank.
+	if count >= defaultBestShareLimit && difficulty <= worst {
 		return
+	}
+
+	share := BestShare{
+		Worker:        worker,
+		DisplayWorker: shortWorkerName(worker, workerNamePrefix, workerNameSuffix),
+		Difficulty:    difficulty,
+		Timestamp:     timestamp,
+		Hash:          hash,
+		DisplayHash:   shortDisplayID(hash, hashPrefix, hashSuffix),
 	}
 
 	if ch := m.bestShareChan; ch != nil {

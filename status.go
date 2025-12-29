@@ -563,6 +563,12 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 		workerScriptHex = strings.ToLower(strings.TrimSpace(wv.WalletScript))
 	}
 
+	if wv.LastShareDetail != nil && wv.LastShareDetail.Coinbase != "" && len(wv.LastShareDetail.CoinbaseOutputs) == 0 {
+		dbg := *wv.LastShareDetail
+		dbg.DecodeCoinbaseFields()
+		wv.LastShareDetail = &dbg
+	}
+
 	// Always set script hex values for template matching
 	data.WorkerScriptHex = workerScriptHex
 	aggregateCoinbaseSplit(data.PoolScriptHex, data.DonationScriptHex, workerScriptHex, wv.LastShareDetail)

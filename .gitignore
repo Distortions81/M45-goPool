@@ -10,3 +10,5 @@ data/banlist.json
 
 scripts/bitcoin-node
 gopool-test
+*.test
+*.out

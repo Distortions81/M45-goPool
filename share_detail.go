@@ -98,6 +98,8 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, ha
 		}
 	}
 	detail.Coinbase = hex.EncodeToString(cbTx)
-	detail.DecodeCoinbaseFields()
+	if debugLogging || verboseLogging {
+		detail.DecodeCoinbaseFields()
+	}
 	return detail
 }
