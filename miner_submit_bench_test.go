@@ -86,6 +86,7 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 func BenchmarkProcessSubmissionTaskAcceptedShare(b *testing.B) {
 	job := benchmarkSubmitJob(b)
 	metrics := NewPoolMetrics()
+	const benchSharesPerWorkerPerMin = 15.0
 
 	ntimeHex := fmt.Sprintf("%08x", uint32(job.Template.CurTime))
 
@@ -125,12 +126,67 @@ func BenchmarkProcessSubmissionTaskAcceptedShare(b *testing.B) {
 		if nsPerShare > 0 {
 			sharesPerSecond := 1e9 / nsPerShare
 			b.ReportMetric(sharesPerSecond, "shares/s")
-			if defaultVarDiffTargetSharesPerMin > 0 {
-				workers := sharesPerSecond * 60 / float64(defaultVarDiffTargetSharesPerMin)
-				b.ReportMetric(workers, "workers@target_spm")
-				b.ReportMetric(workers*0.7, "workers@70pct")
+			if benchSharesPerWorkerPerMin > 0 {
+				workers := sharesPerSecond * 60 / benchSharesPerWorkerPerMin
+				b.ReportMetric(workers, "workers@15spm")
+				b.ReportMetric(workers*0.7, "workers@15spm_70pct")
 			}
 		}
 	}
 }
 
+func BenchmarkHandleSubmitAndProcessAcceptedShare(b *testing.B) {
+	job := benchmarkSubmitJob(b)
+	metrics := NewPoolMetrics()
+	const benchSharesPerWorkerPerMin = 15.0
+
+	ntimeHex := fmt.Sprintf("%08x", uint32(job.Template.CurTime))
+	jobID := job.JobID
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		mc := benchmarkMinerConnForSubmit(metrics)
+		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.jobMu.Lock()
+		mc.activeJobs = map[string]*Job{jobID: job}
+		mc.lastJob = job
+		mc.jobDifficulty[jobID] = 1e-12
+		mc.jobMu.Unlock()
+
+		var i uint32
+		for pb.Next() {
+			i++
+			nonceHex := fmt.Sprintf("%08x", i)
+			en2Hex := fmt.Sprintf("%08x", i^0x9e3779b9)
+
+			req := &StratumRequest{
+				ID:     1,
+				Method: "mining.submit",
+				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+			}
+
+			now := time.Unix(1700000000+int64(i), 0)
+			task, ok := mc.prepareSubmissionTask(req, now)
+			if !ok {
+				b.Fatalf("prepareSubmissionTask unexpectedly rejected a bench share")
+			}
+			mc.processSubmissionTask(task)
+		}
+	})
+	b.StopTimer()
+
+	if b.N > 0 {
+		nsPerShare := float64(b.Elapsed().Nanoseconds()) / float64(b.N)
+		b.ReportMetric(nsPerShare, "ns/share")
+		if nsPerShare > 0 {
+			sharesPerSecond := 1e9 / nsPerShare
+			b.ReportMetric(sharesPerSecond, "shares/s")
+			if benchSharesPerWorkerPerMin > 0 {
+				workers := sharesPerSecond * 60 / benchSharesPerWorkerPerMin
+				b.ReportMetric(workers, "workers@15spm")
+				b.ReportMetric(workers*0.7, "workers@15spm_70pct")
+			}
+		}
+	}
+}

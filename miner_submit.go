@@ -135,9 +135,25 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// [worker_name, job_id, extranonce2, ntime, nonce]
 	now := time.Now()
 
-	params, ok := mc.parseSubmitParams(req, now)
+	task, ok := mc.prepareSubmissionTask(req, now)
 	if !ok {
 		return
+	}
+	ensureSubmissionWorkerPool()
+	submissionWorkers.submit(task)
+}
+
+// prepareSubmissionTask validates a mining.submit request and, if valid, returns
+// a fully-populated submissionTask. On any validation failure it writes the
+// appropriate Stratum response and returns ok=false.
+//
+// This helper exists so benchmarks can include submit parsing/validation while
+// still exercising the core share-processing path without extra goroutine
+// scheduling noise.
+func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (submissionTask, bool) {
+	params, ok := mc.parseSubmitParams(req, now)
+	if !ok {
+		return submissionTask{}, false
 	}
 
 	worker := params.worker
@@ -155,7 +171,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 			mc.metrics.RecordSubmitError("banned")
 		}
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
-		return
+		return submissionTask{}, false
 	}
 
 	job, ok := mc.jobForID(jobID)
@@ -163,7 +179,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
 		// Use "job not found" for missing/expired jobs.
 		mc.rejectShareWithBan(req, workerName, rejectStaleJob, 21, "job not found", now)
-		return
+		return submissionTask{}, false
 	}
 
 	// Defensive: ensure the job template still matches what we advertised to this
@@ -174,32 +190,32 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if curLast != nil && curLast.Template.Previous != job.Template.Previous {
 		logger.Warn("submit rejected: stale job prevhash mismatch", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
 		mc.rejectShareWithBan(req, workerName, rejectStaleJob, 21, "job not found", now)
-		return
+		return submissionTask{}, false
 	}
 
 	if len(extranonce2) != job.Extranonce2Size*2 {
 		logger.Warn("submit invalid extranonce2 length", "remote", mc.id, "got", len(extranonce2)/2, "expected", job.Extranonce2Size)
 		mc.rejectShareWithBan(req, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
-		return
+		return submissionTask{}, false
 	}
 	en2, err := hex.DecodeString(extranonce2)
 	if err != nil {
 		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
 		mc.rejectShareWithBan(req, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
-		return
+		return submissionTask{}, false
 	}
 
 	if len(ntime) != 8 {
 		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
 		mc.rejectShareWithBan(req, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
-		return
+		return submissionTask{}, false
 	}
 	// Stratum pools send ntime as BIG-ENDIAN hex and parse it back with parseInt(hex, 16).
 	ntimeVal, err := parseUint32BEHex(ntime)
 	if err != nil {
 		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
 		mc.rejectShareWithBan(req, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
-		return
+		return submissionTask{}, false
 	}
 	// Tight ntime bounds: require ntime to be >= the template's curtime
 	// (or mintime when provided) and allow it to roll forward only a short
@@ -216,19 +232,19 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime {
 		logger.Warn("submit ntime outside window", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
 		mc.rejectShareWithBan(req, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
-		return
+		return submissionTask{}, false
 	}
 
 	if len(nonce) != 8 {
 		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
 		mc.rejectShareWithBan(req, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
-		return
+		return submissionTask{}, false
 	}
 	// Nonce is sent as BIG-ENDIAN hex in mining.notify.
 	if _, err := parseUint32BEHex(nonce); err != nil {
 		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
 		mc.rejectShareWithBan(req, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
-		return
+		return submissionTask{}, false
 	}
 
 	// BIP320: reject version rolls outside the negotiated mask (docs/protocols/bip-0320.mediawiki).
@@ -252,23 +268,23 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if versionDiff != 0 && !mc.versionRoll {
 		logger.Warn("submit rejected: version rolling disabled", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
 		mc.rejectShareWithBan(req, workerName, rejectInvalidVersion, 20, "version rolling not enabled", now)
-		return
+		return submissionTask{}, false
 	}
 	if versionDiff&^mc.versionMask != 0 {
 		logger.Warn("submit rejected: version outside mask", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
 		mc.rejectShareWithBan(req, workerName, rejectInvalidVersionMask, 20, "invalid version mask", now)
-		return
+		return submissionTask{}, false
 	}
 	if versionDiff != 0 && mc.minVerBits > 0 && bits.OnesCount32(versionDiff&mc.versionMask) < mc.minVerBits {
 		logger.Warn("submit rejected: insufficient version rolling bits", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
 		mc.rejectShareWithBan(req, workerName, rejectInsufficientVersionBits, 20, "insufficient version bits", now)
-		return
+		return submissionTask{}, false
 	}
 
 	if mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
 		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
 		mc.rejectShareWithBan(req, workerName, rejectDuplicateShare, 22, "duplicate share", now)
-		return
+		return submissionTask{}, false
 	}
 
 	task := submissionTask{
@@ -285,8 +301,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		useVersion:       useVersion,
 		receivedAt:       now,
 	}
-	ensureSubmissionWorkerPool()
-	submissionWorkers.submit(task)
+	return task, true
 }
 
 func (mc *MinerConn) processSubmissionTask(task submissionTask) {

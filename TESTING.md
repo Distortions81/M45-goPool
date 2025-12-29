@@ -72,6 +72,7 @@ go test -v ./... -run TestBuildBlock_ParsesWithBtcdAndHasValidMerkle
   - `submit_timing_test.go` - measures the time from entering the
     `handleBlockShare` path to the point where `submitblock` is invoked, using
     a fake `rpcCaller` so the test does not depend on network latency.
+  - `performance.md` - benchmark notes and capacity planning guidance.
 
 ## Profiling with simulated miners
 

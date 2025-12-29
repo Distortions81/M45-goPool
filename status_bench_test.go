@@ -242,6 +242,10 @@ func BenchmarkBuildStatusData(b *testing.B) {
 				b.ReportMetric(nsPerConn, "ns/conn")
 				if nsPerConn > 0 {
 					b.ReportMetric(benchBudgetNS/nsPerConn, "conns@10ms")
+					b.ReportMetric((5*float64(time.Millisecond))/nsPerConn, "conns@5ms")
+					b.ReportMetric((15*float64(time.Millisecond))/nsPerConn, "conns@15ms")
+					b.ReportMetric((30*float64(time.Millisecond))/nsPerConn, "conns@30ms")
+					b.ReportMetric((60*float64(time.Millisecond))/nsPerConn, "conns@60ms")
 				}
 			}
 		})
