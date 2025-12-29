@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -11,6 +12,29 @@ import (
 
 	"github.com/bytedance/sonic"
 )
+
+const maxSavedWorkersPerWalletDisplay = 16
+
+func savedWorkersWalletKey(worker string) string {
+	worker = strings.TrimSpace(worker)
+	if worker == "" {
+		return ""
+	}
+
+	// Prefer canonical base payout address when possible.
+	if base := workerBaseAddress(worker); base != "" {
+		return base
+	}
+
+	// Otherwise group by the string prefix before '.' (wallet-ish), since
+	// saved-workers naming can include non-address identifiers.
+	if parts := strings.SplitN(worker, ".", 2); len(parts) > 1 {
+		if head := strings.ToLower(strings.TrimSpace(parts[0])); head != "" {
+			return head
+		}
+	}
+	return strings.ToLower(worker)
+}
 
 func safeRedirectPath(value string) string {
 	value = strings.TrimSpace(value)
@@ -267,19 +291,34 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 
+	perWalletRowsShown := make(map[string]int, 8)
 	for _, saved := range data.SavedWorkers {
+		wallet := savedWorkersWalletKey(saved.Name)
+		if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+			continue
+		}
+
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
 
 		if len(views) == 0 {
 			// Worker is offline
+			if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+				continue
+			}
 			entry := savedWorkerEntry{
 				Name: saved.Name,
 				Hash: lookupHash,
+			}
+			if wallet != "" {
+				perWalletRowsShown[wallet]++
 			}
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
 		} else {
 			// Worker is online, show each connection separately
 			for _, view := range views {
+				if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+					break
+				}
 				hashrate := view.RollingHashrate
 				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
@@ -300,6 +339,9 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					ConnectionSeq:     view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
+				if wallet != "" {
+					perWalletRowsShown[wallet]++
+				}
 				data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
 			}
 		}
@@ -360,20 +402,46 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		SavedCount: len(saved),
 	}
 
+	perWalletRowsShown := make(map[string]int, 8)
+	totalRowsSent := 0
 	for _, savedEntry := range saved {
+		if totalRowsSent >= maxSavedWorkersPerUser {
+			break
+		}
+		wallet := savedWorkersWalletKey(savedEntry.Name)
+		if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+			continue
+		}
+
 		views, lookupHash := s.findSavedWorkerConnections(savedEntry.Name, savedEntry.Hash, now)
 
 		if len(views) == 0 {
 			// Worker is offline
+			if totalRowsSent >= maxSavedWorkersPerUser {
+				break
+			}
+			if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+				continue
+			}
 			e := entry{
 				Name:   savedEntry.Name,
 				Hash:   lookupHash,
 				Online: false,
 			}
+			if wallet != "" {
+				perWalletRowsShown[wallet]++
+			}
+			totalRowsSent++
 			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
 		} else {
 			// Worker is online, show each connection separately
 			for _, view := range views {
+				if totalRowsSent >= maxSavedWorkersPerUser {
+					break
+				}
+				if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+					break
+				}
 				hashrate := view.RollingHashrate
 				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
@@ -396,7 +464,11 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
 				}
+				if wallet != "" {
+					perWalletRowsShown[wallet]++
+				}
 				resp.OnlineCount++
+				totalRowsSent++
 				resp.OnlineWorkers = append(resp.OnlineWorkers, e)
 			}
 		}
@@ -410,6 +482,96 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		return
 	} else if _, err := w.Write(out); err != nil {
 		logger.Error("saved workers json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	now := time.Now()
+	code, expiresAt := s.getOrCreateOneTimeCode(user.UserID, now)
+	if code == "" || expiresAt.IsZero() {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := struct {
+		Code      string `json:"code"`
+		ExpiresAt string `json:"expires_at"`
+	}{
+		Code:      code,
+		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("one time code json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("one time code json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	var code string
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		type req struct {
+			Code string `json:"code"`
+		}
+		var parsed req
+		if err := json.NewDecoder(r.Body).Decode(&parsed); err == nil {
+			code = strings.TrimSpace(parsed.Code)
+		}
+	} else {
+		_ = r.ParseForm()
+		code = strings.TrimSpace(r.FormValue("code"))
+	}
+
+	cleared := false
+	if code != "" {
+		cleared = s.clearOneTimeCode(user.UserID, code, time.Now())
+	}
+
+	resp := struct {
+		Cleared bool `json:"cleared"`
+	}{Cleared: cleared}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("one time code clear json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("one time code clear json write", "error", err)
 	}
 }
 

@@ -353,6 +353,8 @@ type StatusServer struct {
 	lastCPUProc         uint64
 	lastCPUTotal        uint64
 	lastCPUUsage        float64
+	oneTimeCodeMu       sync.Mutex
+	oneTimeCodes        map[string]oneTimeCodeEntry
 
 	statusMu        sync.RWMutex
 	cachedStatus    StatusData
@@ -592,6 +594,7 @@ type StatusData struct {
 	BTCPriceUpdatedAt              string                `json:"btc_price_updated_at,omitempty"`
 	PoolDonationAddress            string                `json:"pool_donation_address,omitempty"`
 	DiscordURL                     string                `json:"discord_url,omitempty"`
+	DiscordNotificationsEnabled    bool                  `json:"discord_notifications_enabled,omitempty"`
 	GitHubURL                      string                `json:"github_url,omitempty"`
 	NodeNetwork                    string                `json:"node_network,omitempty"`
 	NodeSubversion                 string                `json:"node_subversion,omitempty"`

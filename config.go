@@ -16,6 +16,10 @@ var secretsConfigExample = []byte(`# RPC credentials for bitcoind
 rpc_user = "bitcoinrpc"
 rpc_pass = "password"
 
+# Optional Discord notifications integration.
+# discord_server_id = "123456789012345678"
+# discord_token = "YOUR_DISCORD_BOT_TOKEN"
+
 # Optional Clerk backend API secret key (development only).
 # This is needed to exchange the development __clerk_db_jwt query param into a
 # first-party __session cookie on localhost. Do NOT use this in production.
@@ -45,6 +49,12 @@ type Config struct {
 	PoolDonationAddress string
 	// DiscordURL is an optional Discord invite link shown in the header.
 	DiscordURL string
+	// DiscordServerID is the Discord server/guild ID used for optional
+	// Discord notifications features.
+	DiscordServerID string
+	// DiscordBotToken is the Discord bot token used for optional Discord
+	// notifications features. This should be stored in secrets.toml.
+	DiscordBotToken string
 	// GitHubURL is an optional GitHub link shown in the header and About page.
 	GitHubURL string
 	// ServerLocation is an optional server location string shown in the header.
@@ -303,6 +313,7 @@ type brandingConfig struct {
 	FiatCurrency                    string `toml:"fiat_currency"`
 	PoolDonationAddress             string `toml:"pool_donation_address"`
 	DiscordURL                      string `toml:"discord_url"`
+	DiscordServerID                 string `toml:"discord_server_id"`
 	GitHubURL                       string `toml:"github_url"`
 	ServerLocation                  string `toml:"server_location"`
 }
@@ -449,6 +460,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			FiatCurrency:                    cfg.FiatCurrency,
 			PoolDonationAddress:             cfg.PoolDonationAddress,
 			DiscordURL:                      cfg.DiscordURL,
+			DiscordServerID:                 cfg.DiscordServerID,
 			GitHubURL:                       cfg.GitHubURL,
 			ServerLocation:                  cfg.ServerLocation,
 		},
@@ -544,6 +556,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 type secretsConfig struct {
 	RPCUser             string `toml:"rpc_user"`
 	RPCPass             string `toml:"rpc_pass"`
+	DiscordBotToken     string `toml:"discord_token"`
 	ClerkSecretKey      string `toml:"clerk_secret_key"`
 	ClerkPublishableKey string `toml:"clerk_publishable_key"`
 }
@@ -686,6 +699,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Branding.DiscordURL != "" {
 		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
+	}
+	if fc.Branding.DiscordServerID != "" {
+		cfg.DiscordServerID = strings.TrimSpace(fc.Branding.DiscordServerID)
 	}
 	if fc.Branding.GitHubURL != "" {
 		cfg.GitHubURL = strings.TrimSpace(fc.Branding.GitHubURL)
@@ -1132,6 +1148,9 @@ func fileExists(path string) bool {
 }
 
 func applySecretsConfig(cfg *Config, sc secretsConfig) {
+	if sc.DiscordBotToken != "" {
+		cfg.DiscordBotToken = strings.TrimSpace(sc.DiscordBotToken)
+	}
 	if sc.ClerkSecretKey != "" {
 		cfg.ClerkSecretKey = sc.ClerkSecretKey
 	}

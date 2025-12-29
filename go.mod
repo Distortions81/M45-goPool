@@ -10,6 +10,7 @@ require (
 	github.com/clerk/clerk-sdk-go/v2 v2.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
+	github.com/martinhoefling/goxkcdpwgen v0.1.1
 	github.com/minio/sha256-simd v1.0.1
 	github.com/pebbe/zmq4 v1.4.0
 	github.com/pelletier/go-toml v1.9.5

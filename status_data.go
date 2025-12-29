@@ -554,6 +554,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	discordNotificationsEnabled := strings.TrimSpace(s.Config().DiscordServerID) != "" && strings.TrimSpace(s.Config().DiscordBotToken) != ""
 
 	var warnings []string
 	if s.Config().PoolFeePercent > 10 {
@@ -575,6 +576,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		FiatCurrency:                   s.Config().FiatCurrency,
 		PoolDonationAddress:            s.Config().PoolDonationAddress,
 		DiscordURL:                     s.Config().DiscordURL,
+		DiscordNotificationsEnabled:    discordNotificationsEnabled,
 		GitHubURL:                      s.Config().GitHubURL,
 		NodeRPCURL:                     s.Config().RPCURL,
 		NodeZMQAddr:                    s.Config().ZMQBlockAddr,

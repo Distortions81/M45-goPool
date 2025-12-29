@@ -19,6 +19,8 @@ func defaultConfig() Config {
 		FiatCurrency:                    defaultFiatCurrency,
 		PoolDonationAddress:             "",
 		DiscordURL:                      "",
+		DiscordServerID:                 "",
+		DiscordBotToken:                 "",
 		GitHubURL:                       defaultGitHubURL,
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.

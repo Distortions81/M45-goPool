@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -249,5 +251,56 @@ func BenchmarkBuildStatusData(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+var (
+	memBench500kOnce   sync.Once
+	memBench500kServer *StatusServer
+	memBench500kDelta  runtime.MemStats
+	memBench500kLive   runtime.MemStats
+)
+
+func initMemBench500k() {
+	const workerCount = 500_000
+
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	memBench500kServer = benchmarkStatusServerWithConns(workerCount)
+
+	runtime.GC()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	memBench500kDelta.HeapAlloc = after.HeapAlloc - before.HeapAlloc
+	memBench500kDelta.HeapInuse = after.HeapInuse - before.HeapInuse
+	memBench500kDelta.HeapObjects = after.HeapObjects - before.HeapObjects
+	memBench500kLive = after
+}
+
+// BenchmarkEstimateMemory500kWorkers reports a rough estimate of live heap
+// memory used to keep 500k worker connections in memory.
+//
+// Notes:
+// - This benchmark intentionally does most work in a sync.Once setup step so
+//   the Go benchmark runner doesn't allocate 500k workers multiple times while
+//   calibrating b.N.
+// - Run explicitly (it is expensive): `go test -run '^$' -bench BenchmarkEstimateMemory500kWorkers -count=1`.
+func BenchmarkEstimateMemory500kWorkers(b *testing.B) {
+	const workerCount = 500_000
+	memBench500kOnce.Do(initMemBench500k)
+
+	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/(1024*1024), "heapAllocMB")
+	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/(1024*1024), "heapInuseMB")
+	b.ReportMetric(float64(memBench500kDelta.HeapObjects), "heapObjects")
+	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/float64(workerCount), "B/worker")
+	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/float64(workerCount), "inuseB/worker")
+	b.ReportMetric(float64(memBench500kLive.HeapAlloc)/(1024*1024), "liveHeapAllocMB")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		runtime.KeepAlive(memBench500kServer)
 	}
 }
