@@ -284,10 +284,10 @@ func initMemBench500k() {
 // memory used to keep 500k worker connections in memory.
 //
 // Notes:
-// - This benchmark intentionally does most work in a sync.Once setup step so
-//   the Go benchmark runner doesn't allocate 500k workers multiple times while
-//   calibrating b.N.
-// - Run explicitly (it is expensive): `go test -run '^$' -bench BenchmarkEstimateMemory500kWorkers -count=1`.
+//   - This benchmark intentionally does most work in a sync.Once setup step so
+//     the Go benchmark runner doesn't allocate 500k workers multiple times while
+//     calibrating b.N.
+//   - Run explicitly (it is expensive): `go test -run '^$' -bench BenchmarkEstimateMemory500kWorkers -count=1`.
 func BenchmarkEstimateMemory500kWorkers(b *testing.B) {
 	const workerCount = 500_000
 	memBench500kOnce.Do(initMemBench500k)
