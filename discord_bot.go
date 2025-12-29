@@ -555,9 +555,6 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 		if len(onlineOverdue) > 0 {
 			parts = append(parts, fmt.Sprintf("%d miners back online (2+ min)", len(onlineOverdue)))
 		}
-		if url := n.savedWorkersURL(); url != "" {
-			parts = append(parts, "(click for status) "+url)
-		}
 	}
 
 	line := strings.Join(parts, " | ")
@@ -938,6 +935,13 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 		}
 		n.pingMu.Unlock()
 		return
+	}
+
+	if url := n.savedWorkersURL(); url != "" {
+		footer := "[check status / pings off](" + url + ")"
+		if len(msg)+2+len(footer) <= 1000 {
+			msg = msg + "\n" + footer
+		}
 	}
 
 	_, err := n.dg.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{

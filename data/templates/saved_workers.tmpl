@@ -102,7 +102,9 @@
 
 			<div class="card">
 				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-					<h2 style="margin-top:0;">Privacy</h2>
+					<h2 style="margin-top:0;">Options</h2>
+				</div>
+				<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
 					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" style="gap:8px;">
 						<span id="privacyToggleIcon" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -113,9 +115,24 @@
 						</span>
 						<span id="privacyToggleText">Privacy</span>
 					</button>
+
+					{{if .DiscordNotificationsEnabled}}
+						<button
+							id="notifyAllToggle"
+							class="btn btn-secondary"
+							type="button"
+							{{if not .DiscordNotificationsRegistered}}disabled{{end}}
+							data-enabled="{{if .DiscordNotificationsUserEnabled}}1{{else}}0{{end}}"
+							aria-label="{{if .DiscordNotificationsRegistered}}{{if .DiscordNotificationsUserEnabled}}Disable notifications{{else}}Enable notifications{{end}}{{else}}Register first to manage notifications{{end}}"
+							title="{{if .DiscordNotificationsRegistered}}{{if .DiscordNotificationsUserEnabled}}Disable notifications{{else}}Enable notifications{{end}}{{else}}Register first to manage notifications{{end}}"
+						>{{if .DiscordNotificationsUserEnabled}}🔕 Disable notifications{{else}}🔔 Enable notifications{{end}}</button>
+						<button id="oneTimeCodeGenerate" class="btn btn-highlight{{if .DiscordNotificationsRegistered}} no-glow{{end}}" type="button" aria-label="Connect Your Discord Account!">
+							Connect Your Discord Account!
+						</button>
+					{{end}}
 				</div>
-				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
-					Hides your worker names on this page (useful when screen sharing).
+				<p class="text-sm" style="color:var(--text-muted); margin:10px 0 0;">
+					Privacy hides worker names on this page; notification settings affect Discord pings.
 				</p>
 			</div>
 
@@ -125,11 +142,6 @@
 					<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
 						<h2 style="margin:0;">Offline Workers</h2>
 						<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end;">
-							{{if .DiscordNotificationsEnabled}}
-								<button id="oneTimeCodeGenerate" class="btn btn-highlight{{if .DiscordNotificationsRegistered}} no-glow{{end}}" type="button" aria-label="Get Discord notifications">
-									Get Discord notifications
-								</button>
-							{{end}}
 							<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
 								{{$offlineCount}} offline
 							</span>
@@ -145,9 +157,9 @@
 							</div>
 							<span class="badge badge-danger">Offline</span>
 							<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
-								{{if $.DiscordNotificationsEnabled}}
-									<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" title="{{if .NotifyEnabled}}Disable notifications for this worker{{else}}Enable notifications for this worker{{end}}">
-										{{if .NotifyEnabled}}Notif: On{{else}}Notif: Off{{end}}
+							{{if $.DiscordNotificationsEnabled}}
+									<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+										{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
 									</button>
 								{{end}}
 								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
@@ -192,7 +204,7 @@
 					</div>
 				</div>
 				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
-					Note: For workers sharing the same wallet, only the first 16 are displayed here.
+					Note: For workers sharing the same wallet and name, only the first 16 are displayed here.
 				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
@@ -229,8 +241,8 @@
 									<td style="text-align:right;">
 										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 											{{if $.DiscordNotificationsEnabled}}
-												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" title="{{if .NotifyEnabled}}Disable notifications for this worker{{else}}Enable notifications for this worker{{end}}">
-													{{if .NotifyEnabled}}Notif: On{{else}}Notif: Off{{end}}
+												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+													{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
 												</button>
 											{{end}}
 											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
@@ -271,9 +283,9 @@
 	<dialog id="discordNotifDialog" class="discord-dialog" aria-label="Discord notifications setup">
 		<div class="discord-dialog-header">
 			<div style="display:flex; flex-direction:column; gap:2px;">
-				<div style="font-weight:700;">Discord notifications</div>
-				<div class="text-sm" style="color:var(--text-muted);">Get pinged when your saved workers go offline/online.</div>
-			</div>
+			<div style="font-weight:700;">Connect your Discord account</div>
+			<div class="text-sm" style="color:var(--text-muted);">Get pinged when your saved workers go offline/online.</div>
+		</div>
 			<button id="discordNotifClose" class="btn btn-secondary" type="button" aria-label="Close">Close</button>
 		</div>
 		<div class="discord-dialog-body">
@@ -961,11 +973,11 @@
 		}
 
 		function notifyToggleText(enabled) {
-			return enabled ? 'Notif: On' : 'Notif: Off';
+			return enabled ? '🔔' : '🔕';
 		}
 
 		function notifyToggleTitle(enabled) {
-			return enabled ? 'Disable notifications for this worker' : 'Enable notifications for this worker';
+			return enabled ? 'Disable pings for this worker' : 'Enable pings for this worker';
 		}
 
 		function applyLastOnlineLabels(root) {
@@ -1019,6 +1031,45 @@
 			}
 		}
 
+		function notifyAllToggleText(enabled) {
+			return enabled ? '🔕 Disable notifications' : '🔔 Enable notifications';
+		}
+
+		function notifyAllToggleTitle(enabled) {
+			return enabled ? 'Disable notifications' : 'Enable notifications';
+		}
+
+		function attachNotifyAllButtons() {
+			if (!discordNotificationsEnabled) return;
+			const btn = document.getElementById('notifyAllToggle');
+			if (btn && !btn.__notifyAllAttached) {
+				btn.__notifyAllAttached = true;
+				btn.addEventListener('click', async function() {
+					const cur = String(btn.getAttribute('data-enabled') || '0').trim() === '1';
+					const next = !cur;
+					if (!confirm(next ? 'Enable notifications for your account?' : 'Disable notifications for your account?')) return;
+					btn.disabled = true;
+					try {
+						const res = await fetchWithAuthRefresh('/api/discord/notify-enabled', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ enabled: next }),
+						});
+						if (!res.ok) throw new Error('request failed');
+						btn.setAttribute('data-enabled', next ? '1' : '0');
+						btn.textContent = notifyAllToggleText(next);
+						btn.title = notifyAllToggleTitle(next);
+					} catch (_) {
+						// ignore
+					} finally {
+						btn.disabled = false;
+						refreshSavedWorkers();
+					}
+				});
+			}
+		}
+
 		function updatePrivacyToggle() {
 			const btn = document.getElementById('privacyToggleNames');
 			const text = document.getElementById('privacyToggleText');
@@ -1031,6 +1082,15 @@
 				const res = await fetchWithAuthRefresh('/api/saved-workers', { credentials: 'same-origin' });
 				if (!res.ok) return;
 				const data = await res.json();
+				const notifyAllToggle = document.getElementById('notifyAllToggle');
+				if (notifyAllToggle && typeof data.discord_registered === 'boolean') {
+					const registered = !!data.discord_registered;
+					const enabled = !!data.discord_notify_enabled;
+					notifyAllToggle.disabled = !registered;
+					notifyAllToggle.setAttribute('data-enabled', enabled ? '1' : '0');
+					notifyAllToggle.textContent = notifyAllToggleText(enabled);
+					notifyAllToggle.title = registered ? notifyAllToggleTitle(enabled) : 'Register first to manage notifications';
+				}
 				const savedCount = document.getElementById('savedCount');
 				const savedMax = document.getElementById('savedMax');
 				const onlineCount = document.getElementById('onlineCount');
@@ -1126,6 +1186,7 @@
 		applyWorkerNameCensoring(document);
 		applyLastOnlineLabels(document);
 		attachNotifyToggles(document);
+		attachNotifyAllButtons();
 		updatePrivacyToggle();
 
 		// Best-effort: keep the login cookie fresh while this page is open.

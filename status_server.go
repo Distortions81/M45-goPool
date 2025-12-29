@@ -633,8 +633,9 @@ func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusDa
 				logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
 			}
 			if data.DiscordNotificationsEnabled {
-				if enabled, err := s.workerLists.IsDiscordLinkEnabled(user.UserID); err == nil {
-					data.DiscordNotificationsRegistered = enabled
+				if _, enabled, ok, err := s.workerLists.GetDiscordLink(user.UserID); err == nil {
+					data.DiscordNotificationsRegistered = ok
+					data.DiscordNotificationsUserEnabled = ok && enabled
 				}
 			}
 		}

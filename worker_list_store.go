@@ -293,23 +293,22 @@ func (s *workerListStore) ListEnabledDiscordLinks() ([]discordLink, error) {
 	return out, nil
 }
 
-func (s *workerListStore) IsDiscordLinkEnabled(userID string) (bool, error) {
+func (s *workerListStore) GetDiscordLink(userID string) (discordUserID string, enabled bool, ok bool, err error) {
 	if s == nil || s.db == nil {
-		return false, nil
+		return "", false, false, nil
 	}
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return false, nil
+		return "", false, false, nil
 	}
 	var enabledInt int
-	err := s.db.QueryRow("SELECT enabled FROM discord_links WHERE user_id = ?", userID).Scan(&enabledInt)
-	if err != nil {
+	if err := s.db.QueryRow("SELECT discord_user_id, enabled FROM discord_links WHERE user_id = ?", userID).Scan(&discordUserID, &enabledInt); err != nil {
 		if err == sql.ErrNoRows {
-			return false, nil
+			return "", false, false, nil
 		}
-		return false, err
+		return "", false, false, err
 	}
-	return enabledInt != 0, nil
+	return strings.TrimSpace(discordUserID), enabledInt != 0, true, nil
 }
 
 func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]workerNotifyState, error) {
@@ -363,6 +362,51 @@ func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]wor
 		out[hash] = st
 	}
 	return out, nil
+}
+
+func (s *workerListStore) SetDiscordLinkEnabled(userID string, enabled bool, now time.Time) (ok bool, err error) {
+	if s == nil || s.db == nil {
+		return false, nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false, nil
+	}
+
+	if _, _, exists, err := s.GetDiscordLink(userID); err != nil {
+		return false, err
+	} else if !exists {
+		return false, nil
+	}
+
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err = s.db.Exec("UPDATE discord_links SET enabled = ?, updated_at = ? WHERE user_id = ?", val, now.Unix(), userID)
+	return true, err
+}
+
+func (s *workerListStore) ResetDiscordWorkerStateTimers(userID string, now time.Time) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+	ts := now.Unix()
+	_, err := s.db.Exec(`
+		UPDATE discord_worker_state
+		SET
+			since = ?,
+			offline_notified = 0,
+			recovery_eligible = 0,
+			recovery_notified = 0,
+			updated_at = ?
+		WHERE user_id = ?
+	`, ts, ts, userID)
+	return err
 }
 
 func (s *workerListStore) PersistDiscordWorkerStates(userID string, upserts map[string]workerNotifyState, deletes []string, now time.Time) error {

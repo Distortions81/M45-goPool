@@ -413,17 +413,32 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 			stateByHash = st
 		}
 	}
+	discordRegistered := false
+	discordUserEnabled := false
+	if s.workerLists != nil &&
+		strings.TrimSpace(s.Config().DiscordServerID) != "" &&
+		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
+		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != "" {
+		if _, enabled, ok, err := s.workerLists.GetDiscordLink(user.UserID); err == nil {
+			discordRegistered = ok
+			discordUserEnabled = ok && enabled
+		}
+	}
 	resp := struct {
-		UpdatedAt      string  `json:"updated_at"`
-		SavedMax       int     `json:"saved_max"`
-		SavedCount     int     `json:"saved_count"`
-		OnlineCount    int     `json:"online_count"`
-		OnlineWorkers  []entry `json:"online_workers"`
-		OfflineWorkers []entry `json:"offline_workers"`
+		UpdatedAt            string  `json:"updated_at"`
+		SavedMax             int     `json:"saved_max"`
+		SavedCount           int     `json:"saved_count"`
+		OnlineCount          int     `json:"online_count"`
+		DiscordRegistered    bool    `json:"discord_registered,omitempty"`
+		DiscordNotifyEnabled bool    `json:"discord_notify_enabled,omitempty"`
+		OnlineWorkers        []entry `json:"online_workers"`
+		OfflineWorkers       []entry `json:"offline_workers"`
 	}{
-		UpdatedAt:  now.UTC().Format(time.RFC3339),
-		SavedMax:   maxSavedWorkersPerUser,
-		SavedCount: len(saved),
+		UpdatedAt:            now.UTC().Format(time.RFC3339),
+		SavedMax:             maxSavedWorkersPerUser,
+		SavedCount:           len(saved),
+		DiscordRegistered:    discordRegistered,
+		DiscordNotifyEnabled: discordUserEnabled,
 	}
 
 	perWalletRowsShown := make(map[string]int, 8)
@@ -671,6 +686,73 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 		return
 	}
 	_ = s.workerLists.PersistDiscordWorkerStates(user.UserID, nil, []string{hash}, now)
+
+	resp := struct {
+		OK      bool `json:"ok"`
+		Enabled bool `json:"enabled"`
+	}{
+		OK:      true,
+		Enabled: *parsed.Enabled,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
+	}
+}
+
+func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" || strings.TrimSpace(s.Config().DiscordNotifyChannelID) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	type req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
+			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
+			parsed.Enabled = &b
+		}
+	}
+	if parsed.Enabled == nil {
+		http.Error(w, "missing enabled", http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	ok, err := s.workerLists.SetDiscordLinkEnabled(user.UserID, *parsed.Enabled, now)
+	if err != nil {
+		logger.Warn("discord notify toggle failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "not registered", http.StatusNotFound)
+		return
+	}
+	_ = s.workerLists.ResetDiscordWorkerStateTimers(user.UserID, now)
 
 	resp := struct {
 		OK      bool `json:"ok"`
