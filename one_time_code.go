@@ -28,6 +28,8 @@ func generateOneTimeCodeXKCD() string {
 	return strings.TrimSpace(g.GeneratePasswordString())
 }
 
+var oneTimeCodeGenerator = generateOneTimeCodeXKCD
+
 func (s *StatusServer) initOneTimeCodesLocked() {
 	if s.oneTimeCodes == nil {
 		s.oneTimeCodes = make(map[string]oneTimeCodeEntry)
@@ -40,6 +42,19 @@ func (s *StatusServer) cleanupExpiredOneTimeCodesLocked(now time.Time) {
 			delete(s.oneTimeCodes, userID)
 		}
 	}
+}
+
+func (s *StatusServer) oneTimeCodeInUseLocked(code string) bool {
+	code = strings.TrimSpace(code)
+	if s == nil || code == "" {
+		return false
+	}
+	for _, entry := range s.oneTimeCodes {
+		if entry.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *StatusServer) getOrCreateOneTimeCode(userID string, now time.Time) (code string, expiresAt time.Time) {
@@ -60,23 +75,24 @@ func (s *StatusServer) getOrCreateOneTimeCode(userID string, now time.Time) (cod
 	s.evictOneTimeCodesLocked(now)
 
 	// Best-effort uniqueness and non-empty output.
-	for i := 0; i < 5; i++ {
-		code = generateOneTimeCodeXKCD()
-		if code != "" {
-			break
+	for i := 0; i < 50; i++ {
+		code = strings.TrimSpace(oneTimeCodeGenerator())
+		if code == "" {
+			continue
 		}
-	}
-	if code == "" {
-		return "", time.Time{}
+		if s.oneTimeCodeInUseLocked(code) {
+			continue
+		}
+		expiresAt = now.Add(oneTimeCodeTTL)
+		s.oneTimeCodes[userID] = oneTimeCodeEntry{
+			Code:      code,
+			CreatedAt: now,
+			ExpiresAt: expiresAt,
+		}
+		return code, expiresAt
 	}
 
-	expiresAt = now.Add(oneTimeCodeTTL)
-	s.oneTimeCodes[userID] = oneTimeCodeEntry{
-		Code:      code,
-		CreatedAt: now,
-		ExpiresAt: expiresAt,
-	}
-	return code, expiresAt
+	return "", time.Time{}
 }
 
 func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code string, expiresAt time.Time) {
@@ -95,23 +111,23 @@ func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code 
 
 	s.evictOneTimeCodesLocked(now)
 
-	for i := 0; i < 5; i++ {
-		code = generateOneTimeCodeXKCD()
-		if code != "" {
-			break
+	for i := 0; i < 50; i++ {
+		code = strings.TrimSpace(oneTimeCodeGenerator())
+		if code == "" {
+			continue
 		}
+		if s.oneTimeCodeInUseLocked(code) {
+			continue
+		}
+		expiresAt = now.Add(oneTimeCodeTTL)
+		s.oneTimeCodes[userID] = oneTimeCodeEntry{
+			Code:      code,
+			CreatedAt: now,
+			ExpiresAt: expiresAt,
+		}
+		return code, expiresAt
 	}
-	if code == "" {
-		return "", time.Time{}
-	}
-
-	expiresAt = now.Add(oneTimeCodeTTL)
-	s.oneTimeCodes[userID] = oneTimeCodeEntry{
-		Code:      code,
-		CreatedAt: now,
-		ExpiresAt: expiresAt,
-	}
-	return code, expiresAt
+	return "", time.Time{}
 }
 
 func (s *StatusServer) evictOneTimeCodesLocked(now time.Time) {
