@@ -252,6 +252,9 @@
 
 		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
 			<div class="mono" id="overview-data-refreshed">Data loading...</div>
+			<div style="margin-top:4px;">
+				Rendered in <span class="mono" id="overview-render-time">--</span>
+			</div>
 		</div>
 
 		{{template "footer" .}}
@@ -534,7 +537,7 @@
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
 					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
-					const connectionId = worker.connection_id || '—';
+					const connectionId = worker.connection_id ?? '—';
 					return `
 						<tr>
 							<td class="mono">${name}</td>
@@ -690,7 +693,7 @@
 		}
 
 		function updateRenderTime(duration) {
-			const renderTimeEl = document.querySelector('.mono:last-of-type');
+			const renderTimeEl = document.getElementById('overview-render-time');
 			if (!renderTimeEl || !duration) return;
 			const ms = duration / 1000000;
 			renderTimeEl.textContent = ms.toFixed(2) + 'ms';
