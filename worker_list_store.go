@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -13,6 +14,14 @@ const maxSavedWorkersPerUser = 64
 
 type workerListStore struct {
 	db *sql.DB
+}
+
+type discordLink struct {
+	UserID        string
+	DiscordUserID string
+	Enabled       bool
+	LinkedAt      time.Time
+	UpdatedAt     time.Time
 }
 
 func newWorkerListStore(path string) (*workerListStore, error) {
@@ -48,6 +57,22 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS saved_workers_hash_idx ON saved_workers (user_id, worker_hash)`); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS discord_links (
+			user_id TEXT PRIMARY KEY,
+			discord_user_id TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			linked_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS discord_links_discord_user_idx ON discord_links (discord_user_id)`); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -134,6 +159,78 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 		return nil, err
 	}
 	return workers, nil
+}
+
+func (s *workerListStore) UpsertDiscordLink(userID, discordUserID string, enabled bool, now time.Time) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	discordUserID = strings.TrimSpace(discordUserID)
+	if userID == "" || discordUserID == "" {
+		return nil
+	}
+	enabledInt := 0
+	if enabled {
+		enabledInt = 1
+	}
+	ts := now.Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO discord_links (user_id, discord_user_id, enabled, linked_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET
+			discord_user_id = excluded.discord_user_id,
+			enabled = excluded.enabled,
+			updated_at = excluded.updated_at
+	`, userID, discordUserID, enabledInt, ts, ts)
+	return err
+}
+
+func (s *workerListStore) DisableDiscordLinkByDiscordUserID(discordUserID string, now time.Time) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	discordUserID = strings.TrimSpace(discordUserID)
+	if discordUserID == "" {
+		return nil
+	}
+	_, err := s.db.Exec("UPDATE discord_links SET enabled = 0, updated_at = ? WHERE discord_user_id = ?", now.Unix(), discordUserID)
+	return err
+}
+
+func (s *workerListStore) ListEnabledDiscordLinks() ([]discordLink, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT user_id, discord_user_id, enabled, linked_at, updated_at FROM discord_links WHERE enabled = 1 ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []discordLink
+	for rows.Next() {
+		var (
+			entry         discordLink
+			enabledInt    int
+			linkedAtUnix  int64
+			updatedAtUnix int64
+		)
+		if err := rows.Scan(&entry.UserID, &entry.DiscordUserID, &enabledInt, &linkedAtUnix, &updatedAtUnix); err != nil {
+			return nil, err
+		}
+		entry.UserID = strings.TrimSpace(entry.UserID)
+		entry.DiscordUserID = strings.TrimSpace(entry.DiscordUserID)
+		entry.Enabled = enabledInt != 0
+		if linkedAtUnix > 0 {
+			entry.LinkedAt = time.Unix(linkedAtUnix, 0)
+		}
+		if updatedAtUnix > 0 {
+			entry.UpdatedAt = time.Unix(updatedAtUnix, 0)
+		}
+		out = append(out, entry)
+	}
+	return out, nil
 }
 
 func (s *workerListStore) Remove(userID, worker string) error {

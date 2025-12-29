@@ -274,6 +274,10 @@ func main() {
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
+	notifier := &discordNotifier{s: statusServer}
+	if err := notifier.start(ctx); err != nil {
+		logger.Warn("discord notifier start failed", "error", err)
+	}
 
 	// Start SIGUSR1/SIGUSR2 handler for live template/config reloading
 	go func() {

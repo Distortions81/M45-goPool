@@ -91,3 +91,32 @@ func (s *StatusServer) clearOneTimeCode(userID, code string, now time.Time) bool
 	delete(s.oneTimeCodes, userID)
 	return true
 }
+
+func (s *StatusServer) redeemOneTimeCode(code string, now time.Time) (userID string, ok bool) {
+	if s == nil {
+		return "", false
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", false
+	}
+
+	s.oneTimeCodeMu.Lock()
+	defer s.oneTimeCodeMu.Unlock()
+
+	s.initOneTimeCodesLocked()
+	s.cleanupExpiredOneTimeCodesLocked(now)
+
+	for uid, entry := range s.oneTimeCodes {
+		if entry.Code != code {
+			continue
+		}
+		if entry.ExpiresAt.IsZero() || now.After(entry.ExpiresAt) {
+			delete(s.oneTimeCodes, uid)
+			return "", false
+		}
+		delete(s.oneTimeCodes, uid)
+		return uid, true
+	}
+	return "", false
+}

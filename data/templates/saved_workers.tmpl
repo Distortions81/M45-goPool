@@ -239,7 +239,7 @@
 				oneTimeCodeValueEl.style.display = activeOneTimeCode ? '' : 'none';
 			}
 			if (oneTimeCodeStatusEl) {
-				oneTimeCodeStatusEl.textContent = activeOneTimeCode ? 'Click to copy • Expires in 5m' : '';
+				oneTimeCodeStatusEl.textContent = activeOneTimeCode ? 'Click to copy, then run /notify <code> in Discord • Expires in 5m' : '';
 				oneTimeCodeStatusEl.style.display = activeOneTimeCode ? '' : 'none';
 			}
 			if (oneTimeCodeTimeout) clearTimeout(oneTimeCodeTimeout);
@@ -281,25 +281,24 @@
 
 			if (oneTimeCodeValueEl && !oneTimeCodeValueEl.__oneTimeCodeCopyAttached) {
 				oneTimeCodeValueEl.__oneTimeCodeCopyAttached = true;
-				oneTimeCodeValueEl.addEventListener('click', async function() {
-					const code = activeOneTimeCode;
-					if (!code) return;
-					try {
-						const ok = await copyTextToClipboard(code);
-						if (!ok) throw new Error('copy failed');
-						await fetch('/api/saved-workers/one-time-code/clear', {
-							method: 'POST',
-							credentials: 'same-origin',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ code }),
-						});
-						clearOneTimeCode('Copied');
-						setTimeout(() => clearOneTimeCode(''), 1200);
-					} catch (_) {
-						prompt('Copy one-time code:', code);
-					}
-				});
-			}
+					oneTimeCodeValueEl.addEventListener('click', async function() {
+						const code = activeOneTimeCode;
+						if (!code) return;
+						try {
+							const ok = await copyTextToClipboard(code);
+							if (!ok) throw new Error('copy failed');
+							if (oneTimeCodeStatusEl) {
+								oneTimeCodeStatusEl.textContent = 'Copied';
+								oneTimeCodeStatusEl.style.display = '';
+								setTimeout(() => {
+									if (activeOneTimeCode) oneTimeCodeStatusEl.textContent = 'Click to copy, then run /notify <code> in Discord • Expires in 5m';
+								}, 1200);
+							}
+						} catch (_) {
+							prompt('Copy one-time code:', code);
+						}
+					});
+				}
 		}
 
 		// Saved workers total hashrate graph (sum of online workers).
