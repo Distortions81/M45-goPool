@@ -292,15 +292,48 @@ func BenchmarkEstimateMemory500kWorkers(b *testing.B) {
 	const workerCount = 500_000
 	memBench500kOnce.Do(initMemBench500k)
 
-	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/(1024*1024), "heapAllocMB")
-	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/(1024*1024), "heapInuseMB")
+	miB := float64(1024 * 1024)
+	kiB := float64(1024)
+	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/miB, "heapAllocMiB")
+	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/miB, "heapInuseMiB")
 	b.ReportMetric(float64(memBench500kDelta.HeapObjects), "heapObjects")
 	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/float64(workerCount), "B/worker")
+	b.ReportMetric(float64(memBench500kDelta.HeapAlloc)/float64(workerCount)/kiB, "KiB/worker")
 	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/float64(workerCount), "inuseB/worker")
-	b.ReportMetric(float64(memBench500kLive.HeapAlloc)/(1024*1024), "liveHeapAllocMB")
+	b.ReportMetric(float64(memBench500kDelta.HeapInuse)/float64(workerCount)/kiB, "inuseKiB/worker")
+	b.ReportMetric(float64(memBench500kLive.HeapAlloc)/miB, "liveHeapAllocMiB")
+
+	b.Logf("Estimated 500k workers memory: heapAlloc=%s heapInuse=%s objects=%d (alloc≈%s/worker inuse≈%s/worker)",
+		formatBytesIEC(memBench500kDelta.HeapAlloc),
+		formatBytesIEC(memBench500kDelta.HeapInuse),
+		memBench500kDelta.HeapObjects,
+		formatBytesIEC(uint64(float64(memBench500kDelta.HeapAlloc)/float64(workerCount))),
+		formatBytesIEC(uint64(float64(memBench500kDelta.HeapInuse)/float64(workerCount))),
+	)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		runtime.KeepAlive(memBench500kServer)
+	}
+}
+
+func formatBytesIEC(n uint64) string {
+	const (
+		KiB = 1024
+		MiB = 1024 * KiB
+		GiB = 1024 * MiB
+		TiB = 1024 * GiB
+	)
+	switch {
+	case n >= TiB:
+		return fmt.Sprintf("%.2f TiB", float64(n)/float64(TiB))
+	case n >= GiB:
+		return fmt.Sprintf("%.2f GiB", float64(n)/float64(GiB))
+	case n >= MiB:
+		return fmt.Sprintf("%.2f MiB", float64(n)/float64(MiB))
+	case n >= KiB:
+		return fmt.Sprintf("%.2f KiB", float64(n)/float64(KiB))
+	default:
+		return fmt.Sprintf("%d B", n)
 	}
 }
