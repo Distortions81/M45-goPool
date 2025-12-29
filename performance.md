@@ -1,147 +1,78 @@
-# Performance
+# Performance (Operator Notes)
 
-This document summarizes the pool’s main CPU cost centers and the benchmarks we
-use to keep them in check. Numbers vary by hardware and Go version; always run
-the benchmarks on your target machine for capacity planning.
+This is a practical, operator-friendly reference for “how much can this box
+handle?” using simple benchmarks. It focuses on **CPU only** (network ignored).
 
-## What matters (CPU-only)
+These numbers are meant as a *ballpark*, not a guarantee. Real deployments will
+hit other limits too (file descriptors, memory, kernel/network overhead, TLS,
+disk logging, etc.).
 
-At a high level, pool CPU is dominated by:
-
-- **Share submission verification**: per-share coinbase/header build, SHA256d,
-  difficulty math, stats/accounting, and response serialization.
-- **Status snapshot rebuild**: iterating over connections to rebuild the cached
-  status snapshot used by the web UI and JSON endpoints.
-- **JSON payload assembly**: per-endpoint censoring and slice copying for the
-  specific fields that are actually returned.
-
-This doc is focused on CPU. Network bandwidth, socket limits, and miner/network
-latency will usually become constraints *before* pure CPU, depending on your
-deployment.
-
-## Status/UI architecture (why it scales)
-
-- Status endpoints read a cached snapshot via `(*StatusServer).statusDataView()`
-  and **only copy/censor what they serialize**, instead of deep-cloning the
-  entire `StatusData`.
-- Pool-wide `SharesPerSecond/SharesPerMinute` are tracked in `PoolMetrics` as a
-  rolling 60s window so reads are **O(1)** (not a scan of all workers).
-- Pool-wide `PoolHashrate` is tracked as an aggregate of per-connection rolling
-  hashrate updates, so reads are **O(1)** (not a scan of all connections).
-- The status snapshot itself (`buildStatusData`) is rebuilt at most once per
-  `defaultRefreshInterval` (currently 10s) and then served from cache.
-
-## Benchmarks
-
-### Benchmark environment
-
-Example numbers in this doc were captured on:
+## Reference machine (for the numbers below)
 
 - CPU: AMD Ryzen 9 7950X 16-Core Processor
 - OS/Arch: linux/amd64
 - Go: go1.24.11
 
-### Share processing throughput (CPU per accepted share)
+## Quick capacity picture (CPU-only, network ignored)
 
-Benchmark:
+We assume **15 shares/min per worker** for rough planning.
 
-- `miner_submit_bench_test.go` → `BenchmarkHandleSubmitAndProcessAcceptedShare`
+- **Share handling headroom is huge on this CPU.** Even including submit
+  parsing/validation, we measured about **~1.16M shares/sec** of CPU throughput.
+  At 15 shares/min/worker (0.25 shares/sec/worker), that’s a *theoretical*
+  **~4.6M workers at 100% CPU** for share checking alone.
+- **What will limit “snappy dashboard” first is status rebuilding**, because it
+  scales with the number of connected miners and is paid periodically (and on
+  the first request after the cache expires).
 
-What it measures:
+In other words: for “web UI feels fast”, plan around the dashboard/status work,
+not around share hashing.
 
-- The CPU cost of `handleSubmit` parsing/validation + duplicate-share check,
-  plus `(*MinerConn).processSubmissionTask(...)` for an accepted (non-block)
-  share, including stats/accounting + response JSON serialization.
-- It uses a no-op `net.Conn`, so it excludes real kernel/network I/O.
+## What uses CPU (and what it means)
 
-Run:
+- **Every share submitted by miners**: parse the message, validate it, do the
+  proof-of-work checks, update stats, and send a response. More shares/min per
+  worker means more CPU per worker.
+- **Keeping the dashboard fresh**: the server rebuilds a status snapshot by
+  scanning connections. With more connected miners, this takes longer.
+- **Serving the web/API**: turning that snapshot into JSON responses costs some
+  CPU, but it’s usually smaller than the snapshot rebuild itself.
+
+## “Low-latency max workers” (dashboard rebuild budget)
+
+If you want the UI to feel responsive, a simple rule of thumb is:
+
+“How many connected workers can we scan/rebuild in **X ms**?”
+
+On the reference 7950X, measured rebuild budgets are roughly:
+
+- ~`2.7k` workers @ `5ms`
+- ~`5.3k` workers @ `10ms`
+- ~`8.0k` workers @ `15ms`
+- ~`16.0k` workers @ `30ms`
+- ~`32.1k` workers @ `60ms`
+
+Notes:
+
+- The status snapshot is cached and only rebuilt about once per
+  `defaultRefreshInterval` (currently 10s), so most requests are “cheap reads”.
+  The “spike” happens on rebuild.
+- At **15 shares/min per worker**, share CPU is not the limiting factor at these
+  worker counts (e.g. `10k workers` ≈ `2.5k shares/sec`, far below the measured
+  share-processing throughput).
+
+## Re-running these numbers on your hardware
+
+Run the two benchmarks:
 
 ```bash
 go test -run '^$' -bench 'BenchmarkHandleSubmitAndProcessAcceptedShare$' -benchmem
+go test -run '^$' -bench 'BenchmarkBuildStatusData$' -benchmem
 ```
 
-Example (Ryzen 9 7950X, from a local run):
-
-- ~`~0.85 µs/share` ⇒ ~`~1.18M shares/s` (CPU-only, no real network I/O)
-- Converted to “workers” at **15 shares/min per worker**:
-  `workers ≈ shares/s * 60 / 15` (≈ `shares/s * 4`)
-
-Profiling:
+If you want a CPU profile (to see what’s taking time):
 
 ```bash
 go test -run '^$' -bench 'BenchmarkHandleSubmitAndProcessAcceptedShare$' -cpuprofile cpu_submit.out
 go tool pprof -top ./goPool.test cpu_submit.out
 ```
-
-### Status snapshot rebuild (CPU per connection)
-
-Benchmark:
-
-- `status_bench_test.go` → `BenchmarkBuildStatusData`
-
-What it measures:
-
-- The CPU cost of rebuilding the cached status snapshot (`buildStatusData`)
-  as a function of live connection count.
-- It reports `ns/conn` and a derived `conns@10ms` (how many connections could be
-  processed within a 10ms CPU budget for a single rebuild). It also reports
-  `conns@5ms`, `conns@15ms`, `conns@30ms`, and `conns@60ms`.
-
-Run:
-
-```bash
-go test -run '^$' -bench 'BenchmarkBuildStatusData$' -benchmem
-```
-
-### Overview payload assembly (CPU per rendered worker)
-
-Benchmark:
-
-- `status_bench_test.go` → `BenchmarkOverviewPagePayload`
-
-What it measures:
-
-- The CPU cost of assembling the overview JSON response from the cached view,
-  copying/censoring only the small slices the page returns.
-- It reports `ns/recent_worker` (based on `RecentWork`, not total workers).
-
-Run:
-
-```bash
-go test -run '^$' -bench 'BenchmarkOverviewPagePayload$' -benchmem
-```
-
-## Ballpark “max workers” (low-latency, CPU-only, network ignored)
-
-For “web UI feels snappy”, the status snapshot rebuild time is a good
-first-order bound because the first request after the cache TTL pays the rebuild
-cost.
-
-Treat these as rough CPU-only guidelines for “connected workers” on the example
-benchmark machine above:
-
-- ~`~5.2k workers @ 10ms` rebuild budget
-- ~`~7.9k workers @ 15ms` rebuild budget
-- ~`~15.7k workers @ 30ms` rebuild budget
-- ~`~31.4k workers @ 60ms` rebuild budget
-
-At **15 shares/min per worker**, share-processing CPU is typically not the
-limiting factor at those sizes (e.g. `10k workers` ≈ `2.5k shares/s`).
-
-## Interpreting “max workers” (CPU-only)
-
-There is no single “max workers” number without assumptions. Capacity depends
-on:
-
-- **Shares per worker per minute** (VarDiff target): more shares/min means more
-  work per worker.
-- **Refresh interval + snapshot rebuild cost**: `buildStatusData` runs at most
-  once per refresh interval, but it’s still O(connections).
-- **UI payload size**: endpoints that render “all workers” will always be more
-  expensive than “recent/top N”.
-
-For CPU planning, treat these as separate budgets:
-
-- A **share-processing budget** (shares/sec sustained).
-- A **status rebuild budget** (one rebuild per refresh interval).
-- A **UI payload budget** (per request).
