@@ -277,6 +277,19 @@
 		let activeOneTimeCode = '';
 		let activeExpiresAtMillis = 0;
 
+		function setBadge(el, text, danger) {
+			if (!el) return;
+			text = String(text || '');
+			if (danger) el.classList.add('badge-danger');
+			else el.classList.remove('badge-danger');
+			if (text) {
+				el.textContent = text;
+				el.style.display = '';
+			} else {
+				el.style.display = 'none';
+			}
+		}
+
 		async function copyTextToClipboard(text) {
 			const clip = navigator.clipboard;
 			if (clip && clip.writeText) {
@@ -326,26 +339,22 @@
 			}
 			if (discordCodeEl) discordCodeEl.style.display = 'none';
 			if (discordCopyBtn) discordCopyBtn.style.display = 'none';
-			if (discordStatusEl) {
-				if (statusText) {
-					discordStatusEl.textContent = statusText;
-					discordStatusEl.style.display = '';
-				} else {
-					discordStatusEl.style.display = 'none';
-				}
+			if (statusText === 'Expired') {
+				setBadge(discordStatusEl, 'Code expired, generate a new one.', true);
+				setBadge(discordExpiresEl, 'Expired', true);
+			} else {
+				setBadge(discordStatusEl, statusText || '', false);
+				setBadge(discordExpiresEl, '', false);
 			}
-			if (discordExpiresEl) discordExpiresEl.style.display = 'none';
 		}
 
 		function updateExpiresCountdown() {
-			if (!discordExpiresEl) return;
 			if (!activeOneTimeCode || !activeExpiresAtMillis) {
-				discordExpiresEl.style.display = 'none';
+				setBadge(discordExpiresEl, '', false);
 				return;
 			}
 			const seconds = Math.max(0, Math.ceil((activeExpiresAtMillis - Date.now()) / 1000));
-			discordExpiresEl.textContent = `Expires in ${seconds}s`;
-			discordExpiresEl.style.display = '';
+			setBadge(discordExpiresEl, `Expires in ${seconds}s`, false);
 			if (seconds <= 0) {
 				clearOneTimeCodeUI('Expired');
 			}
@@ -359,13 +368,8 @@
 				discordCodeEl.style.display = activeOneTimeCode ? '' : 'none';
 			}
 			if (discordCopyBtn) discordCopyBtn.style.display = activeOneTimeCode ? '' : 'none';
-			if (discordStatusEl) {
-				discordStatusEl.textContent = activeOneTimeCode ? 'Copy the code, then run /notify in Discord.' : '';
-				discordStatusEl.style.display = activeOneTimeCode ? '' : 'none';
-			}
-			if (discordExpiresEl) {
-				updateExpiresCountdown();
-			}
+			setBadge(discordStatusEl, activeOneTimeCode ? 'Copy the code, then run /notify in Discord.' : '', false);
+			updateExpiresCountdown();
 			if (oneTimeCodeTimeout) clearTimeout(oneTimeCodeTimeout);
 			if (oneTimeCodeCountdownTimer) {
 				clearInterval(oneTimeCodeCountdownTimer);
@@ -379,10 +383,8 @@
 		}
 
 		async function generateOneTimeCode() {
-			if (discordStatusEl) {
-				discordStatusEl.textContent = 'Generating...';
-				discordStatusEl.style.display = '';
-			}
+			setBadge(discordStatusEl, 'Generating...', false);
+			setBadge(discordExpiresEl, '', false);
 			try {
 				if (discordRegenBtn) discordRegenBtn.disabled = true;
 				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = true;
