@@ -13,28 +13,7 @@ import (
 	"github.com/bytedance/sonic"
 )
 
-const maxSavedWorkersPerWalletDisplay = 16
-
-func savedWorkersWalletKey(worker string) string {
-	worker = strings.TrimSpace(worker)
-	if worker == "" {
-		return ""
-	}
-
-	// Prefer canonical base payout address when possible.
-	if base := workerBaseAddress(worker); base != "" {
-		return base
-	}
-
-	// Otherwise group by the string prefix before '.' (wallet-ish), since
-	// saved-workers naming can include non-address identifiers.
-	if parts := strings.SplitN(worker, ".", 2); len(parts) > 1 {
-		if head := strings.ToLower(strings.TrimSpace(parts[0])); head != "" {
-			return head
-		}
-	}
-	return strings.ToLower(worker)
-}
+const maxSavedWorkersPerNameDisplay = 16
 
 func safeRedirectPath(value string) string {
 	value = strings.TrimSpace(value)
@@ -300,18 +279,16 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	perWalletRowsShown := make(map[string]int, 8)
+	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
-		wallet := savedWorkersWalletKey(saved.Name)
-		if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
+		if lookupHash == "" {
 			continue
 		}
 
-		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
-
 		if len(views) == 0 {
 			// Worker is offline
-			if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+			if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 				continue
 			}
 			entry := savedWorkerEntry{
@@ -324,14 +301,12 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					entry.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
 				}
 			}
-			if wallet != "" {
-				perWalletRowsShown[wallet]++
-			}
+			perNameRowsShown[lookupHash]++
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
 		} else {
 			// Worker is online, show each connection separately
 			for _, view := range views {
-				if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 					break
 				}
 				hashrate := view.RollingHashrate
@@ -355,9 +330,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					ConnectionSeq:     view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
-				if wallet != "" {
-					perWalletRowsShown[wallet]++
-				}
+				perNameRowsShown[lookupHash]++
 				data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
 			}
 		}
@@ -441,25 +414,23 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		DiscordNotifyEnabled: discordUserEnabled,
 	}
 
-	perWalletRowsShown := make(map[string]int, 8)
+	perNameRowsShown := make(map[string]int, 16)
 	totalRowsSent := 0
 	for _, savedEntry := range saved {
 		if totalRowsSent >= maxSavedWorkersPerUser {
 			break
 		}
-		wallet := savedWorkersWalletKey(savedEntry.Name)
-		if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+		views, lookupHash := s.findSavedWorkerConnections(savedEntry.Name, savedEntry.Hash, now)
+		if lookupHash == "" {
 			continue
 		}
-
-		views, lookupHash := s.findSavedWorkerConnections(savedEntry.Name, savedEntry.Hash, now)
 
 		if len(views) == 0 {
 			// Worker is offline
 			if totalRowsSent >= maxSavedWorkersPerUser {
 				break
 			}
-			if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+			if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 				continue
 			}
 			e := entry{
@@ -473,9 +444,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					e.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
 				}
 			}
-			if wallet != "" {
-				perWalletRowsShown[wallet]++
-			}
+			perNameRowsShown[lookupHash]++
 			totalRowsSent++
 			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
 		} else {
@@ -484,7 +453,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				if totalRowsSent >= maxSavedWorkersPerUser {
 					break
 				}
-				if wallet != "" && perWalletRowsShown[wallet] >= maxSavedWorkersPerWalletDisplay {
+				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 					break
 				}
 				hashrate := view.RollingHashrate
@@ -510,9 +479,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
 				}
-				if wallet != "" {
-					perWalletRowsShown[wallet]++
-				}
+				perNameRowsShown[lookupHash]++
 				resp.OnlineCount++
 				totalRowsSent++
 				resp.OnlineWorkers = append(resp.OnlineWorkers, e)
