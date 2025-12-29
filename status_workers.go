@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/bytedance/sonic"
 )
+
+const maxSavedWorkersPerNameDisplay = 16
 
 func safeRedirectPath(value string) string {
 	value = strings.TrimSpace(value)
@@ -240,6 +243,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	type savedWorkerEntry struct {
 		Name              string
 		Hash              string
+		NotifyEnabled     bool
+		LastOnlineAt      string
 		Hashrate          float64
 		ShareRate         float64
 		Accepted          uint64
@@ -267,19 +272,43 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 
+	stateByHash := map[string]workerNotifyState(nil)
+	if s.workerLists != nil {
+		if st, err := s.workerLists.LoadDiscordWorkerStates(data.ClerkUser.UserID); err == nil {
+			stateByHash = st
+		}
+	}
+
+	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
+		if lookupHash == "" {
+			continue
+		}
 
 		if len(views) == 0 {
 			// Worker is offline
-			entry := savedWorkerEntry{
-				Name: saved.Name,
-				Hash: lookupHash,
+			if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
+				continue
 			}
+			entry := savedWorkerEntry{
+				Name:          saved.Name,
+				Hash:          lookupHash,
+				NotifyEnabled: saved.NotifyEnabled,
+			}
+			if stateByHash != nil && lookupHash != "" {
+				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
+					entry.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
+				}
+			}
+			perNameRowsShown[lookupHash]++
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
 		} else {
 			// Worker is online, show each connection separately
 			for _, view := range views {
+				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
+					break
+				}
 				hashrate := view.RollingHashrate
 				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
@@ -291,6 +320,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				entry := savedWorkerEntry{
 					Name:              saved.Name,
 					Hash:              view.WorkerSHA256,
+					NotifyEnabled:     saved.NotifyEnabled,
 					Hashrate:          hashrate,
 					ShareRate:         view.ShareRate,
 					Accepted:          view.Accepted,
@@ -300,6 +330,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					ConnectionSeq:     view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
+				perNameRowsShown[lookupHash]++
 				data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
 			}
 		}
@@ -339,6 +370,8 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Name                      string  `json:"name"`
 		Hash                      string  `json:"hash"`
 		Online                    bool    `json:"online"`
+		NotifyEnabled             bool    `json:"notify_enabled"`
+		LastOnlineAt              string  `json:"last_online_at,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
 		Accepted                  uint64  `json:"accepted"`
@@ -347,33 +380,82 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
 	now := time.Now()
+	stateByHash := map[string]workerNotifyState(nil)
+	if s.workerLists != nil {
+		if st, err := s.workerLists.LoadDiscordWorkerStates(user.UserID); err == nil {
+			stateByHash = st
+		}
+	}
+	discordRegistered := false
+	discordUserEnabled := false
+	if s.workerLists != nil &&
+		strings.TrimSpace(s.Config().DiscordServerID) != "" &&
+		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
+		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != "" {
+		if _, enabled, ok, err := s.workerLists.GetDiscordLink(user.UserID); err == nil {
+			discordRegistered = ok
+			discordUserEnabled = ok && enabled
+		}
+	}
 	resp := struct {
-		UpdatedAt      string  `json:"updated_at"`
-		SavedMax       int     `json:"saved_max"`
-		SavedCount     int     `json:"saved_count"`
-		OnlineCount    int     `json:"online_count"`
-		OnlineWorkers  []entry `json:"online_workers"`
-		OfflineWorkers []entry `json:"offline_workers"`
+		UpdatedAt            string  `json:"updated_at"`
+		SavedMax             int     `json:"saved_max"`
+		SavedCount           int     `json:"saved_count"`
+		OnlineCount          int     `json:"online_count"`
+		DiscordRegistered    bool    `json:"discord_registered,omitempty"`
+		DiscordNotifyEnabled bool    `json:"discord_notify_enabled,omitempty"`
+		OnlineWorkers        []entry `json:"online_workers"`
+		OfflineWorkers       []entry `json:"offline_workers"`
 	}{
-		UpdatedAt:  now.UTC().Format(time.RFC3339),
-		SavedMax:   maxSavedWorkersPerUser,
-		SavedCount: len(saved),
+		UpdatedAt:            now.UTC().Format(time.RFC3339),
+		SavedMax:             maxSavedWorkersPerUser,
+		SavedCount:           len(saved),
+		DiscordRegistered:    discordRegistered,
+		DiscordNotifyEnabled: discordUserEnabled,
 	}
 
+	perNameRowsShown := make(map[string]int, 16)
+	totalRowsSent := 0
 	for _, savedEntry := range saved {
+		if totalRowsSent >= maxSavedWorkersPerUser {
+			break
+		}
 		views, lookupHash := s.findSavedWorkerConnections(savedEntry.Name, savedEntry.Hash, now)
+		if lookupHash == "" {
+			continue
+		}
 
 		if len(views) == 0 {
 			// Worker is offline
-			e := entry{
-				Name:   savedEntry.Name,
-				Hash:   lookupHash,
-				Online: false,
+			if totalRowsSent >= maxSavedWorkersPerUser {
+				break
 			}
+			if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
+				continue
+			}
+			e := entry{
+				Name:          savedEntry.Name,
+				Hash:          lookupHash,
+				Online:        false,
+				NotifyEnabled: savedEntry.NotifyEnabled,
+			}
+			if stateByHash != nil && lookupHash != "" {
+				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
+					e.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
+				}
+			}
+			perNameRowsShown[lookupHash]++
+			totalRowsSent++
 			resp.OfflineWorkers = append(resp.OfflineWorkers, e)
 		} else {
 			// Worker is online, show each connection separately
 			for _, view := range views {
+				if totalRowsSent >= maxSavedWorkersPerUser {
+					break
+				}
+				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
+					break
+				}
 				hashrate := view.RollingHashrate
 				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
 					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
@@ -389,6 +471,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Name:                      savedEntry.Name,
 					Hash:                      view.WorkerSHA256,
 					Online:                    true,
+					NotifyEnabled:             savedEntry.NotifyEnabled,
 					Hashrate:                  hashrate,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
@@ -396,7 +479,9 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
 				}
+				perNameRowsShown[lookupHash]++
 				resp.OnlineCount++
+				totalRowsSent++
 				resp.OnlineWorkers = append(resp.OnlineWorkers, e)
 			}
 		}
@@ -410,6 +495,246 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		return
 	} else if _, err := w.Write(out); err != nil {
 		logger.Error("saved workers json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	now := time.Now()
+	code, expiresAt := s.createNewOneTimeCode(user.UserID, now)
+	if code == "" || expiresAt.IsZero() {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := struct {
+		Code      string `json:"code"`
+		ExpiresAt string `json:"expires_at"`
+	}{
+		Code:      code,
+		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("one time code json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("one time code json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	var code string
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		type req struct {
+			Code string `json:"code"`
+		}
+		var parsed req
+		if err := json.NewDecoder(r.Body).Decode(&parsed); err == nil {
+			code = strings.TrimSpace(parsed.Code)
+		}
+	} else {
+		_ = r.ParseForm()
+		code = strings.TrimSpace(r.FormValue("code"))
+	}
+
+	cleared := false
+	if code != "" {
+		cleared = s.clearOneTimeCode(user.UserID, code, time.Now())
+	}
+
+	resp := struct {
+		Cleared bool `json:"cleared"`
+	}{Cleared: cleared}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		logger.Error("one time code clear json marshal", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if _, err := w.Write(out); err != nil {
+		logger.Error("one time code clear json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+
+	type req struct {
+		Hash    string `json:"hash"`
+		Enabled *bool  `json:"enabled"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		parsed.Hash = r.FormValue("hash")
+		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
+			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
+			parsed.Enabled = &b
+		}
+	}
+
+	hash := strings.ToLower(strings.TrimSpace(parsed.Hash))
+	if hash == "" || len(hash) != 64 {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+	if parsed.Enabled == nil {
+		http.Error(w, "missing enabled", http.StatusBadRequest)
+		return
+	}
+
+	list, err := s.workerLists.List(user.UserID)
+	if err != nil {
+		http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
+		return
+	}
+	found := false
+	for _, sw := range list {
+		if strings.ToLower(strings.TrimSpace(sw.Hash)) == hash {
+			found = true
+			break
+		}
+	}
+	if !found {
+		http.Error(w, "worker not found", http.StatusNotFound)
+		return
+	}
+
+	now := time.Now()
+	if err := s.workerLists.SetSavedWorkerNotifyEnabled(user.UserID, hash, *parsed.Enabled, now); err != nil {
+		logger.Warn("saved worker notify toggle failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	_ = s.workerLists.PersistDiscordWorkerStates(user.UserID, nil, []string{hash}, now)
+
+	resp := struct {
+		OK      bool `json:"ok"`
+		Enabled bool `json:"enabled"`
+	}{
+		OK:      true,
+		Enabled: *parsed.Enabled,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
+	}
+}
+
+func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" || strings.TrimSpace(s.Config().DiscordNotifyChannelID) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	type req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
+			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
+			parsed.Enabled = &b
+		}
+	}
+	if parsed.Enabled == nil {
+		http.Error(w, "missing enabled", http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	ok, err := s.workerLists.SetDiscordLinkEnabled(user.UserID, *parsed.Enabled, now)
+	if err != nil {
+		logger.Warn("discord notify toggle failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "not registered", http.StatusNotFound)
+		return
+	}
+	_ = s.workerLists.ResetDiscordWorkerStateTimers(user.UserID, now)
+
+	resp := struct {
+		OK      bool `json:"ok"`
+		Enabled bool `json:"enabled"`
+	}{
+		OK:      true,
+		Enabled: *parsed.Enabled,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
 	}
 }
 
@@ -501,6 +826,78 @@ func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
+func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s == nil || s.clerk == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.TrimSpace(s.Config().ClerkPublishableKey) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	type req struct {
+		Token string `json:"token"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		parsed.Token = r.FormValue("token")
+	}
+	token := strings.TrimSpace(parsed.Token)
+	if token == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		return
+	}
+
+	claims, err := s.clerk.Verify(token)
+	if err != nil || claims == nil || strings.TrimSpace(claims.Subject) == "" {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     s.clerk.SessionCookieName(),
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		cookie.Secure = strings.EqualFold(proto, "https")
+	} else {
+		cookie.Secure = r.TLS != nil
+	}
+	if claims.ExpiresAt != nil {
+		cookie.Expires = claims.ExpiresAt.Time
+	}
+	http.SetCookie(w, cookie)
+
+	resp := struct {
+		OK        bool   `json:"ok"`
+		ExpiresAt string `json:"expires_at,omitempty"`
+	}{
+		OK: true,
+	}
+	if claims.ExpiresAt != nil {
+		resp.ExpiresAt = claims.ExpiresAt.Time.UTC().Format(time.RFC3339)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
+	}
+}
+
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.
 // This endpoint expects the SHA256 hash of the worker name and performs direct lookup.
 func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http.Request) {
@@ -589,7 +986,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			}
 			s.workerPageMu.RUnlock()
 
-			if wv, ok := s.findWorkerViewByHash(workerHash, now); ok {
+			if wv, ok := s.findWorkerViewByHash(workerHash); ok {
 				setWorkerStatusView(&data, wv)
 				if data.BTCPriceFiat > 0 {
 					cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
@@ -754,9 +1151,8 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	data.QueriedWorkerHash = fmt.Sprintf("%x", hashSum[:])
 
 	data.QueriedWorker = workerID
-	now := time.Now()
 	found := false
-	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash, now); ok {
+	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash); ok {
 		setWorkerStatusView(&data, wv)
 		found = true
 	} else if s.accounting != nil {

@@ -92,7 +92,7 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	useVersion := uint32(1)
 	now := time.Now()
 
-	req := &StratumRequest{ID: 1, Method: "mining.submit"}
+	req := &StratumRequest{ID: 1}
 
 	trpc.start = time.Now()
 	mc.handleBlockShare(req.ID, job, "worker1", en2, ntimeHex, nonceHex, useVersion, "dummyhash", 1.0, now)

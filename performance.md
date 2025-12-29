@@ -110,6 +110,19 @@ go test -run '^$' -bench 'BenchmarkHandleSubmitAndProcessAcceptedShare$' -cpupro
 go tool pprof -top ./goPool.test cpu_submit.out
 ```
 
+If you want a portable CPU profile suitable for PGO builds (and an easy SVG you
+can open in a browser):
+
+- `default.pgo` (CPU profile output): [default.pgo](default.pgo)
+- `profile.svg` (Graphviz render): [profile.svg](profile.svg)
+
+Generate `default.pgo` with the `-profile` flag (writes a 60s CPU profile), then
+render it with:
+
+```bash
+./scripts/profile-graph.sh default.pgo profile.svg
+```
+
 ## Saved workers dashboard (how many people can watch?)
 
 The saved workers page refreshes every **5 seconds** and (usually) checks a

@@ -181,14 +181,7 @@ func (s *StatusServer) computePoolHashrate() float64 {
 	return total
 }
 
-func (s *StatusServer) findWorkerViewByName(name string, now time.Time) (WorkerView, bool) {
-	if name == "" {
-		return WorkerView{}, false
-	}
-	return s.findWorkerViewByHash(workerNameHash(name), now)
-}
-
-func (s *StatusServer) findWorkerViewByHash(hash string, now time.Time) (WorkerView, bool) {
+func (s *StatusServer) findWorkerViewByHash(hash string) (WorkerView, bool) {
 	if hash == "" {
 		return WorkerView{}, false
 	}
