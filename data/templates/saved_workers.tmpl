@@ -5,6 +5,44 @@
 	<meta charset="UTF-8">
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Saved Workers</title>
 	<link rel="stylesheet" href="/style.css">
+	<style>
+		.discord-dialog {
+			max-width: 560px;
+			width: calc(100vw - 32px);
+			border: 1px solid #2a2f3a;
+			border-radius: 12px;
+			padding: 0;
+			background: #0f1218;
+			color: var(--text, #e8ecf7);
+			box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+		}
+		.discord-dialog::backdrop { background: rgba(0,0,0,0.55); }
+		.discord-dialog-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 14px 14px 10px 14px;
+			border-bottom: 1px solid #242a36;
+		}
+		.discord-dialog-body { padding: 14px; }
+		.discord-dialog-code {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			flex-wrap: wrap;
+			margin-top: 10px;
+		}
+		.discord-dialog-code .mono {
+			padding: 8px 10px;
+			border-radius: 10px;
+			background: #0b0d12;
+			border: 1px solid #2a2f3a;
+			cursor: pointer;
+			user-select: all;
+		}
+		.discord-dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+	</style>
 </head>
 <body>
 	{{template "header" .}}
@@ -49,8 +87,6 @@
 								<button id="oneTimeCodeGenerate" class="btn btn-highlight" type="button" aria-label="Get Discord notifications" title="Get Discord notifications">
 									Get Discord notifications
 								</button>
-								<span id="oneTimeCodeValue" class="badge mono" style="display:none; cursor:pointer;" title="Click to copy"></span>
-								<span id="oneTimeCodeStatus" class="badge" style="display:none;"></span>
 							{{end}}
 							<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
 								{{$offlineCount}} offline
@@ -180,8 +216,47 @@
 		</div>
 		{{end}}
 
-		{{template "footer" .}}
+	{{template "footer" .}}
 	</div>
+	{{if .DiscordNotificationsEnabled}}
+	<dialog id="discordNotifDialog" class="discord-dialog" aria-label="Discord notifications setup">
+		<div class="discord-dialog-header">
+			<div style="display:flex; flex-direction:column; gap:2px;">
+				<div style="font-weight:700;">Discord notifications</div>
+				<div class="text-sm" style="color:var(--text-muted);">Get pinged when your saved workers go offline/online.</div>
+			</div>
+			<button id="discordNotifClose" class="btn btn-secondary" type="button" aria-label="Close">Close</button>
+		</div>
+		<div class="discord-dialog-body">
+			<div class="text-sm" style="color:var(--text-muted);">
+				<ol style="margin:0; padding-left:18px;">
+					<li>Generate a one-time code</li>
+					<li>In Discord, run <span class="mono">/notify</span> and paste the code</li>
+				</ol>
+			</div>
+
+			<div class="discord-dialog-code">
+				<span id="discordNotifCode" class="mono" style="display:none;" title="Click to copy"></span>
+				<button id="discordNotifCopy" class="btn btn-secondary" type="button" style="display:none;">Copy</button>
+				<button id="discordNotifRegenerate" class="btn btn-highlight" type="button">Generate code</button>
+			</div>
+
+			<div class="discord-dialog-actions">
+				<button id="discordInviteBtn" class="btn" type="button" data-discord-url="{{.DiscordURL}}">Open Discord invite</button>
+				<a class="btn btn-secondary" href="https://support-apps.discord.com/hc/en-us/articles/26501837786775-Slash-Commands-FAQ" target="_blank" rel="noopener noreferrer">How to use slash commands</a>
+			</div>
+
+			<div class="text-sm" style="margin-top:12px;">
+				<span id="discordNotifStatus" class="badge" style="display:none;"></span>
+				<span id="discordNotifExpires" class="badge" style="display:none;"></span>
+			</div>
+
+			<div class="text-sm" style="margin-top:10px; color:var(--text-muted);">
+				Closing this dialog clears the code on the server. Codes expire after 5 minutes if unused.
+			</div>
+		</div>
+	</dialog>
+	{{end}}
 	{{if .ClerkUser}}
 	<script>
 	(function() {
@@ -189,10 +264,18 @@
 
 		// One-time code (server-generated, stored in memory for 5 minutes).
 		const oneTimeCodeGenerateBtn = document.getElementById('oneTimeCodeGenerate');
-		const oneTimeCodeValueEl = document.getElementById('oneTimeCodeValue');
-		const oneTimeCodeStatusEl = document.getElementById('oneTimeCodeStatus');
+		const discordDialog = document.getElementById('discordNotifDialog');
+		const discordDialogClose = document.getElementById('discordNotifClose');
+		const discordCodeEl = document.getElementById('discordNotifCode');
+		const discordCopyBtn = document.getElementById('discordNotifCopy');
+		const discordRegenBtn = document.getElementById('discordNotifRegenerate');
+		const discordInviteBtn = document.getElementById('discordInviteBtn');
+		const discordStatusEl = document.getElementById('discordNotifStatus');
+		const discordExpiresEl = document.getElementById('discordNotifExpires');
 		let oneTimeCodeTimeout = null;
+		let oneTimeCodeCountdownTimer = null;
 		let activeOneTimeCode = '';
+		let activeExpiresAtMillis = 0;
 
 		async function copyTextToClipboard(text) {
 			const clip = navigator.clipboard;
@@ -215,90 +298,227 @@
 			}
 		}
 
-		function clearOneTimeCode(statusText) {
+		async function clearOneTimeCodeServerSide() {
+			const code = activeOneTimeCode;
+			if (!code) return;
+			try {
+				await fetch('/api/saved-workers/one-time-code/clear', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ code }),
+				});
+			} catch (_) {
+				// ignore
+			}
+		}
+
+		function clearOneTimeCodeUI(statusText) {
 			activeOneTimeCode = '';
+			activeExpiresAtMillis = 0;
 			if (oneTimeCodeTimeout) {
 				clearTimeout(oneTimeCodeTimeout);
 				oneTimeCodeTimeout = null;
 			}
-			if (oneTimeCodeValueEl) oneTimeCodeValueEl.style.display = 'none';
-			if (oneTimeCodeStatusEl) {
+			if (oneTimeCodeCountdownTimer) {
+				clearInterval(oneTimeCodeCountdownTimer);
+				oneTimeCodeCountdownTimer = null;
+			}
+			if (discordCodeEl) discordCodeEl.style.display = 'none';
+			if (discordCopyBtn) discordCopyBtn.style.display = 'none';
+			if (discordStatusEl) {
 				if (statusText) {
-					oneTimeCodeStatusEl.textContent = statusText;
-					oneTimeCodeStatusEl.style.display = '';
+					discordStatusEl.textContent = statusText;
+					discordStatusEl.style.display = '';
 				} else {
-					oneTimeCodeStatusEl.style.display = 'none';
+					discordStatusEl.style.display = 'none';
 				}
+			}
+			if (discordExpiresEl) discordExpiresEl.style.display = 'none';
+		}
+
+		function updateExpiresCountdown() {
+			if (!discordExpiresEl) return;
+			if (!activeOneTimeCode || !activeExpiresAtMillis) {
+				discordExpiresEl.style.display = 'none';
+				return;
+			}
+			const seconds = Math.max(0, Math.ceil((activeExpiresAtMillis - Date.now()) / 1000));
+			discordExpiresEl.textContent = `Expires in ${seconds}s`;
+			discordExpiresEl.style.display = '';
+			if (seconds <= 0) {
+				clearOneTimeCodeUI('Expired');
 			}
 		}
 
 		function setOneTimeCode(code, expiresAtMillis) {
 			activeOneTimeCode = code || '';
-			if (oneTimeCodeValueEl) {
-				oneTimeCodeValueEl.textContent = activeOneTimeCode;
-				oneTimeCodeValueEl.style.display = activeOneTimeCode ? '' : 'none';
+			activeExpiresAtMillis = Number(expiresAtMillis) || 0;
+			if (discordCodeEl) {
+				discordCodeEl.textContent = activeOneTimeCode;
+				discordCodeEl.style.display = activeOneTimeCode ? '' : 'none';
 			}
-			if (oneTimeCodeStatusEl) {
-				oneTimeCodeStatusEl.textContent = activeOneTimeCode ? 'Click to copy, then run /notify (paste code) in Discord • Expires in 5m' : '';
-				oneTimeCodeStatusEl.style.display = activeOneTimeCode ? '' : 'none';
+			if (discordCopyBtn) discordCopyBtn.style.display = activeOneTimeCode ? '' : 'none';
+			if (discordStatusEl) {
+				discordStatusEl.textContent = activeOneTimeCode ? 'Copy the code, then run /notify in Discord.' : '';
+				discordStatusEl.style.display = activeOneTimeCode ? '' : 'none';
+			}
+			if (discordExpiresEl) {
+				updateExpiresCountdown();
 			}
 			if (oneTimeCodeTimeout) clearTimeout(oneTimeCodeTimeout);
+			if (oneTimeCodeCountdownTimer) {
+				clearInterval(oneTimeCodeCountdownTimer);
+				oneTimeCodeCountdownTimer = null;
+			}
 			if (activeOneTimeCode && expiresAtMillis) {
 				const remaining = Math.max(0, expiresAtMillis - Date.now());
-				oneTimeCodeTimeout = setTimeout(() => clearOneTimeCode('Expired'), remaining);
+				oneTimeCodeTimeout = setTimeout(() => clearOneTimeCodeUI('Expired'), remaining);
+				oneTimeCodeCountdownTimer = setInterval(updateExpiresCountdown, 250);
 			}
 		}
 
-		function attachOneTimeCodeHandlers() {
-			if (oneTimeCodeGenerateBtn && !oneTimeCodeGenerateBtn.__oneTimeCodeAttached) {
-				oneTimeCodeGenerateBtn.__oneTimeCodeAttached = true;
+		async function generateOneTimeCode() {
+			if (discordStatusEl) {
+				discordStatusEl.textContent = 'Generating...';
+				discordStatusEl.style.display = '';
+			}
+			try {
+				if (discordRegenBtn) discordRegenBtn.disabled = true;
+				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = true;
+				const res = await fetch('/api/saved-workers/one-time-code', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json' },
+					body: '{}',
+				});
+				if (!res.ok) throw new Error('request failed');
+				const data = await res.json();
+				const code = String(data.code || '');
+				const expiresAt = Date.parse(String(data.expires_at || ''));
+				if (!code || !isFinite(expiresAt)) throw new Error('bad response');
+				setOneTimeCode(code, expiresAt);
+			} catch (_) {
+				clearOneTimeCodeUI('Error');
+			} finally {
+				if (discordRegenBtn) discordRegenBtn.disabled = false;
+				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = false;
+			}
+		}
+
+		function openDiscordDialog() {
+			if (!discordDialog) return;
+			clearOneTimeCodeUI('');
+			try {
+				if (typeof discordDialog.showModal === 'function') {
+					discordDialog.showModal();
+				} else {
+					discordDialog.setAttribute('open', '');
+				}
+			} catch (_) {
+				discordDialog.setAttribute('open', '');
+			}
+		}
+
+		function closeDiscordDialog() {
+			if (!discordDialog) return;
+			try {
+				discordDialog.close();
+			} catch (_) {
+				discordDialog.removeAttribute('open');
+			}
+		}
+
+		function attachDiscordDialogHandlers() {
+			if (oneTimeCodeGenerateBtn && !oneTimeCodeGenerateBtn.__discordDialogAttached) {
+				oneTimeCodeGenerateBtn.__discordDialogAttached = true;
 				oneTimeCodeGenerateBtn.addEventListener('click', async function() {
-					if (oneTimeCodeStatusEl) {
-						oneTimeCodeStatusEl.textContent = 'Generating...';
-						oneTimeCodeStatusEl.style.display = '';
-					}
-					try {
-						oneTimeCodeGenerateBtn.disabled = true;
-						const res = await fetch('/api/saved-workers/one-time-code', {
-							method: 'POST',
-							credentials: 'same-origin',
-							headers: { 'Content-Type': 'application/json' },
-							body: '{}',
-						});
-						if (!res.ok) throw new Error('request failed');
-						const data = await res.json();
-						const code = String(data.code || '');
-						const expiresAt = Date.parse(String(data.expires_at || ''));
-						if (!code || !isFinite(expiresAt)) throw new Error('bad response');
-						setOneTimeCode(code, expiresAt);
-					} catch (_) {
-						clearOneTimeCode('Error');
-					} finally {
-						oneTimeCodeGenerateBtn.disabled = false;
-					}
+					openDiscordDialog();
+					await generateOneTimeCode();
 				});
 			}
 
-			if (oneTimeCodeValueEl && !oneTimeCodeValueEl.__oneTimeCodeCopyAttached) {
-				oneTimeCodeValueEl.__oneTimeCodeCopyAttached = true;
-					oneTimeCodeValueEl.addEventListener('click', async function() {
-						const code = activeOneTimeCode;
-						if (!code) return;
-						try {
-							const ok = await copyTextToClipboard(code);
-							if (!ok) throw new Error('copy failed');
-							if (oneTimeCodeStatusEl) {
-								oneTimeCodeStatusEl.textContent = 'Copied';
-								oneTimeCodeStatusEl.style.display = '';
-								setTimeout(() => {
-									if (activeOneTimeCode) oneTimeCodeStatusEl.textContent = 'Click to copy, then run /notify (paste code) in Discord • Expires in 5m';
-								}, 1200);
-							}
-						} catch (_) {
-							prompt('Copy one-time code:', code);
-						}
-					});
+			if (discordRegenBtn && !discordRegenBtn.__discordDialogAttached) {
+				discordRegenBtn.__discordDialogAttached = true;
+				discordRegenBtn.addEventListener('click', async function() {
+					await generateOneTimeCode();
+				});
+			}
+
+			if (discordInviteBtn && !discordInviteBtn.__discordDialogAttached) {
+				discordInviteBtn.__discordDialogAttached = true;
+				const url = String(discordInviteBtn.getAttribute('data-discord-url') || '').trim();
+				if (!url) {
+					discordInviteBtn.disabled = true;
+					discordInviteBtn.title = 'Discord invite link is not configured for this pool.';
 				}
+				discordInviteBtn.addEventListener('click', function() {
+					const u = String(discordInviteBtn.getAttribute('data-discord-url') || '').trim();
+					if (!u) {
+						if (discordStatusEl) {
+							discordStatusEl.textContent = 'Discord invite link is not configured for this pool.';
+							discordStatusEl.style.display = '';
+						}
+						return;
+					}
+					window.open(u, '_blank', 'noopener,noreferrer');
+				});
+			}
+
+			async function doCopy() {
+				const code = activeOneTimeCode;
+				if (!code) return;
+				try {
+					const ok = await copyTextToClipboard(code);
+					if (!ok) throw new Error('copy failed');
+					if (discordStatusEl) {
+						discordStatusEl.textContent = 'Copied';
+						discordStatusEl.style.display = '';
+						setTimeout(() => {
+							if (activeOneTimeCode) {
+								discordStatusEl.textContent = 'Copy the code, then run /notify in Discord.';
+							}
+						}, 1200);
+					}
+				} catch (_) {
+					prompt('Copy one-time code:', code);
+				}
+			}
+
+			if (discordCopyBtn && !discordCopyBtn.__discordDialogAttached) {
+				discordCopyBtn.__discordDialogAttached = true;
+				discordCopyBtn.addEventListener('click', doCopy);
+			}
+			if (discordCodeEl && !discordCodeEl.__discordDialogAttached) {
+				discordCodeEl.__discordDialogAttached = true;
+				discordCodeEl.addEventListener('click', doCopy);
+			}
+
+			if (discordDialogClose && !discordDialogClose.__discordDialogAttached) {
+				discordDialogClose.__discordDialogAttached = true;
+				discordDialogClose.addEventListener('click', async function() {
+					await clearOneTimeCodeServerSide();
+					clearOneTimeCodeUI('');
+					closeDiscordDialog();
+				});
+			}
+
+			if (discordDialog && !discordDialog.__discordDialogAttached) {
+				discordDialog.__discordDialogAttached = true;
+
+				// Click outside closes (native dialogs only).
+				discordDialog.addEventListener('click', function(e) {
+					if (e.target === discordDialog) {
+						discordDialogClose && discordDialogClose.click();
+					}
+				});
+
+				// Any close (Esc / programmatic) clears the code server-side.
+				discordDialog.addEventListener('close', async function() {
+					await clearOneTimeCodeServerSide();
+					clearOneTimeCodeUI('');
+				});
+			}
 		}
 
 		// Saved workers total hashrate graph (sum of online workers).
@@ -499,6 +719,8 @@
 		let currentSortField = sortFieldSelect && sortFieldSelect.value ? sortFieldSelect.value : 'connection_seq';
 		let sortDescending = true;
 		let lastOnlineWorkers = [];
+
+		attachDiscordDialogHandlers();
 
 		function updateSortOrderButtonText() {
 			if (!sortOrderBtn) return;
@@ -706,7 +928,6 @@
 		attachRemoveConfirms(document);
 		applyWorkerNameCensoring(document);
 		updatePrivacyToggle();
-		attachOneTimeCodeHandlers();
 
 		const privacyToggle = document.getElementById('privacyToggleNames');
 		if (privacyToggle) {
