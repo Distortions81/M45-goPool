@@ -201,11 +201,12 @@
 				const rawHistory = data.job_feed?.error_history ?? [];
 				if (rawHistory.length > 0) {
 					const history = rawHistory.slice().reverse();
+					const isEvent = (msg) => String(msg || '').trim().toLowerCase().startsWith('event:');
 					const entries = history.map((msg, idx) => {
-						const prefix = idx === 0 ? 'Error' : 'Previous';
+						const prefix = isEvent(msg) ? (idx === 0 ? 'Event' : 'Previous event') : (idx === 0 ? 'Error' : 'Previous');
 						return `${prefix}: ${msg}`;
 					});
-					if (data.job_feed?.last_error_at) {
+					if (!isEvent(history[0]) && data.job_feed?.last_error && data.job_feed?.last_error_at) {
 						entries[0] += ` (at ${data.job_feed.last_error_at})`;
 					}
 					jobFeedEl.textContent = entries.join(' | ');

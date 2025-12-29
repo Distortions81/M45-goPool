@@ -113,6 +113,7 @@ const jobFeedErrorHistorySize = 3
 type JobManager struct {
 	rpc               *RPCClient
 	cfg               Config
+	metrics           *PoolMetrics
 	mu                sync.RWMutex
 	curJob            *Job
 	payoutScript      []byte
@@ -140,10 +141,11 @@ type JobManager struct {
 	onNewBlock func()
 }
 
-func NewJobManager(rpc *RPCClient, cfg Config, payoutScript []byte, donationScript []byte) *JobManager {
+func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScript []byte, donationScript []byte) *JobManager {
 	return &JobManager{
 		rpc:            rpc,
 		cfg:            cfg,
+		metrics:        metrics,
 		payoutScript:   payoutScript,
 		donationScript: donationScript,
 		subs:           make(map[chan *Job]struct{}),
@@ -191,12 +193,20 @@ func (jm *JobManager) appendJobFeedError(msg string) {
 
 func (jm *JobManager) recordJobSuccess(job *Job) {
 	jm.lastErrMu.Lock()
+	hadErr := jm.lastErr != nil
 	jm.lastErr = nil
 	jm.lastErrAt = time.Time{}
 	if job != nil && !job.CreatedAt.IsZero() {
 		jm.lastJobSuccess = job.CreatedAt
 	} else {
 		jm.lastJobSuccess = time.Now()
+	}
+	if hadErr {
+		target := "(unknown)"
+		if jm.rpc != nil {
+			target = jm.rpc.EndpointLabel()
+		}
+		jm.appendJobFeedError("event: job feed recovered (rpc " + target + ")")
 	}
 	jm.lastErrMu.Unlock()
 }

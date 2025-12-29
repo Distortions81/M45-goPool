@@ -548,7 +548,7 @@ func main() {
 	// from bitcoind instead of relying on a manual version_mask setting.
 	autoConfigureVersionMaskFromNode(ctx, rpcClient, &cfg)
 
-	jobMgr := NewJobManager(rpcClient, cfg, payoutScript, donationScript)
+	jobMgr := NewJobManager(rpcClient, cfg, metrics, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
 	if cfg.ZMQBlockAddr != "" {
 		if cfg.ZMQLongpollFallback {

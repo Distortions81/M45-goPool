@@ -6,7 +6,7 @@ import (
 )
 
 func TestJobManagerZMQReconnects(t *testing.T) {
-	jm := NewJobManager(nil, Config{ZMQBlockAddr: "tcp://127.0.0.1:28332"}, nil, nil)
+	jm := NewJobManager(nil, Config{ZMQBlockAddr: "tcp://127.0.0.1:28332"}, nil, nil, nil)
 
 	jm.markZMQHealthy()
 	if got := atomic.LoadUint64(&jm.zmqReconnects); got != 1 {

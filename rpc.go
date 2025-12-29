@@ -9,9 +9,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -63,6 +65,8 @@ type RPCClient struct {
 	idMu    sync.Mutex
 	nextID  int
 	metrics *PoolMetrics
+	connected atomic.Bool
+	unhealthy  atomic.Bool
 
 	authMu        sync.RWMutex
 	cookiePath    string
@@ -188,12 +192,23 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 		}
 		err := c.performCall(ctx, client, method, params, out)
 		if err == nil {
+			if c.unhealthy.Swap(false) && c.metrics != nil {
+				verb := "reconnected"
+				if !c.connected.Load() {
+					verb = "connected"
+				}
+				c.metrics.RecordErrorEvent("rpc", verb+" to "+c.endpointLabel(), time.Now())
+			}
+			c.connected.Store(true)
 			c.recordRPCCallSuccess()
 			return nil
 		}
 		c.recordLastError(err)
 		if c.metrics != nil {
 			c.metrics.RecordRPCError(err)
+		}
+		if isRPCConnectivityError(err) {
+			c.unhealthy.Store(true)
 		}
 		if c.shouldRetry(err) {
 			c.reloadCookieIfChanged()
@@ -204,6 +219,48 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 		}
 		return err
 	}
+}
+
+func (c *RPCClient) endpointLabel() string {
+	raw := strings.TrimSpace(c.url)
+	if raw == "" {
+		return "(unknown)"
+	}
+	u, err := url.Parse(raw)
+	if err == nil && u.Host != "" {
+		return u.Host
+	}
+	// Best-effort fallback for non-URL inputs; never include user/pass.
+	if idx := strings.Index(raw, "@"); idx != -1 && idx+1 < len(raw) {
+		raw = raw[idx+1:]
+	}
+	raw = strings.TrimLeft(raw, "/")
+	if raw == "" {
+		return "(unknown)"
+	}
+	return raw
+}
+
+func (c *RPCClient) EndpointLabel() string {
+	return c.endpointLabel()
+}
+
+func isRPCConnectivityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return true
+	}
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == http.StatusUnauthorized || statusErr.StatusCode >= 500
+	}
+	return false
 }
 
 func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {

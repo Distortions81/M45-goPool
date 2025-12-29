@@ -48,7 +48,7 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
-	jm := NewJobManager(rpc, Config{ZMQBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, []byte{0x51}, nil)
+	jm := NewJobManager(rpc, Config{ZMQBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, nil, []byte{0x51}, nil)
 
 	// Build a minimal raw block payload sufficient for parseRawBlockTip().
 	// Header (80 bytes) + tx count (1) + coinbase tx version + input count (1) + prevout (36)
@@ -80,4 +80,3 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 		t.Fatalf("expected tip height 2, got %d", jm.blockTipHeight())
 	}
 }
-

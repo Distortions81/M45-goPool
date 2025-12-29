@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/pebbe/zmq4"
 )
@@ -19,6 +20,20 @@ func (jm *JobManager) markZMQHealthy() {
 	}
 	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
+	if jm.metrics != nil {
+		verb := "connected"
+		if atomic.LoadUint64(&jm.zmqDisconnects) > 0 {
+			verb = "reconnected"
+		}
+		jm.metrics.RecordErrorEvent("zmq", verb+" to "+jm.cfg.ZMQBlockAddr, time.Now())
+	}
+	verb := "connected"
+	if atomic.LoadUint64(&jm.zmqDisconnects) > 0 {
+		verb = "reconnected"
+	}
+	jm.lastErrMu.Lock()
+	jm.appendJobFeedError("event: zmq " + verb + " (" + jm.cfg.ZMQBlockAddr + ")")
+	jm.lastErrMu.Unlock()
 }
 
 func (jm *JobManager) markZMQUnhealthy(reason string, err error) {

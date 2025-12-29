@@ -55,7 +55,7 @@ func TestJobManagerRefreshBlockHistoryFromRPC(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
-	jm := NewJobManager(client, Config{}, nil, nil)
+	jm := NewJobManager(client, Config{}, nil, nil, nil)
 
 	ok := jm.refreshBlockHistoryFromRPC(context.Background())
 	if !ok {
@@ -89,7 +89,7 @@ func TestJobManagerRefreshBlockHistoryFromRPC(t *testing.T) {
 }
 
 func TestJobManagerRecordBlockTip_AppendsRepeatedTimestamps(t *testing.T) {
-	jm := NewJobManager(nil, Config{}, nil, nil)
+	jm := NewJobManager(nil, Config{}, nil, nil, nil)
 	ts := time.Unix(1_700_000_000, 0).UTC()
 
 	jm.recordBlockTip(ZMQBlockTip{Hash: "a", Height: 1, Time: ts})
@@ -103,4 +103,3 @@ func TestJobManagerRecordBlockTip_AppendsRepeatedTimestamps(t *testing.T) {
 		t.Fatalf("expected 2 timestamps, got %d", len(got))
 	}
 }
-
