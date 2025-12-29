@@ -42,6 +42,22 @@ type discordNotifier struct {
 	netBadStreak int
 }
 
+func (n *discordNotifier) savedWorkersURL() string {
+	if n == nil || n.s == nil {
+		return ""
+	}
+	domain := strings.TrimSpace(n.s.Config().StatusBrandDomain)
+	if domain == "" {
+		return ""
+	}
+	base := domain
+	if !strings.Contains(base, "://") {
+		base = "https://" + base
+	}
+	base = strings.TrimRight(base, "/")
+	return base + "/saved-workers"
+}
+
 func (n *discordNotifier) enabled() bool {
 	if n == nil || n.s == nil {
 		return false
@@ -505,6 +521,9 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 	currentOnline := make(map[string]bool, len(saved))
 	nameByHash := make(map[string]string, len(saved))
 	for _, sw := range saved {
+		if !sw.NotifyEnabled {
+			continue
+		}
 		views, lookupHash := n.s.findSavedWorkerConnections(sw.Name, sw.Hash, now)
 		if lookupHash == "" {
 			continue
@@ -519,13 +538,28 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 	if len(offlineOverdue) == 0 && len(onlineOverdue) == 0 {
 		return
 	}
-	parts := make([]string, 0, 2)
-	if len(offlineOverdue) > 0 {
-		parts = append(parts, "Offline >2m: "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
+
+	detailed := len(offlineOverdue) <= 1 && len(onlineOverdue) <= 1
+	parts := make([]string, 0, 3)
+	if detailed {
+		if len(offlineOverdue) > 0 {
+			parts = append(parts, "Offline >2m: "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
+		}
+		if len(onlineOverdue) > 0 {
+			parts = append(parts, "Back online (2+ min): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
+		}
+	} else {
+		if len(offlineOverdue) > 0 {
+			parts = append(parts, fmt.Sprintf("%d miners offline >2m", len(offlineOverdue)))
+		}
+		if len(onlineOverdue) > 0 {
+			parts = append(parts, fmt.Sprintf("%d miners back online (2+ min)", len(onlineOverdue)))
+		}
+		if url := n.savedWorkersURL(); url != "" {
+			parts = append(parts, "(click for status) "+url)
+		}
 	}
-	if len(onlineOverdue) > 0 {
-		parts = append(parts, "Back online (2+ min): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
-	}
+
 	line := strings.Join(parts, " | ")
 	n.enqueuePing(link.DiscordUserID, line)
 }

@@ -329,7 +329,9 @@ func main() {
 		mux.HandleFunc("/api/node", statusServer.handleNodePageJSON)
 		mux.HandleFunc("/api/server", statusServer.handleServerPageJSON)
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
+		mux.HandleFunc("/api/auth/session-refresh", statusServer.handleClerkSessionRefresh)
 		mux.HandleFunc("/api/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkersJSON))
+		mux.HandleFunc("/api/saved-workers/notify-enabled", statusServer.withClerkUser(statusServer.handleSavedWorkersNotifyEnabled))
 		mux.HandleFunc("/api/saved-workers/one-time-code", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCode))
 		mux.HandleFunc("/api/saved-workers/one-time-code/clear", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCodeClear))
 

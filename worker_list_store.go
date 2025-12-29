@@ -46,6 +46,7 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 			user_id TEXT NOT NULL,
 			worker TEXT NOT NULL,
 			worker_hash TEXT,
+			notify_enabled INTEGER NOT NULL DEFAULT 1,
 			PRIMARY KEY(user_id, worker)
 		)
 	`); err != nil {
@@ -53,6 +54,10 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 	if err := addSavedWorkersHashColumn(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := addSavedWorkersNotifyEnabledColumn(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -113,6 +118,17 @@ func addSavedWorkersHashColumn(db *sql.DB) error {
 	return nil
 }
 
+func addSavedWorkersNotifyEnabledColumn(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("ALTER TABLE saved_workers ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 1")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	return nil
+}
+
 func (s *workerListStore) Add(userID, worker string) error {
 	if s == nil || s.db == nil {
 		return nil
@@ -135,7 +151,7 @@ func (s *workerListStore) Add(userID, worker string) error {
 	}
 
 	hash := workerNameHash(worker)
-	if _, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash) VALUES (?, ?, ?)", userID, worker, hash); err != nil {
+	if _, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, notify_enabled) VALUES (?, ?, ?, 1)", userID, worker, hash); err != nil {
 		return err
 	}
 	_, err := s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ? AND (worker_hash IS NULL OR worker_hash = '')", hash, userID, worker)
@@ -150,7 +166,7 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if userID == "" {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT worker, worker_hash FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	rows, err := s.db.Query("SELECT worker, worker_hash, notify_enabled FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,9 +175,11 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	var workers []SavedWorkerEntry
 	for rows.Next() {
 		var entry SavedWorkerEntry
-		if err := rows.Scan(&entry.Name, &entry.Hash); err != nil {
+		var notifyEnabledInt int
+		if err := rows.Scan(&entry.Name, &entry.Hash, &notifyEnabledInt); err != nil {
 			return nil, err
 		}
+		entry.NotifyEnabled = notifyEnabledInt != 0
 		entry.Hash = strings.TrimSpace(entry.Hash)
 		if entry.Hash == "" {
 			entry.Hash = workerNameHash(entry.Name)
@@ -181,6 +199,26 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 		return nil, err
 	}
 	return workers, nil
+}
+
+func (s *workerListStore) SetSavedWorkerNotifyEnabled(userID, workerHash string, enabled bool, now time.Time) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	workerHash = strings.ToLower(strings.TrimSpace(workerHash))
+	if userID == "" || workerHash == "" {
+		return nil
+	}
+	if len(workerHash) != 64 {
+		return nil
+	}
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := s.db.Exec("UPDATE saved_workers SET notify_enabled = ? WHERE user_id = ? AND worker_hash = ?", val, userID, workerHash)
+	return err
 }
 
 func (s *workerListStore) UpsertDiscordLink(userID, discordUserID string, enabled bool, now time.Time) error {

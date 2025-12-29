@@ -264,6 +264,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	type savedWorkerEntry struct {
 		Name              string
 		Hash              string
+		NotifyEnabled     bool
+		LastOnlineAt      string
 		Hashrate          float64
 		ShareRate         float64
 		Accepted          uint64
@@ -291,6 +293,13 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 
+	stateByHash := map[string]workerNotifyState(nil)
+	if s.workerLists != nil {
+		if st, err := s.workerLists.LoadDiscordWorkerStates(data.ClerkUser.UserID); err == nil {
+			stateByHash = st
+		}
+	}
+
 	perWalletRowsShown := make(map[string]int, 8)
 	for _, saved := range data.SavedWorkers {
 		wallet := savedWorkersWalletKey(saved.Name)
@@ -306,8 +315,14 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				continue
 			}
 			entry := savedWorkerEntry{
-				Name: saved.Name,
-				Hash: lookupHash,
+				Name:          saved.Name,
+				Hash:          lookupHash,
+				NotifyEnabled: saved.NotifyEnabled,
+			}
+			if stateByHash != nil && lookupHash != "" {
+				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
+					entry.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
+				}
 			}
 			if wallet != "" {
 				perWalletRowsShown[wallet]++
@@ -330,6 +345,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				entry := savedWorkerEntry{
 					Name:              saved.Name,
 					Hash:              view.WorkerSHA256,
+					NotifyEnabled:     saved.NotifyEnabled,
 					Hashrate:          hashrate,
 					ShareRate:         view.ShareRate,
 					Accepted:          view.Accepted,
@@ -381,6 +397,8 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Name                      string  `json:"name"`
 		Hash                      string  `json:"hash"`
 		Online                    bool    `json:"online"`
+		NotifyEnabled             bool    `json:"notify_enabled"`
+		LastOnlineAt              string  `json:"last_online_at,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
 		Accepted                  uint64  `json:"accepted"`
@@ -389,6 +407,12 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
 	now := time.Now()
+	stateByHash := map[string]workerNotifyState(nil)
+	if s.workerLists != nil {
+		if st, err := s.workerLists.LoadDiscordWorkerStates(user.UserID); err == nil {
+			stateByHash = st
+		}
+	}
 	resp := struct {
 		UpdatedAt      string  `json:"updated_at"`
 		SavedMax       int     `json:"saved_max"`
@@ -424,9 +448,15 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				continue
 			}
 			e := entry{
-				Name:   savedEntry.Name,
-				Hash:   lookupHash,
-				Online: false,
+				Name:          savedEntry.Name,
+				Hash:          lookupHash,
+				Online:        false,
+				NotifyEnabled: savedEntry.NotifyEnabled,
+			}
+			if stateByHash != nil && lookupHash != "" {
+				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
+					e.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
+				}
 			}
 			if wallet != "" {
 				perWalletRowsShown[wallet]++
@@ -457,6 +487,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Name:                      savedEntry.Name,
 					Hash:                      view.WorkerSHA256,
 					Online:                    true,
+					NotifyEnabled:             savedEntry.NotifyEnabled,
 					Hashrate:                  hashrate,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
@@ -575,6 +606,89 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 	}
 }
 
+func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+
+	type req struct {
+		Hash    string `json:"hash"`
+		Enabled *bool  `json:"enabled"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		parsed.Hash = r.FormValue("hash")
+		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
+			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
+			parsed.Enabled = &b
+		}
+	}
+
+	hash := strings.ToLower(strings.TrimSpace(parsed.Hash))
+	if hash == "" || len(hash) != 64 {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+	if parsed.Enabled == nil {
+		http.Error(w, "missing enabled", http.StatusBadRequest)
+		return
+	}
+
+	list, err := s.workerLists.List(user.UserID)
+	if err != nil {
+		http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
+		return
+	}
+	found := false
+	for _, sw := range list {
+		if strings.ToLower(strings.TrimSpace(sw.Hash)) == hash {
+			found = true
+			break
+		}
+	}
+	if !found {
+		http.Error(w, "worker not found", http.StatusNotFound)
+		return
+	}
+
+	now := time.Now()
+	if err := s.workerLists.SetSavedWorkerNotifyEnabled(user.UserID, hash, *parsed.Enabled, now); err != nil {
+		logger.Warn("saved worker notify toggle failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	_ = s.workerLists.PersistDiscordWorkerStates(user.UserID, nil, []string{hash}, now)
+
+	resp := struct {
+		OK      bool `json:"ok"`
+		Enabled bool `json:"enabled"`
+	}{
+		OK:      true,
+		Enabled: *parsed.Enabled,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
+	}
+}
+
 func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -661,6 +775,78 @@ func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request)
 	}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s == nil || s.clerk == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.TrimSpace(s.Config().ClerkPublishableKey) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	type req struct {
+		Token string `json:"token"`
+	}
+	var parsed req
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&parsed)
+	} else {
+		_ = r.ParseForm()
+		parsed.Token = r.FormValue("token")
+	}
+	token := strings.TrimSpace(parsed.Token)
+	if token == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		return
+	}
+
+	claims, err := s.clerk.Verify(token)
+	if err != nil || claims == nil || strings.TrimSpace(claims.Subject) == "" {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     s.clerk.SessionCookieName(),
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		cookie.Secure = strings.EqualFold(proto, "https")
+	} else {
+		cookie.Secure = r.TLS != nil
+	}
+	if claims.ExpiresAt != nil {
+		cookie.Expires = claims.ExpiresAt.Time
+	}
+	http.SetCookie(w, cookie)
+
+	resp := struct {
+		OK        bool   `json:"ok"`
+		ExpiresAt string `json:"expires_at,omitempty"`
+	}{
+		OK: true,
+	}
+	if claims.ExpiresAt != nil {
+		resp.ExpiresAt = claims.ExpiresAt.Time.UTC().Format(time.RFC3339)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	if out, err := sonic.Marshal(resp); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else {
+		_, _ = w.Write(out)
+	}
 }
 
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.
