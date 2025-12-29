@@ -26,7 +26,7 @@ const (
 	// StratumTLSListen is the default TLS listen address. Operators can disable
 	// TLS by setting this to an empty string in config.
 	defaultStratumTLSListen = ":4333"
-	defaultRPCURL = "http://127.0.0.1:8332"
+	defaultRPCURL           = "http://127.0.0.1:8332"
 
 	defaultExtranonce2Size         = 4
 	defaultTemplateExtraNonce2Size = 8
@@ -48,7 +48,7 @@ const (
 	defaultCoinbaseScriptSigMaxBytes = 100
 
 	defaultReplayLimit = int64(16 << 20)
-	defaultMaxConns    = 10000
+	defaultMaxConns    = 50000
 
 	defaultNTimeForwardSlackSeconds      = 7000
 	defaultBanInvalidSubmissionsAfter    = 60
