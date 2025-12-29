@@ -186,3 +186,64 @@ func BenchmarkOverviewPagePayload(b *testing.B) {
 		})
 	}
 }
+
+func benchmarkStatusServerWithConns(connCount int) *StatusServer {
+	now := time.Now()
+	cfg := defaultConfig()
+	reg := NewMinerRegistry()
+	metrics := NewPoolMetrics()
+
+	for i := 0; i < connCount; i++ {
+		mc := &MinerConn{
+			cfg:         cfg,
+			vardiff:     defaultVarDiff,
+			metrics:     metrics,
+			connectedAt: now.Add(-time.Minute),
+		}
+		mc.stats = MinerStats{
+			Worker:            fmt.Sprintf("worker-%d", i),
+			WorkerSHA256:      fmt.Sprintf("%064x", i),
+			WindowStart:       now.Add(-30 * time.Second),
+			WindowAccepted:    10,
+			WindowSubmissions: 12,
+			LastShare:         now,
+		}
+		mc.rollingHashrateValue = float64(1e12 + float64(i%1000))
+		mc.connectionSeq = uint64(i + 1)
+
+		metrics.UpdateConnectionHashrate(uint64(i+1), mc.rollingHashrateValue)
+		reg.Add(mc)
+	}
+
+	s := &StatusServer{
+		registry: reg,
+		metrics:  metrics,
+		start:    now.Add(-time.Hour),
+	}
+	s.UpdateConfig(cfg)
+	return s
+}
+
+func BenchmarkBuildStatusData(b *testing.B) {
+	connSizes := []int{1000, 10000, 50000, 100000}
+	for _, size := range connSizes {
+		b.Run(fmt.Sprintf("%d_conns", size), func(b *testing.B) {
+			s := benchmarkStatusServerWithConns(size)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = s.buildStatusData()
+			}
+			b.StopTimer()
+
+			if size > 0 && b.N > 0 {
+				nsPerOp := float64(b.Elapsed().Nanoseconds()) / float64(b.N)
+				nsPerConn := nsPerOp / float64(size)
+				b.ReportMetric(nsPerConn, "ns/conn")
+				if nsPerConn > 0 {
+					b.ReportMetric(benchBudgetNS/nsPerConn, "conns@10ms")
+				}
+			}
+		})
+	}
+}
