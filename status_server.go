@@ -581,6 +581,15 @@ func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 	}
 	claims, err := s.clerk.Verify(cookie.Value)
 	if err != nil {
+		// In dev/test Clerk environments, tokens expiring frequently is common
+		// and can create noisy logs (e.g. saved-workers polling). Silence these
+		// verification warnings when using test keys.
+		secret := strings.TrimSpace(s.Config().ClerkSecretKey)
+		publishable := strings.TrimSpace(s.Config().ClerkPublishableKey)
+		if strings.HasPrefix(secret, "sk_test_") || strings.HasPrefix(publishable, "pk_test_") {
+			logger.Debug("clerk session verification failed (test keys)", "error", err, "remote_addr", r.RemoteAddr)
+			return nil
+		}
 		logger.Warn("clerk session verification failed", "error", err, "remote_addr", r.RemoteAddr)
 		return nil
 	}
