@@ -572,8 +572,9 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 }
 
 type SavedWorkerEntry struct {
-	Name string `json:"name"`
-	Hash string `json:"hash"`
+	Name          string `json:"name"`
+	Hash          string `json:"hash"`
+	NotifyEnabled bool   `json:"notify_enabled,omitempty"`
 }
 
 type StatusData struct {
@@ -582,6 +583,8 @@ type StatusData struct {
 	ClerkEnabled                   bool                  `json:"clerk_enabled"`
 	ClerkLoginURL                  string                `json:"clerk_login_url,omitempty"`
 	ClerkUser                      *ClerkUser            `json:"clerk_user,omitempty"`
+	ClerkPublishableKey            string                `json:"-"`
+	ClerkJSURL                     string                `json:"-"`
 	SavedWorkers                   []SavedWorkerEntry    `json:"saved_workers,omitempty"`
 	BrandName                      string                `json:"brand_name"`
 	BrandDomain                    string                `json:"brand_domain"`

@@ -558,6 +558,19 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
 		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != ""
 
+	clerkPK := strings.TrimSpace(s.Config().ClerkPublishableKey)
+	clerkJSURL := ""
+	if clerkPK != "" {
+		clerkJSHost := strings.TrimRight(strings.TrimSpace(s.Config().ClerkFrontendAPIURL), "/")
+		if clerkJSHost == "" {
+			clerkJSHost = strings.TrimRight(strings.TrimSpace(s.Config().ClerkIssuerURL), "/")
+		}
+		if clerkJSHost == "" {
+			clerkJSHost = "https://clerk.clerk.com"
+		}
+		clerkJSURL = clerkJSHost + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+	}
+
 	var warnings []string
 	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
@@ -571,6 +584,8 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
+		ClerkPublishableKey:            clerkPK,
+		ClerkJSURL:                     clerkJSURL,
 		Tagline:                        s.Config().StatusTagline,
 		ConnectMinerTitleExtra:         strings.TrimSpace(s.Config().StatusConnectMinerTitleExtra),
 		ConnectMinerTitleExtraURL:      strings.TrimSpace(s.Config().StatusConnectMinerTitleExtraURL),

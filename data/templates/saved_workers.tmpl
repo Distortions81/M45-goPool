@@ -42,6 +42,29 @@
 			user-select: all;
 		}
 		.discord-dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+		.offline-list li {
+			display: grid;
+			grid-template-columns: 1fr auto auto auto;
+			align-items: center;
+			gap: 10px;
+		}
+		.offline-worker-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+		.offline-worker-meta a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.offline-last-online { color: var(--text-muted); }
+		@media (max-width: 540px) {
+			.offline-list li {
+				grid-template-columns: 1fr auto;
+				grid-template-rows: auto auto;
+				align-items: start;
+			}
+			.offline-list li .offline-actions {
+				grid-column: 1 / -1;
+				display: flex;
+				justify-content: flex-end;
+				gap: 8px;
+			}
+		}
 	</style>
 </head>
 <body>
@@ -60,7 +83,7 @@
 							{{end}}
 						</h2>
 					</div>
-					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
+					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" style="gap:8px;">
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
 							<polyline points="16 17 21 12 16 7"></polyline>
@@ -77,6 +100,25 @@
 				</form>
 			</div>
 
+			<div class="card">
+				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+					<h2 style="margin-top:0;">Privacy</h2>
+					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" style="gap:8px;">
+						<span id="privacyToggleIcon" aria-hidden="true">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+								<circle cx="12" cy="12" r="3"></circle>
+								<line x1="4" y1="20" x2="20" y2="4"></line>
+							</svg>
+						</span>
+						<span id="privacyToggleText">Privacy</span>
+					</button>
+				</div>
+				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
+					Hides your worker names on this page (useful when screen sharing).
+				</p>
+			</div>
+
 			{{$offlineCount := len .OfflineWorkerEntries}}
 			<div class="card offline-card" id="offlineSection">
 				<div class="offline-card-header">
@@ -84,7 +126,7 @@
 						<h2 style="margin:0;">Offline Workers</h2>
 						<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end;">
 							{{if .DiscordNotificationsEnabled}}
-								<button id="oneTimeCodeGenerate" class="btn btn-highlight" type="button" aria-label="Get Discord notifications" title="Get Discord notifications">
+								<button id="oneTimeCodeGenerate" class="btn btn-highlight" type="button" aria-label="Get Discord notifications">
 									Get Discord notifications
 								</button>
 							{{end}}
@@ -97,20 +139,30 @@
 				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
 					{{range .OfflineWorkerEntries}}
 						<li>
-							<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+							<div class="offline-worker-meta">
+								<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+								<span class="text-sm offline-last-online" data-last-online-at="{{.LastOnlineAt}}"></span>
+							</div>
 							<span class="badge badge-danger">Offline</span>
-							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-								<input type="hidden" name="worker" value="{{.Name}}">
-								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-										<polyline points="3 6 5 6 21 6"></polyline>
-										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-										<path d="M10 11v6"></path>
-										<path d="M14 11v6"></path>
-										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-									</svg>
-								</button>
-							</form>
+							<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+								{{if $.DiscordNotificationsEnabled}}
+									<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" title="{{if .NotifyEnabled}}Disable notifications for this worker{{else}}Enable notifications for this worker{{end}}">
+										{{if .NotifyEnabled}}Notif: On{{else}}Notif: Off{{end}}
+									</button>
+								{{end}}
+								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+									<input type="hidden" name="worker" value="{{.Name}}">
+									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<polyline points="3 6 5 6 21 6"></polyline>
+											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+											<path d="M10 11v6"></path>
+											<path d="M14 11v6"></path>
+											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+										</svg>
+									</button>
+								</form>
+							</div>
 						</li>
 					{{end}}
 				</ul>
@@ -137,16 +189,6 @@
 					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
 						<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
 						<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
-						<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
-							<span id="privacyToggleIcon" aria-hidden="true">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
-									<circle cx="12" cy="12" r="3"></circle>
-									<line x1="4" y1="20" x2="20" y2="4"></line>
-								</svg>
-							</span>
-							<span id="privacyToggleText">Privacy</span>
-						</button>
 					</div>
 				</div>
 				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
@@ -185,18 +227,25 @@
 									<td>{{.Accepted}}</td>
 									<td>{{humanDuration .ConnectedDuration}}</td>
 									<td style="text-align:right;">
-										<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-											<input type="hidden" name="worker" value="{{.Name}}">
-											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-													<polyline points="3 6 5 6 21 6"></polyline>
-													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-													<path d="M10 11v6"></path>
-													<path d="M14 11v6"></path>
-													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-												</svg>
-											</button>
-										</form>
+										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+											{{if $.DiscordNotificationsEnabled}}
+												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" title="{{if .NotifyEnabled}}Disable notifications for this worker{{else}}Enable notifications for this worker{{end}}">
+													{{if .NotifyEnabled}}Notif: On{{else}}Notif: Off{{end}}
+												</button>
+											{{end}}
+											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+												<input type="hidden" name="worker" value="{{.Name}}">
+												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<polyline points="3 6 5 6 21 6"></polyline>
+														<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+														<path d="M10 11v6"></path>
+														<path d="M14 11v6"></path>
+														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+													</svg>
+												</button>
+											</form>
+										</div>
 									</td>
 								</tr>
 								{{end}}
@@ -261,6 +310,81 @@
 	<script>
 	(function() {
 		let hideWorkerNames = true;
+		const discordNotificationsEnabled = {{if .DiscordNotificationsEnabled}}true{{else}}false{{end}};
+		const clerkEnabled = {{if .ClerkEnabled}}true{{else}}false{{end}};
+		const clerkPublishableKey = "{{.ClerkPublishableKey}}";
+		const clerkJSURL = "{{.ClerkJSURL}}";
+		const clerkLoginURL = "{{.ClerkLoginURL}}";
+
+		let clerkLoadPromise = null;
+		let clerkRefreshing = null;
+
+		function redirectToLogin() {
+			const url = (clerkLoginURL || '/sign-in?redirect=/saved-workers');
+			try { window.location.href = url; } catch (_) {}
+		}
+
+		function loadClerkJS() {
+			if (!clerkEnabled || !clerkPublishableKey || !clerkJSURL) return Promise.resolve(null);
+			if (window.Clerk) return Promise.resolve(window.Clerk);
+			if (clerkLoadPromise) return clerkLoadPromise;
+			clerkLoadPromise = new Promise((resolve) => {
+				const script = document.createElement('script');
+				script.async = true;
+				script.crossOrigin = 'anonymous';
+				script.src = clerkJSURL;
+				script.setAttribute('data-clerk-publishable-key', clerkPublishableKey);
+				script.onload = () => resolve(window.Clerk || null);
+				script.onerror = () => resolve(null);
+				document.head.appendChild(script);
+			}).then(async (clerk) => {
+				try {
+					if (clerk && typeof clerk.load === 'function') {
+						await clerk.load();
+					}
+				} catch (_) {}
+				return window.Clerk || clerk || null;
+			});
+			return clerkLoadPromise;
+		}
+
+		async function refreshClerkSession() {
+			if (!clerkEnabled) return false;
+			if (clerkRefreshing) return clerkRefreshing;
+			clerkRefreshing = (async () => {
+				const clerk = await loadClerkJS();
+				if (!clerk) return false;
+				try {
+					if (clerk.session && typeof clerk.session.getToken === 'function') {
+						const token = await clerk.session.getToken();
+						if (!token) return false;
+						const res = await fetch('/api/auth/session-refresh', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ token }),
+						});
+						return res && res.ok;
+					}
+				} catch (_) {}
+				return false;
+			})().finally(() => {
+				clerkRefreshing = null;
+			});
+			return clerkRefreshing;
+		}
+
+		async function fetchWithAuthRefresh(url, options) {
+			const res = await fetch(url, options);
+			if (res.status !== 401) return res;
+			const ok = await refreshClerkSession();
+			if (ok) {
+				const retry = await fetch(url, options);
+				if (retry.status !== 401) return retry;
+			}
+			redirectToLogin();
+			return res;
+		}
 
 		// One-time code (server-generated, stored in memory for 5 minutes).
 		const oneTimeCodeGenerateBtn = document.getElementById('oneTimeCodeGenerate');
@@ -315,7 +439,7 @@
 			const code = activeOneTimeCode;
 			if (!code) return;
 			try {
-				await fetch('/api/saved-workers/one-time-code/clear', {
+				await fetchWithAuthRefresh('/api/saved-workers/one-time-code/clear', {
 					method: 'POST',
 					credentials: 'same-origin',
 					headers: { 'Content-Type': 'application/json' },
@@ -388,7 +512,7 @@
 			try {
 				if (discordRegenBtn) discordRegenBtn.disabled = true;
 				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = true;
-				const res = await fetch('/api/saved-workers/one-time-code', {
+				const res = await fetchWithAuthRefresh('/api/saved-workers/one-time-code', {
 					method: 'POST',
 					credentials: 'same-origin',
 					headers: { 'Content-Type': 'application/json' },
@@ -785,22 +909,26 @@
 					<td>${Number(w.accepted || 0)}</td>
 					<td>${formatDurationShort(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
-						<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-							<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
-							<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<polyline points="3 6 5 6 21 6"></polyline>
-									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-									<path d="M10 11v6"></path>
-									<path d="M14 11v6"></path>
-									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-								</svg>
-							</button>
-						</form>
+						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+							${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+								<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+										<path d="M10 11v6"></path>
+										<path d="M14 11v6"></path>
+										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+									</svg>
+								</button>
+							</form>
+						</div>
 					</td>
 				</tr>
 			`).join('');
 			attachRemoveConfirms(onlineBody);
+			attachNotifyToggles(onlineBody);
 			applyWorkerNameCensoring(onlineBody);
 		}
 
@@ -832,6 +960,65 @@
 			}
 		}
 
+		function notifyToggleText(enabled) {
+			return enabled ? 'Notif: On' : 'Notif: Off';
+		}
+
+		function notifyToggleTitle(enabled) {
+			return enabled ? 'Disable notifications for this worker' : 'Enable notifications for this worker';
+		}
+
+		function applyLastOnlineLabels(root) {
+			const els = (root || document).querySelectorAll('[data-last-online-at]');
+			for (const el of els) {
+				const raw = String(el.getAttribute('data-last-online-at') || '').trim();
+				if (!raw) {
+					el.textContent = '';
+					continue;
+				}
+				const t = Date.parse(raw);
+				if (!isFinite(t)) {
+					el.textContent = '';
+					continue;
+				}
+				const ago = formatDurationShort((Date.now() - t) / 1000);
+				el.textContent = ago ? `Last online: ${ago} ago` : '';
+			}
+		}
+
+		function attachNotifyToggles(root) {
+			if (!discordNotificationsEnabled) return;
+			const buttons = (root || document).querySelectorAll('button.worker-notify-toggle[data-worker-hash]');
+			for (const btn of buttons) {
+				if (btn.__notifyToggleAttached) continue;
+				btn.__notifyToggleAttached = true;
+				btn.addEventListener('click', async function() {
+					const hash = String(btn.getAttribute('data-worker-hash') || '').trim();
+					if (!hash) return;
+					const cur = String(btn.getAttribute('data-notify-enabled') || '1').trim() === '1';
+					const next = !cur;
+					btn.disabled = true;
+					try {
+						const res = await fetchWithAuthRefresh('/api/saved-workers/notify-enabled', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ hash, enabled: next }),
+						});
+						if (!res.ok) throw new Error('request failed');
+						btn.setAttribute('data-notify-enabled', next ? '1' : '0');
+						btn.textContent = notifyToggleText(next);
+						btn.title = notifyToggleTitle(next);
+					} catch (_) {
+						// ignore
+					} finally {
+						btn.disabled = false;
+						refreshSavedWorkers();
+					}
+				});
+			}
+		}
+
 		function updatePrivacyToggle() {
 			const btn = document.getElementById('privacyToggleNames');
 			const text = document.getElementById('privacyToggleText');
@@ -841,7 +1028,7 @@
 
 		async function refreshSavedWorkers() {
 			try {
-				const res = await fetch('/api/saved-workers', { credentials: 'same-origin' });
+				const res = await fetchWithAuthRefresh('/api/saved-workers', { credentials: 'same-origin' });
 				if (!res.ok) return;
 				const data = await res.json();
 				const savedCount = document.getElementById('savedCount');
@@ -891,24 +1078,32 @@
 						}
 						offlineList.innerHTML = offline.map(w => `
 							<li>
-								<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+								<div class="offline-worker-meta">
+									<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+									<span class="text-sm offline-last-online" data-last-online-at="${escapeAttr(w.last_online_at || '')}"></span>
+								</div>
 								<span class="badge badge-danger">Offline</span>
-								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-									<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
-									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<polyline points="3 6 5 6 21 6"></polyline>
-											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-											<path d="M10 11v6"></path>
-											<path d="M14 11v6"></path>
-											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-										</svg>
-									</button>
-								</form>
+								<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+									${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+									<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+										<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+												<polyline points="3 6 5 6 21 6"></polyline>
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+												<path d="M10 11v6"></path>
+												<path d="M14 11v6"></path>
+												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+											</svg>
+										</button>
+									</form>
+								</div>
 							</li>
 						`).join('');
 						applyWorkerNameCensoring(offlineList);
+						applyLastOnlineLabels(offlineList);
 						attachRemoveConfirms(offlineList);
+						attachNotifyToggles(offlineList);
 					}
 				}
 			} catch (_) {}
@@ -929,7 +1124,14 @@
 
 		attachRemoveConfirms(document);
 		applyWorkerNameCensoring(document);
+		applyLastOnlineLabels(document);
+		attachNotifyToggles(document);
 		updatePrivacyToggle();
+
+		// Best-effort: keep the login cookie fresh while this page is open.
+		if (clerkEnabled) {
+			setInterval(() => { refreshClerkSession(); }, 60 * 1000);
+		}
 
 		const privacyToggle = document.getElementById('privacyToggleNames');
 		if (privacyToggle) {
