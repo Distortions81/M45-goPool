@@ -13,20 +13,21 @@ import (
 )
 
 type discordNotifier struct {
-	s                *StatusServer
-	dg               *discordgo.Session
-	guildID          string
-	scheduleMu       sync.Mutex
-	startChecksAt    time.Time
-	bootChecksAt     time.Time
-	bootNoticeSent   bool
-	notifyChannelID  string
-	stateMu          sync.Mutex
-	statusByUser     map[string]map[string]workerNotifyState // clerk user_id -> workerHash -> state
-	lastSweepAt      time.Time
-	links            []discordLink
-	linkIdx          int
-	lastLinksRefresh time.Time
+	s                  *StatusServer
+	dg                 *discordgo.Session
+	guildID            string
+	scheduleMu         sync.Mutex
+	startChecksAt      time.Time
+	bootChecksAt       time.Time
+	bootNoticeSent     bool
+	ignoreNetworkUntil time.Time
+	notifyChannelID    string
+	stateMu            sync.Mutex
+	statusByUser       map[string]map[string]workerNotifyState // clerk user_id -> workerHash -> state
+	lastSweepAt        time.Time
+	links              []discordLink
+	linkIdx            int
+	lastLinksRefresh   time.Time
 
 	pingMu    sync.Mutex
 	pingQueue []queuedDiscordMessage
@@ -66,6 +67,7 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	n.startChecksAt = time.Now().Add(5 * time.Minute)
 	n.bootChecksAt = n.startChecksAt
 	n.bootNoticeSent = false
+	n.ignoreNetworkUntil = n.startChecksAt
 	n.scheduleMu.Unlock()
 
 	dg, err := discordgo.New("Bot " + token)
@@ -120,6 +122,13 @@ func (n *discordNotifier) isNetworkOK() bool {
 	if n == nil {
 		return false
 	}
+	n.scheduleMu.Lock()
+	ignoreUntil := n.ignoreNetworkUntil
+	n.scheduleMu.Unlock()
+	if !ignoreUntil.IsZero() && time.Now().Before(ignoreUntil) {
+		// Ignore connectivity checks during the initial boot gate.
+		return true
+	}
 	n.netMu.Lock()
 	defer n.netMu.Unlock()
 	if !n.networkKnown {
@@ -142,7 +151,11 @@ func (n *discordNotifier) setNetworkOK(ok bool, now time.Time) {
 
 	// On any network transition (offline OR online), reset notifier state so
 	// we don't spam everyone due to our own connectivity blip.
-	if !prevKnown || prevOK != ok {
+	//
+	// On first observation (prevKnown=false), do not reset state or emit a
+	// channel message; this avoids pushing the boot gate back and avoids a
+	// confusing "network back online" message at startup.
+	if prevKnown && prevOK != ok {
 		n.resetAllNotificationState(now)
 		if ok {
 			n.enqueueNotice("Network connectivity is back online; notifications will resume after the warm-up delay.")
@@ -190,6 +203,25 @@ func (n *discordNotifier) networkLoop(ctx context.Context) {
 			return
 		default:
 			now := time.Now()
+
+			// Ignore network connectivity during the initial boot gate to avoid
+			// disabling notifications due to transient startup conditions.
+			n.scheduleMu.Lock()
+			ignoreUntil := n.ignoreNetworkUntil
+			n.scheduleMu.Unlock()
+			if !ignoreUntil.IsZero() && now.Before(ignoreUntil) {
+				n.netMu.Lock()
+				n.netOKStreak = 0
+				n.netBadStreak = 0
+				n.netMu.Unlock()
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(onlineCheckInterval):
+				}
+				continue
+			}
+
 			ok := checkNetworkConnectivity()
 
 			n.netMu.Lock()
