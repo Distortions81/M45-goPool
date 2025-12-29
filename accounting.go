@@ -235,6 +235,9 @@ func (d *ShareDetail) DecodeCoinbaseFields() {
 	}
 	pos = p
 	var outs []CoinbaseOutputDebug
+	if voutCount > 0 && voutCount <= 1024 {
+		outs = make([]CoinbaseOutputDebug, 0, int(voutCount))
+	}
 	var totalValue int64
 	for outIdx := uint64(0); outIdx < voutCount; outIdx++ {
 		if pos+8 > len(raw) {
@@ -256,7 +259,7 @@ func (d *ShareDetail) DecodeCoinbaseFields() {
 		addr := scriptToAddress(script, ChainParams())
 		outs = append(outs, CoinbaseOutputDebug{
 			ValueSats: value,
-			ScriptHex: strings.ToLower(hex.EncodeToString(script)),
+			ScriptHex: hex.EncodeToString(script),
 			Address:   addr,
 		})
 	}

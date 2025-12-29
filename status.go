@@ -410,17 +410,15 @@ func shortDisplayID(s string, prefix, suffix int) string {
 	if s == "" {
 		return ""
 	}
-	var cleaned []rune
-	for _, r := range s {
+	cleaned := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		b := s[i]
 		switch {
-		case r >= 'a' && r <= 'z':
-			cleaned = append(cleaned, r)
-		case r >= 'A' && r <= 'Z':
-			cleaned = append(cleaned, r)
-		case r >= '0' && r <= '9':
-			cleaned = append(cleaned, r)
-		case r == '.', r == '-', r == '_':
-			cleaned = append(cleaned, r)
+		case b >= 'a' && b <= 'z',
+			b >= 'A' && b <= 'Z',
+			b >= '0' && b <= '9',
+			b == '.', b == '-', b == '_':
+			cleaned = append(cleaned, b)
 		default:
 			// drop spaces, newlines, and any other unexpected chars
 		}
@@ -428,10 +426,9 @@ func shortDisplayID(s string, prefix, suffix int) string {
 	if len(cleaned) == 0 {
 		return ""
 	}
-	rs := cleaned
-	n := len(rs)
+	n := len(cleaned)
 	if n <= prefix+suffix+3 {
-		return string(rs)
+		return string(cleaned)
 	}
 	if prefix < 0 {
 		prefix = 0
@@ -440,9 +437,13 @@ func shortDisplayID(s string, prefix, suffix int) string {
 		suffix = 0
 	}
 	if prefix+suffix+3 > n {
-		return string(rs)
+		return string(cleaned)
 	}
-	return string(rs[:prefix]) + "..." + string(rs[n-suffix:])
+	out := make([]byte, 0, prefix+3+suffix)
+	out = append(out, cleaned[:prefix]...)
+	out = append(out, '.', '.', '.')
+	out = append(out, cleaned[n-suffix:]...)
+	return string(out)
 }
 
 // shortWorkerName shortens a worker name but preserves the suffix beginning
@@ -453,12 +454,10 @@ func shortWorkerName(s string, prefix, suffix int) string {
 	if s == "" {
 		return ""
 	}
-	parts := strings.SplitN(s, ".", 2)
-	if len(parts) == 1 {
+	head, tail, ok := strings.Cut(s, ".")
+	if !ok {
 		return shortDisplayID(s, prefix, suffix)
 	}
-	head := parts[0]
-	tail := parts[1]
 	shortHead := shortDisplayID(head, prefix, suffix)
 	return shortHead + "." + tail
 }

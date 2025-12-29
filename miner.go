@@ -174,7 +174,7 @@ func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
 
 	// Clear map when full (simple eviction strategy)
 	if s.count >= duplicateShareHistory {
-		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
+		clear(s.m)
 		s.count = 0
 	}
 
