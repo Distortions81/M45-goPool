@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ type discordNotifier struct {
 	s                *StatusServer
 	dg               *discordgo.Session
 	guildID          string
+	scheduleMu       sync.Mutex
 	startChecksAt    time.Time
 	notifyChannelID  string
 	stateMu          sync.Mutex
@@ -26,6 +28,12 @@ type discordNotifier struct {
 
 	pingMu    sync.Mutex
 	pingQueue []pingEntry
+
+	netMu        sync.Mutex
+	networkOK    bool
+	networkKnown bool
+	netOKStreak  int
+	netBadStreak int
 }
 
 type workerNotifyState struct {
@@ -58,13 +66,27 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	token := strings.TrimSpace(cfg.DiscordBotToken)
 	n.guildID = strings.TrimSpace(cfg.DiscordServerID)
 	n.notifyChannelID = strings.TrimSpace(cfg.DiscordNotifyChannelID)
+	n.scheduleMu.Lock()
 	n.startChecksAt = time.Now().Add(5 * time.Minute)
+	n.scheduleMu.Unlock()
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return err
 	}
 	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuilds)
+
+	// Reset notification state on Discord disconnect/reconnect to avoid spurious
+	// offline/online storms from our own connectivity hiccups.
+	dg.AddHandler(func(_ *discordgo.Session, _ *discordgo.Disconnect) {
+		n.resetAllNotificationState(time.Now())
+	})
+	dg.AddHandler(func(_ *discordgo.Session, _ *discordgo.Ready) {
+		n.resetAllNotificationState(time.Now())
+	})
+	dg.AddHandler(func(_ *discordgo.Session, _ *discordgo.Resumed) {
+		n.resetAllNotificationState(time.Now())
+	})
 
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if i.Type != discordgo.InteractionApplicationCommand {
@@ -84,6 +106,7 @@ func (n *discordNotifier) start(ctx context.Context) error {
 
 	go n.loop(ctx)
 	go n.pingLoop(ctx)
+	go n.networkLoop(ctx)
 	logger.Info("discord notifier started", "guild_id", n.guildID)
 	return nil
 }
@@ -93,6 +116,141 @@ func (n *discordNotifier) close() {
 		return
 	}
 	_ = n.dg.Close()
+}
+
+func (n *discordNotifier) isNetworkOK() bool {
+	if n == nil {
+		return false
+	}
+	n.netMu.Lock()
+	defer n.netMu.Unlock()
+	if !n.networkKnown {
+		// Until we have a signal either way, assume OK (startup will quickly check).
+		return true
+	}
+	return n.networkOK
+}
+
+func (n *discordNotifier) setNetworkOK(ok bool, now time.Time) {
+	if n == nil {
+		return
+	}
+	n.netMu.Lock()
+	prevKnown := n.networkKnown
+	prevOK := n.networkOK
+	n.networkKnown = true
+	n.networkOK = ok
+	n.netMu.Unlock()
+
+	// On any network transition (offline OR online), reset notifier state so
+	// we don't spam everyone due to our own connectivity blip.
+	if !prevKnown || prevOK != ok {
+		n.resetAllNotificationState(now)
+	}
+}
+
+func (n *discordNotifier) resetAllNotificationState(now time.Time) {
+	if n == nil {
+		return
+	}
+	// Clear per-user state so we re-seed without notifications after recovery.
+	n.stateMu.Lock()
+	n.statusByUser = nil
+	n.links = nil
+	n.linkIdx = 0
+	n.lastLinksRefresh = time.Time{}
+	n.lastSweepAt = time.Time{}
+	n.stateMu.Unlock()
+
+	// Clear queued pings.
+	n.pingMu.Lock()
+	n.pingQueue = nil
+	n.pingMu.Unlock()
+
+	// Apply the same startup delay before resuming checks. When the network is
+	// offline, checks are already gated by isNetworkOK().
+	n.scheduleMu.Lock()
+	n.startChecksAt = now.Add(5 * time.Minute)
+	n.scheduleMu.Unlock()
+}
+
+func (n *discordNotifier) networkLoop(ctx context.Context) {
+	const (
+		onlineCheckInterval  = 15 * time.Second
+		offlineCheckInterval = 15 * time.Second
+		streakThreshold      = 4
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			now := time.Now()
+			ok := checkNetworkConnectivity()
+
+			n.netMu.Lock()
+			if ok {
+				n.netOKStreak++
+				n.netBadStreak = 0
+			} else {
+				n.netBadStreak++
+				n.netOKStreak = 0
+			}
+			known := n.networkKnown
+			currentOK := n.networkOK
+			okStreak := n.netOKStreak
+			badStreak := n.netBadStreak
+			n.netMu.Unlock()
+
+			// Require a few consecutive results before flipping state to reduce
+			// churn from transient dial failures.
+			shouldFlip := false
+			targetOK := currentOK
+			if !known {
+				shouldFlip = true
+				targetOK = ok
+			} else if currentOK && badStreak >= streakThreshold {
+				shouldFlip = true
+				targetOK = false
+			} else if !currentOK && okStreak >= streakThreshold {
+				shouldFlip = true
+				targetOK = true
+			}
+			if shouldFlip {
+				n.setNetworkOK(targetOK, now)
+			}
+
+			interval := onlineCheckInterval
+			if !n.isNetworkOK() {
+				interval = offlineCheckInterval
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(interval):
+			}
+		}
+	}
+}
+
+func checkNetworkConnectivity() bool {
+	// Simple routing-level test using IPs to avoid DNS dependency.
+	// We consider the network "up" if we can connect to any well-known host.
+	targets := []string{
+		"1.1.1.1:443", // Cloudflare
+		"8.8.8.8:443", // Google DNS
+		"9.9.9.9:443", // Quad9
+	}
+	d := net.Dialer{Timeout: 2 * time.Second}
+	for _, addr := range targets {
+		conn, err := d.Dial("tcp", addr)
+		if err == nil && conn != nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }
 
 func (n *discordNotifier) registerCommands(ctx context.Context) error {
@@ -230,7 +388,13 @@ func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) 
 		return
 	}
 	now := time.Now()
-	if !n.startChecksAt.IsZero() && now.Before(n.startChecksAt) {
+	if !n.isNetworkOK() {
+		return
+	}
+	n.scheduleMu.Lock()
+	startAt := n.startChecksAt
+	n.scheduleMu.Unlock()
+	if !startAt.IsZero() && now.Before(startAt) {
 		return
 	}
 	const refreshInterval = 30 * time.Second
@@ -423,17 +587,36 @@ func (n *discordNotifier) enqueuePing(discordUserID, line string) {
 	}
 	n.pingMu.Lock()
 	defer n.pingMu.Unlock()
-	const maxQueue = 100_000
+	const maxQueue = 3
 	if len(n.pingQueue) >= maxQueue {
-		// Drop oldest to keep memory bounded.
-		n.pingQueue = n.pingQueue[1:]
+		// Drop new notifications when backlogged to avoid unbounded spam.
+		return
 	}
 	n.pingQueue = append(n.pingQueue, pingEntry{DiscordUserID: discordUserID, Line: line})
 }
 
+func (n *discordNotifier) subscribedUserCount() int {
+	if n == nil {
+		return 0
+	}
+	n.stateMu.Lock()
+	cached := len(n.links)
+	n.stateMu.Unlock()
+	if cached > 0 {
+		return cached
+	}
+	if n.s == nil || n.s.workerLists == nil {
+		return 0
+	}
+	if links, err := n.s.workerLists.ListEnabledDiscordLinks(); err == nil {
+		return len(links)
+	}
+	return 0
+}
+
 func (n *discordNotifier) pingLoop(ctx context.Context) {
-	// 25 messages/minute max.
-	ticker := time.NewTicker(time.Minute / 25)
+	// 1 message per 10 seconds max.
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -449,6 +632,9 @@ func (n *discordNotifier) sendNextPingBatch() {
 	if n == nil || n.dg == nil {
 		return
 	}
+	if !n.isNetworkOK() {
+		return
+	}
 	channelID := strings.TrimSpace(n.notifyChannelID)
 	if channelID == "" {
 		return
@@ -460,6 +646,38 @@ func (n *discordNotifier) sendNextPingBatch() {
 	if len(n.pingQueue) == 0 {
 		n.pingMu.Unlock()
 		return
+	}
+
+	// Outage guard: if we'd ping "too many" subscribed users at once, treat it as a
+	// localized outage (e.g. upstream connectivity) and drop the notification burst.
+	// Threshold: > max(100 users, 10% of subscribed users).
+	uniqueUsers := make(map[string]struct{}, 128)
+	for _, e := range n.pingQueue {
+		if strings.TrimSpace(e.DiscordUserID) != "" {
+			uniqueUsers[e.DiscordUserID] = struct{}{}
+		}
+	}
+	affected := len(uniqueUsers)
+	subscribed := n.subscribedUserCount()
+	if subscribed > 0 {
+		pctThreshold := int(math.Ceil(float64(subscribed) * 0.10))
+		if pctThreshold < 0 {
+			pctThreshold = 0
+		}
+		threshold := 100
+		if pctThreshold > threshold {
+			threshold = pctThreshold
+		}
+		if affected > threshold {
+			n.pingMu.Unlock()
+			logger.Warn("notification burst dropped (possible localized outage)",
+				"affected_users", affected,
+				"subscribed_users", subscribed,
+				"threshold", threshold,
+			)
+			n.resetAllNotificationState(time.Now())
+			return
+		}
 	}
 
 	used := 0
