@@ -1056,6 +1056,10 @@ h2 {
 	animation: loginButtonGlow 3s ease-in-out infinite;
 }
 
+.btn-highlight.no-glow {
+	animation: none;
+}
+
 .btn-highlight::after {
 	content: "";
 	position: absolute;

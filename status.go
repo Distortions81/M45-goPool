@@ -598,6 +598,7 @@ type StatusData struct {
 	PoolDonationAddress            string                `json:"pool_donation_address,omitempty"`
 	DiscordURL                     string                `json:"discord_url,omitempty"`
 	DiscordNotificationsEnabled    bool                  `json:"discord_notifications_enabled,omitempty"`
+	DiscordNotificationsRegistered bool                  `json:"-"`
 	GitHubURL                      string                `json:"github_url,omitempty"`
 	NodeNetwork                    string                `json:"node_network,omitempty"`
 	NodeSubversion                 string                `json:"node_subversion,omitempty"`

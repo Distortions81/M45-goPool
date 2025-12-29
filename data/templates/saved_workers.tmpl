@@ -126,7 +126,7 @@
 						<h2 style="margin:0;">Offline Workers</h2>
 						<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end;">
 							{{if .DiscordNotificationsEnabled}}
-								<button id="oneTimeCodeGenerate" class="btn btn-highlight" type="button" aria-label="Get Discord notifications">
+								<button id="oneTimeCodeGenerate" class="btn btn-highlight{{if .DiscordNotificationsRegistered}} no-glow{{end}}" type="button" aria-label="Get Discord notifications">
 									Get Discord notifications
 								</button>
 							{{end}}
