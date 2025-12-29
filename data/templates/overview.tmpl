@@ -537,7 +537,8 @@
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
 					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
-					const connectionId = worker.connection_id ?? '—';
+					let connectionId = worker.connection_id ?? '—';
+					if (connectionId === '') connectionId = '0';
 					return `
 						<tr>
 							<td class="mono">${name}</td>
