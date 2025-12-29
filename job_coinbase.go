@@ -173,6 +173,16 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 	})
 
 	var outputs bytes.Buffer
+	var total int
+	if len(commitmentScript) > 0 {
+		total += 8 + 9 + len(commitmentScript)
+	}
+	for _, o := range orderedPayouts {
+		total += 8 + 9 + len(o.Script)
+	}
+	total += 9 // output count varint upper bound
+	outputs.Grow(total)
+
 	outputCount := uint64(len(orderedPayouts))
 	if len(commitmentScript) > 0 {
 		outputCount++
