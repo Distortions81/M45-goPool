@@ -91,7 +91,7 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	}
 	n.dg = dg
 
-	if err := n.registerCommands(ctx); err != nil {
+	if err := n.registerCommands(); err != nil {
 		logger.Warn("discord command registration failed", "error", err)
 	}
 
@@ -244,7 +244,7 @@ func checkNetworkConnectivity() bool {
 	return false
 }
 
-func (n *discordNotifier) registerCommands(ctx context.Context) error {
+func (n *discordNotifier) registerCommands() error {
 	if n == nil || n.dg == nil {
 		return nil
 	}

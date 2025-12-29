@@ -501,7 +501,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *h
 	}
 
 	now := time.Now()
-	code, expiresAt := s.getOrCreateOneTimeCode(user.UserID, now)
+	code, expiresAt := s.createNewOneTimeCode(user.UserID, now)
 	if code == "" || expiresAt.IsZero() {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -751,7 +751,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			}
 			s.workerPageMu.RUnlock()
 
-			if wv, ok := s.findWorkerViewByHash(workerHash, now); ok {
+			if wv, ok := s.findWorkerViewByHash(workerHash); ok {
 				setWorkerStatusView(&data, wv)
 				if data.BTCPriceFiat > 0 {
 					cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
@@ -916,9 +916,8 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	data.QueriedWorkerHash = fmt.Sprintf("%x", hashSum[:])
 
 	data.QueriedWorker = workerID
-	now := time.Now()
 	found := false
-	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash, now); ok {
+	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash); ok {
 		setWorkerStatusView(&data, wv)
 		found = true
 	} else if s.accounting != nil {
