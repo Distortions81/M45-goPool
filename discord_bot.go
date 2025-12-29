@@ -18,6 +18,8 @@ type discordNotifier struct {
 	guildID          string
 	scheduleMu       sync.Mutex
 	startChecksAt    time.Time
+	bootChecksAt     time.Time
+	bootNoticeSent   bool
 	notifyChannelID  string
 	stateMu          sync.Mutex
 	statusByUser     map[string]map[string]workerNotifyState // clerk user_id -> workerHash -> state
@@ -27,7 +29,10 @@ type discordNotifier struct {
 	lastLinksRefresh time.Time
 
 	pingMu    sync.Mutex
-	pingQueue []pingEntry
+	pingQueue []queuedDiscordMessage
+
+	droppedQueuedLines int
+	lastDropNoticeAt   time.Time
 
 	netMu        sync.Mutex
 	networkOK    bool
@@ -59,6 +64,8 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	n.notifyChannelID = strings.TrimSpace(cfg.DiscordNotifyChannelID)
 	n.scheduleMu.Lock()
 	n.startChecksAt = time.Now().Add(5 * time.Minute)
+	n.bootChecksAt = n.startChecksAt
+	n.bootNoticeSent = false
 	n.scheduleMu.Unlock()
 
 	dg, err := discordgo.New("Bot " + token)
@@ -137,6 +144,11 @@ func (n *discordNotifier) setNetworkOK(ok bool, now time.Time) {
 	// we don't spam everyone due to our own connectivity blip.
 	if !prevKnown || prevOK != ok {
 		n.resetAllNotificationState(now)
+		if ok {
+			n.enqueueNotice("Network connectivity is back online; notifications will resume after the warm-up delay.")
+		} else {
+			n.enqueueNotice("Network connectivity appears offline; notifications are paused and state has been reset.")
+		}
 	}
 }
 
@@ -388,9 +400,19 @@ func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) 
 	}
 	n.scheduleMu.Lock()
 	startAt := n.startChecksAt
+	bootAt := n.bootChecksAt
+	bootNoticeSent := n.bootNoticeSent
 	n.scheduleMu.Unlock()
 	if !startAt.IsZero() && now.Before(startAt) {
 		return
+	}
+	if !bootNoticeSent && !bootAt.IsZero() && !now.Before(bootAt) {
+		n.scheduleMu.Lock()
+		if !n.bootNoticeSent {
+			n.bootNoticeSent = true
+		}
+		n.scheduleMu.Unlock()
+		n.enqueueNotice("Pool has been online for 5+ minutes; Discord notifications are now active.")
 	}
 	const refreshInterval = 30 * time.Second
 	if n.lastLinksRefresh.IsZero() || now.Sub(n.lastLinksRefresh) >= refreshInterval {
@@ -465,7 +487,6 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 	if len(offlineOverdue) == 0 && len(onlineOverdue) == 0 {
 		return
 	}
-	line := fmt.Sprintf("<@%s> ", link.DiscordUserID)
 	parts := make([]string, 0, 2)
 	if len(offlineOverdue) > 0 {
 		parts = append(parts, "Offline >2m: "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
@@ -473,7 +494,7 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 	if len(onlineOverdue) > 0 {
 		parts = append(parts, "Back online (2+ min): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
 	}
-	line += strings.Join(parts, " | ")
+	line := strings.Join(parts, " | ")
 	n.enqueuePing(link.DiscordUserID, line)
 }
 
@@ -627,9 +648,21 @@ func renderNames(hashes []string, nameByHash map[string]string) []string {
 	return out
 }
 
-type pingEntry struct {
-	DiscordUserID string
-	Line          string
+type queuedDiscordMessage struct {
+	Notices     []string
+	UserOrder   []string
+	LinesByUser map[string][]string
+}
+
+func (n *discordNotifier) enqueueNotice(msg string) {
+	if n == nil {
+		return
+	}
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return
+	}
+	n.enqueueQueuedLine("", "[goPool] "+msg)
 }
 
 func (n *discordNotifier) enqueuePing(discordUserID, line string) {
@@ -641,14 +674,100 @@ func (n *discordNotifier) enqueuePing(discordUserID, line string) {
 	if discordUserID == "" || line == "" {
 		return
 	}
-	n.pingMu.Lock()
-	defer n.pingMu.Unlock()
-	const maxQueue = 3
-	if len(n.pingQueue) >= maxQueue {
-		// Drop new notifications when backlogged to avoid unbounded spam.
+	n.enqueueQueuedLine(discordUserID, line)
+}
+
+func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string) {
+	if n == nil {
 		return
 	}
-	n.pingQueue = append(n.pingQueue, pingEntry{DiscordUserID: discordUserID, Line: line})
+	mentionUserID = strings.TrimSpace(mentionUserID)
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+
+	const (
+		maxMessagesQueued = 3
+		maxChars          = 1000
+	)
+
+	if len(line) > maxChars {
+		line = line[:maxChars]
+	}
+
+	n.pingMu.Lock()
+	defer n.pingMu.Unlock()
+
+	// Try to append to the last queued message if it fits (group per user so we
+	// only mention each user once per message).
+	if len(n.pingQueue) > 0 {
+		lastIdx := len(n.pingQueue) - 1
+		last := n.pingQueue[lastIdx]
+
+		if mentionUserID == "" {
+			last.Notices = append(last.Notices, line)
+		} else {
+			if last.LinesByUser == nil {
+				last.LinesByUser = make(map[string][]string, 8)
+			}
+			if _, ok := last.LinesByUser[mentionUserID]; !ok {
+				last.UserOrder = append(last.UserOrder, mentionUserID)
+			}
+			last.LinesByUser[mentionUserID] = append(last.LinesByUser[mentionUserID], line)
+		}
+
+		if rendered, _ := renderQueuedMessage(last); len(rendered) <= maxChars {
+			n.pingQueue[lastIdx] = last
+			return
+		}
+	}
+
+	// Start a new message if we still have capacity; otherwise drop.
+	if len(n.pingQueue) >= maxMessagesQueued {
+		n.droppedQueuedLines++
+		return
+	}
+	msg := queuedDiscordMessage{}
+	if mentionUserID == "" {
+		msg.Notices = []string{line}
+	} else {
+		msg.UserOrder = []string{mentionUserID}
+		msg.LinesByUser = map[string][]string{mentionUserID: {line}}
+	}
+	n.pingQueue = append(n.pingQueue, msg)
+}
+
+func renderQueuedMessage(m queuedDiscordMessage) (content string, mentions []string) {
+	lines := make([]string, 0, len(m.Notices)+len(m.UserOrder))
+	for _, n := range m.Notices {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			lines = append(lines, n)
+		}
+	}
+	if m.LinesByUser != nil {
+		for _, uid := range m.UserOrder {
+			uid = strings.TrimSpace(uid)
+			if uid == "" {
+				continue
+			}
+			parts := m.LinesByUser[uid]
+			clean := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					clean = append(clean, p)
+				}
+			}
+			if len(clean) == 0 {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("<@%s> %s", uid, strings.Join(clean, " | ")))
+			mentions = append(mentions, uid)
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")), mentions
 }
 
 func (n *discordNotifier) subscribedUserCount() int {
@@ -679,12 +798,12 @@ func (n *discordNotifier) pingLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			n.sendNextPingBatch()
+			n.sendNextQueuedMessage()
 		}
 	}
 }
 
-func (n *discordNotifier) sendNextPingBatch() {
+func (n *discordNotifier) sendNextQueuedMessage() {
 	if n == nil || n.dg == nil {
 		return
 	}
@@ -696,8 +815,6 @@ func (n *discordNotifier) sendNextPingBatch() {
 		return
 	}
 
-	const maxChars = 1000
-
 	n.pingMu.Lock()
 	if len(n.pingQueue) == 0 {
 		n.pingMu.Unlock()
@@ -707,10 +824,13 @@ func (n *discordNotifier) sendNextPingBatch() {
 	// Outage guard: if we'd ping "too many" subscribed users at once, treat it as a
 	// localized outage (e.g. upstream connectivity) and drop the notification burst.
 	// Threshold: > max(100 users, 10% of subscribed users).
-	uniqueUsers := make(map[string]struct{}, 128)
-	for _, e := range n.pingQueue {
-		if strings.TrimSpace(e.DiscordUserID) != "" {
-			uniqueUsers[e.DiscordUserID] = struct{}{}
+	uniqueUsers := make(map[string]struct{}, 256)
+	for _, m := range n.pingQueue {
+		for _, id := range m.UserOrder {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				uniqueUsers[id] = struct{}{}
+			}
 		}
 	}
 	affected := len(uniqueUsers)
@@ -732,44 +852,26 @@ func (n *discordNotifier) sendNextPingBatch() {
 				"threshold", threshold,
 			)
 			n.resetAllNotificationState(time.Now())
+			n.enqueueNotice(fmt.Sprintf(
+				"Notification burst suppressed (possible localized outage): %d users (of %d) exceeded threshold %d. Notifications paused and state reset.",
+				affected, subscribed, threshold,
+			))
 			return
 		}
 	}
 
-	used := 0
-	msg := ""
-	userIDs := make(map[string]struct{}, 16)
-	for i := 0; i < len(n.pingQueue); i++ {
-		line := n.pingQueue[i].Line
-		if line == "" {
-			used++
-			continue
-		}
-		if len(line) > maxChars {
-			line = line[:maxChars]
-		}
-		candidate := line
-		if msg != "" {
-			candidate = msg + "\n" + line
-		}
-		if len(candidate) > maxChars {
-			break
-		}
-		msg = candidate
-		userIDs[n.pingQueue[i].DiscordUserID] = struct{}{}
-		used++
-	}
-	if used == 0 || strings.TrimSpace(msg) == "" {
-		n.pingMu.Unlock()
-		return
-	}
+	// Peek the next message; only pop it after a successful send.
+	next := n.pingQueue[0]
+	msg, mentions := renderQueuedMessage(next)
 	n.pingMu.Unlock()
 
-	mentions := make([]string, 0, len(userIDs))
-	for id := range userIDs {
-		if strings.TrimSpace(id) != "" {
-			mentions = append(mentions, id)
+	if msg == "" {
+		n.pingMu.Lock()
+		if len(n.pingQueue) > 0 {
+			n.pingQueue = n.pingQueue[1:]
 		}
+		n.pingMu.Unlock()
+		return
 	}
 
 	_, err := n.dg.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
@@ -784,10 +886,23 @@ func (n *discordNotifier) sendNextPingBatch() {
 	}
 
 	n.pingMu.Lock()
-	if used > len(n.pingQueue) {
-		used = len(n.pingQueue)
+	if len(n.pingQueue) > 0 {
+		n.pingQueue = n.pingQueue[1:]
 	}
-	n.pingQueue = n.pingQueue[used:]
+	if n.droppedQueuedLines > 0 {
+		now := time.Now()
+		if n.lastDropNoticeAt.IsZero() || now.Sub(n.lastDropNoticeAt) >= time.Minute {
+			dropped := n.droppedQueuedLines
+			n.droppedQueuedLines = 0
+			n.lastDropNoticeAt = now
+			// Best-effort: only enqueue if there's capacity.
+			if len(n.pingQueue) < 3 {
+				n.pingQueue = append(n.pingQueue, queuedDiscordMessage{
+					Notices: []string{fmt.Sprintf("[goPool] Notification backlog full; dropped %d updates to stay within rate limits.", dropped)},
+				})
+			}
+		}
+	}
 	n.pingMu.Unlock()
 }
 
