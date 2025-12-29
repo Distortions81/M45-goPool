@@ -5,6 +5,67 @@
 	<meta charset="UTF-8">
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Saved Workers</title>
 	<link rel="stylesheet" href="/style.css">
+	<style>
+		.discord-dialog {
+			max-width: 560px;
+			width: calc(100vw - 32px);
+			border: 1px solid #2a2f3a;
+			border-radius: 12px;
+			padding: 0;
+			background: #0f1218;
+			color: var(--text, #e8ecf7);
+			box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+		}
+		.discord-dialog::backdrop { background: rgba(0,0,0,0.55); }
+		.discord-dialog-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 14px 14px 10px 14px;
+			border-bottom: 1px solid #242a36;
+		}
+		.discord-dialog-body { padding: 14px; }
+		.discord-dialog-code {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			flex-wrap: wrap;
+			margin-top: 10px;
+		}
+		.discord-dialog-code .mono {
+			padding: 8px 10px;
+			border-radius: 10px;
+			background: #0b0d12;
+			border: 1px solid #2a2f3a;
+			cursor: pointer;
+			user-select: all;
+		}
+		.discord-dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+		.offline-list li {
+			display: grid;
+			grid-template-columns: 1fr auto auto auto;
+			align-items: center;
+			gap: 10px;
+		}
+		.offline-worker-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+		.offline-worker-meta a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.offline-last-online { color: var(--text-muted); }
+		@media (max-width: 540px) {
+			.offline-list li {
+				grid-template-columns: 1fr auto;
+				grid-template-rows: auto auto;
+				align-items: start;
+			}
+			.offline-list li .offline-actions {
+				grid-column: 1 / -1;
+				display: flex;
+				justify-content: flex-end;
+				gap: 8px;
+			}
+		}
+	</style>
 </head>
 <body>
 	{{template "header" .}}
@@ -22,7 +83,7 @@
 							{{end}}
 						</h2>
 					</div>
-					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" title="Sign out" style="gap:8px;">
+					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" style="gap:8px;">
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
 							<polyline points="16 17 21 12 16 7"></polyline>
@@ -39,31 +100,81 @@
 				</form>
 			</div>
 
+			<div class="card">
+				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+					<h2 style="margin-top:0;">Options</h2>
+				</div>
+				<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" style="gap:8px;">
+						<span id="privacyToggleIcon" aria-hidden="true">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
+								<circle cx="12" cy="12" r="3"></circle>
+								<line x1="4" y1="20" x2="20" y2="4"></line>
+							</svg>
+						</span>
+						<span id="privacyToggleText">Privacy</span>
+					</button>
+
+					{{if .DiscordNotificationsEnabled}}
+						<button
+							id="notifyAllToggle"
+							class="btn btn-secondary"
+							type="button"
+							{{if not .DiscordNotificationsRegistered}}disabled{{end}}
+							data-enabled="{{if .DiscordNotificationsUserEnabled}}1{{else}}0{{end}}"
+							aria-label="{{if .DiscordNotificationsRegistered}}{{if .DiscordNotificationsUserEnabled}}Disable notifications{{else}}Enable notifications{{end}}{{else}}Register first to manage notifications{{end}}"
+							title="{{if .DiscordNotificationsRegistered}}{{if .DiscordNotificationsUserEnabled}}Disable notifications{{else}}Enable notifications{{end}}{{else}}Register first to manage notifications{{end}}"
+						>{{if .DiscordNotificationsUserEnabled}}🔕 Disable notifications{{else}}🔔 Enable notifications{{end}}</button>
+						<button id="oneTimeCodeGenerate" class="btn btn-highlight{{if .DiscordNotificationsRegistered}} no-glow{{end}}" type="button" aria-label="Connect Your Discord Account!">
+							Connect Your Discord Account!
+						</button>
+					{{end}}
+				</div>
+				<p class="text-sm" style="color:var(--text-muted); margin:10px 0 0;">
+					Privacy hides worker names on this page; notification settings affect Discord pings.
+				</p>
+			</div>
+
 			{{$offlineCount := len .OfflineWorkerEntries}}
 			<div class="card offline-card" id="offlineSection">
 				<div class="offline-card-header">
-					<h2 style="margin:0;">Offline Workers</h2>
-					<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
-						{{$offlineCount}} offline
-					</span>
+					<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+						<h2 style="margin:0;">Offline Workers</h2>
+						<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end;">
+							<span class="badge badge-danger" id="offlineCountBadge" style="margin-left:8px; {{if eq $offlineCount 0}}display:none;{{end}}">
+								{{$offlineCount}} offline
+							</span>
+						</div>
+					</div>
 				</div>
 				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
 					{{range .OfflineWorkerEntries}}
 						<li>
-							<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+							<div class="offline-worker-meta">
+								<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+								<span class="text-sm offline-last-online" data-last-online-at="{{.LastOnlineAt}}"></span>
+							</div>
 							<span class="badge badge-danger">Offline</span>
-							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-								<input type="hidden" name="worker" value="{{.Name}}">
-								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-										<polyline points="3 6 5 6 21 6"></polyline>
-										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-										<path d="M10 11v6"></path>
-										<path d="M14 11v6"></path>
-										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-									</svg>
-								</button>
-							</form>
+							<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+							{{if $.DiscordNotificationsEnabled}}
+									<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+										{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
+									</button>
+								{{end}}
+								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+									<input type="hidden" name="worker" value="{{.Name}}">
+									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<polyline points="3 6 5 6 21 6"></polyline>
+											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+											<path d="M10 11v6"></path>
+											<path d="M14 11v6"></path>
+											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+										</svg>
+									</button>
+								</form>
+							</div>
 						</li>
 					{{end}}
 				</ul>
@@ -90,18 +201,11 @@
 					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
 						<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
 						<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
-						<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" title="Toggle privacy" style="gap:8px;">
-							<span id="privacyToggleIcon" aria-hidden="true">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
-									<circle cx="12" cy="12" r="3"></circle>
-									<line x1="4" y1="20" x2="20" y2="4"></line>
-								</svg>
-							</span>
-							<span id="privacyToggleText">Privacy</span>
-						</button>
 					</div>
 				</div>
+				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
+					Note: For workers sharing the same wallet and name, only the first 16 are displayed here.
+				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
 					<select id="savedWorkersSortField" class="input" style="max-width:220px;">
@@ -135,18 +239,25 @@
 									<td>{{.Accepted}}</td>
 									<td>{{humanDuration .ConnectedDuration}}</td>
 									<td style="text-align:right;">
-										<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-											<input type="hidden" name="worker" value="{{.Name}}">
-											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-													<polyline points="3 6 5 6 21 6"></polyline>
-													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-													<path d="M10 11v6"></path>
-													<path d="M14 11v6"></path>
-													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-												</svg>
-											</button>
-										</form>
+										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+											{{if $.DiscordNotificationsEnabled}}
+												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+													{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
+												</button>
+											{{end}}
+											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
+												<input type="hidden" name="worker" value="{{.Name}}">
+												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<polyline points="3 6 5 6 21 6"></polyline>
+														<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+														<path d="M10 11v6"></path>
+														<path d="M14 11v6"></path>
+														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+													</svg>
+												</button>
+											</form>
+										</div>
 									</td>
 								</tr>
 								{{end}}
@@ -166,12 +277,387 @@
 		</div>
 		{{end}}
 
-		{{template "footer" .}}
+	{{template "footer" .}}
 	</div>
+	{{if .DiscordNotificationsEnabled}}
+	<dialog id="discordNotifDialog" class="discord-dialog" aria-label="Discord notifications setup">
+		<div class="discord-dialog-header">
+			<div style="display:flex; flex-direction:column; gap:2px;">
+			<div style="font-weight:700;">Connect your Discord account</div>
+			<div class="text-sm" style="color:var(--text-muted);">Get pinged when your saved workers go offline/online.</div>
+		</div>
+			<button id="discordNotifClose" class="btn btn-secondary" type="button" aria-label="Close">Close</button>
+		</div>
+		<div class="discord-dialog-body">
+			<div class="text-sm" style="color:var(--text-muted);">
+				<ol style="margin:0; padding-left:18px;">
+					<li>Generate a one-time code</li>
+					<li>In Discord, run <span class="mono">/notify</span> and paste the code</li>
+				</ol>
+			</div>
+
+			<div class="discord-dialog-code">
+				<span id="discordNotifCode" class="mono" style="display:none;" title="Click to copy"></span>
+				<button id="discordNotifCopy" class="btn btn-secondary" type="button" style="display:none;">Copy</button>
+				<button id="discordNotifRegenerate" class="btn btn-highlight" type="button">Generate code</button>
+			</div>
+
+			<div class="discord-dialog-actions">
+				<button id="discordInviteBtn" class="btn" type="button" data-discord-url="{{.DiscordURL}}">Open Discord invite</button>
+				<a class="btn btn-secondary" href="https://support-apps.discord.com/hc/en-us/articles/26501837786775-Slash-Commands-FAQ" target="_blank" rel="noopener noreferrer">How to use slash commands</a>
+			</div>
+
+			<div class="text-sm" style="margin-top:12px;">
+				<span id="discordNotifStatus" class="badge" style="display:none;"></span>
+				<span id="discordNotifExpires" class="badge" style="display:none;"></span>
+			</div>
+
+			<div class="text-sm" style="margin-top:10px; color:var(--text-muted);">
+				Closing this dialog clears the code on the server. Codes expire after 5 minutes if unused.
+			</div>
+		</div>
+	</dialog>
+	{{end}}
 	{{if .ClerkUser}}
 	<script>
 	(function() {
 		let hideWorkerNames = true;
+		const discordNotificationsEnabled = {{if .DiscordNotificationsEnabled}}true{{else}}false{{end}};
+		const clerkEnabled = {{if .ClerkEnabled}}true{{else}}false{{end}};
+		const clerkPublishableKey = "{{.ClerkPublishableKey}}";
+		const clerkJSURL = "{{.ClerkJSURL}}";
+		const clerkLoginURL = "{{.ClerkLoginURL}}";
+
+		let clerkLoadPromise = null;
+		let clerkRefreshing = null;
+
+		function redirectToLogin() {
+			const url = (clerkLoginURL || '/sign-in?redirect=/saved-workers');
+			try { window.location.href = url; } catch (_) {}
+		}
+
+		function loadClerkJS() {
+			if (!clerkEnabled || !clerkPublishableKey || !clerkJSURL) return Promise.resolve(null);
+			if (window.Clerk) return Promise.resolve(window.Clerk);
+			if (clerkLoadPromise) return clerkLoadPromise;
+			clerkLoadPromise = new Promise((resolve) => {
+				const script = document.createElement('script');
+				script.async = true;
+				script.crossOrigin = 'anonymous';
+				script.src = clerkJSURL;
+				script.setAttribute('data-clerk-publishable-key', clerkPublishableKey);
+				script.onload = () => resolve(window.Clerk || null);
+				script.onerror = () => resolve(null);
+				document.head.appendChild(script);
+			}).then(async (clerk) => {
+				try {
+					if (clerk && typeof clerk.load === 'function') {
+						await clerk.load();
+					}
+				} catch (_) {}
+				return window.Clerk || clerk || null;
+			});
+			return clerkLoadPromise;
+		}
+
+		async function refreshClerkSession() {
+			if (!clerkEnabled) return false;
+			if (clerkRefreshing) return clerkRefreshing;
+			clerkRefreshing = (async () => {
+				const clerk = await loadClerkJS();
+				if (!clerk) return false;
+				try {
+					if (clerk.session && typeof clerk.session.getToken === 'function') {
+						const token = await clerk.session.getToken();
+						if (!token) return false;
+						const res = await fetch('/api/auth/session-refresh', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ token }),
+						});
+						return res && res.ok;
+					}
+				} catch (_) {}
+				return false;
+			})().finally(() => {
+				clerkRefreshing = null;
+			});
+			return clerkRefreshing;
+		}
+
+		async function fetchWithAuthRefresh(url, options) {
+			const res = await fetch(url, options);
+			if (res.status !== 401) return res;
+			const ok = await refreshClerkSession();
+			if (ok) {
+				const retry = await fetch(url, options);
+				if (retry.status !== 401) return retry;
+			}
+			redirectToLogin();
+			return res;
+		}
+
+		// One-time code (server-generated, stored in memory for 5 minutes).
+		const oneTimeCodeGenerateBtn = document.getElementById('oneTimeCodeGenerate');
+		const discordDialog = document.getElementById('discordNotifDialog');
+		const discordDialogClose = document.getElementById('discordNotifClose');
+		const discordCodeEl = document.getElementById('discordNotifCode');
+		const discordCopyBtn = document.getElementById('discordNotifCopy');
+		const discordRegenBtn = document.getElementById('discordNotifRegenerate');
+		const discordInviteBtn = document.getElementById('discordInviteBtn');
+		const discordStatusEl = document.getElementById('discordNotifStatus');
+		const discordExpiresEl = document.getElementById('discordNotifExpires');
+		let oneTimeCodeTimeout = null;
+		let oneTimeCodeCountdownTimer = null;
+		let activeOneTimeCode = '';
+		let activeExpiresAtMillis = 0;
+
+		function setBadge(el, text, danger) {
+			if (!el) return;
+			text = String(text || '');
+			if (danger) el.classList.add('badge-danger');
+			else el.classList.remove('badge-danger');
+			if (text) {
+				el.textContent = text;
+				el.style.display = '';
+			} else {
+				el.style.display = 'none';
+			}
+		}
+
+		async function copyTextToClipboard(text) {
+			const clip = navigator.clipboard;
+			if (clip && clip.writeText) {
+				await clip.writeText(text);
+				return true;
+			}
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.setAttribute('readonly', '');
+			ta.style.position = 'fixed';
+			ta.style.top = '-9999px';
+			ta.style.left = '-9999px';
+			document.body.appendChild(ta);
+			ta.select();
+			try {
+				return document.execCommand('copy');
+			} finally {
+				document.body.removeChild(ta);
+			}
+		}
+
+		async function clearOneTimeCodeServerSide() {
+			const code = activeOneTimeCode;
+			if (!code) return;
+			try {
+				await fetchWithAuthRefresh('/api/saved-workers/one-time-code/clear', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ code }),
+				});
+			} catch (_) {
+				// ignore
+			}
+		}
+
+		function clearOneTimeCodeUI(statusText) {
+			activeOneTimeCode = '';
+			activeExpiresAtMillis = 0;
+			if (oneTimeCodeTimeout) {
+				clearTimeout(oneTimeCodeTimeout);
+				oneTimeCodeTimeout = null;
+			}
+			if (oneTimeCodeCountdownTimer) {
+				clearInterval(oneTimeCodeCountdownTimer);
+				oneTimeCodeCountdownTimer = null;
+			}
+			if (discordCodeEl) discordCodeEl.style.display = 'none';
+			if (discordCopyBtn) discordCopyBtn.style.display = 'none';
+			if (statusText === 'Expired') {
+				setBadge(discordStatusEl, 'Code expired, generate a new one.', true);
+				setBadge(discordExpiresEl, 'Expired', true);
+			} else {
+				setBadge(discordStatusEl, statusText || '', false);
+				setBadge(discordExpiresEl, '', false);
+			}
+		}
+
+		function updateExpiresCountdown() {
+			if (!activeOneTimeCode || !activeExpiresAtMillis) {
+				setBadge(discordExpiresEl, '', false);
+				return;
+			}
+			const seconds = Math.max(0, Math.ceil((activeExpiresAtMillis - Date.now()) / 1000));
+			setBadge(discordExpiresEl, `Expires in ${seconds}s`, false);
+			if (seconds <= 0) {
+				clearOneTimeCodeUI('Expired');
+			}
+		}
+
+		function setOneTimeCode(code, expiresAtMillis) {
+			activeOneTimeCode = code || '';
+			activeExpiresAtMillis = Number(expiresAtMillis) || 0;
+			if (discordCodeEl) {
+				discordCodeEl.textContent = activeOneTimeCode;
+				discordCodeEl.style.display = activeOneTimeCode ? '' : 'none';
+			}
+			if (discordCopyBtn) discordCopyBtn.style.display = activeOneTimeCode ? '' : 'none';
+			setBadge(discordStatusEl, activeOneTimeCode ? 'Copy the code, then run /notify in Discord.' : '', false);
+			updateExpiresCountdown();
+			if (oneTimeCodeTimeout) clearTimeout(oneTimeCodeTimeout);
+			if (oneTimeCodeCountdownTimer) {
+				clearInterval(oneTimeCodeCountdownTimer);
+				oneTimeCodeCountdownTimer = null;
+			}
+			if (activeOneTimeCode && expiresAtMillis) {
+				const remaining = Math.max(0, expiresAtMillis - Date.now());
+				oneTimeCodeTimeout = setTimeout(() => clearOneTimeCodeUI('Expired'), remaining);
+				oneTimeCodeCountdownTimer = setInterval(updateExpiresCountdown, 250);
+			}
+		}
+
+		async function generateOneTimeCode() {
+			setBadge(discordStatusEl, 'Generating...', false);
+			setBadge(discordExpiresEl, '', false);
+			try {
+				if (discordRegenBtn) discordRegenBtn.disabled = true;
+				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = true;
+				const res = await fetchWithAuthRefresh('/api/saved-workers/one-time-code', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json' },
+					body: '{}',
+				});
+				if (!res.ok) throw new Error('request failed');
+				const data = await res.json();
+				const code = String(data.code || '');
+				const expiresAt = Date.parse(String(data.expires_at || ''));
+				if (!code || !isFinite(expiresAt)) throw new Error('bad response');
+				setOneTimeCode(code, expiresAt);
+			} catch (_) {
+				clearOneTimeCodeUI('Error');
+			} finally {
+				if (discordRegenBtn) discordRegenBtn.disabled = false;
+				if (oneTimeCodeGenerateBtn) oneTimeCodeGenerateBtn.disabled = false;
+			}
+		}
+
+		function openDiscordDialog() {
+			if (!discordDialog) return;
+			clearOneTimeCodeUI('');
+			try {
+				if (typeof discordDialog.showModal === 'function') {
+					discordDialog.showModal();
+				} else {
+					discordDialog.setAttribute('open', '');
+				}
+			} catch (_) {
+				discordDialog.setAttribute('open', '');
+			}
+		}
+
+		function closeDiscordDialog() {
+			if (!discordDialog) return;
+			try {
+				discordDialog.close();
+			} catch (_) {
+				discordDialog.removeAttribute('open');
+			}
+		}
+
+		function attachDiscordDialogHandlers() {
+			if (oneTimeCodeGenerateBtn && !oneTimeCodeGenerateBtn.__discordDialogAttached) {
+				oneTimeCodeGenerateBtn.__discordDialogAttached = true;
+				oneTimeCodeGenerateBtn.addEventListener('click', async function() {
+					openDiscordDialog();
+					await generateOneTimeCode();
+				});
+			}
+
+			if (discordRegenBtn && !discordRegenBtn.__discordDialogAttached) {
+				discordRegenBtn.__discordDialogAttached = true;
+				discordRegenBtn.addEventListener('click', async function() {
+					await generateOneTimeCode();
+				});
+			}
+
+			if (discordInviteBtn && !discordInviteBtn.__discordDialogAttached) {
+				discordInviteBtn.__discordDialogAttached = true;
+				const url = String(discordInviteBtn.getAttribute('data-discord-url') || '').trim();
+				if (!url) {
+					discordInviteBtn.disabled = true;
+					discordInviteBtn.title = 'Discord invite link is not configured for this pool.';
+				}
+				discordInviteBtn.addEventListener('click', function() {
+					const u = String(discordInviteBtn.getAttribute('data-discord-url') || '').trim();
+					if (!u) {
+						if (discordStatusEl) {
+							discordStatusEl.textContent = 'Discord invite link is not configured for this pool.';
+							discordStatusEl.style.display = '';
+						}
+						return;
+					}
+					window.open(u, '_blank', 'noopener,noreferrer');
+				});
+			}
+
+			async function doCopy() {
+				const code = activeOneTimeCode;
+				if (!code) return;
+				try {
+					const ok = await copyTextToClipboard(code);
+					if (!ok) throw new Error('copy failed');
+					if (discordStatusEl) {
+						discordStatusEl.textContent = 'Copied';
+						discordStatusEl.style.display = '';
+						setTimeout(() => {
+							if (activeOneTimeCode) {
+								discordStatusEl.textContent = 'Copy the code, then run /notify in Discord.';
+							}
+						}, 1200);
+					}
+				} catch (_) {
+					prompt('Copy one-time code:', code);
+				}
+			}
+
+			if (discordCopyBtn && !discordCopyBtn.__discordDialogAttached) {
+				discordCopyBtn.__discordDialogAttached = true;
+				discordCopyBtn.addEventListener('click', doCopy);
+			}
+			if (discordCodeEl && !discordCodeEl.__discordDialogAttached) {
+				discordCodeEl.__discordDialogAttached = true;
+				discordCodeEl.addEventListener('click', doCopy);
+			}
+
+			if (discordDialogClose && !discordDialogClose.__discordDialogAttached) {
+				discordDialogClose.__discordDialogAttached = true;
+				discordDialogClose.addEventListener('click', async function() {
+					await clearOneTimeCodeServerSide();
+					clearOneTimeCodeUI('');
+					closeDiscordDialog();
+				});
+			}
+
+			if (discordDialog && !discordDialog.__discordDialogAttached) {
+				discordDialog.__discordDialogAttached = true;
+
+				// Click outside closes (native dialogs only).
+				discordDialog.addEventListener('click', function(e) {
+					if (e.target === discordDialog) {
+						discordDialogClose && discordDialogClose.click();
+					}
+				});
+
+				// Any close (Esc / programmatic) clears the code server-side.
+				discordDialog.addEventListener('close', async function() {
+					await clearOneTimeCodeServerSide();
+					clearOneTimeCodeUI('');
+				});
+			}
+		}
 
 		// Saved workers total hashrate graph (sum of online workers).
 		const chartCanvas = document.getElementById('savedWorkersHashrateChart');
@@ -372,6 +858,8 @@
 		let sortDescending = true;
 		let lastOnlineWorkers = [];
 
+		attachDiscordDialogHandlers();
+
 		function updateSortOrderButtonText() {
 			if (!sortOrderBtn) return;
 			sortOrderBtn.textContent = sortDescending ? 'Desc ↓' : 'Asc ↑';
@@ -433,22 +921,26 @@
 					<td>${Number(w.accepted || 0)}</td>
 					<td>${formatDurationShort(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
-						<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-							<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
-							<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<polyline points="3 6 5 6 21 6"></polyline>
-									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-									<path d="M10 11v6"></path>
-									<path d="M14 11v6"></path>
-									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-								</svg>
-							</button>
-						</form>
+						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+							${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+								<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+										<path d="M10 11v6"></path>
+										<path d="M14 11v6"></path>
+										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+									</svg>
+								</button>
+							</form>
+						</div>
 					</td>
 				</tr>
 			`).join('');
 			attachRemoveConfirms(onlineBody);
+			attachNotifyToggles(onlineBody);
 			applyWorkerNameCensoring(onlineBody);
 		}
 
@@ -480,6 +972,104 @@
 			}
 		}
 
+		function notifyToggleText(enabled) {
+			return enabled ? '🔔' : '🔕';
+		}
+
+		function notifyToggleTitle(enabled) {
+			return enabled ? 'Disable pings for this worker' : 'Enable pings for this worker';
+		}
+
+		function applyLastOnlineLabels(root) {
+			const els = (root || document).querySelectorAll('[data-last-online-at]');
+			for (const el of els) {
+				const raw = String(el.getAttribute('data-last-online-at') || '').trim();
+				if (!raw) {
+					el.textContent = '';
+					continue;
+				}
+				const t = Date.parse(raw);
+				if (!isFinite(t)) {
+					el.textContent = '';
+					continue;
+				}
+				const ago = formatDurationShort((Date.now() - t) / 1000);
+				el.textContent = ago ? `Last online: ${ago} ago` : '';
+			}
+		}
+
+		function attachNotifyToggles(root) {
+			if (!discordNotificationsEnabled) return;
+			const buttons = (root || document).querySelectorAll('button.worker-notify-toggle[data-worker-hash]');
+			for (const btn of buttons) {
+				if (btn.__notifyToggleAttached) continue;
+				btn.__notifyToggleAttached = true;
+				btn.addEventListener('click', async function() {
+					const hash = String(btn.getAttribute('data-worker-hash') || '').trim();
+					if (!hash) return;
+					const cur = String(btn.getAttribute('data-notify-enabled') || '1').trim() === '1';
+					const next = !cur;
+					btn.disabled = true;
+					try {
+						const res = await fetchWithAuthRefresh('/api/saved-workers/notify-enabled', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ hash, enabled: next }),
+						});
+						if (!res.ok) throw new Error('request failed');
+						btn.setAttribute('data-notify-enabled', next ? '1' : '0');
+						btn.textContent = notifyToggleText(next);
+						btn.title = notifyToggleTitle(next);
+					} catch (_) {
+						// ignore
+					} finally {
+						btn.disabled = false;
+						refreshSavedWorkers();
+					}
+				});
+			}
+		}
+
+		function notifyAllToggleText(enabled) {
+			return enabled ? '🔕 Disable notifications' : '🔔 Enable notifications';
+		}
+
+		function notifyAllToggleTitle(enabled) {
+			return enabled ? 'Disable notifications' : 'Enable notifications';
+		}
+
+		function attachNotifyAllButtons() {
+			if (!discordNotificationsEnabled) return;
+			const btn = document.getElementById('notifyAllToggle');
+			if (btn && !btn.__notifyAllAttached) {
+				btn.__notifyAllAttached = true;
+				btn.addEventListener('click', async function() {
+					const cur = String(btn.getAttribute('data-enabled') || '0').trim() === '1';
+					const next = !cur;
+					if (!confirm(next ? 'Enable notifications for your account?' : 'Disable notifications for your account?')) return;
+					btn.disabled = true;
+					try {
+						const res = await fetchWithAuthRefresh('/api/discord/notify-enabled', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ enabled: next }),
+						});
+						if (!res.ok) throw new Error('request failed');
+						btn.setAttribute('data-enabled', next ? '1' : '0');
+						btn.textContent = notifyAllToggleText(next);
+						btn.title = notifyAllToggleTitle(next);
+					} catch (_) {
+						// ignore
+					} finally {
+						btn.disabled = false;
+						refreshSavedWorkers();
+					}
+				});
+			}
+		}
+
 		function updatePrivacyToggle() {
 			const btn = document.getElementById('privacyToggleNames');
 			const text = document.getElementById('privacyToggleText');
@@ -489,9 +1079,18 @@
 
 		async function refreshSavedWorkers() {
 			try {
-				const res = await fetch('/api/saved-workers', { credentials: 'same-origin' });
+				const res = await fetchWithAuthRefresh('/api/saved-workers', { credentials: 'same-origin' });
 				if (!res.ok) return;
 				const data = await res.json();
+				const notifyAllToggle = document.getElementById('notifyAllToggle');
+				if (notifyAllToggle && typeof data.discord_registered === 'boolean') {
+					const registered = !!data.discord_registered;
+					const enabled = !!data.discord_notify_enabled;
+					notifyAllToggle.disabled = !registered;
+					notifyAllToggle.setAttribute('data-enabled', enabled ? '1' : '0');
+					notifyAllToggle.textContent = notifyAllToggleText(enabled);
+					notifyAllToggle.title = registered ? notifyAllToggleTitle(enabled) : 'Register first to manage notifications';
+				}
 				const savedCount = document.getElementById('savedCount');
 				const savedMax = document.getElementById('savedMax');
 				const onlineCount = document.getElementById('onlineCount');
@@ -539,24 +1138,32 @@
 						}
 						offlineList.innerHTML = offline.map(w => `
 							<li>
-								<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+								<div class="offline-worker-meta">
+									<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+									<span class="text-sm offline-last-online" data-last-online-at="${escapeAttr(w.last_online_at || '')}"></span>
+								</div>
 								<span class="badge badge-danger">Offline</span>
-								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-									<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
-									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<polyline points="3 6 5 6 21 6"></polyline>
-											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-											<path d="M10 11v6"></path>
-											<path d="M14 11v6"></path>
-											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-										</svg>
-									</button>
-								</form>
+								<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+									${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+									<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
+										<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+												<polyline points="3 6 5 6 21 6"></polyline>
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+												<path d="M10 11v6"></path>
+												<path d="M14 11v6"></path>
+												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+											</svg>
+										</button>
+									</form>
+								</div>
 							</li>
 						`).join('');
 						applyWorkerNameCensoring(offlineList);
+						applyLastOnlineLabels(offlineList);
 						attachRemoveConfirms(offlineList);
+						attachNotifyToggles(offlineList);
 					}
 				}
 			} catch (_) {}
@@ -577,7 +1184,15 @@
 
 		attachRemoveConfirms(document);
 		applyWorkerNameCensoring(document);
+		applyLastOnlineLabels(document);
+		attachNotifyToggles(document);
+		attachNotifyAllButtons();
 		updatePrivacyToggle();
+
+		// Best-effort: keep the login cookie fresh while this page is open.
+		if (clerkEnabled) {
+			setInterval(() => { refreshClerkSession(); }, 60 * 1000);
+		}
 
 		const privacyToggle = document.getElementById('privacyToggleNames');
 		if (privacyToggle) {

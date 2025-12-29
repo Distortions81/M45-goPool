@@ -554,6 +554,22 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
+	discordNotificationsEnabled := strings.TrimSpace(s.Config().DiscordServerID) != "" &&
+		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
+		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != ""
+
+	clerkPK := strings.TrimSpace(s.Config().ClerkPublishableKey)
+	clerkJSURL := ""
+	if clerkPK != "" {
+		clerkJSHost := strings.TrimRight(strings.TrimSpace(s.Config().ClerkFrontendAPIURL), "/")
+		if clerkJSHost == "" {
+			clerkJSHost = strings.TrimRight(strings.TrimSpace(s.Config().ClerkIssuerURL), "/")
+		}
+		if clerkJSHost == "" {
+			clerkJSHost = "https://clerk.clerk.com"
+		}
+		clerkJSURL = clerkJSHost + "/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+	}
 
 	var warnings []string
 	if s.Config().PoolFeePercent > 10 {
@@ -568,6 +584,8 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		StratumTLSListen:               s.Config().StratumTLSListen,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
+		ClerkPublishableKey:            clerkPK,
+		ClerkJSURL:                     clerkJSURL,
 		Tagline:                        s.Config().StatusTagline,
 		ConnectMinerTitleExtra:         strings.TrimSpace(s.Config().StatusConnectMinerTitleExtra),
 		ConnectMinerTitleExtraURL:      strings.TrimSpace(s.Config().StatusConnectMinerTitleExtraURL),
@@ -575,6 +593,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		FiatCurrency:                   s.Config().FiatCurrency,
 		PoolDonationAddress:            s.Config().PoolDonationAddress,
 		DiscordURL:                     s.Config().DiscordURL,
+		DiscordNotificationsEnabled:    discordNotificationsEnabled,
 		GitHubURL:                      s.Config().GitHubURL,
 		NodeRPCURL:                     s.Config().RPCURL,
 		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
@@ -605,61 +624,4 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		NodePeerCleanupMaxPingMs:       s.Config().PeerCleanupMaxPingMs,
 		NodePeerCleanupMinPeers:        s.Config().PeerCleanupMinPeers,
 	}
-}
-
-// buildCensoredStatusData builds status data with all sensitive information censored
-// for public API endpoints. This ensures censoring happens at the source.
-func (s *StatusServer) buildCensoredStatusData() StatusData {
-	// Clone the cached status view so censoring doesn't mutate shared state.
-	data := cloneStatusData(s.statusDataView())
-
-	// Censor all workers
-	for i := range data.Workers {
-		data.Workers[i] = censorWorkerView(data.Workers[i])
-	}
-
-	// Censor banned workers
-	for i := range data.BannedWorkers {
-		data.BannedWorkers[i] = censorWorkerView(data.BannedWorkers[i])
-	}
-
-	// Censor best shares
-	for i := range data.BestShares {
-		data.BestShares[i] = censorBestShare(data.BestShares[i])
-	}
-
-	// Censor found blocks
-	for i := range data.FoundBlocks {
-		if data.FoundBlocks[i].Hash != "" {
-			data.FoundBlocks[i].Hash = shortDisplayID(data.FoundBlocks[i].Hash, hashPrefix, hashSuffix)
-			data.FoundBlocks[i].DisplayHash = shortDisplayID(data.FoundBlocks[i].Hash, hashPrefix, hashSuffix)
-		}
-		if data.FoundBlocks[i].Worker != "" {
-			data.FoundBlocks[i].Worker = shortWorkerName(data.FoundBlocks[i].Worker, workerNamePrefix, workerNameSuffix)
-			data.FoundBlocks[i].DisplayWorker = shortWorkerName(data.FoundBlocks[i].Worker, workerNamePrefix, workerNameSuffix)
-		}
-	}
-
-	// Remove/censor sensitive configuration
-	// Keep minimal job info (just height for display), remove sensitive mining data
-	if data.CurrentJob != nil {
-		data.CurrentJob = &Job{
-			JobID:    data.CurrentJob.JobID,
-			Template: data.CurrentJob.Template, // Contains height
-			// All other sensitive fields omitted
-		}
-	}
-	data.PayoutAddress = shortDisplayID(data.PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
-	data.CoinbaseMessage = shortDisplayID(data.CoinbaseMessage, coinbaseMsgPrefix, coinbaseMsgSuffix)
-	// PoolDonationAddress is intentionally NOT censored - pools want to show this publicly
-
-	// Censor node configuration
-	if data.NodeRPCURL != "" && !strings.Contains(data.NodeRPCURL, "127.0.0.1") && !strings.Contains(data.NodeRPCURL, "localhost") {
-		data.NodeRPCURL = "(external node)"
-	}
-	if data.NodeZMQAddr != "" && !strings.Contains(data.NodeZMQAddr, "127.0.0.1") && !strings.Contains(data.NodeZMQAddr, "localhost") {
-		data.NodeZMQAddr = "(external node)"
-	}
-
-	return data
 }

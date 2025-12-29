@@ -23,13 +23,6 @@ var (
 			return new(big.Int)
 		},
 	}
-
-	// responseBufferPool reuses buffers for Stratum JSON response marshaling
-	responseBufferPool = sync.Pool{
-		New: func() interface{} {
-			return new(bytes.Buffer)
-		},
-	}
 )
 
 // Helper functions for atomic float64 operations (stored as uint64 bits)

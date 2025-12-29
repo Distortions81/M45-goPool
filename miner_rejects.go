@@ -269,14 +269,6 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	}
 }
 
-// currentRollingHashrate returns the smoothed hashrate value derived from
-// recent shares. It is safe to call from other goroutines.
-func (mc *MinerConn) currentRollingHashrate() float64 {
-	mc.statsMu.Lock()
-	defer mc.statsMu.Unlock()
-	return mc.rollingHashrateValue
-}
-
 // updateHashrateLocked updates the per-connection hashrate using a simple
 // exponential moving average (EMA) over time. It expects statsMu to be held
 // by the caller.

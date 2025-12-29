@@ -271,9 +271,16 @@ func main() {
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
 	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
+	statusServer.startOneTimeCodeJanitor(ctx)
+	statusServer.loadOneTimeCodesFromDisk(cfg.DataDir)
+	statusServer.startOneTimeCodePersistence(ctx)
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
+	notifier := &discordNotifier{s: statusServer}
+	if err := notifier.start(ctx); err != nil {
+		logger.Warn("discord notifier start failed", "error", err)
+	}
 
 	// Start SIGUSR1/SIGUSR2 handler for live template/config reloading
 	go func() {
@@ -322,7 +329,12 @@ func main() {
 		mux.HandleFunc("/api/node", statusServer.handleNodePageJSON)
 		mux.HandleFunc("/api/server", statusServer.handleServerPageJSON)
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
+		mux.HandleFunc("/api/auth/session-refresh", statusServer.handleClerkSessionRefresh)
 		mux.HandleFunc("/api/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkersJSON))
+		mux.HandleFunc("/api/saved-workers/notify-enabled", statusServer.withClerkUser(statusServer.handleSavedWorkersNotifyEnabled))
+		mux.HandleFunc("/api/discord/notify-enabled", statusServer.withClerkUser(statusServer.handleDiscordNotifyEnabled))
+		mux.HandleFunc("/api/saved-workers/one-time-code", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCode))
+		mux.HandleFunc("/api/saved-workers/one-time-code/clear", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCodeClear))
 
 		// Other endpoints
 		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)
