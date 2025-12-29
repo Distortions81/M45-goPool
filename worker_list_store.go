@@ -293,6 +293,25 @@ func (s *workerListStore) ListEnabledDiscordLinks() ([]discordLink, error) {
 	return out, nil
 }
 
+func (s *workerListStore) IsDiscordLinkEnabled(userID string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false, nil
+	}
+	var enabledInt int
+	err := s.db.QueryRow("SELECT enabled FROM discord_links WHERE user_id = ?", userID).Scan(&enabledInt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return enabledInt != 0, nil
+}
+
 func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]workerNotifyState, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
