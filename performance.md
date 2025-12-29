@@ -1,7 +1,8 @@
 # Performance (Operator Notes)
 
 This is a practical, operator-friendly reference for “how much can this box
-handle?” using simple benchmarks. It focuses on **CPU only** (network ignored).
+handle?” using simple benchmarks. Most of it focuses on **CPU**; there’s also a
+small **network bandwidth** section at the end for gigabit vs 10 gig ballparks.
 
 These numbers are meant as a *ballpark*, not a guarantee. Real deployments will
 hit other limits too (file descriptors, memory, kernel/network overhead, TLS,
@@ -125,3 +126,28 @@ offline), the pool can serve roughly:
 In practice, network/TLS overhead and whatever else the machine is doing will
 reduce this, but the main takeaway is that “saved workers page viewers” are not
 usually a CPU bottleneck compared to managing the miners themselves.
+
+## Network ballparks (gigabit vs 10 gig)
+
+These are **bandwidth-only** estimates (not CPU), assuming:
+
+- **15 shares/min per worker** (0.25 shares/sec)
+- Stratum traffic is “typical” (shares + responses + occasional `mining.notify`)
+- We aim to use ~**70%** of link capacity to avoid living at the edge
+
+As a conservative rule of thumb, plan for **~1 KB/sec per worker** of total
+traffic (up + down). On this assumption:
+
+- **1 Gbit**: ~`87k` workers (70% of 1 Gbit)
+- **10 Gbit**: ~`875k` workers (70% of 10 Gbit)
+
+If your miners/pool send more frequent or larger `mining.notify` messages, or
+you’re using TLS everywhere, a safer “heavy traffic” assumption is **~2 KB/sec
+per worker**, which halves the numbers:
+
+- **1 Gbit (heavy)**: ~`44k` workers
+- **10 Gbit (heavy)**: ~`438k` workers
+
+In practice, long before you hit these bandwidth limits you may hit other real
+world limits: file descriptors, kernel packet-per-second overhead, memory, and
+the CPU/UI limits earlier in this document.
