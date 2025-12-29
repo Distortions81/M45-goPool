@@ -329,7 +329,11 @@ func (n *discordNotifier) handleCommand(s *discordgo.Session, i *discordgo.Inter
 			return
 		}
 
-		_ = respondEphemeral(s, i, "Enabled. You’ll be pinged in the configured channel when a saved worker stays offline for over 2 minutes.")
+		channelRef := ""
+		if ch := strings.TrimSpace(n.notifyChannelID); ch != "" {
+			channelRef = fmt.Sprintf(" in <#%s>", ch)
+		}
+		_ = respondEphemeral(s, i, "Enabled. You’ll be pinged"+channelRef+" when a saved worker stays offline for over 2 minutes (and again when it’s back online for 2+ minutes).")
 	case "notify-stop":
 		if n.s.workerLists != nil {
 			_ = n.s.workerLists.DisableDiscordLinkByDiscordUserID(i.Member.User.ID, time.Now())
