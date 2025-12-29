@@ -20,6 +20,7 @@ func defaultConfig() Config {
 		PoolDonationAddress:             "",
 		DiscordURL:                      "",
 		DiscordServerID:                 "",
+		DiscordNotifyChannelID:          "",
 		DiscordBotToken:                 "",
 		GitHubURL:                       defaultGitHubURL,
 		// StratumTLSListen defaults to empty (disabled) so operators

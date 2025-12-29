@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -11,12 +12,29 @@ import (
 )
 
 type discordNotifier struct {
-	s           *StatusServer
-	dg          *discordgo.Session
-	guildID     string
-	stateMu     sync.Mutex
-	lastByUser  map[string]map[string]bool // clerk user_id -> workerHash -> online
-	lastSweepAt time.Time
+	s                *StatusServer
+	dg               *discordgo.Session
+	guildID          string
+	startChecksAt    time.Time
+	notifyChannelID  string
+	stateMu          sync.Mutex
+	statusByUser     map[string]map[string]workerNotifyState // clerk user_id -> workerHash -> state
+	lastSweepAt      time.Time
+	links            []discordLink
+	linkIdx          int
+	lastLinksRefresh time.Time
+
+	pingMu    sync.Mutex
+	pingQueue []pingEntry
+}
+
+type workerNotifyState struct {
+	Online          bool
+	Since           time.Time
+	OfflineNotified bool
+
+	RecoveryEligible bool
+	RecoveryNotified bool
 }
 
 func (n *discordNotifier) enabled() bool {
@@ -24,7 +42,9 @@ func (n *discordNotifier) enabled() bool {
 		return false
 	}
 	cfg := n.s.Config()
-	return strings.TrimSpace(cfg.DiscordServerID) != "" && strings.TrimSpace(cfg.DiscordBotToken) != ""
+	return strings.TrimSpace(cfg.DiscordServerID) != "" &&
+		strings.TrimSpace(cfg.DiscordBotToken) != "" &&
+		strings.TrimSpace(cfg.DiscordNotifyChannelID) != ""
 }
 
 func (n *discordNotifier) start(ctx context.Context) error {
@@ -37,12 +57,14 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	cfg := n.s.Config()
 	token := strings.TrimSpace(cfg.DiscordBotToken)
 	n.guildID = strings.TrimSpace(cfg.DiscordServerID)
+	n.notifyChannelID = strings.TrimSpace(cfg.DiscordNotifyChannelID)
+	n.startChecksAt = time.Now().Add(5 * time.Minute)
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return err
 	}
-	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuilds | discordgo.IntentsDirectMessages)
+	dg.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuilds)
 
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if i.Type != discordgo.InteractionApplicationCommand {
@@ -61,6 +83,7 @@ func (n *discordNotifier) start(ctx context.Context) error {
 	}
 
 	go n.loop(ctx)
+	go n.pingLoop(ctx)
 	logger.Info("discord notifier started", "guild_id", n.guildID)
 	return nil
 }
@@ -148,7 +171,7 @@ func (n *discordNotifier) handleCommand(s *discordgo.Session, i *discordgo.Inter
 			return
 		}
 
-		_ = respondEphemeral(s, i, "Enabled. You’ll receive a DM when your saved workers go online/offline.")
+		_ = respondEphemeral(s, i, "Enabled. You’ll be pinged in the configured channel when a saved worker stays offline for over 2 minutes.")
 	case "notify-stop":
 		if n.s.workerLists != nil {
 			_ = n.s.workerLists.DisableDiscordLinkByDiscordUserID(i.Member.User.ID, time.Now())
@@ -173,7 +196,15 @@ func respondEphemeral(s *discordgo.Session, i *discordgo.InteractionCreate, msg 
 }
 
 func (n *discordNotifier) loop(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
+	// Throttle: aim to scan all subscribed users within ~30s at steady state
+	// while still spreading work out smoothly.
+	const (
+		checkTick      = 100 * time.Millisecond
+		checkBudget    = 90 * time.Millisecond
+		targetFullScan = 30 * time.Second
+	)
+
+	ticker := time.NewTicker(checkTick)
 	defer ticker.Stop()
 	for {
 		select {
@@ -181,105 +212,182 @@ func (n *discordNotifier) loop(ctx context.Context) {
 			n.close()
 			return
 		case <-ticker.C:
-			n.pollOnce()
+			n.pollBatch(checkBudget, checkTick, targetFullScan)
 		}
 	}
 }
 
-func (n *discordNotifier) pollOnce() {
+func (n *discordNotifier) usersPerTick(total int, tick, target time.Duration) int {
+	if total <= 0 || tick <= 0 || target <= 0 {
+		return 0
+	}
+	// ceil(total * tick / target)
+	return int(math.Ceil(float64(total) * float64(tick) / float64(target)))
+}
+
+func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) {
 	if n == nil || n.s == nil || n.dg == nil || n.s.workerLists == nil {
 		return
 	}
-	links, err := n.s.workerLists.ListEnabledDiscordLinks()
-	if err != nil || len(links) == 0 {
-		n.sweep(nil)
+	now := time.Now()
+	if !n.startChecksAt.IsZero() && now.Before(n.startChecksAt) {
+		return
+	}
+	const refreshInterval = 30 * time.Second
+	if n.lastLinksRefresh.IsZero() || now.Sub(n.lastLinksRefresh) >= refreshInterval {
+		links, err := n.s.workerLists.ListEnabledDiscordLinks()
+		if err != nil || len(links) == 0 {
+			n.links = nil
+			n.linkIdx = 0
+			n.lastLinksRefresh = now
+			n.sweep(nil)
+			return
+		}
+		n.links = links
+		n.linkIdx = 0
+		n.lastLinksRefresh = now
+		active := make(map[string]struct{}, len(links))
+		for _, link := range links {
+			if link.UserID != "" {
+				active[link.UserID] = struct{}{}
+			}
+		}
+		n.sweep(active)
+	}
+	if len(n.links) == 0 {
 		return
 	}
 
-	active := make(map[string]struct{}, len(links))
-	for _, link := range links {
+	perTick := n.usersPerTick(len(n.links), tick, targetFullScan)
+	if perTick < 1 {
+		perTick = 1
+	}
+	deadline := time.Now().Add(budget)
+	checked := 0
+	for checked < perTick && time.Now().Before(deadline) {
+		link := n.links[n.linkIdx%len(n.links)]
+		n.linkIdx++
 		if link.UserID == "" || link.DiscordUserID == "" {
 			continue
 		}
-		active[link.UserID] = struct{}{}
-
-		saved, err := n.s.workerLists.List(link.UserID)
-		if err != nil || len(saved) == 0 {
-			continue
-		}
-
-		now := time.Now()
-		onlineNow := make(map[string]bool, len(saved))
-		nameByHash := make(map[string]string, len(saved))
-		for _, sw := range saved {
-			views, lookupHash := n.s.findSavedWorkerConnections(sw.Name, sw.Hash, now)
-			if lookupHash == "" {
-				continue
-			}
-			onlineNow[lookupHash] = len(views) > 0
-			if _, ok := nameByHash[lookupHash]; !ok {
-				nameByHash[lookupHash] = sw.Name
-			}
-		}
-
-		wentOnline, wentOffline := n.diffAndUpdate(link.UserID, onlineNow)
-		if len(wentOnline) == 0 && len(wentOffline) == 0 {
-			continue
-		}
-
-		var parts []string
-		if len(wentOnline) > 0 {
-			parts = append(parts, "Online: "+strings.Join(renderNames(wentOnline, nameByHash), ", "))
-		}
-		if len(wentOffline) > 0 {
-			parts = append(parts, "Offline: "+strings.Join(renderNames(wentOffline, nameByHash), ", "))
-		}
-		msg := strings.Join(parts, "\n")
-		_ = n.sendDM(link.DiscordUserID, msg)
+		n.checkUser(link, now)
+		checked++
 	}
-
-	n.sweep(active)
 }
 
-func (n *discordNotifier) diffAndUpdate(userID string, current map[string]bool) (wentOnline, wentOffline []string) {
+func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
+	if n == nil || n.s == nil || n.dg == nil || n.s.workerLists == nil {
+		return
+	}
+	if strings.TrimSpace(n.notifyChannelID) == "" {
+		return
+	}
+
+	saved, err := n.s.workerLists.List(link.UserID)
+	if err != nil || len(saved) == 0 {
+		n.clearUserOfflineState(link.UserID)
+		return
+	}
+
+	currentOnline := make(map[string]bool, len(saved))
+	nameByHash := make(map[string]string, len(saved))
+	for _, sw := range saved {
+		views, lookupHash := n.s.findSavedWorkerConnections(sw.Name, sw.Hash, now)
+		if lookupHash == "" {
+			continue
+		}
+		currentOnline[lookupHash] = len(views) > 0
+		if _, ok := nameByHash[lookupHash]; !ok {
+			nameByHash[lookupHash] = sw.Name
+		}
+	}
+
+	offlineOverdue, onlineOverdue := n.updateWorkerStates(link.UserID, currentOnline, now)
+	if len(offlineOverdue) == 0 && len(onlineOverdue) == 0 {
+		return
+	}
+	line := fmt.Sprintf("<@%s> ", link.DiscordUserID)
+	parts := make([]string, 0, 2)
+	if len(offlineOverdue) > 0 {
+		parts = append(parts, "Offline >2m: "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
+	}
+	if len(onlineOverdue) > 0 {
+		parts = append(parts, "Back online (2+ min): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
+	}
+	line += strings.Join(parts, " | ")
+	n.enqueuePing(link.DiscordUserID, line)
+}
+
+func (n *discordNotifier) updateWorkerStates(userID string, current map[string]bool, now time.Time) (offlineOverdue, onlineOverdue []string) {
+	const (
+		offlineThreshold  = 2 * time.Minute
+		recoveryThreshold = 2 * time.Minute
+	)
+
 	n.stateMu.Lock()
 	defer n.stateMu.Unlock()
 
-	if n.lastByUser == nil {
-		n.lastByUser = make(map[string]map[string]bool, 16)
+	if n.statusByUser == nil {
+		n.statusByUser = make(map[string]map[string]workerNotifyState, 16)
 	}
-	prev := n.lastByUser[userID]
-	if prev == nil {
-		prev = make(map[string]bool, len(current))
-		n.lastByUser[userID] = prev
-		// First observation: seed without emitting notifications.
-		for k, v := range current {
-			prev[k] = v
-		}
-		return nil, nil
+	state := n.statusByUser[userID]
+	firstObservation := false
+	if state == nil {
+		state = make(map[string]workerNotifyState, len(current))
+		n.statusByUser[userID] = state
+		firstObservation = true
 	}
 
+	// Update states based on current online map.
 	for hash, online := range current {
-		if before, ok := prev[hash]; ok {
-			if before == online {
-				continue
-			}
-			if online {
-				wentOnline = append(wentOnline, hash)
-			} else {
-				wentOffline = append(wentOffline, hash)
-			}
+		st, ok := state[hash]
+		if !ok {
+			state[hash] = workerNotifyState{Online: online, Since: now}
+			continue
 		}
-		prev[hash] = online
+
+		// Transition: reset timers and notification flags.
+		if st.Online != online {
+			st.Online = online
+			st.Since = now
+			st.OfflineNotified = false
+			st.RecoveryNotified = false
+			st.RecoveryEligible = online // only eligible when we just came online from offline
+			state[hash] = st
+			continue
+		}
+
+		// First observation seeds state without firing notifications (but timers start).
+		if firstObservation {
+			continue
+		}
+
+		if !online && !st.OfflineNotified && !st.Since.IsZero() && now.Sub(st.Since) >= offlineThreshold {
+			st.OfflineNotified = true
+			state[hash] = st
+			offlineOverdue = append(offlineOverdue, hash)
+			continue
+		}
+
+		if online && st.RecoveryEligible && !st.RecoveryNotified && !st.Since.IsZero() && now.Sub(st.Since) >= recoveryThreshold {
+			st.RecoveryNotified = true
+			st.RecoveryEligible = false
+			state[hash] = st
+			onlineOverdue = append(onlineOverdue, hash)
+		}
 	}
 
-	// If a saved worker disappears, forget it (no notification).
-	for hash := range prev {
+	// If a saved worker disappears, forget it.
+	for hash := range state {
 		if _, ok := current[hash]; !ok {
-			delete(prev, hash)
+			delete(state, hash)
 		}
 	}
-	return wentOnline, wentOffline
+
+	if len(state) == 0 {
+		delete(n.statusByUser, userID)
+	}
+	return offlineOverdue, onlineOverdue
 }
 
 func renderNames(hashes []string, nameByHash map[string]string) []string {
@@ -299,21 +407,114 @@ func renderNames(hashes []string, nameByHash map[string]string) []string {
 	return out
 }
 
-func (n *discordNotifier) sendDM(discordUserID, msg string) error {
-	if n == nil || n.dg == nil {
-		return nil
+type pingEntry struct {
+	DiscordUserID string
+	Line          string
+}
+
+func (n *discordNotifier) enqueuePing(discordUserID, line string) {
+	if n == nil {
+		return
 	}
 	discordUserID = strings.TrimSpace(discordUserID)
-	msg = strings.TrimSpace(msg)
-	if discordUserID == "" || msg == "" {
-		return nil
+	line = strings.TrimSpace(line)
+	if discordUserID == "" || line == "" {
+		return
 	}
-	ch, err := n.dg.UserChannelCreate(discordUserID)
-	if err != nil || ch == nil {
-		return err
+	n.pingMu.Lock()
+	defer n.pingMu.Unlock()
+	const maxQueue = 100_000
+	if len(n.pingQueue) >= maxQueue {
+		// Drop oldest to keep memory bounded.
+		n.pingQueue = n.pingQueue[1:]
 	}
-	_, err = n.dg.ChannelMessageSend(ch.ID, msg)
-	return err
+	n.pingQueue = append(n.pingQueue, pingEntry{DiscordUserID: discordUserID, Line: line})
+}
+
+func (n *discordNotifier) pingLoop(ctx context.Context) {
+	// 25 messages/minute max.
+	ticker := time.NewTicker(time.Minute / 25)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n.sendNextPingBatch()
+		}
+	}
+}
+
+func (n *discordNotifier) sendNextPingBatch() {
+	if n == nil || n.dg == nil {
+		return
+	}
+	channelID := strings.TrimSpace(n.notifyChannelID)
+	if channelID == "" {
+		return
+	}
+
+	const maxChars = 1000
+
+	n.pingMu.Lock()
+	if len(n.pingQueue) == 0 {
+		n.pingMu.Unlock()
+		return
+	}
+
+	used := 0
+	msg := ""
+	userIDs := make(map[string]struct{}, 16)
+	for i := 0; i < len(n.pingQueue); i++ {
+		line := n.pingQueue[i].Line
+		if line == "" {
+			used++
+			continue
+		}
+		if len(line) > maxChars {
+			line = line[:maxChars]
+		}
+		candidate := line
+		if msg != "" {
+			candidate = msg + "\n" + line
+		}
+		if len(candidate) > maxChars {
+			break
+		}
+		msg = candidate
+		userIDs[n.pingQueue[i].DiscordUserID] = struct{}{}
+		used++
+	}
+	if used == 0 || strings.TrimSpace(msg) == "" {
+		n.pingMu.Unlock()
+		return
+	}
+	n.pingMu.Unlock()
+
+	mentions := make([]string, 0, len(userIDs))
+	for id := range userIDs {
+		if strings.TrimSpace(id) != "" {
+			mentions = append(mentions, id)
+		}
+	}
+
+	_, err := n.dg.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content: msg,
+		AllowedMentions: &discordgo.MessageAllowedMentions{
+			Users: mentions,
+		},
+	})
+	if err != nil {
+		logger.Warn("discord notify send failed", "error", err)
+		return
+	}
+
+	n.pingMu.Lock()
+	if used > len(n.pingQueue) {
+		used = len(n.pingQueue)
+	}
+	n.pingQueue = n.pingQueue[used:]
+	n.pingMu.Unlock()
 }
 
 func (n *discordNotifier) sweep(active map[string]struct{}) {
@@ -324,18 +525,30 @@ func (n *discordNotifier) sweep(active map[string]struct{}) {
 		return
 	}
 	n.lastSweepAt = now
-	if n.lastByUser == nil {
+	if n.statusByUser == nil {
 		return
 	}
 	if active == nil {
 		// Nothing enabled; clear everything.
-		n.lastByUser = nil
+		n.statusByUser = nil
 		return
 	}
-	for uid := range n.lastByUser {
+	for uid := range n.statusByUser {
 		if _, ok := active[uid]; !ok {
-			delete(n.lastByUser, uid)
+			delete(n.statusByUser, uid)
 		}
+	}
+}
+
+func (n *discordNotifier) clearUserOfflineState(userID string) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return
+	}
+	n.stateMu.Lock()
+	defer n.stateMu.Unlock()
+	if n.statusByUser != nil {
+		delete(n.statusByUser, userID)
 	}
 }
 

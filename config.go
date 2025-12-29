@@ -52,6 +52,8 @@ type Config struct {
 	// DiscordServerID is the Discord server/guild ID used for optional
 	// Discord notifications features.
 	DiscordServerID string
+	// DiscordNotifyChannelID is the Discord channel where offline alerts are posted.
+	DiscordNotifyChannelID string
 	// DiscordBotToken is the Discord bot token used for optional Discord
 	// notifications features. This should be stored in secrets.toml.
 	DiscordBotToken string
@@ -314,6 +316,7 @@ type brandingConfig struct {
 	PoolDonationAddress             string `toml:"pool_donation_address"`
 	DiscordURL                      string `toml:"discord_url"`
 	DiscordServerID                 string `toml:"discord_server_id"`
+	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id"`
 	GitHubURL                       string `toml:"github_url"`
 	ServerLocation                  string `toml:"server_location"`
 }
@@ -461,6 +464,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			PoolDonationAddress:             cfg.PoolDonationAddress,
 			DiscordURL:                      cfg.DiscordURL,
 			DiscordServerID:                 cfg.DiscordServerID,
+			DiscordNotifyChannelID:          cfg.DiscordNotifyChannelID,
 			GitHubURL:                       cfg.GitHubURL,
 			ServerLocation:                  cfg.ServerLocation,
 		},
@@ -702,6 +706,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Branding.DiscordServerID != "" {
 		cfg.DiscordServerID = strings.TrimSpace(fc.Branding.DiscordServerID)
+	}
+	if fc.Branding.DiscordNotifyChannelID != "" {
+		cfg.DiscordNotifyChannelID = strings.TrimSpace(fc.Branding.DiscordNotifyChannelID)
 	}
 	if fc.Branding.GitHubURL != "" {
 		cfg.GitHubURL = strings.TrimSpace(fc.Branding.GitHubURL)
