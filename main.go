@@ -271,6 +271,9 @@ func main() {
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
 	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
+	statusServer.startOneTimeCodeJanitor(ctx)
+	statusServer.loadOneTimeCodesFromDisk(cfg.DataDir)
+	statusServer.startOneTimeCodePersistence(ctx)
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.
 	rpcClient.SetResultHook(statusServer.handleRPCResult)
