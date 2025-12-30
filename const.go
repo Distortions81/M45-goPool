@@ -32,7 +32,7 @@ const (
 	defaultTemplateExtraNonce2Size = 8
 	defaultPoolFeePercent          = 2.0
 	defaultRecentJobs              = 3
-	defaultConnectionTimeout       = 60 * time.Second
+	defaultConnectionTimeout       = 90 * time.Second
 
 	defaultMaxAcceptsPerSecond               = 500
 	defaultMaxAcceptBurst                    = 1000
