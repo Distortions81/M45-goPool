@@ -64,6 +64,18 @@ const (
 	defaultMinVersionBits    = 1
 	defaultRefreshInterval   = 10 * time.Second
 	defaultZMQReceiveTimeout = 15 * time.Second
+	defaultZMQConnectTimeout = 5 * time.Second
+
+	// ZMQ socket liveness/reconnect tuning. These are conservative defaults:
+	// - Heartbeats help detect dead peers faster than TCP alone.
+	// - Reconnect intervals/backoff avoid spamming the node during restarts.
+	defaultZMQHeartbeatInterval  = 5 * time.Second
+	defaultZMQHeartbeatTimeout   = 15 * time.Second
+	defaultZMQHeartbeatTTL       = 30 * time.Second
+	defaultZMQReconnectInterval  = 1 * time.Second
+	defaultZMQReconnectMax       = 10 * time.Second
+	defaultZMQRecreateBackoffMin = 500 * time.Millisecond
+	defaultZMQRecreateBackoffMax = 10 * time.Second
 
 	defaultZMQBlockAddr = "tcp://127.0.0.1:28332"
 
