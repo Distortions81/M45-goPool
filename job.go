@@ -484,13 +484,20 @@ func (jm *JobManager) Start(ctx context.Context) {
 }
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
+	return jm.refreshJobCtxMinInterval(ctx, 100*time.Millisecond)
+}
+
+func (jm *JobManager) refreshJobCtxForce(ctx context.Context) error {
+	return jm.refreshJobCtxMinInterval(ctx, 0)
+}
+
+func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval time.Duration) error {
 	jm.refreshMu.Lock()
-	if time.Since(jm.lastRefreshAttempt) < 100*time.Millisecond {
-		jm.refreshMu.Unlock()
+	defer jm.refreshMu.Unlock()
+	if minInterval > 0 && time.Since(jm.lastRefreshAttempt) < minInterval {
 		return nil
 	}
 	jm.lastRefreshAttempt = time.Now()
-	jm.refreshMu.Unlock()
 
 	params := map[string]interface{}{
 		"rules":        []string{"segwit"},
