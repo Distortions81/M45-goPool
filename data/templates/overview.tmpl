@@ -356,7 +356,6 @@
 				ctx.lineWidth = 1;
 				ctx.setLineDash([4, 3]);
 				ctx.font = '11px monospace';
-				ctx.textAlign = 'center';
 				for (let i = 1; i < blockHeights.length; i++) {
 					const prev = blockHeights[i - 1];
 					const cur = blockHeights[i];
@@ -369,7 +368,18 @@
 					ctx.lineTo(x, height - paddingBottom);
 					ctx.stroke();
 					ctx.setLineDash([]);
-					ctx.fillText(`#${cur}`, x, paddingTop + 12);
+					const label = `#${cur}`;
+					const labelY = paddingTop + 12;
+					const paddingX = 6;
+					const maxX = width - paddingRight - paddingX;
+					const desiredX = x + paddingX;
+					if (desiredX > maxX) {
+						ctx.textAlign = 'right';
+						ctx.fillText(label, x - paddingX, labelY);
+					} else {
+						ctx.textAlign = 'left';
+						ctx.fillText(label, desiredX, labelY);
+					}
 					ctx.setLineDash([4, 3]);
 				}
 				ctx.restore();
