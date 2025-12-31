@@ -124,7 +124,7 @@ type Config struct {
 	CoinbaseScriptSigMaxBytes int
 	ZMQBlockAddr              string
 	// ZMQLongpollFallback enables RPC longpoll job refresh even when ZMQ is configured.
-	// Default: false (ZMQ-only).
+	// Default: true (enable longpoll for more frequent template/coinbasevalue updates).
 	ZMQLongpollFallback bool
 	DataDir             string
 	ShareLogBufferBytes int

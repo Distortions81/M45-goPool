@@ -58,6 +58,7 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 - `-allow-rpc-credentials` allows `rpc_user`/`rpc_pass` from `data/config/secrets.toml`, but is deprecated/insecure compared to the cookie.
 - To connect to intentionally unauthenticated public RPC endpoints, set `node.allow_public_rpc = true` (and still understand the security implications).
 - ZMQ can be disabled with `-no-zmq` (pool will rely on RPC/longpoll only).
+- To get more frequent transaction-fee/`coinbasevalue` updates during high-fee periods (without waiting for a new block), enable `node.zmq_longpoll_fallback = true` (this is now the default).
 
 ## Status UI and TLS
 

@@ -50,7 +50,7 @@ func defaultConfig() Config {
 		CoinbaseMsg:                       poolSoftwareName,
 		CoinbaseScriptSigMaxBytes:         defaultCoinbaseScriptSigMaxBytes,
 		ZMQBlockAddr:                      defaultZMQBlockAddr,
-		ZMQLongpollFallback:               false,
+		ZMQLongpollFallback:               true,
 		DataDir:                           defaultDataDir,
 		ShareLogBufferBytes:               defaultShareLogBufferBytes,
 		FsyncShareLog:                     defaultFsyncShareLog,
