@@ -464,6 +464,8 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		var blockHeight int64
 		var blockDifficulty float64
 		blockTimeLeftSec := int64(-1)
+		var templateTxFeesSats *int64
+		var templateUpdatedAt string
 		const targetBlockInterval = 10 * time.Minute
 		now := time.Now()
 
@@ -481,6 +483,23 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		var recentBlockTimes []string
 		if s.jobMgr != nil {
 			fs := s.jobMgr.FeedStatus()
+			if !fs.LastSuccess.IsZero() {
+				templateUpdatedAt = fs.LastSuccess.UTC().Format(time.RFC3339)
+			}
+			if job := s.jobMgr.CurrentJob(); job != nil {
+				tpl := job.Template
+				if tpl.Height > 0 && job.CoinbaseValue > 0 {
+					subsidy := calculateBlockSubsidy(tpl.Height)
+					fees := job.CoinbaseValue - subsidy
+					if fees < 0 {
+						fees = 0
+					}
+					templateTxFeesSats = &fees
+				}
+				if templateUpdatedAt == "" && !job.CreatedAt.IsZero() {
+					templateUpdatedAt = job.CreatedAt.UTC().Format(time.RFC3339)
+				}
+			}
 			blockTip := fs.Payload.BlockTip
 			if blockTip.Height > 0 {
 				blockHeight = blockTip.Height
@@ -540,6 +559,8 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			BlockTimeLeftSec       int64                   `json:"block_time_left_sec"`
 			RecentBlockTimes       []string                `json:"recent_block_times"`
 			NextDifficultyRetarget *nextDifficultyRetarget `json:"next_difficulty_retarget,omitempty"`
+			TemplateTxFeesSats     *int64                  `json:"template_tx_fees_sats,omitempty"`
+			TemplateUpdatedAt      string                  `json:"template_updated_at,omitempty"`
 			UpdatedAt              string                  `json:"updated_at"`
 		}{
 			APIVersion:             apiVersion,
@@ -549,6 +570,8 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			BlockTimeLeftSec:       blockTimeLeftSec,
 			RecentBlockTimes:       recentBlockTimes,
 			NextDifficultyRetarget: nextRetarget,
+			TemplateTxFeesSats:     templateTxFeesSats,
+			TemplateUpdatedAt:      templateUpdatedAt,
 			UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
 		}
 		return sonic.Marshal(data)
