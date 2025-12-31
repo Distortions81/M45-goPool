@@ -11,7 +11,7 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 ## Features
 
 - Stratum v1 over TCP (`server.pool_listen`) with optional TLS (`stratum.stratum_tls_listen`).
-- Bitcoin Core integration via JSON-RPC (`node.rpc_url`) + ZMQ block feed (`node.zmq_block_addr`), with optional RPC longpoll fallback.
+- Bitcoin Core integration via JSON-RPC (`node.rpc_url`) + ZMQ block feed (`node.zmq_block_addr`), with RPC longpoll for template updates.
 - Split coinbase outputs: pool fee, optional operator donation, and miner payout.
 - Status UI (HTML templates in `data/templates/`) + JSON endpoints under `/api/*`.
 - HTTPS-first status UI with auto-generated self-signed cert by default (writes `data/tls_cert.pem` / `data/tls_key.pem`).
@@ -58,7 +58,7 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 - `-allow-rpc-credentials` allows `rpc_user`/`rpc_pass` from `data/config/secrets.toml`, but is deprecated/insecure compared to the cookie.
 - To connect to intentionally unauthenticated public RPC endpoints, set `node.allow_public_rpc = true` (and still understand the security implications).
 - ZMQ can be disabled with `-no-zmq` (pool will rely on RPC/longpoll only).
-- To get more frequent transaction-fee/`coinbasevalue` updates during high-fee periods (without waiting for a new block), enable `node.zmq_longpoll_fallback = true` (this is now the default).
+- goPool always uses RPC longpoll for frequent `getblocktemplate` updates (including `coinbasevalue` / transaction fees); ZMQ is used for fast new-block detection and status metrics.
 
 ## Status UI and TLS
 

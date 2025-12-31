@@ -31,8 +31,7 @@ goPool reads Bitcoin Core's ZMQ notifications from `node.zmq_block_addr` and sub
 - `rawtx` / `hashtx` (optional): used for status/metrics only.
 
 Bitcoin Core allows publishing each topic to a different ZMQ address/port (e.g. `zmqpubrawblock=...`, `zmqpubrawtx=...`). goPool currently expects all topics it subscribes to to be available on the single configured `node.zmq_block_addr`, so publish the optional tx topics to the same endpoint if you want those UI stats to populate.
-
-For more frequent updates to `getblocktemplate.coinbasevalue` (and thus transaction-fee-inclusive payouts) between blocks, set `node.zmq_longpoll_fallback = true` so goPool also uses RPC longpoll while ZMQ is enabled (default).
+goPool also uses RPC longpoll for frequent `getblocktemplate` updates (including `coinbasevalue` / transaction fees); ZMQ is used for fast new-block detection and status metrics.
 
 ## Status pages & API
 

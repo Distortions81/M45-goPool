@@ -123,9 +123,6 @@ type Config struct {
 	CoinbasePoolTag           string
 	CoinbaseScriptSigMaxBytes int
 	ZMQBlockAddr              string
-	// ZMQLongpollFallback enables RPC longpoll job refresh even when ZMQ is configured.
-	// Default: true (enable longpoll for more frequent template/coinbasevalue updates).
-	ZMQLongpollFallback bool
 	DataDir             string
 	ShareLogBufferBytes int
 	FsyncShareLog       bool
@@ -264,7 +261,6 @@ type EffectiveConfig struct {
 	CoinbaseMsg                       string  `json:"coinbase_message"`
 	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
 	ZMQBlockAddr                      string  `json:"zmq_block_addr,omitempty"`
-	ZMQLongpollFallback               bool    `json:"zmq_longpoll_fallback,omitempty"`
 	DataDir                           string  `json:"data_dir"`
 	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
 	FsyncShareLog                     bool    `json:"fsync_share_log"`
@@ -335,13 +331,12 @@ type authConfig struct {
 }
 
 type nodeConfig struct {
-	RPCURL              string `toml:"rpc_url"`
-	PayoutAddress       string `toml:"payout_address"`
-	DataDir             string `toml:"data_dir"`
-	ZMQBlockAddr        string `toml:"zmq_block_addr"`
-	ZMQLongpollFallback bool   `toml:"zmq_longpoll_fallback"`
-	RPCCookiePath       string `toml:"rpc_cookie_path"`
-	AllowPublicRPC      bool   `toml:"allow_public_rpc"`
+	RPCURL         string `toml:"rpc_url"`
+	PayoutAddress  string `toml:"payout_address"`
+	DataDir        string `toml:"data_dir"`
+	ZMQBlockAddr   string `toml:"zmq_block_addr"`
+	RPCCookiePath  string `toml:"rpc_cookie_path"`
+	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
 type miningConfig struct {
@@ -471,15 +466,14 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
-		Node: nodeConfig{
-			RPCURL:              cfg.RPCURL,
-			PayoutAddress:       cfg.PayoutAddress,
-			DataDir:             cfg.DataDir,
-			ZMQBlockAddr:        cfg.ZMQBlockAddr,
-			ZMQLongpollFallback: cfg.ZMQLongpollFallback,
-			RPCCookiePath:       cfg.RPCCookiePath,
-			AllowPublicRPC:      cfg.AllowPublicRPC,
-		},
+			Node: nodeConfig{
+				RPCURL:         cfg.RPCURL,
+				PayoutAddress:  cfg.PayoutAddress,
+				DataDir:        cfg.DataDir,
+				ZMQBlockAddr:   cfg.ZMQBlockAddr,
+				RPCCookiePath:  cfg.RPCCookiePath,
+				AllowPublicRPC: cfg.AllowPublicRPC,
+			},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
 			OperatorDonationPercent:   float64Ptr(cfg.OperatorDonationPercent),
@@ -753,13 +747,10 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.ZMQBlockAddr != "" {
 		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
 	}
-	if fc.Node.ZMQLongpollFallback {
-		cfg.ZMQLongpollFallback = true
-	}
-	cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
-	cfg.rpCCookiePathFromConfig = cookiePath
-	if cookiePath != "" {
-		cfg.RPCCookiePath = cookiePath
+		cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
+		cfg.rpCCookiePathFromConfig = cookiePath
+		if cookiePath != "" {
+			cfg.RPCCookiePath = cookiePath
 	}
 	if fc.Node.AllowPublicRPC {
 		cfg.AllowPublicRPC = true
@@ -1198,15 +1189,14 @@ func (cfg Config) Effective() EffectiveConfig {
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
 		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
-		CoinbasePoolTag:                   cfg.CoinbasePoolTag,
-		CoinbaseMsg:                       cfg.CoinbaseMsg,
-		CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
-		ZMQBlockAddr:                      cfg.ZMQBlockAddr,
-		ZMQLongpollFallback:               cfg.ZMQLongpollFallback,
-		DataDir:                           cfg.DataDir,
-		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
-		FsyncShareLog:                     cfg.FsyncShareLog,
-		ShareLogReplayBytes:               cfg.ShareLogReplayBytes,
+			CoinbasePoolTag:                   cfg.CoinbasePoolTag,
+			CoinbaseMsg:                       cfg.CoinbaseMsg,
+			CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
+			ZMQBlockAddr:                      cfg.ZMQBlockAddr,
+			DataDir:                           cfg.DataDir,
+			ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
+			FsyncShareLog:                     cfg.FsyncShareLog,
+			ShareLogReplayBytes:               cfg.ShareLogReplayBytes,
 		MaxConns:                          cfg.MaxConns,
 		MaxAcceptsPerSecond:               cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                    cfg.MaxAcceptBurst,

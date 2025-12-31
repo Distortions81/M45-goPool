@@ -13,7 +13,6 @@ type runtimeOverrides struct {
 	allowRPCCredentials bool
 	flood               bool
 	noZMQ               bool
-	zmqLongpollFallback bool
 	mainnet             bool
 	testnet             bool
 	signet              bool
@@ -106,10 +105,6 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 		cfg.ZMQBlockAddr = ""
 	} else if cfg.ZMQBlockAddr == "" {
 		return fmt.Errorf("missing zmq_block_addr; set it in config.toml or use -no-zmq to disable ZMQ")
-	}
-
-	if overrides.zmqLongpollFallback {
-		cfg.ZMQLongpollFallback = true
 	}
 
 	return nil

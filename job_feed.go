@@ -53,10 +53,6 @@ func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
 	}
 }
 
-func (jm *JobManager) shouldUseLongpollFallback() bool {
-	return jm.cfg.ZMQBlockAddr == "" || jm.cfg.ZMQLongpollFallback
-}
-
 func (jm *JobManager) longpollLoop(ctx context.Context) {
 	for {
 		if ctx.Err() != nil {
@@ -96,9 +92,6 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			if err := sleepContext(ctx, jobRetryDelay); err != nil {
 				return
 			}
-			continue
-		}
-		if !jm.shouldUseLongpollFallback() {
 			continue
 		}
 
