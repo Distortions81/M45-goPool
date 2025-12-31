@@ -106,8 +106,9 @@
 			<div class="card">
 				<div class="label">Annual block odds</div>
 				<div class="value mono" id="status-block-chance">--</div>
-				<div class="card-context">Odds of finding a block in a year</div>
-				<div class="card-context">(For one worker on the pool at present speed and difficulty)</div>
+				<div class="card-context">Transaction Fees</div>
+				<div class="value mono" id="status-template-tx-fees">--</div>
+				<div class="card-context" id="status-template-tx-fees-updated">Updated --</div>
 			</div>
 			<div class="card">
 				<div class="label">Network stats</div>
@@ -286,6 +287,7 @@
 		const maxDataPoints = 60; // 5 minutes at 5-second intervals
 		const hashrateData = [];
 		const timestamps = [];
+		const blockHeights = [];
 		let smoothedHashrate = null;
 		let initialZeroPrepended = false;
 
@@ -344,6 +346,33 @@
 				const value = maxHashrate - (range / 4) * i;
 				const formatted = formatHashrateShort(value);
 				ctx.fillText(formatted, paddingLeft - 8, y + 4);
+			}
+
+			// Draw block-height change markers (vertical dividers with labels).
+			if (blockHeights.length > 1) {
+				ctx.save();
+				ctx.strokeStyle = '#f3d36b';
+				ctx.fillStyle = '#f3d36b';
+				ctx.lineWidth = 1;
+				ctx.setLineDash([4, 3]);
+				ctx.font = '11px monospace';
+				ctx.textAlign = 'center';
+				for (let i = 1; i < blockHeights.length; i++) {
+					const prev = blockHeights[i - 1];
+					const cur = blockHeights[i];
+					if (!prev || !cur || cur === prev) {
+						continue;
+					}
+					const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
+					ctx.beginPath();
+					ctx.moveTo(x, paddingTop);
+					ctx.lineTo(x, height - paddingBottom);
+					ctx.stroke();
+					ctx.setLineDash([]);
+					ctx.fillText(`#${cur}`, x, paddingTop + 12);
+					ctx.setLineDash([4, 3]);
+				}
+				ctx.restore();
 			}
 
 			// Draw the line graph
@@ -407,7 +436,7 @@
 			return val.toFixed(1) + ' ' + units[idx];
 		}
 
-		function updateHashrateGraph(newHashrate) {
+		function updateHashrateGraph(newHashrate, blockHeight) {
 			if (!newHashrate || newHashrate <= 0) return;
 
 			// Apply a small client-side EMA so the graph transitions smoothly
@@ -415,6 +444,7 @@
 			if (!initialZeroPrepended && hashrateData.length === 0) {
 				hashrateData.push(0);
 				timestamps.push(new Date(Date.now() - 5000));
+				blockHeights.push(blockHeight || null);
 				initialZeroPrepended = true;
 			}
 			if (smoothedHashrate === null) {
@@ -426,11 +456,13 @@
 
 			hashrateData.push(smoothedHashrate);
 			timestamps.push(new Date());
+			blockHeights.push(blockHeight || null);
 
 			// Keep only last maxDataPoints
 			if (hashrateData.length > maxDataPoints) {
 				hashrateData.shift();
 				timestamps.shift();
+				blockHeights.shift();
 			}
 
 			drawGraph();
@@ -705,6 +737,7 @@
 			const priceEl = document.getElementById('status-btc-price');
 			const updatedEl = document.getElementById('status-btc-price-updated');
 			const price = Number(newData.btc_price_usd ?? 0);
+			window.btcPriceUSD = price;
 			if (priceEl) {
 				priceEl.textContent = price > 0 ? ('BTC $' + Math.round(price).toLocaleString() + ' USD') : '--';
 			}
@@ -779,9 +812,13 @@
 		const blockHistoryEl = document.getElementById('status-block-history');
 		const networkHashrateEl = document.getElementById('status-network-hashrate');
 		const blockChanceEl = document.getElementById('status-block-chance');
+		const templateTxFeesEl = document.getElementById('status-template-tx-fees');
+		const templateTxFeesUpdatedEl = document.getElementById('status-template-tx-fees-updated');
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
+		let templateUpdatedAtMillis = null;
+		let templateTxFeesSats = null;
 		const BLOCKS_PER_YEAR = 52560;
 		if (!valueEl) {
 			return;
@@ -858,6 +895,78 @@
 				return `${minutes}m ${secs}s`;
 			}
 			return `${secs}s`;
+		}
+
+		function formatBTCShort(sats) {
+			const btc = (Number(sats) || 0) / 1e8;
+			return `${btc.toFixed(8)} BTC`;
+		}
+
+		function formatUSD(amount) {
+			const value = Number(amount);
+			if (!Number.isFinite(value)) {
+				return null;
+			}
+			try {
+				return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value);
+			} catch (_) {
+				return '$' + value.toFixed(2);
+			}
+		}
+
+		function formatHHMMSSUTC(millis) {
+			if (typeof millis !== 'number' || !Number.isFinite(millis)) {
+				return null;
+			}
+			const date = new Date(millis);
+			if (Number.isNaN(date.getTime())) {
+				return null;
+			}
+			return date.toISOString().substring(11, 19) + ' UTC';
+		}
+
+		function formatTimeAgoMillis(millis) {
+			if (typeof millis !== 'number' || !Number.isFinite(millis)) {
+				return null;
+			}
+			const diffSec = Math.floor((Date.now() - millis) / 1000);
+			if (diffSec < 0) return 'just now';
+			if (diffSec < 5) return 'just now';
+			if (diffSec < 60) return `${diffSec}s ago`;
+			if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+			if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+			const days = Math.floor(diffSec / 86400);
+			if (days < 7) return `${days}d ago`;
+			if (days < 30) return `${Math.floor(days / 7)}w ago`;
+			if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+			return `${Math.floor(days / 365)}y ago`;
+		}
+
+		function renderTemplateTxFees() {
+			if (!templateTxFeesEl) {
+				return;
+			}
+				if (typeof templateTxFeesSats !== 'number' || templateTxFeesSats < 0) {
+					templateTxFeesEl.textContent = '--';
+					if (templateTxFeesUpdatedEl) {
+						templateTxFeesUpdatedEl.textContent = 'Updated --';
+					}
+					return;
+				}
+			const btcText = formatBTCShort(templateTxFeesSats);
+			const priceUSD = Number(window.btcPriceUSD ?? 0);
+			const usdText = priceUSD > 0 ? formatUSD((Number(templateTxFeesSats) / 1e8) * priceUSD) : null;
+			templateTxFeesEl.innerHTML = usdText
+				? `${btcText} <span style="opacity:0.7; font-size:0.85em;">(${usdText})</span>`
+				: btcText;
+			if (templateTxFeesUpdatedEl) {
+				const when = formatHHMMSSUTC(templateUpdatedAtMillis);
+				const ago = formatTimeAgoMillis(templateUpdatedAtMillis);
+				const parts = [];
+				if (when) parts.push(when);
+				if (ago) parts.push(`(${ago})`);
+				templateTxFeesUpdatedEl.textContent = parts.length ? `Updated ${parts.join(' ')}` : 'Updated --';
+			}
 		}
 
 		function formatDurationDetailed(seconds) {
@@ -939,9 +1048,6 @@
 			if (valueEl.textContent !== formatted) {
 				valueEl.textContent = formatted;
 			}
-			if (window.updateHashrateGraph && rate > 0) {
-				window.updateHashrateGraph(rate);
-			}
 		}
 
 		function fetchHashrate() {
@@ -951,10 +1057,21 @@
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					return response.json().then(data => ({ data, updatedAt }));
 				})
-				.then(({ data, updatedAt }) => {
-					if (data && typeof data.pool_hashrate === 'number') {
-						updateHashrateDisplay(data.pool_hashrate);
+					.then(({ data, updatedAt }) => {
+						const heightForGraph = typeof data?.block_height === 'number' && data.block_height > 0 ? data.block_height : null;
+						if (data && typeof data.pool_hashrate === 'number') {
+							updateHashrateDisplay(data.pool_hashrate);
+							if (window.updateHashrateGraph && data.pool_hashrate > 0) {
+								window.updateHashrateGraph(data.pool_hashrate, heightForGraph);
+							}
+						}
+						if (data && typeof data.template_tx_fees_sats === 'number') {
+							templateTxFeesSats = data.template_tx_fees_sats;
+						} else {
+						templateTxFeesSats = null;
 					}
+					templateUpdatedAtMillis = getUpdatedAtMillis(data?.template_updated_at) ?? getUpdatedAtMillis(updatedAt || data?.updated_at);
+					renderTemplateTxFees();
 					if (blockHeightEl && typeof data.block_height === 'number' && data.block_height > 0) {
 						const height = data.block_height;
 						blockHeightEl.textContent = height.toLocaleString();
@@ -1052,6 +1169,7 @@
 		fetchHashrate();
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
 		setInterval(() => {
+			renderTemplateTxFees();
 			if (typeof blockTimeLeftSec !== 'number') {
 				return;
 			}
