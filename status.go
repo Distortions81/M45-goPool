@@ -705,8 +705,6 @@ type StatusData struct {
 	HashrateEMATauSeconds   float64 `json:"hashrate_ema_tau_seconds"`
 	HashrateEMAMinShares    int     `json:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSec    int     `json:"ntime_forward_slack_seconds"`
-	// Worker database summary (status page only).
-	WorkerDatabase WorkerDatabaseStats `json:"worker_database"`
 	Warnings       []string            `json:"warnings,omitempty"`
 }
 

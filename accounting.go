@@ -68,13 +68,6 @@ type RecentWorkView struct {
 	ConnectionID    string  `json:"connection_id"`
 }
 
-// WorkerDatabaseStats summarizes high-level worker database metrics exposed
-// via status and diagnostics views.
-type WorkerDatabaseStats struct {
-	TotalWorkers    int
-	ActiveWorkers   int
-	EstimatedSizeKB int64
-}
 
 // ShareDetail holds detailed data for each share, including coinbase transaction details.
 type ShareDetail struct {
@@ -719,10 +712,6 @@ func (s *AccountStore) WorkersSnapshot() []WorkerView {
 		out = append(out, bannedWorkerView(entry))
 	}
 	return out
-}
-
-func (s *AccountStore) WorkerDatabaseStats() WorkerDatabaseStats {
-	return WorkerDatabaseStats{}
 }
 
 func (s *AccountStore) MarkBan(worker string, until time.Time, reason string) {
