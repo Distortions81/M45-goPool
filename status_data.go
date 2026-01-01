@@ -111,7 +111,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		bestShares = s.metrics.SnapshotBestShares()
 	}
 	var allWorkers []WorkerView
-	var workerDBStats WorkerDatabaseStats
 	allWorkers = s.snapshotWorkerViews(snapshotTime)
 	workers = make([]WorkerView, 0, len(allWorkers))
 	bannedWorkers = make([]WorkerView, 0, len(allWorkers))
@@ -127,7 +126,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		}
 	}
 	if s.accounting != nil {
-		workerDBStats = s.accounting.WorkerDatabaseStats()
 		for _, wv := range s.accounting.WorkersSnapshot() {
 			if wv.Name == "" {
 				continue
@@ -530,7 +528,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		MinDifficulty:                  s.Config().MinDifficulty,
 		MaxDifficulty:                  s.Config().MaxDifficulty,
 		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
-		WorkerDatabase:                 workerDBStats,
 		Warnings:                       warnings,
 	}
 }

@@ -77,7 +77,6 @@ type PoolStatsData struct {
 	BTCPriceFiat            float64             `json:"btc_price_fiat,omitempty"`
 	BTCPriceUpdatedAt       string              `json:"btc_price_updated_at,omitempty"`
 	FiatCurrency            string              `json:"fiat_currency,omitempty"`
-	WorkerDatabase          WorkerDatabaseStats `json:"worker_database"`
 	Warnings                []string            `json:"warnings,omitempty"`
 }
 
@@ -201,7 +200,6 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			BTCPriceFiat:            view.BTCPriceFiat,
 			BTCPriceUpdatedAt:       view.BTCPriceUpdatedAt,
 			FiatCurrency:            view.FiatCurrency,
-			WorkerDatabase:          view.WorkerDatabase,
 			Warnings:                view.Warnings,
 		}
 		return sonic.Marshal(data)
