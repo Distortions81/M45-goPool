@@ -407,23 +407,16 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// BlockHeader represents a Bitcoin block header from getblockheader RPC
+// BlockHeader represents the subset of Bitcoin block header data we consume.
 type BlockHeader struct {
 	Hash              string  `json:"hash"`
-	Confirmations     int64   `json:"confirmations"`
 	Height            int64   `json:"height"`
-	Version           int32   `json:"version"`
-	VersionHex        string  `json:"versionHex"`
 	MerkleRoot        string  `json:"merkleroot"`
 	Time              int64   `json:"time"`
-	MedianTime        int64   `json:"mediantime"`
 	Nonce             uint32  `json:"nonce"`
 	Bits              string  `json:"bits"`
 	Difficulty        float64 `json:"difficulty"`
-	ChainWork         string  `json:"chainwork"`
-	NTx               int     `json:"nTx"`
 	PreviousBlockHash string  `json:"previousblockhash"`
-	NextBlockHash     string  `json:"nextblockhash"`
 }
 
 // GetBestBlockHash returns the hash of the best (tip) block in the longest blockchain
