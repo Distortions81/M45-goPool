@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	github.com/Backblaze/blazer v0.7.2 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.6 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect

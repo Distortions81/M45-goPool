@@ -115,6 +115,9 @@ const (
 	// miner so we don't thrash difficulty on every small fluctuation.
 	minDiffChangeInterval = 60 * time.Second
 
+	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
+	defaultBackblazeMaxBackups            = 60
+
 	// Input validation limits for miner-provided fields
 	maxMinerClientIDLen = 256 // mining.subscribe client identifier
 	maxWorkerNameLen    = 256 // mining.authorize and submit worker name

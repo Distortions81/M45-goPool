@@ -244,6 +244,12 @@ func main() {
 	} else {
 		defer workerLists.Close()
 	}
+	if svc, err := newBackblazeBackupService(ctx, cfg, workerListDBPath); err != nil {
+		logger.Warn("initialize backblaze backup service", "error", err)
+	} else if svc != nil {
+		logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String())
+		svc.start(ctx)
+	}
 	rpcClient := NewRPCClient(cfg, metrics)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.

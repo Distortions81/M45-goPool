@@ -25,6 +25,10 @@ rpc_pass = "password"
 # first-party __session cookie on localhost. Do NOT use this in production.
 # clerk_secret_key = "sk_test_..."
 # clerk_publishable_key = "pk_test_..."
+
+# Backblaze B2 credentials for database backups (optional).
+# backblaze_account_id = "B1234567890XXXXXXXX"
+# backblaze_application_key = "KXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 `)
 
 type Config struct {
@@ -123,6 +127,21 @@ type Config struct {
 	CoinbasePoolTag           string
 	CoinbaseScriptSigMaxBytes int
 	ZMQBlockAddr              string
+	// BackblazeBackupEnabled toggles periodic uploads of the worker list
+	// database snapshot to Backblaze B2.
+	BackblazeBackupEnabled bool
+	// BackblazeAccountID is the Backblaze account ID used to authenticate.
+	BackblazeAccountID string
+	// BackblazeApplicationKey is the application key paired with the account ID.
+	BackblazeApplicationKey string
+	// BackblazeBucket is the B2 bucket where backups are stored.
+	BackblazeBucket string
+	// BackblazePrefix is an optional namespace prefix applied to uploaded objects.
+	BackblazePrefix string
+	// BackblazeBackupIntervalSeconds controls how often backups run (seconds).
+	BackblazeBackupIntervalSeconds int
+	// BackblazeMaxBackups is the number of snapshots kept before deleting the oldest.
+	BackblazeMaxBackups int
 	DataDir             string
 	ShareLogBufferBytes int
 	FsyncShareLog       bool
@@ -261,6 +280,11 @@ type EffectiveConfig struct {
 	CoinbaseMsg                       string  `json:"coinbase_message"`
 	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
 	ZMQBlockAddr                      string  `json:"zmq_block_addr,omitempty"`
+	BackblazeBackupEnabled            bool    `json:"backblaze_backup_enabled,omitempty"`
+	BackblazeBucket                   string  `json:"backblaze_bucket,omitempty"`
+	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
+	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
+	BackblazeMaxBackups               int     `json:"backblaze_max_backups,omitempty"`
 	DataDir                           string  `json:"data_dir"`
 	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
 	FsyncShareLog                     bool    `json:"fsync_share_log"`
@@ -339,6 +363,16 @@ type nodeConfig struct {
 	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
+type backblazeBackupConfig struct {
+	Enabled         bool   `toml:"enabled"`
+	AccountID       string `toml:"account_id"`
+	ApplicationKey  string `toml:"application_key"`
+	Bucket          string `toml:"bucket"`
+	Prefix          string `toml:"prefix"`
+	IntervalSeconds *int   `toml:"interval_seconds"`
+	MaxBackups      *int   `toml:"max_backups"`
+}
+
 type miningConfig struct {
 	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
 	OperatorDonationPercent   *float64 `toml:"operator_donation_percent"`
@@ -354,12 +388,13 @@ type miningConfig struct {
 }
 
 type baseFileConfig struct {
-	Server   serverConfig   `toml:"server"`
-	Branding brandingConfig `toml:"branding"`
-	Stratum  stratumConfig  `toml:"stratum"`
-	Auth     authConfig     `toml:"auth"`
-	Node     nodeConfig     `toml:"node"`
-	Mining   miningConfig   `toml:"mining"`
+	Server    serverConfig          `toml:"server"`
+	Branding  brandingConfig        `toml:"branding"`
+	Stratum   stratumConfig         `toml:"stratum"`
+	Auth      authConfig            `toml:"auth"`
+	Node      nodeConfig            `toml:"node"`
+	Mining    miningConfig          `toml:"mining"`
+	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
 }
 
 func float64Ptr(v float64) *float64 { return &v }
@@ -466,14 +501,14 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
-			Node: nodeConfig{
-				RPCURL:         cfg.RPCURL,
-				PayoutAddress:  cfg.PayoutAddress,
-				DataDir:        cfg.DataDir,
-				ZMQBlockAddr:   cfg.ZMQBlockAddr,
-				RPCCookiePath:  cfg.RPCCookiePath,
-				AllowPublicRPC: cfg.AllowPublicRPC,
-			},
+		Node: nodeConfig{
+			RPCURL:         cfg.RPCURL,
+			PayoutAddress:  cfg.PayoutAddress,
+			DataDir:        cfg.DataDir,
+			ZMQBlockAddr:   cfg.ZMQBlockAddr,
+			RPCCookiePath:  cfg.RPCCookiePath,
+			AllowPublicRPC: cfg.AllowPublicRPC,
+		},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
 			OperatorDonationPercent:   float64Ptr(cfg.OperatorDonationPercent),
@@ -494,6 +529,15 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ClerkCallbackPath:      cfg.ClerkCallbackPath,
 			ClerkFrontendAPIURL:    cfg.ClerkFrontendAPIURL,
 			ClerkSessionCookieName: cfg.ClerkSessionCookieName,
+		},
+		Backblaze: backblazeBackupConfig{
+			Enabled:         cfg.BackblazeBackupEnabled,
+			AccountID:       cfg.BackblazeAccountID,
+			ApplicationKey:  cfg.BackblazeApplicationKey,
+			Bucket:          cfg.BackblazeBucket,
+			Prefix:          cfg.BackblazePrefix,
+			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
+			MaxBackups:      intPtr(cfg.BackblazeMaxBackups),
 		},
 	}
 }
@@ -552,11 +596,13 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 // secretsConfig holds values from secrets.toml: Clerk secrets and (when enabled)
 // RPC user/password for fallback authentication.
 type secretsConfig struct {
-	RPCUser             string `toml:"rpc_user"`
-	RPCPass             string `toml:"rpc_pass"`
-	DiscordBotToken     string `toml:"discord_token"`
-	ClerkSecretKey      string `toml:"clerk_secret_key"`
-	ClerkPublishableKey string `toml:"clerk_publishable_key"`
+	RPCUser                 string `toml:"rpc_user"`
+	RPCPass                 string `toml:"rpc_pass"`
+	DiscordBotToken         string `toml:"discord_token"`
+	ClerkSecretKey          string `toml:"clerk_secret_key"`
+	ClerkPublishableKey     string `toml:"clerk_publishable_key"`
+	BackblazeAccountID      string `toml:"backblaze_account_id"`
+	BackblazeApplicationKey string `toml:"backblaze_application_key"`
 }
 
 func loadConfig(configPath, secretsPath string) (Config, string) {
@@ -747,10 +793,10 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.ZMQBlockAddr != "" {
 		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
 	}
-		cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
-		cfg.rpCCookiePathFromConfig = cookiePath
-		if cookiePath != "" {
-			cfg.RPCCookiePath = cookiePath
+	cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
+	cfg.rpCCookiePathFromConfig = cookiePath
+	if cookiePath != "" {
+		cfg.RPCCookiePath = cookiePath
 	}
 	if fc.Node.AllowPublicRPC {
 		cfg.AllowPublicRPC = true
@@ -787,6 +833,25 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
 		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
+	}
+	cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
+	if fc.Backblaze.AccountID != "" {
+		cfg.BackblazeAccountID = strings.TrimSpace(fc.Backblaze.AccountID)
+	}
+	if fc.Backblaze.ApplicationKey != "" {
+		cfg.BackblazeApplicationKey = strings.TrimSpace(fc.Backblaze.ApplicationKey)
+	}
+	if fc.Backblaze.Bucket != "" {
+		cfg.BackblazeBucket = strings.TrimSpace(fc.Backblaze.Bucket)
+	}
+	if fc.Backblaze.Prefix != "" {
+		cfg.BackblazePrefix = strings.TrimSpace(fc.Backblaze.Prefix)
+	}
+	if fc.Backblaze.IntervalSeconds != nil && *fc.Backblaze.IntervalSeconds > 0 {
+		cfg.BackblazeBackupIntervalSeconds = *fc.Backblaze.IntervalSeconds
+	}
+	if fc.Backblaze.MaxBackups != nil && *fc.Backblaze.MaxBackups > 0 {
+		cfg.BackblazeMaxBackups = *fc.Backblaze.MaxBackups
 	}
 }
 
@@ -1155,9 +1220,20 @@ func applySecretsConfig(cfg *Config, sc secretsConfig) {
 	if sc.ClerkPublishableKey != "" {
 		cfg.ClerkPublishableKey = strings.TrimSpace(sc.ClerkPublishableKey)
 	}
+	if sc.BackblazeAccountID != "" {
+		cfg.BackblazeAccountID = strings.TrimSpace(sc.BackblazeAccountID)
+	}
+	if sc.BackblazeApplicationKey != "" {
+		cfg.BackblazeApplicationKey = strings.TrimSpace(sc.BackblazeApplicationKey)
+	}
 }
 
 func (cfg Config) Effective() EffectiveConfig {
+	backblazeInterval := ""
+	if cfg.BackblazeBackupIntervalSeconds > 0 {
+		backblazeInterval = (time.Duration(cfg.BackblazeBackupIntervalSeconds) * time.Second).String()
+	}
+
 	return EffectiveConfig{
 		ListenAddr:                        cfg.ListenAddr,
 		StatusAddr:                        cfg.StatusAddr,
@@ -1189,14 +1265,19 @@ func (cfg Config) Effective() EffectiveConfig {
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
 		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
-			CoinbasePoolTag:                   cfg.CoinbasePoolTag,
-			CoinbaseMsg:                       cfg.CoinbaseMsg,
-			CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
-			ZMQBlockAddr:                      cfg.ZMQBlockAddr,
-			DataDir:                           cfg.DataDir,
-			ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
-			FsyncShareLog:                     cfg.FsyncShareLog,
-			ShareLogReplayBytes:               cfg.ShareLogReplayBytes,
+		CoinbasePoolTag:                   cfg.CoinbasePoolTag,
+		CoinbaseMsg:                       cfg.CoinbaseMsg,
+		CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
+		ZMQBlockAddr:                      cfg.ZMQBlockAddr,
+		BackblazeBackupEnabled:            cfg.BackblazeBackupEnabled,
+		BackblazeBucket:                   cfg.BackblazeBucket,
+		BackblazePrefix:                   cfg.BackblazePrefix,
+		BackblazeBackupInterval:           backblazeInterval,
+		BackblazeMaxBackups:               cfg.BackblazeMaxBackups,
+		DataDir:                           cfg.DataDir,
+		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
+		FsyncShareLog:                     cfg.FsyncShareLog,
+		ShareLogReplayBytes:               cfg.ShareLogReplayBytes,
 		MaxConns:                          cfg.MaxConns,
 		MaxAcceptsPerSecond:               cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                    cfg.MaxAcceptBurst,

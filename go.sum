@@ -1,3 +1,5 @@
+github.com/Backblaze/blazer v0.7.2 h1:UWNHMLB+Nf+UmbO2qkVvgriODLEMz4kIyr2Hm+DVXQM=
+github.com/Backblaze/blazer v0.7.2/go.mod h1:T4y3EYa9IQ5J0PKc/C/J8/CEnSd3qa/lgNw938wZg10=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
 github.com/btcsuite/btcd v0.22.0-beta.0.20220111032746-97732e52810c/go.mod h1:tjmYdS6MLJ5/s0Fj4DbLgSbDHbEqLJrtnHecBFkdz5M=
