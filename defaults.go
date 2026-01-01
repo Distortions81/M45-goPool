@@ -51,8 +51,6 @@ func defaultConfig() Config {
 		CoinbaseScriptSigMaxBytes:         defaultCoinbaseScriptSigMaxBytes,
 		ZMQBlockAddr:                      defaultZMQBlockAddr,
 		BackblazeBackupEnabled:            false,
-		BackblazeAccountID:                "",
-		BackblazeApplicationKey:           "",
 		BackblazeBucket:                   "",
 		BackblazePrefix:                   "",
 		BackblazeBackupIntervalSeconds:    defaultBackblazeBackupIntervalSeconds,

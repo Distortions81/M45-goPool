@@ -130,23 +130,21 @@ type Config struct {
 	// BackblazeBackupEnabled toggles periodic uploads of the worker list
 	// database snapshot to Backblaze B2.
 	BackblazeBackupEnabled bool
-	// BackblazeAccountID is the Backblaze account ID used to authenticate.
-	BackblazeAccountID string
-	// BackblazeApplicationKey is the application key paired with the account ID.
-	BackblazeApplicationKey string
 	// BackblazeBucket is the B2 bucket where backups are stored.
 	BackblazeBucket string
+	// BackblazeAccountID is set from secrets and used for authentication.
+	BackblazeAccountID string
+	// BackblazeApplicationKey is set from secrets and used for authentication.
+	BackblazeApplicationKey string
 	// BackblazePrefix is an optional namespace prefix applied to uploaded objects.
 	BackblazePrefix string
 	// BackblazeBackupIntervalSeconds controls how often backups run (seconds).
 	BackblazeBackupIntervalSeconds int
-	// BackblazeMaxBackups is the number of snapshots kept before deleting the oldest.
-	BackblazeMaxBackups int
-	DataDir             string
-	ShareLogBufferBytes int
-	FsyncShareLog       bool
-	ShareLogReplayBytes int64
-	MaxConns            int
+	DataDir                        string
+	ShareLogBufferBytes            int
+	FsyncShareLog                  bool
+	ShareLogReplayBytes            int64
+	MaxConns                       int
 	// MaxAcceptsPerSecond limits how many new TCP connections the pool
 	// will accept per second. Zero disables rate limiting.
 	MaxAcceptsPerSecond int
@@ -284,7 +282,6 @@ type EffectiveConfig struct {
 	BackblazeBucket                   string  `json:"backblaze_bucket,omitempty"`
 	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
 	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
-	BackblazeMaxBackups               int     `json:"backblaze_max_backups,omitempty"`
 	DataDir                           string  `json:"data_dir"`
 	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
 	FsyncShareLog                     bool    `json:"fsync_share_log"`
@@ -365,12 +362,9 @@ type nodeConfig struct {
 
 type backblazeBackupConfig struct {
 	Enabled         bool   `toml:"enabled"`
-	AccountID       string `toml:"account_id"`
-	ApplicationKey  string `toml:"application_key"`
 	Bucket          string `toml:"bucket"`
 	Prefix          string `toml:"prefix"`
 	IntervalSeconds *int   `toml:"interval_seconds"`
-	MaxBackups      *int   `toml:"max_backups"`
 }
 
 type miningConfig struct {
@@ -532,12 +526,9 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		},
 		Backblaze: backblazeBackupConfig{
 			Enabled:         cfg.BackblazeBackupEnabled,
-			AccountID:       cfg.BackblazeAccountID,
-			ApplicationKey:  cfg.BackblazeApplicationKey,
 			Bucket:          cfg.BackblazeBucket,
 			Prefix:          cfg.BackblazePrefix,
 			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
-			MaxBackups:      intPtr(cfg.BackblazeMaxBackups),
 		},
 	}
 }
@@ -835,12 +826,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
 	}
 	cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
-	if fc.Backblaze.AccountID != "" {
-		cfg.BackblazeAccountID = strings.TrimSpace(fc.Backblaze.AccountID)
-	}
-	if fc.Backblaze.ApplicationKey != "" {
-		cfg.BackblazeApplicationKey = strings.TrimSpace(fc.Backblaze.ApplicationKey)
-	}
 	if fc.Backblaze.Bucket != "" {
 		cfg.BackblazeBucket = strings.TrimSpace(fc.Backblaze.Bucket)
 	}
@@ -849,9 +834,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Backblaze.IntervalSeconds != nil && *fc.Backblaze.IntervalSeconds > 0 {
 		cfg.BackblazeBackupIntervalSeconds = *fc.Backblaze.IntervalSeconds
-	}
-	if fc.Backblaze.MaxBackups != nil && *fc.Backblaze.MaxBackups > 0 {
-		cfg.BackblazeMaxBackups = *fc.Backblaze.MaxBackups
 	}
 }
 
@@ -1273,7 +1255,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazeBucket:                   cfg.BackblazeBucket,
 		BackblazePrefix:                   cfg.BackblazePrefix,
 		BackblazeBackupInterval:           backblazeInterval,
-		BackblazeMaxBackups:               cfg.BackblazeMaxBackups,
 		DataDir:                           cfg.DataDir,
 		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
 		FsyncShareLog:                     cfg.FsyncShareLog,

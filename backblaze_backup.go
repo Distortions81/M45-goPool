@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,21 +20,11 @@ type dbBackuper interface {
 }
 
 type backblazeBackupService struct {
-	bucket           *b2.Bucket
-	dbPath           string
-	objectPrefix     string
-	objectListPrefix string
-	interval         time.Duration
-	maxBackups       int
-	lastBackupPath   string
-	missingLastStamp bool
+	bucket       *b2.Bucket
+	dbPath       string
+	interval     time.Duration
+	objectPrefix string
 }
-
-const (
-	backupObjectBaseName = "workers-db-"
-	backupObjectSuffix   = ".db"
-	backupTimestampName  = "backblaze_last_backup"
-)
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
 	if !cfg.BackblazeBackupEnabled {
@@ -64,26 +53,13 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	if interval <= 0 {
 		interval = time.Duration(defaultBackblazeBackupIntervalSeconds) * time.Second
 	}
-	maxBackups := cfg.BackblazeMaxBackups
-
 	objectPrefix := sanitizeObjectPrefix(cfg.BackblazePrefix)
-	objectListPrefix := objectPrefix + backupObjectBaseName
-	stateDir := filepath.Dir(dbPath)
-	lastBackupPath := filepath.Join(stateDir, backupTimestampName)
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create state dir for backblaze timestamp: %w", err)
-	}
-	missingStamp := !fileExists(lastBackupPath)
 
 	return &backblazeBackupService{
-		bucket:           bucket,
-		dbPath:           dbPath,
-		objectPrefix:     objectPrefix,
-		objectListPrefix: objectListPrefix,
-		interval:         interval,
-		maxBackups:       maxBackups,
-		lastBackupPath:   lastBackupPath,
-		missingLastStamp: missingStamp,
+		bucket:       bucket,
+		dbPath:       dbPath,
+		objectPrefix: objectPrefix,
+		interval:     interval,
 	}, nil
 }
 
@@ -91,9 +67,6 @@ func (s *backblazeBackupService) start(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	go func() {
 		defer ticker.Stop()
-		if s.missingLastStamp {
-			logger.Info("backblaze timestamp missing, forcing initial backup")
-		}
 		s.run(ctx)
 		for {
 			select {
@@ -110,10 +83,6 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := s.pruneBackups(ctx); err != nil {
-		logger.Warn("backblaze backup prune failed", "error", err)
-	}
-	ts := time.Now().UTC()
 	snapshot, err := snapshotWorkerDB(ctx, s.dbPath)
 	if err != nil {
 		logger.Warn("backblaze backup snapshot failed", "error", err)
@@ -121,13 +90,10 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	defer os.Remove(snapshot)
 
-	object := s.objectName(ts)
+	object := s.objectName()
 	if err := s.upload(ctx, snapshot, object); err != nil {
 		logger.Warn("backblaze backup upload failed", "error", err, "object", object)
 		return
-	}
-	if err := s.recordLastBackup(ts); err != nil {
-		logger.Warn("record backblaze timestamp", "error", err)
 	}
 	logger.Info("backblaze backup uploaded", "object", object)
 }
@@ -147,49 +113,8 @@ func (s *backblazeBackupService) upload(ctx context.Context, path, object string
 	return writer.Close()
 }
 
-func (s *backblazeBackupService) objectName(ts time.Time) string {
-	return fmt.Sprintf("%s%s%s%s", s.objectPrefix, backupObjectBaseName, ts.Format("20060102T150405Z"), backupObjectSuffix)
-}
-
-func (s *backblazeBackupService) recordLastBackup(ts time.Time) error {
-	if s.lastBackupPath == "" {
-		return nil
-	}
-	data := []byte(ts.UTC().Format(time.RFC3339Nano))
-	if err := os.WriteFile(s.lastBackupPath, data, 0o644); err != nil {
-		return err
-	}
-	s.missingLastStamp = false
-	return nil
-}
-
-func (s *backblazeBackupService) pruneBackups(ctx context.Context) error {
-	if s.maxBackups <= 0 {
-		return nil
-	}
-	iter := s.bucket.List(ctx, b2.ListPrefix(s.objectListPrefix))
-	var names []string
-	for iter.Next() {
-		names = append(names, iter.Object().Name())
-	}
-	if err := iter.Err(); err != nil {
-		return err
-	}
-	keep := s.maxBackups - 1
-	if keep < 0 {
-		keep = 0
-	}
-	if len(names) <= keep {
-		return nil
-	}
-	sort.Strings(names)
-	toDelete := len(names) - keep
-	for _, name := range names[:toDelete] {
-		if err := s.bucket.Object(name).Delete(ctx); err != nil {
-			logger.Warn("backblaze backup delete old object", "error", err, "object", name)
-		}
-	}
-	return nil
+func (s *backblazeBackupService) objectName() string {
+	return fmt.Sprintf("%s%s", s.objectPrefix, filepath.Base(s.dbPath))
 }
 
 func snapshotWorkerDB(ctx context.Context, srcPath string) (string, error) {
