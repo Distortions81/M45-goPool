@@ -645,7 +645,7 @@ func (m *PoolMetrics) persistBestShares(shares []BestShare) {
 	if m == nil || len(shares) == 0 || m.bestSharesFile == "" {
 		return
 	}
-	data, err := sonic.ConfigDefault.MarshalIndent(shares, "", "  ")
+	data, err := sonic.ConfigDefault.MarshalIndent(sanitizeBestSharesForFile(shares), "", "  ")
 	if err != nil {
 		logger.Warn("marshal best shares", "error", err)
 		return
@@ -659,4 +659,20 @@ func (m *PoolMetrics) persistBestShares(shares []BestShare) {
 		logger.Warn("rename best shares file", "error", err, "tmp", tmp, "target", m.bestSharesFile)
 		return
 	}
+}
+
+// sanitizeBestSharesForFile censors worker names so persisted files don't retain
+// sensitive identifiers.
+func sanitizeBestSharesForFile(shares []BestShare) []BestShare {
+	if len(shares) == 0 {
+		return nil
+	}
+	sanitized := make([]BestShare, len(shares))
+	copy(sanitized, shares)
+	for i := range sanitized {
+		if sanitized[i].Worker != "" {
+			sanitized[i].Worker = shortWorkerName(sanitized[i].Worker, workerNamePrefix, workerNameSuffix)
+		}
+	}
+	return sanitized
 }
