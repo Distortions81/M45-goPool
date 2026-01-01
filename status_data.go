@@ -291,6 +291,19 @@ func (s *StatusServer) buildStatusData() StatusData {
 		genesisHash = info.genesisHash
 		bestHash = info.bestHash
 	}
+	if len(foundBlocks) > 0 && nodeBlocks > 0 {
+		for i := range foundBlocks {
+			height := foundBlocks[i].Height
+			if height <= 0 {
+				continue
+			}
+			confirms := nodeBlocks - height + 1
+			if confirms < 1 {
+				confirms = 0
+			}
+			foundBlocks[i].Confirmations = confirms
+		}
+	}
 	if s.accounting != nil {
 		if err := s.accounting.LastError(); err != nil {
 			acctErr = err.Error()

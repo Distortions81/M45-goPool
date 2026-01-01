@@ -696,16 +696,16 @@ type StatusData struct {
 	SystemLoad5         float64 `json:"system_load5"`
 	SystemLoad15        float64 `json:"system_load15"`
 	// Safe-to-share pool config summary.
-	MaxConns                int     `json:"max_conns"`
-	MaxAcceptsPerSecond     int     `json:"max_accepts_per_second"`
-	MaxAcceptBurst          int     `json:"max_accept_burst"`
-	MinDifficulty           float64 `json:"min_difficulty"`
-	MaxDifficulty           float64 `json:"max_difficulty"`
-	LockSuggestedDifficulty bool    `json:"lock_suggested_difficulty"`
-	HashrateEMATauSeconds   float64 `json:"hashrate_ema_tau_seconds"`
-	HashrateEMAMinShares    int     `json:"hashrate_ema_min_shares"`
-	NTimeForwardSlackSec    int     `json:"ntime_forward_slack_seconds"`
-	Warnings       []string            `json:"warnings,omitempty"`
+	MaxConns                int      `json:"max_conns"`
+	MaxAcceptsPerSecond     int      `json:"max_accepts_per_second"`
+	MaxAcceptBurst          int      `json:"max_accept_burst"`
+	MinDifficulty           float64  `json:"min_difficulty"`
+	MaxDifficulty           float64  `json:"max_difficulty"`
+	LockSuggestedDifficulty bool     `json:"lock_suggested_difficulty"`
+	HashrateEMATauSeconds   float64  `json:"hashrate_ema_tau_seconds"`
+	HashrateEMAMinShares    int      `json:"hashrate_ema_min_shares"`
+	NTimeForwardSlackSec    int      `json:"ntime_forward_slack_seconds"`
+	Warnings                []string `json:"warnings,omitempty"`
 }
 
 type ServerPageJobFeed struct {
@@ -982,4 +982,5 @@ type FoundBlockView struct {
 	ShareDiff        float64   `json:"share_diff"`
 	PoolFeeSats      int64     `json:"pool_fee_sats,omitempty"`
 	WorkerPayoutSats int64     `json:"worker_payout_sats,omitempty"`
+	Confirmations    int64     `json:"confirmations,omitempty"`
 }

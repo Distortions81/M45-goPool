@@ -208,6 +208,7 @@
 							<th>Height</th>
 							<th>Hash</th>
 							<th>Miner</th>
+							<th>Confirmations</th>
 							<th>Pool (sats)</th>
 							<th>Worker (sats)</th>
 							<th>Share difficulty</th>
@@ -216,7 +217,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="7" class="text-sm">Loading found blocks…</td>
+							<td colspan="8" class="text-sm">Loading found blocks…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -619,17 +620,22 @@
 				tbody.innerHTML = '<tr><td colspan="7" class="text-sm">No blocks found yet.</td></tr>';
 				return;
 			}
-				const rows = blocks.map(block => `
+				const rows = blocks.map(block => {
+					const confirmations = (typeof block.confirmations === 'number' && block.confirmations > 0)
+						? block.confirmations
+						: '—';
+					return `
 					<tr>
 						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
-					<td class="mono">${block.display_hash || block.hash || '—'}</td>
-					<td class="mono">${block.display_worker || block.worker || '—'}</td>
-					<td>${block.pool_fee_sats || 0}</td>
-					<td>${block.worker_payout_sats || 0}</td>
-					<td>${formatDiff(block.share_diff)}</td>
-					<td>${formatTimeAgo(block.timestamp)}</td>
-				</tr>
-			`);
+						<td class="mono">${block.display_hash || block.hash || '—'}</td>
+						<td class="mono">${block.display_worker || block.worker || '—'}</td>
+						<td class="mono">${confirmations}</td>
+						<td>${block.pool_fee_sats || 0}</td>
+						<td>${block.worker_payout_sats || 0}</td>
+						<td>${formatDiff(block.share_diff)}</td>
+						<td>${formatTimeAgo(block.timestamp)}</td>
+					</tr>`;
+				});
 			tbody.innerHTML = rows.join('');
 		}
 
