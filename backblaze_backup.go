@@ -65,9 +65,6 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		interval = time.Duration(defaultBackblazeBackupIntervalSeconds) * time.Second
 	}
 	maxBackups := cfg.BackblazeMaxBackups
-	if maxBackups <= 0 {
-		maxBackups = defaultBackblazeMaxBackups
-	}
 
 	objectPrefix := sanitizeObjectPrefix(cfg.BackblazePrefix)
 	objectListPrefix := objectPrefix + backupObjectBaseName

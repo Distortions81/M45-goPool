@@ -13,7 +13,7 @@
   - `account_id` and `bucket` are stored in the main config so you can keep bucket names and namespace prefixes under version control.
   - `prefix` is an optional path component (e.g. `backups/state`) that’s sanitized and automatically suffixed with `/` before uploading.
 - `interval_seconds` controls how often goPool takes a snapshot of `state/workers.db` and uploads a file named `workers-db-<timestamp>.db` (default `43200`, i.e. every 12 hours). A snapshot also runs immediately on startup.
-- `max_backups` controls how many snapshots are retained before goPool deletes the oldest backup prior to uploading a new one (default `60`).
+- `max_backups` controls how many snapshots are retained before goPool deletes the oldest backup prior to uploading a new one; leaving it unset keeps every upload and lets you rely on bucket lifecycle rules instead.
 - A timestamp of the last successful backup lives in `data/state/backblaze_last_backup`; when that file is missing (first run or after cleanup), goPool forces a backup on the next startup so the file can be populated.
   - The actual Backblaze application key is a secret and should be stored in `data/config/secrets.toml` via the `backblaze_application_key` entry (the `backblaze_account_id` option is also mirrored there for convenience).
   - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
