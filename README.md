@@ -15,6 +15,7 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 - Split coinbase outputs: pool fee, optional operator donation, and miner payout.
 - Status UI (HTML templates in `data/templates/`) + JSON endpoints under `/api/*`.
 - HTTPS-first status UI with auto-generated self-signed cert by default (writes `data/tls_cert.pem` / `data/tls_key.pem`).
+- Periodic local snapshots of `data/state/workers.db` for safe system backups, with optional Backblaze B2 uploads (configured under `[backblaze_backup]`; uploads are not required for local snapshots).
 - Defensive controls: rate limiting, invalid-submission bans, reconnect churn bans.
 - Extensive test suite and compatibility checks (see `TESTING.md`).
 

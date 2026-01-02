@@ -7,15 +7,17 @@
 - `data/config/tuning.toml` (optional): advanced tuning and limits. Deleting this file reverts to the built-in defaults. See `data/config/examples/tuning.toml.example` for the current list.
 - Branding options in `config.toml` include `discord_url` and `github_url`, which control the header and About-page links.
 
-## Backblaze database backups
+## Database snapshots & Backblaze uploads
 
-- Backblaze B2 integration is configured via a `[backblaze_backup]` table in `data/config/config.toml`. The service stays disabled unless `enabled = true` and the required fields are populated.
+- goPool can produce a periodic local snapshot of `data/state/workers.db` for safe backups. Backblaze B2 uploads are optional and are **not** required for local snapshots.
+- Backblaze B2 integration is configured via a `[backblaze_backup]` table in `data/config/config.toml`. Uploads stay disabled unless `enabled = true` and the required fields are populated.
   - `account_id`, `bucket`, and optional `prefix` belong in the base config so you can keep namespace settings under version control. Backblaze requires the bucket name to be lowercase.
   - The sensitive `application_key` (and optionally `backblaze_account_id`) must live in `data/config/secrets.toml` so it never shows up in the checked-in config (`backblaze_application_key`, `backblaze_account_id`). Use the master application key (not the key’s ID); if you don’t already have one, generate a new application key with write permissions for your bucket. The `backblaze_account_id` in the secrets file should match the Key ID associated with that master application key.
 - `interval_seconds` controls how often goPool snapshots `state/workers.db` and uploads that file (default `43200`, i.e. every 12 hours); the configured prefix is prepended so you can namespace the upload, and Backblaze keeps every version unless you add lifecycle rules.
   - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
   - `keep_local_copy` (default `true`) stores a local copy of the last snapshot in `data/state/` even if Backblaze uploads are disabled.
   - `snapshot_path` (default empty) overrides where the local snapshot is written; when set to a relative path it is resolved relative to `data_dir`.
+  - The most recent snapshot time is recorded in `data/state/last_backup` (migrated from the legacy `data/state/backblaze_last_backup`).
   - When backing up outside of goPool (rsync/tar/system backups), back up the snapshot file (`snapshot_path` / `data/state/workers.db.bak`) rather than the live `data/state/workers.db`; copying a live SQLite DB can fail or produce a corrupt backup. If you must back up `workers.db` directly, stop goPool first.
 
 ## Tuning highlights
