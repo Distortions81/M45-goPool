@@ -178,8 +178,20 @@ func (m *PoolMetrics) loadBestSharesFile(path string) error {
 				rewrote = true
 			}
 		}
+		if shares[i].Hash != "" {
+			censored := shortDisplayID(shares[i].Hash, hashPrefix, hashSuffix)
+			if censored != "" && censored != shares[i].Hash {
+				shares[i].Hash = censored
+				rewrote = true
+			}
+		}
 		if shares[i].DisplayWorker != "" {
-			shares[i].DisplayWorker = shortWorkerName(shares[i].Worker, workerNamePrefix, workerNameSuffix)
+			shares[i].DisplayWorker = ""
+			rewrote = true
+		}
+		if shares[i].DisplayHash != "" {
+			shares[i].DisplayHash = ""
+			rewrote = true
 		}
 	}
 	if rewrote {
@@ -574,13 +586,13 @@ func (m *PoolMetrics) TrackBestShare(worker, hash string, difficulty float64, ti
 		return
 	}
 
+	censoredWorker := shortWorkerName(worker, workerNamePrefix, workerNameSuffix)
+	censoredHash := shortDisplayID(hash, hashPrefix, hashSuffix)
 	share := BestShare{
-		Worker:        worker,
-		DisplayWorker: shortWorkerName(worker, workerNamePrefix, workerNameSuffix),
-		Difficulty:    difficulty,
-		Timestamp:     timestamp,
-		Hash:          hash,
-		DisplayHash:   shortDisplayID(hash, hashPrefix, hashSuffix),
+		Worker:     censoredWorker,
+		Difficulty: difficulty,
+		Timestamp:  timestamp,
+		Hash:       censoredHash,
 	}
 
 	if ch := m.bestShareChan; ch != nil {
@@ -693,6 +705,11 @@ func sanitizeBestSharesForFile(shares []BestShare) []BestShare {
 		if sanitized[i].Worker != "" {
 			sanitized[i].Worker = shortWorkerName(sanitized[i].Worker, workerNamePrefix, workerNameSuffix)
 		}
+		if sanitized[i].Hash != "" {
+			sanitized[i].Hash = shortDisplayID(sanitized[i].Hash, hashPrefix, hashSuffix)
+		}
+		sanitized[i].DisplayWorker = ""
+		sanitized[i].DisplayHash = ""
 	}
 	return sanitized
 }
