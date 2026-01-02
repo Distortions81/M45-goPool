@@ -145,19 +145,28 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 		}
 	}
 
+	// Record that we've produced a snapshot so quick restarts don't trigger
+	// another full copy immediately. If the upload fails, we persist a 0
+	// data_version so we'll retry later even if the DB hasn't changed.
+	stampDataVersion := int64(0)
+	uploaded := false
 	if s.bucket != nil {
 		object := s.objectName()
 		if err := s.upload(ctx, snapshot, object); err != nil {
 			logger.Warn("backblaze backup upload failed", "error", err, "object", object)
-			return
+		} else {
+			uploaded = true
+			stampDataVersion = dataVersion
 		}
+	} else {
+		stampDataVersion = dataVersion
 	}
 	s.lastBackup = now
-	s.lastDataVersion = dataVersion
-	if err := writeBackblazeLastBackup(s.lastBackupPath, now, dataVersion); err != nil {
+	s.lastDataVersion = stampDataVersion
+	if err := writeBackblazeLastBackup(s.lastBackupPath, now, stampDataVersion); err != nil {
 		logger.Warn("record backblaze timestamp", "error", err, "path", s.lastBackupPath)
 	}
-	if s.bucket != nil {
+	if uploaded {
 		logger.Info("backblaze backup uploaded", "object", s.objectName())
 	} else {
 		logger.Info("local backup written", "path", s.localCopyPath)
