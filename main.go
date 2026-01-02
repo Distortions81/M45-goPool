@@ -248,9 +248,9 @@ func main() {
 		logger.Warn("initialize backblaze backup service", "error", err)
 	} else if svc != nil {
 		if cfg.BackblazeBackupEnabled {
-			logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String())
+			logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String(), "snapshot_path", svc.snapshotPath)
 		} else {
-			logger.Info("local database backups enabled", "interval", svc.interval.String())
+			logger.Info("local database backups enabled", "interval", svc.interval.String(), "snapshot_path", svc.snapshotPath)
 		}
 		svc.start(ctx)
 	}
