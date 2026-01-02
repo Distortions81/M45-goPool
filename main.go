@@ -247,7 +247,11 @@ func main() {
 	if svc, err := newBackblazeBackupService(ctx, cfg, workerListDBPath); err != nil {
 		logger.Warn("initialize backblaze backup service", "error", err)
 	} else if svc != nil {
-		logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String())
+		if cfg.BackblazeBackupEnabled {
+			logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String())
+		} else {
+			logger.Info("local database backups enabled", "interval", svc.interval.String())
+		}
 		svc.start(ctx)
 	}
 	rpcClient := NewRPCClient(cfg, metrics)

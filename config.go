@@ -140,6 +140,9 @@ type Config struct {
 	BackblazePrefix string
 	// BackblazeBackupIntervalSeconds controls how often backups run (seconds).
 	BackblazeBackupIntervalSeconds int
+	// BackblazeKeepLocalCopy controls whether a local copy of the last
+	// successfully uploaded backup is stored in the state dir.
+	BackblazeKeepLocalCopy bool
 	DataDir                        string
 	ShareLogBufferBytes            int
 	FsyncShareLog                  bool
@@ -282,6 +285,7 @@ type EffectiveConfig struct {
 	BackblazeBucket                   string  `json:"backblaze_bucket,omitempty"`
 	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
 	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
+	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
 	DataDir                           string  `json:"data_dir"`
 	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
 	FsyncShareLog                     bool    `json:"fsync_share_log"`
@@ -365,6 +369,7 @@ type backblazeBackupConfig struct {
 	Bucket          string `toml:"bucket"`
 	Prefix          string `toml:"prefix"`
 	IntervalSeconds *int   `toml:"interval_seconds"`
+	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
 }
 
 type miningConfig struct {
@@ -529,6 +534,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			Bucket:          cfg.BackblazeBucket,
 			Prefix:          cfg.BackblazePrefix,
 			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
+			KeepLocalCopy:   boolPtr(cfg.BackblazeKeepLocalCopy),
 		},
 	}
 }
@@ -834,6 +840,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Backblaze.IntervalSeconds != nil && *fc.Backblaze.IntervalSeconds > 0 {
 		cfg.BackblazeBackupIntervalSeconds = *fc.Backblaze.IntervalSeconds
+	}
+	if fc.Backblaze.KeepLocalCopy != nil {
+		cfg.BackblazeKeepLocalCopy = *fc.Backblaze.KeepLocalCopy
 	}
 }
 
@@ -1255,6 +1264,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazeBucket:                   cfg.BackblazeBucket,
 		BackblazePrefix:                   cfg.BackblazePrefix,
 		BackblazeBackupInterval:           backblazeInterval,
+		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
 		DataDir:                           cfg.DataDir,
 		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
 		FsyncShareLog:                     cfg.FsyncShareLog,

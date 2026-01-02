@@ -29,31 +29,38 @@ type backblazeBackupService struct {
 	lastBackup      time.Time
 	lastDataVersion int64
 	lastBackupPath  string
+	keepLocalCopy   bool
+	localCopyPath   string
 }
 
 const backblazeLastBackupFilename = "backblaze_last_backup"
+const backblazeLocalCopySuffix = ".b2last"
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
-	if !cfg.BackblazeBackupEnabled {
+	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy {
 		return nil, nil
 	}
 	if dbPath == "" {
 		return nil, fmt.Errorf("worker database path is empty")
 	}
-	if cfg.BackblazeAccountID == "" || cfg.BackblazeApplicationKey == "" || cfg.BackblazeBucket == "" {
-		return nil, fmt.Errorf("backblaze credentials are incomplete")
-	}
 
-	client, err := b2.NewClient(ctx, cfg.BackblazeAccountID, cfg.BackblazeApplicationKey)
-	if err != nil {
-		return nil, fmt.Errorf("create backblaze client: %w", err)
-	}
-	bucket, err := client.Bucket(ctx, cfg.BackblazeBucket)
-	if err != nil {
-		return nil, fmt.Errorf("access backblaze bucket: %w", err)
-	}
-	if _, err := bucket.Attrs(ctx); err != nil {
-		return nil, fmt.Errorf("access backblaze bucket: %w", err)
+	var bucket *b2.Bucket
+	if cfg.BackblazeBackupEnabled {
+		if cfg.BackblazeAccountID == "" || cfg.BackblazeApplicationKey == "" || cfg.BackblazeBucket == "" {
+			return nil, fmt.Errorf("backblaze credentials are incomplete")
+		}
+
+		client, err := b2.NewClient(ctx, cfg.BackblazeAccountID, cfg.BackblazeApplicationKey)
+		if err != nil {
+			return nil, fmt.Errorf("create backblaze client: %w", err)
+		}
+		bucket, err = client.Bucket(ctx, cfg.BackblazeBucket)
+		if err != nil {
+			return nil, fmt.Errorf("access backblaze bucket: %w", err)
+		}
+		if _, err := bucket.Attrs(ctx); err != nil {
+			return nil, fmt.Errorf("access backblaze bucket: %w", err)
+		}
 	}
 
 	interval := time.Duration(cfg.BackblazeBackupIntervalSeconds) * time.Second
@@ -71,6 +78,7 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	if err != nil {
 		logger.Warn("read backblaze last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
 	}
+	localCopyPath := filepath.Join(stateDir, filepath.Base(dbPath)+backblazeLocalCopySuffix)
 
 	return &backblazeBackupService{
 		bucket:       bucket,
@@ -81,6 +89,8 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 
 		lastDataVersion: lastDataVersion,
 		lastBackupPath:  lastBackupPath,
+		keepLocalCopy:   cfg.BackblazeKeepLocalCopy,
+		localCopyPath:   localCopyPath,
 	}, nil
 }
 
@@ -129,17 +139,29 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	defer os.Remove(snapshot)
 
-	object := s.objectName()
-	if err := s.upload(ctx, snapshot, object); err != nil {
-		logger.Warn("backblaze backup upload failed", "error", err, "object", object)
-		return
+	if s.keepLocalCopy {
+		if err := atomicCopyFile(snapshot, s.localCopyPath, 0o644); err != nil {
+			logger.Warn("write local backblaze backup copy failed", "error", err, "path", s.localCopyPath)
+		}
+	}
+
+	if s.bucket != nil {
+		object := s.objectName()
+		if err := s.upload(ctx, snapshot, object); err != nil {
+			logger.Warn("backblaze backup upload failed", "error", err, "object", object)
+			return
+		}
 	}
 	s.lastBackup = now
 	s.lastDataVersion = dataVersion
 	if err := writeBackblazeLastBackup(s.lastBackupPath, now, dataVersion); err != nil {
 		logger.Warn("record backblaze timestamp", "error", err, "path", s.lastBackupPath)
 	}
-	logger.Info("backblaze backup uploaded", "object", object)
+	if s.bucket != nil {
+		logger.Info("backblaze backup uploaded", "object", s.objectName())
+	} else {
+		logger.Info("local backup written", "path", s.localCopyPath)
+	}
 }
 
 func (s *backblazeBackupService) upload(ctx context.Context, path, object string) error {
@@ -159,6 +181,59 @@ func (s *backblazeBackupService) upload(ctx context.Context, path, object string
 
 func (s *backblazeBackupService) objectName() string {
 	return fmt.Sprintf("%s%s", s.objectPrefix, filepath.Base(s.dbPath))
+}
+
+func atomicCopyFile(srcPath, dstPath string, mode os.FileMode) error {
+	if strings.TrimSpace(srcPath) == "" || strings.TrimSpace(dstPath) == "" {
+		return os.ErrInvalid
+	}
+	dir := filepath.Dir(dstPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	tmp, err := os.CreateTemp(dir, filepath.Base(dstPath)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	removeTmp := true
+	defer func() {
+		if tmp != nil {
+			_ = tmp.Close()
+		}
+		if removeTmp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if _, err := io.Copy(tmp, src); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	tmp = nil
+
+	if mode != 0 {
+		if err := os.Chmod(tmpName, mode); err != nil {
+			return err
+		}
+	}
+	if err := os.Rename(tmpName, dstPath); err != nil {
+		return err
+	}
+	removeTmp = false
+	return nil
 }
 
 func readBackblazeLastBackup(path string) (time.Time, int64, error) {

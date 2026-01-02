@@ -14,6 +14,7 @@
   - The sensitive `application_key` (and optionally `backblaze_account_id`) must live in `data/config/secrets.toml` so it never shows up in the checked-in config (`backblaze_application_key`, `backblaze_account_id`). Use the master application key (not the key’s ID); if you don’t already have one, generate a new application key with write permissions for your bucket. The `backblaze_account_id` in the secrets file should match the Key ID associated with that master application key.
 - `interval_seconds` controls how often goPool snapshots `state/workers.db` and uploads that file (default `43200`, i.e. every 12 hours); the configured prefix is prepended so you can namespace the upload, and Backblaze keeps every version unless you add lifecycle rules.
   - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
+  - `keep_local_copy` (default `true`) stores a local copy of the last snapshot in `data/state/` even if Backblaze uploads are disabled.
 
 ## Tuning highlights
 
