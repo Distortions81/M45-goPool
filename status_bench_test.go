@@ -145,18 +145,19 @@ func buildOverviewPagePayloadForBench(s *StatusServer) ([]byte, error) {
 		censoredBanned = append(censoredBanned, censorWorkerView(bw))
 	}
 
-	data := OverviewPageData{
-		APIVersion:      apiVersion,
-		ActiveMiners:    view.ActiveMiners,
-		ActiveTLSMiners: view.ActiveTLSMiners,
-		SharesPerMinute: view.SharesPerMinute,
-		PoolHashrate:    view.PoolHashrate,
-		BTCPriceUSD:     0,
-		BTCPriceUpdated: "",
-		RenderDuration:  time.Since(start),
-		Workers:         recentWork,
-		BannedWorkers:   censoredBanned,
-		BestShares:      bestShares,
+		data := OverviewPageData{
+			APIVersion:      apiVersion,
+			ActiveMiners:    view.ActiveMiners,
+			ActiveTLSMiners: view.ActiveTLSMiners,
+			SharesPerMinute: view.SharesPerMinute,
+			PoolHashrate:    view.PoolHashrate,
+			BTCPriceFiat:    0,
+			BTCPriceUpdated: "",
+			FiatCurrency:    defaultFiatCurrency,
+			RenderDuration:  time.Since(start),
+			Workers:         recentWork,
+			BannedWorkers:   censoredBanned,
+			BestShares:      bestShares,
 		FoundBlocks:     foundBlocks,
 		MinerTypes:      view.MinerTypes,
 	}
