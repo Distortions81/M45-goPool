@@ -29,15 +29,16 @@ type backblazeBackupService struct {
 	lastBackup      time.Time
 	lastDataVersion int64
 	lastBackupPath  string
-	keepLocalCopy   bool
-	localCopyPath   string
+	snapshotPath    string
 }
 
-const backblazeLastBackupFilename = "backblaze_last_backup"
-const backblazeLocalCopySuffix = ".b2last"
+const lastBackupStampFilename = "last_backup"
+const legacyBackblazeLastBackupFilename = "backblaze_last_backup"
+const backupLocalCopySuffix = ".bak"
+const legacyBackblazeLocalCopySuffix = ".b2last"
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
-	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy {
+	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy && strings.TrimSpace(cfg.BackupSnapshotPath) == "" {
 		return nil, nil
 	}
 	if dbPath == "" {
@@ -73,12 +74,49 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create state dir for backblaze timestamp: %w", err)
 	}
-	lastBackupPath := filepath.Join(stateDir, backblazeLastBackupFilename)
-	lastBackup, lastDataVersion, err := readBackblazeLastBackup(lastBackupPath)
+
+	lastBackupPath := filepath.Join(stateDir, lastBackupStampFilename)
+	lastBackup, lastDataVersion, err := readLastBackupStamp(lastBackupPath)
 	if err != nil {
-		logger.Warn("read backblaze last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
+		logger.Warn("read last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
 	}
-	localCopyPath := filepath.Join(stateDir, filepath.Base(dbPath)+backblazeLocalCopySuffix)
+	if _, statErr := os.Stat(lastBackupPath); statErr != nil && errors.Is(statErr, os.ErrNotExist) {
+		legacyPath := filepath.Join(stateDir, legacyBackblazeLastBackupFilename)
+		legacyBackup, legacyDataVersion, legacyErr := readLastBackupStamp(legacyPath)
+		if legacyErr != nil {
+			logger.Warn("read legacy last backup stamp failed (ignored)", "error", legacyErr, "path", legacyPath)
+		} else if !legacyBackup.IsZero() || legacyDataVersion != 0 {
+			lastBackup = legacyBackup
+			lastDataVersion = legacyDataVersion
+			if err := writeLastBackupStamp(lastBackupPath, legacyBackup, legacyDataVersion); err != nil {
+				logger.Warn("migrate legacy last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
+			} else {
+				logger.Info("migrated legacy last backup stamp", "from", legacyPath, "to", lastBackupPath)
+			}
+		}
+	}
+
+	snapshotPath := strings.TrimSpace(cfg.BackupSnapshotPath)
+	if snapshotPath != "" && !filepath.IsAbs(snapshotPath) {
+		base := strings.TrimSpace(cfg.DataDir)
+		if base == "" {
+			base = stateDir
+		}
+		snapshotPath = filepath.Join(base, snapshotPath)
+	}
+	if snapshotPath == "" && cfg.BackblazeKeepLocalCopy {
+		snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
+		legacySnapshotPath := filepath.Join(stateDir, filepath.Base(dbPath)+legacyBackblazeLocalCopySuffix)
+		if _, err := os.Stat(snapshotPath); err != nil && errors.Is(err, os.ErrNotExist) {
+			if _, legacyErr := os.Stat(legacySnapshotPath); legacyErr == nil {
+				if err := os.Rename(legacySnapshotPath, snapshotPath); err != nil {
+					logger.Warn("migrate legacy local snapshot failed (ignored)", "error", err, "from", legacySnapshotPath, "to", snapshotPath)
+				} else {
+					logger.Info("migrated legacy local snapshot", "from", legacySnapshotPath, "to", snapshotPath)
+				}
+			}
+		}
+	}
 
 	return &backblazeBackupService{
 		bucket:       bucket,
@@ -89,8 +127,7 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 
 		lastDataVersion: lastDataVersion,
 		lastBackupPath:  lastBackupPath,
-		keepLocalCopy:   cfg.BackblazeKeepLocalCopy,
-		localCopyPath:   localCopyPath,
+		snapshotPath:    snapshotPath,
 	}, nil
 }
 
@@ -139,9 +176,12 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	defer os.Remove(snapshot)
 
-	if s.keepLocalCopy {
-		if err := atomicCopyFile(snapshot, s.localCopyPath, 0o644); err != nil {
-			logger.Warn("write local backblaze backup copy failed", "error", err, "path", s.localCopyPath)
+	localWritten := false
+	if strings.TrimSpace(s.snapshotPath) != "" {
+		if err := atomicCopyFile(snapshot, s.snapshotPath, 0o644); err != nil {
+			logger.Warn("write local database backup snapshot failed", "error", err, "path", s.snapshotPath)
+		} else {
+			localWritten = true
 		}
 	}
 
@@ -163,13 +203,14 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	s.lastBackup = now
 	s.lastDataVersion = stampDataVersion
-	if err := writeBackblazeLastBackup(s.lastBackupPath, now, stampDataVersion); err != nil {
-		logger.Warn("record backblaze timestamp", "error", err, "path", s.lastBackupPath)
+	if err := writeLastBackupStamp(s.lastBackupPath, now, stampDataVersion); err != nil {
+		logger.Warn("record backup timestamp", "error", err, "path", s.lastBackupPath)
 	}
 	if uploaded {
 		logger.Info("backblaze backup uploaded", "object", s.objectName())
-	} else {
-		logger.Info("local backup written", "path", s.localCopyPath)
+	}
+	if localWritten {
+		logger.Info("local database snapshot written", "path", s.snapshotPath)
 	}
 }
 
@@ -245,7 +286,7 @@ func atomicCopyFile(srcPath, dstPath string, mode os.FileMode) error {
 	return nil
 }
 
-func readBackblazeLastBackup(path string) (time.Time, int64, error) {
+func readLastBackupStamp(path string) (time.Time, int64, error) {
 	if strings.TrimSpace(path) == "" {
 		return time.Time{}, 0, os.ErrInvalid
 	}
@@ -271,7 +312,7 @@ func readBackblazeLastBackup(path string) (time.Time, int64, error) {
 	return ts, dataVersion, nil
 }
 
-func writeBackblazeLastBackup(path string, ts time.Time, dataVersion int64) error {
+func writeLastBackupStamp(path string, ts time.Time, dataVersion int64) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
@@ -288,7 +329,7 @@ func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {
 		return 0, os.ErrInvalid
 	}
 
-	srcDSN := fmt.Sprintf("%s?mode=ro&busy_timeout=5000", srcPath)
+	srcDSN := fmt.Sprintf("%s?mode=ro&_busy_timeout=5000", srcPath)
 	db, err := sql.Open("sqlite", srcDSN)
 	if err != nil {
 		return 0, err
@@ -316,7 +357,9 @@ func snapshotWorkerDB(ctx context.Context, srcPath string) (string, int64, error
 		return "", 0, err
 	}
 
-	srcDSN := fmt.Sprintf("%s?_foreign_keys=1&busy_timeout=5000", srcPath)
+	// Open the source DB in read-only mode so we can take a consistent snapshot
+	// without blocking writers.
+	srcDSN := fmt.Sprintf("%s?mode=ro&_busy_timeout=5000", srcPath)
 	db, err := sql.Open("sqlite", srcDSN)
 	if err != nil {
 		_ = os.Remove(tmpPath)
@@ -331,7 +374,7 @@ func snapshotWorkerDB(ctx context.Context, srcPath string) (string, int64, error
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+	if _, err := conn.ExecContext(ctx, "BEGIN"); err != nil {
 		_ = os.Remove(tmpPath)
 		return "", 0, err
 	}

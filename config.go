@@ -143,6 +143,16 @@ type Config struct {
 	// BackblazeKeepLocalCopy controls whether a local copy of the last
 	// successfully uploaded backup is stored in the state dir.
 	BackblazeKeepLocalCopy bool
+	// BackupSnapshotPath optionally overrides where the local worker database
+	// snapshot is written.
+	//
+	// When empty, the snapshot defaults to `data/state/workers.db.bak` when
+	// BackblazeKeepLocalCopy is enabled.
+	//
+	// (Legacy default suffix was `.b2last`; it is now `.bak`.)
+	//
+	// When set to a relative path, it is resolved relative to DataDir.
+	BackupSnapshotPath string
 	DataDir                        string
 	ShareLogBufferBytes            int
 	FsyncShareLog                  bool
@@ -286,6 +296,7 @@ type EffectiveConfig struct {
 	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
 	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
 	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
+	BackupSnapshotPath                string  `json:"backup_snapshot_path,omitempty"`
 	DataDir                           string  `json:"data_dir"`
 	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
 	FsyncShareLog                     bool    `json:"fsync_share_log"`
@@ -370,6 +381,7 @@ type backblazeBackupConfig struct {
 	Prefix          string `toml:"prefix"`
 	IntervalSeconds *int   `toml:"interval_seconds"`
 	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
+	SnapshotPath    string `toml:"snapshot_path"`
 }
 
 type miningConfig struct {
@@ -535,6 +547,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			Prefix:          cfg.BackblazePrefix,
 			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
 			KeepLocalCopy:   boolPtr(cfg.BackblazeKeepLocalCopy),
+			SnapshotPath:    cfg.BackupSnapshotPath,
 		},
 	}
 }
@@ -843,6 +856,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Backblaze.KeepLocalCopy != nil {
 		cfg.BackblazeKeepLocalCopy = *fc.Backblaze.KeepLocalCopy
+	}
+	if strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
+		cfg.BackupSnapshotPath = strings.TrimSpace(fc.Backblaze.SnapshotPath)
 	}
 }
 
@@ -1265,6 +1281,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazePrefix:                   cfg.BackblazePrefix,
 		BackblazeBackupInterval:           backblazeInterval,
 		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
+		BackupSnapshotPath:                cfg.BackupSnapshotPath,
 		DataDir:                           cfg.DataDir,
 		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
 		FsyncShareLog:                     cfg.FsyncShareLog,

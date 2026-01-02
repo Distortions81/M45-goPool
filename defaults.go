@@ -55,6 +55,7 @@ func defaultConfig() Config {
 		BackblazePrefix:                   "",
 		BackblazeBackupIntervalSeconds:    defaultBackblazeBackupIntervalSeconds,
 		BackblazeKeepLocalCopy:            true,
+		BackupSnapshotPath:                "",
 		DataDir:                           defaultDataDir,
 		ShareLogBufferBytes:               defaultShareLogBufferBytes,
 		FsyncShareLog:                     defaultFsyncShareLog,

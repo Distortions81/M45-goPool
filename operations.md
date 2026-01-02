@@ -15,6 +15,8 @@
 - `interval_seconds` controls how often goPool snapshots `state/workers.db` and uploads that file (default `43200`, i.e. every 12 hours); the configured prefix is prepended so you can namespace the upload, and Backblaze keeps every version unless you add lifecycle rules.
   - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
   - `keep_local_copy` (default `true`) stores a local copy of the last snapshot in `data/state/` even if Backblaze uploads are disabled.
+  - `snapshot_path` (default empty) overrides where the local snapshot is written; when set to a relative path it is resolved relative to `data_dir`.
+  - When backing up outside of goPool (rsync/tar/system backups), back up the snapshot file (`snapshot_path` / `data/state/workers.db.bak`) rather than the live `data/state/workers.db`; copying a live SQLite DB can fail or produce a corrupt backup. If you must back up `workers.db` directly, stop goPool first.
 
 ## Tuning highlights
 
