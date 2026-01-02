@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,13 @@ type backblazeBackupService struct {
 	dbPath       string
 	interval     time.Duration
 	objectPrefix string
+
+	lastBackup      time.Time
+	lastDataVersion int64
+	lastBackupPath  string
 }
+
+const backblazeLastBackupFilename = "backblaze_last_backup"
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
 	if !cfg.BackblazeBackupEnabled {
@@ -55,11 +62,25 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	}
 	objectPrefix := sanitizeObjectPrefix(cfg.BackblazePrefix)
 
+	stateDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create state dir for backblaze timestamp: %w", err)
+	}
+	lastBackupPath := filepath.Join(stateDir, backblazeLastBackupFilename)
+	lastBackup, lastDataVersion, err := readBackblazeLastBackup(lastBackupPath)
+	if err != nil {
+		logger.Warn("read backblaze last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
+	}
+
 	return &backblazeBackupService{
 		bucket:       bucket,
 		dbPath:       dbPath,
 		objectPrefix: objectPrefix,
 		interval:     interval,
+		lastBackup:   lastBackup,
+
+		lastDataVersion: lastDataVersion,
+		lastBackupPath:  lastBackupPath,
 	}, nil
 }
 
@@ -83,7 +104,25 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	snapshot, err := snapshotWorkerDB(ctx, s.dbPath)
+
+	now := time.Now()
+	if !s.lastBackup.IsZero() && now.Sub(s.lastBackup) < s.interval {
+		return
+	}
+	if !s.lastBackup.IsZero() {
+		if s.lastDataVersion == 0 {
+			logger.Info("backblaze backup missing data_version stamp, forcing one backup to initialize change tracking")
+		}
+		if dv, err := workerDBDataVersion(ctx, s.dbPath); err == nil {
+			if dv == s.lastDataVersion {
+				return
+			}
+		} else {
+			logger.Warn("backblaze backup change check failed, proceeding", "error", err)
+		}
+	}
+
+	snapshot, dataVersion, err := snapshotWorkerDB(ctx, s.dbPath)
 	if err != nil {
 		logger.Warn("backblaze backup snapshot failed", "error", err)
 		return
@@ -94,6 +133,11 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	if err := s.upload(ctx, snapshot, object); err != nil {
 		logger.Warn("backblaze backup upload failed", "error", err, "object", object)
 		return
+	}
+	s.lastBackup = now
+	s.lastDataVersion = dataVersion
+	if err := writeBackblazeLastBackup(s.lastBackupPath, now, dataVersion); err != nil {
+		logger.Warn("record backblaze timestamp", "error", err, "path", s.lastBackupPath)
 	}
 	logger.Info("backblaze backup uploaded", "object", object)
 }
@@ -117,34 +161,109 @@ func (s *backblazeBackupService) objectName() string {
 	return fmt.Sprintf("%s%s", s.objectPrefix, filepath.Base(s.dbPath))
 }
 
-func snapshotWorkerDB(ctx context.Context, srcPath string) (string, error) {
+func readBackblazeLastBackup(path string) (time.Time, int64, error) {
+	if strings.TrimSpace(path) == "" {
+		return time.Time{}, 0, os.ErrInvalid
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return time.Time{}, 0, nil
+		}
+		return time.Time{}, 0, err
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return time.Time{}, 0, nil
+	}
+	ts, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(lines[0]))
+	if err != nil {
+		return time.Time{}, 0, err
+	}
+	var dataVersion int64
+	if len(lines) >= 2 {
+		dataVersion, _ = strconv.ParseInt(strings.TrimSpace(lines[1]), 10, 64)
+	}
+	return ts, dataVersion, nil
+}
+
+func writeBackblazeLastBackup(path string, ts time.Time, dataVersion int64) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data := []byte(ts.UTC().Format(time.RFC3339Nano) + "\n" + strconv.FormatInt(dataVersion, 10) + "\n")
+	return os.WriteFile(path, data, 0o644)
+}
+
+func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {
+	if srcPath == "" {
+		return 0, os.ErrInvalid
+	}
+
+	srcDSN := fmt.Sprintf("%s?mode=ro&busy_timeout=5000", srcPath)
+	db, err := sql.Open("sqlite", srcDSN)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+
+	var dataVersion int64
+	if err := db.QueryRowContext(ctx, "PRAGMA data_version").Scan(&dataVersion); err != nil {
+		return 0, err
+	}
+	return dataVersion, nil
+}
+
+func snapshotWorkerDB(ctx context.Context, srcPath string) (string, int64, error) {
 	tmpFile, err := os.CreateTemp("", "gopool-workers-db-*.db")
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	tmpPath := tmpFile.Name()
 	if err := tmpFile.Close(); err != nil {
 		_ = os.Remove(tmpPath)
-		return "", err
+		return "", 0, err
 	}
 	if err := os.Remove(tmpPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", err
+		return "", 0, err
 	}
 
-	srcDSN := fmt.Sprintf("%s?_foreign_keys=1&mode=ro", srcPath)
+	srcDSN := fmt.Sprintf("%s?_foreign_keys=1&busy_timeout=5000", srcPath)
 	db, err := sql.Open("sqlite", srcDSN)
 	if err != nil {
 		_ = os.Remove(tmpPath)
-		return "", err
+		return "", 0, err
 	}
 	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		_ = os.Remove(tmpPath)
-		return "", err
+		return "", 0, err
 	}
 	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", 0, err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		_, _ = conn.ExecContext(ctx, "ROLLBACK")
+	}()
+
+	var dataVersion int64
+	if err := conn.QueryRowContext(ctx, "PRAGMA data_version").Scan(&dataVersion); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", 0, err
+	}
 
 	if err := conn.Raw(func(driverConn any) error {
 		backuper, ok := driverConn.(dbBackuper)
@@ -164,10 +283,16 @@ func snapshotWorkerDB(ctx context.Context, srcPath string) (string, error) {
 		return bck.Finish()
 	}); err != nil {
 		_ = os.Remove(tmpPath)
-		return "", err
+		return "", 0, err
 	}
 
-	return tmpPath, nil
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", 0, err
+	}
+	committed = true
+
+	return tmpPath, dataVersion, nil
 }
 
 func sanitizeObjectPrefix(raw string) string {
