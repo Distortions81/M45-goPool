@@ -1001,7 +1001,7 @@
 			const priceFiat = Number(window.btcPriceFiat ?? 0);
 			const fiatText = priceFiat > 0 ? formatFiat((Number(templateTxFeesSats) / 1e8) * priceFiat, currency) : null;
 			templateTxFeesEl.innerHTML = fiatText
-				? `${btcText} <span style="opacity:0.7; font-size:0.85em;">(${fiatText} ${currency})</span>`
+				? `${btcText}<br><span style="opacity:0.7; font-size:0.85em;">(${fiatText} ${currency})</span>`
 				: btcText;
 			if (templateTxFeesUpdatedEl) {
 				const when = formatHHMMSSUTC(templateUpdatedAtMillis);
