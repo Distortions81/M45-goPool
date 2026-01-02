@@ -62,17 +62,14 @@
 	<span class="mono">{{.PoolSoftware}}</span>
 	&mdash; build: <span class="mono">{{.BuildTime}}</span>
 </p>
-<div class="text-sm" style="margin-top:4px;color:#646b86;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-	{{if .PoolDonationAddress}}
-	<div>
-		Donate to this pool:
-		<a href="bitcoin:{{.PoolDonationAddress}}" class="code-box copyable" title="Click to copy or open in wallet" data-copy="{{.PoolDonationAddress}}" style="text-decoration:none;color:inherit;">{{.PoolDonationAddress}}</a>
+	<div class="text-sm" style="margin-top:4px;color:#646b86;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+		{{if .PoolDonationAddress}}
+		<div>
+			Donate to this pool:
+			<a href="bitcoin:{{.PoolDonationAddress}}" class="code-box copyable" title="Click to copy or open in wallet" data-copy="{{.PoolDonationAddress}}" style="text-decoration:none;color:inherit;">{{.PoolDonationAddress}}</a>
+		</div>
+		{{end}}
 	</div>
-	{{end}}
-	<div style="{{if not .PoolDonationAddress}}margin-left:auto;{{end}}">
-		render: <span class="mono">{{formatRenderDuration .RenderDuration}}</span>
-	</div>
-</div>
 <p class="text-sm" style="margin-top:8px;color:#646b86;text-align:center;">
 	By connecting mining device(s) or software to this pool, you acknowledge and agree to be bound by the <a href="/terms" style="color:inherit;text-decoration:underline;">Terms of Use</a> and acknowledge that you have reviewed the <a href="/privacy" style="color:inherit;text-decoration:underline;">Privacy Policy</a>.
 </p>
