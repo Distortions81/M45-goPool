@@ -168,6 +168,26 @@ func (m *PoolMetrics) loadBestSharesFile(path string) error {
 	if err := sonic.Unmarshal(data, &shares); err != nil {
 		return err
 	}
+
+	rewrote := false
+	for i := range shares {
+		if shares[i].Worker != "" {
+			censored := shortWorkerName(shares[i].Worker, workerNamePrefix, workerNameSuffix)
+			if censored != "" && censored != shares[i].Worker {
+				shares[i].Worker = censored
+				rewrote = true
+			}
+		}
+		if shares[i].DisplayWorker != "" {
+			shares[i].DisplayWorker = shortWorkerName(shares[i].Worker, workerNamePrefix, workerNameSuffix)
+		}
+	}
+	if rewrote {
+		// Opportunistically rewrite legacy files so long worker names aren't kept on disk.
+		// This happens during startup when SetBestSharesFile calls loadBestSharesFile.
+		m.persistBestShares(shares)
+	}
+
 	m.bestSharesMu.Lock()
 	defer m.bestSharesMu.Unlock()
 	m.bestShareCount = 0
