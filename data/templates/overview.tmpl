@@ -491,6 +491,24 @@
 
 	(function() {
 		const REFRESH_INTERVAL = 10000; // 10 seconds
+		const FIAT_CURRENCY = '{{.FiatCurrency}}';
+
+		function normalizeFiatCurrency(cur) {
+			const s = String(cur ?? '').trim();
+			return s ? s.toUpperCase() : 'USD';
+		}
+
+		function formatFiatNoDecimals(value, currency) {
+			const amount = Number(value);
+			if (!Number.isFinite(amount)) {
+				return null;
+			}
+			try {
+				return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
+			} catch (_) {
+				return amount.toFixed(0);
+			}
+		}
 
 		function formatHashrate(h) {
 			if (!h) return '---';
@@ -752,10 +770,13 @@
 			if (!newData) return;
 			const priceEl = document.getElementById('status-btc-price');
 			const updatedEl = document.getElementById('status-btc-price-updated');
-			const price = Number(newData.btc_price_usd ?? 0);
-			window.btcPriceUSD = price;
+			const currency = normalizeFiatCurrency(newData.fiat_currency || FIAT_CURRENCY);
+			const price = Number(newData.btc_price_fiat ?? 0);
+			window.btcPriceFiat = price;
+			window.fiatCurrency = currency;
 			if (priceEl) {
-				priceEl.textContent = price > 0 ? ('BTC $' + Math.round(price).toLocaleString() + ' USD') : '--';
+				const formatted = price > 0 ? formatFiatNoDecimals(Math.round(price), currency) : null;
+				priceEl.textContent = formatted ? ('BTC ' + formatted + ' ' + currency) : '--';
 			}
 			if (updatedEl) {
 				const ts = newData.btc_price_updated_at;
@@ -836,6 +857,7 @@
 		let templateUpdatedAtMillis = null;
 		let templateTxFeesSats = null;
 		const BLOCKS_PER_YEAR = 52560;
+		const FIAT_CURRENCY = '{{.FiatCurrency}}';
 		if (!valueEl) {
 			return;
 		}
@@ -918,13 +940,18 @@
 			return `${btc.toFixed(8)} BTC`;
 		}
 
-		function formatUSD(amount) {
+		function normalizeFiatCurrency(cur) {
+			const s = String(cur ?? '').trim();
+			return s ? s.toUpperCase() : 'USD';
+		}
+
+		function formatFiat(amount, currency) {
 			const value = Number(amount);
 			if (!Number.isFinite(value)) {
 				return null;
 			}
 			try {
-				return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value);
+				return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
 			} catch (_) {
 				return '$' + value.toFixed(2);
 			}
@@ -970,10 +997,11 @@
 					return;
 				}
 			const btcText = formatBTCShort(templateTxFeesSats);
-			const priceUSD = Number(window.btcPriceUSD ?? 0);
-			const usdText = priceUSD > 0 ? formatUSD((Number(templateTxFeesSats) / 1e8) * priceUSD) : null;
-			templateTxFeesEl.innerHTML = usdText
-				? `${btcText} <span style="opacity:0.7; font-size:0.85em;">(${usdText})</span>`
+			const currency = normalizeFiatCurrency(window.fiatCurrency || FIAT_CURRENCY);
+			const priceFiat = Number(window.btcPriceFiat ?? 0);
+			const fiatText = priceFiat > 0 ? formatFiat((Number(templateTxFeesSats) / 1e8) * priceFiat, currency) : null;
+			templateTxFeesEl.innerHTML = fiatText
+				? `${btcText} <span style="opacity:0.7; font-size:0.85em;">(${fiatText} ${currency})</span>`
 				: btcText;
 			if (templateTxFeesUpdatedEl) {
 				const when = formatHHMMSSUTC(templateUpdatedAtMillis);

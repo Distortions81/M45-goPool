@@ -735,8 +735,9 @@ type OverviewPageData struct {
 	ActiveTLSMiners int              `json:"active_tls_miners"`
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
-	BTCPriceUSD     float64          `json:"btc_price_usd,omitempty"`
+	BTCPriceFiat    float64          `json:"btc_price_fiat,omitempty"`
 	BTCPriceUpdated string           `json:"btc_price_updated_at,omitempty"`
+	FiatCurrency    string           `json:"fiat_currency,omitempty"`
 	RenderDuration  time.Duration    `json:"render_duration"`
 	Workers         []RecentWorkView `json:"workers"`
 	BannedWorkers   []WorkerView     `json:"banned_workers"`

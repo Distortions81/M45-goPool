@@ -328,11 +328,15 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		start := time.Now()
 		view := s.statusDataView()
-		var btcUSD float64
+		var btcFiat float64
 		var btcUpdated string
+		fiatCurrency := strings.TrimSpace(s.Config().FiatCurrency)
+		if fiatCurrency == "" {
+			fiatCurrency = defaultFiatCurrency
+		}
 		if s.priceSvc != nil {
-			if price, err := s.priceSvc.BTCPrice("usd"); err == nil && price > 0 {
-				btcUSD = price
+			if price, err := s.priceSvc.BTCPrice(fiatCurrency); err == nil && price > 0 {
+				btcFiat = price
 				if ts := s.priceSvc.LastUpdate(); !ts.IsZero() {
 					btcUpdated = ts.UTC().Format(time.RFC3339)
 				}
@@ -371,8 +375,9 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			ActiveTLSMiners: view.ActiveTLSMiners,
 			SharesPerMinute: view.SharesPerMinute,
 			PoolHashrate:    view.PoolHashrate,
-			BTCPriceUSD:     btcUSD,
+			BTCPriceFiat:    btcFiat,
 			BTCPriceUpdated: btcUpdated,
+			FiatCurrency:    fiatCurrency,
 			RenderDuration:  time.Since(start),
 			Workers:         recentWork,
 			BannedWorkers:   censoredBanned,
