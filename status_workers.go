@@ -274,13 +274,6 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 
-	stateByHash := map[string]workerNotifyState(nil)
-	if s.workerLists != nil {
-		if st, err := s.workerLists.LoadDiscordWorkerStates(data.ClerkUser.UserID); err == nil {
-			stateByHash = st
-		}
-	}
-
 	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
@@ -297,11 +290,6 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				Name:          saved.Name,
 				Hash:          lookupHash,
 				NotifyEnabled: saved.NotifyEnabled,
-			}
-			if stateByHash != nil && lookupHash != "" {
-				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
-					entry.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
-				}
 			}
 			perNameRowsShown[lookupHash]++
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
@@ -382,12 +370,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
 	now := time.Now()
-	stateByHash := map[string]workerNotifyState(nil)
-	if s.workerLists != nil {
-		if st, err := s.workerLists.LoadDiscordWorkerStates(user.UserID); err == nil {
-			stateByHash = st
-		}
-	}
 	discordRegistered := false
 	discordUserEnabled := false
 	if s.workerLists != nil &&
@@ -440,11 +422,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				Hash:          lookupHash,
 				Online:        false,
 				NotifyEnabled: savedEntry.NotifyEnabled,
-			}
-			if stateByHash != nil && lookupHash != "" {
-				if st, ok := stateByHash[lookupHash]; ok && !st.Online && st.SeenOnline && !st.Since.IsZero() {
-					e.LastOnlineAt = st.Since.UTC().Format(time.RFC3339)
-				}
 			}
 			perNameRowsShown[lookupHash]++
 			totalRowsSent++
@@ -654,7 +631,6 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	_ = s.workerLists.PersistDiscordWorkerStates(user.UserID, nil, []string{hash}, now)
 
 	resp := struct {
 		OK      bool `json:"ok"`
@@ -721,7 +697,6 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 		http.Error(w, "not registered", http.StatusNotFound)
 		return
 	}
-	_ = s.workerLists.ResetDiscordWorkerStateTimers(user.UserID, now)
 
 	resp := struct {
 		OK      bool `json:"ok"`

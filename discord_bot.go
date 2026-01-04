@@ -577,21 +577,9 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 	firstObservation := false
 	if state == nil {
 		state = make(map[string]workerNotifyState, len(current))
-		// Load persisted state if available; if present, we will allow alerts
-		// immediately based on SeenOnline/SeenOffline history.
-		if n.s != nil && n.s.workerLists != nil {
-			if persisted, err := n.s.workerLists.LoadDiscordWorkerStates(userID); err == nil && len(persisted) > 0 {
-				for h, st := range persisted {
-					state[h] = st
-				}
-			}
-		}
 		n.statusByUser[userID] = state
 		firstObservation = true
 	}
-
-	upserts := make(map[string]workerNotifyState)
-	var deletes []string
 
 	// Update states based on current online map.
 	for hash, online := range current {
@@ -604,12 +592,17 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 				st.SeenOffline = true
 			}
 			state[hash] = st
-			upserts[hash] = st
 			continue
 		}
 
 		// Transition: reset timers and notification flags.
 		if st.Online != online {
+			offlineDuration := time.Duration(0)
+			if st.Online && !online {
+				offlineDuration = 0
+			} else if !st.Online && online && !st.Since.IsZero() {
+				offlineDuration = now.Sub(st.Since)
+			}
 			if online {
 				st.SeenOnline = true
 			} else {
@@ -619,15 +612,17 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 			st.Since = now
 			st.OfflineNotified = false
 			st.RecoveryNotified = false
-			st.RecoveryEligible = online // only eligible when we just came online from offline
+			if online {
+				st.RecoveryEligible = offlineDuration >= offlineThreshold
+			} else {
+				st.RecoveryEligible = false
+			}
 			state[hash] = st
-			upserts[hash] = st
 			continue
 		}
 
 		// First observation seeds state without firing notifications (but timers start).
 		if firstObservation {
-			upserts[hash] = st
 			continue
 		}
 
@@ -638,7 +633,6 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 			now.Sub(st.Since) >= offlineThreshold {
 			st.OfflineNotified = true
 			state[hash] = st
-			upserts[hash] = st
 			offlineOverdue = append(offlineOverdue, hash)
 			continue
 		}
@@ -652,7 +646,6 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 			st.RecoveryNotified = true
 			st.RecoveryEligible = false
 			state[hash] = st
-			upserts[hash] = st
 			onlineOverdue = append(onlineOverdue, hash)
 			continue
 		}
@@ -661,11 +654,9 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 		if online && !st.SeenOnline {
 			st.SeenOnline = true
 			state[hash] = st
-			upserts[hash] = st
 		} else if !online && !st.SeenOffline {
 			st.SeenOffline = true
 			state[hash] = st
-			upserts[hash] = st
 		}
 	}
 
@@ -673,7 +664,6 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 	for hash := range state {
 		if _, ok := current[hash]; !ok {
 			delete(state, hash)
-			deletes = append(deletes, hash)
 		}
 	}
 
@@ -681,10 +671,6 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 		delete(n.statusByUser, userID)
 	}
 
-	// Persist updates (best-effort).
-	if n.s != nil && n.s.workerLists != nil && (len(upserts) > 0 || len(deletes) > 0) {
-		_ = n.s.workerLists.PersistDiscordWorkerStates(userID, upserts, deletes, now)
-	}
 	return offlineOverdue, onlineOverdue
 }
 
@@ -1003,10 +989,6 @@ func (n *discordNotifier) clearUserOfflineState(userID string) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return
-	}
-	// Remove persisted state too to avoid DB growth for users with no saved workers.
-	if n.s != nil && n.s.workerLists != nil {
-		_ = n.s.workerLists.ClearDiscordWorkerStates(userID)
 	}
 	n.stateMu.Lock()
 	defer n.stateMu.Unlock()
