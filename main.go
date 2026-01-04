@@ -140,14 +140,15 @@ func main() {
 	}
 
 	// Derive a concise, pool-branded coinbase tag of the form
-	// "goPool-<status_brand_name>", truncated to at most 50 bytes and
+	// "/goPool-<status_brand_name>/", truncated to at most 40 bytes and
 	// restricted to printable ASCII so it stays within standard coinbase
 	// scriptSig bounds.
-	tag := poolSoftwareName
+	tag := "/" + poolSoftwareName
 	brand := strings.TrimSpace(cfg.StatusBrandName)
 	if brand != "" {
-		tag = poolSoftwareName + "-" + brand
+		tag = tag + "-" + brand
 	}
+	tag = tag + "/"
 	// Keep only printable ASCII bytes.
 	var buf []byte
 	for i := 0; i < len(tag); i++ {
@@ -157,7 +158,7 @@ func main() {
 		}
 	}
 	if len(buf) == 0 {
-		buf = []byte(poolSoftwareName)
+		buf = []byte("/" + poolSoftwareName + "/")
 	}
 	if len(buf) > 40 {
 		buf = buf[:40]

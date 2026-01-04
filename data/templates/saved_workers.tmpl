@@ -131,10 +131,9 @@
 						</button>
 					{{end}}
 				</div>
-				<p class="text-sm" style="color:var(--text-muted); margin:10px 0 0;">
-					Privacy hides worker names on this page; notification settings affect Discord pings.
-				</p>
 			</div>
+
+			{{template "status_boxes" .}}
 
 			{{$offlineCount := len .OfflineWorkerEntries}}
 			<div class="card offline-card" id="offlineSection">
@@ -1219,6 +1218,511 @@
 				renderOnlineWorkers(lastOnlineWorkers);
 			});
 		}
+	})();
+	(function() {
+		const gridEl = document.querySelector('.grid');
+		if (!gridEl) {
+			return;
+		}
+
+		const REFRESH_INTERVAL = 5000;
+		const FIAT_CURRENCY = '{{.FiatCurrency}}';
+		const poolTagEl = document.getElementById('status-pool-tag');
+		const valueEl = document.getElementById('status-pool-hashrate');
+		const blockHeightEl = document.getElementById('status-block-height');
+		const blockHeightContextEl = document.getElementById('status-block-height-context');
+		const blockDifficultyEl = document.getElementById('status-block-difficulty');
+		const networkHashrateEl = document.getElementById('status-network-hashrate');
+		const blockChanceEl = document.getElementById('status-block-chance');
+		const templateTxFeesEl = document.getElementById('status-template-tx-fees');
+		const templateTxFeesUpdatedEl = document.getElementById('status-template-tx-fees-updated');
+		const blockTimeLeftEl = document.getElementById('status-block-time-left');
+		const blockHistoryEl = document.getElementById('status-block-history');
+
+		let btcPriceFiat = 0;
+		let fiatCurrency = 'USD';
+		let blockTimeLeftSec = null;
+		let blockTimeOverdueSec = 0;
+		let isBlockTimeOverdue = false;
+		let templateUpdatedAtMillis = null;
+		let templateTxFeesSats = null;
+
+		function normalizeFiatCurrency(cur) {
+			const s = String(cur ?? '').trim();
+			return s ? s.toUpperCase() : 'USD';
+		}
+
+		function formatFiatNoDecimals(value, currency) {
+			const amount = Number(value);
+			if (!Number.isFinite(amount)) {
+				return null;
+			}
+			try {
+				return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
+			} catch (_) {
+				return amount.toFixed(0);
+			}
+		}
+
+		function formatHashrate(value) {
+			if (!value || value <= 0) {
+				return '---';
+			}
+			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
+			let val = value;
+			let idx = 0;
+			while (val >= 1000 && idx < units.length - 1) {
+				val /= 1000;
+				idx++;
+			}
+			return `${val.toFixed(2)} ${units[idx]}`;
+		}
+
+		function formatShareRate(rate) {
+			if (!rate) return '0';
+			if (rate < 1000) return rate.toFixed(1);
+			if (rate < 1000000) return (rate / 1000).toFixed(1) + 'K';
+			if (rate < 1000000000) return (rate / 1000000).toFixed(1) + 'M';
+			return (rate / 1000000000).toFixed(1) + 'G';
+		}
+
+		function normalizePoolTag(tag) {
+			if (!tag) return '';
+			if (tag[0] === '/') return tag;
+			return '/' + tag;
+		}
+
+		function updateGridCards(newData) {
+			if (!newData) return;
+			const cardContainers = document.querySelectorAll('.grid > .card');
+			cardContainers.forEach(card => {
+				const label = card.querySelector('.label');
+				const valueEl = card.querySelector('.value');
+				if (!label || !valueEl) return;
+				const labelText = label.textContent.trim();
+				switch (labelText) {
+					case 'Open connections':
+						{
+							const total = newData.active_miners ?? 0;
+							const tls = newData.active_tls_miners ?? 0;
+							valueEl.innerHTML = `${total} <span class="text-sm" style="color:#666;">(${tls} TLS)</span>`;
+						}
+						break;
+					case 'Shares per minute':
+						{
+							const rate = newData.shares_per_minute ?? 0;
+							valueEl.textContent = formatShareRate(rate);
+							const contextEl = card.querySelector('.card-context');
+							if (contextEl) {
+								const workers = newData.active_miners ?? 0;
+								if (workers > 0) {
+									const avgPerWorker = rate / workers;
+									contextEl.textContent = `${formatShareRate(avgPerWorker)} avg/worker`;
+								} else {
+									contextEl.textContent = 'Indicative of server load';
+								}
+							}
+						}
+						break;
+					case 'Estimated pool hashrate':
+						valueEl.textContent = formatHashrate(newData.pool_hashrate);
+						break;
+				}
+			});
+		}
+
+		function updateBTCPrice(newData) {
+			if (!newData) return;
+			const priceEl = document.getElementById('status-btc-price');
+			const updatedEl = document.getElementById('status-btc-price-updated');
+			fiatCurrency = normalizeFiatCurrency(newData.fiat_currency || FIAT_CURRENCY);
+			const price = Number(newData.btc_price_fiat ?? 0);
+			btcPriceFiat = price;
+			if (priceEl) {
+				const formatted = price > 0 ? formatFiatNoDecimals(Math.round(price), fiatCurrency) : null;
+				priceEl.textContent = formatted ? ('BTC ' + formatted + ' ' + fiatCurrency) : '--';
+			}
+			if (updatedEl) {
+				const ts = newData.btc_price_updated_at;
+				if (ts) {
+					try {
+						const d = new Date(ts);
+						updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+					} catch (_) {
+						updatedEl.textContent = 'Updated --';
+					}
+				} else {
+					updatedEl.textContent = 'Updated --';
+				}
+			}
+		}
+
+		function updateOverviewDOM(newData) {
+			if (!newData) return;
+			if (poolTagEl) {
+				const tag = normalizePoolTag(newData.pool_tag);
+				poolTagEl.textContent = tag || '--';
+			}
+			updateGridCards(newData);
+			updateBTCPrice(newData);
+		}
+
+		function formatOddsText(chance) {
+			if (!chance || chance <= 0) {
+				return '1 in ∞';
+			}
+			const ratio = 1 / chance;
+			if (!Number.isFinite(ratio)) {
+				return '1 in ∞';
+			}
+
+			const largeUnits = [
+				{ value: 1e12, label: 'trillion' },
+				{ value: 1e9, label: 'billion' },
+				{ value: 1e6, label: 'million' },
+			];
+
+			for (const { value, label } of largeUnits) {
+				if (ratio >= value) {
+					const scaled = ratio / value;
+					const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+					const formatted = scaled.toFixed(precision).replace(/\.?0+$/, '');
+					return `1 in ${formatted} ${label}`;
+				}
+			}
+
+			const rounded = Math.max(1, Math.round(ratio));
+			return `1 in ${rounded.toLocaleString()}`;
+		}
+
+		function formatDifficulty(diff) {
+			if (!diff || diff <= 0) {
+				return '--';
+			}
+			if (diff < 1000000) return diff.toFixed(0);
+			if (diff >= 1000000000000000) {
+				return (diff / 1000000000000000).toFixed(1) + 'P';
+			}
+			if (diff >= 1000000000000) {
+				return (diff / 1000000000000).toFixed(1) + 'T';
+			}
+			if (diff >= 1000000000) {
+				return (diff / 1000000000).toFixed(1) + 'G';
+			}
+			return (diff / 1000000).toFixed(1) + 'M';
+		}
+
+		function formatDuration(seconds) {
+			const total = Math.max(0, Math.floor(seconds ?? 0));
+			const hours = Math.floor(total / 3600);
+			const minutes = Math.floor((total % 3600) / 60);
+			const secs = total % 60;
+			if (hours > 0) {
+				return `${hours}h ${minutes}m`;
+			}
+			if (minutes > 0) {
+				return `${minutes}m ${secs}s`;
+			}
+			return `${secs}s`;
+		}
+
+		function formatBTCShort(sats) {
+			const btc = (Number(sats) || 0) / 1e8;
+			return `${btc.toFixed(8)} BTC`;
+		}
+
+		function formatFiat(amount, currency) {
+			const value = Number(amount);
+			if (!Number.isFinite(value)) {
+				return null;
+			}
+			try {
+				return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
+			} catch (_) {
+				return '$' + value.toFixed(2);
+			}
+		}
+
+		function formatHHMMSSUTC(millis) {
+			if (typeof millis !== 'number' || !Number.isFinite(millis)) {
+				return null;
+			}
+			const date = new Date(millis);
+			if (Number.isNaN(date.getTime())) {
+				return null;
+			}
+			return date.toISOString().substring(11, 19) + ' UTC';
+		}
+
+		function formatTimeAgoMillis(millis) {
+			if (typeof millis !== 'number' || !Number.isFinite(millis)) {
+				return null;
+			}
+			const diffSec = Math.floor((Date.now() - millis) / 1000);
+			if (diffSec < 0) return 'just now';
+			if (diffSec < 5) return 'just now';
+			if (diffSec < 60) return `${diffSec}s ago`;
+			if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+			if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+			const days = Math.floor(diffSec / 86400);
+			if (days < 7) return `${days}d ago`;
+			if (days < 30) return `${Math.floor(days / 7)}w ago`;
+			if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+			return `${Math.floor(days / 365)}y ago`;
+		}
+
+		function renderTemplateTxFees() {
+			if (!templateTxFeesEl) {
+				return;
+			}
+			if (typeof templateTxFeesSats !== 'number' || templateTxFeesSats < 0) {
+				templateTxFeesEl.textContent = '--';
+				if (templateTxFeesUpdatedEl) {
+					templateTxFeesUpdatedEl.textContent = 'Updated --';
+				}
+				return;
+			}
+			const btcText = formatBTCShort(templateTxFeesSats);
+			const currency = normalizeFiatCurrency(fiatCurrency || FIAT_CURRENCY);
+			const fiatText = btcPriceFiat > 0 ? formatFiat((Number(templateTxFeesSats) / 1e8) * btcPriceFiat, currency) : null;
+			templateTxFeesEl.innerHTML = fiatText
+				? `${btcText}<br><span style="opacity:0.7; font-size:0.85em;">(${fiatText} ${currency})</span>`
+				: btcText;
+			if (templateTxFeesUpdatedEl) {
+				const when = formatHHMMSSUTC(templateUpdatedAtMillis);
+				const ago = formatTimeAgoMillis(templateUpdatedAtMillis);
+				const parts = [];
+				if (when) parts.push(when);
+				if (ago) parts.push(`(${ago})`);
+				templateTxFeesUpdatedEl.textContent = parts.length ? `Updated ${parts.join(' ')}` : 'Updated --';
+			}
+		}
+
+		function formatDurationDetailed(seconds) {
+			const total = Math.max(0, Math.floor(seconds ?? 0));
+			const days = Math.floor(total / 86400);
+			const hours = Math.floor((total % 86400) / 3600);
+			const minutes = Math.floor((total % 3600) / 60);
+			const secs = total % 60;
+
+			const parts = [];
+			if (days > 0) parts.push(`${days}d`);
+			if (hours > 0) parts.push(`${hours}h`);
+			if (minutes > 0) parts.push(`${minutes}m`);
+			if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+			return parts.slice(0, 3).join(' ');
+		}
+
+		function getUpdatedAtMillis(value) {
+			if (!value) {
+				return null;
+			}
+			const parsed = Date.parse(value);
+			if (Number.isNaN(parsed)) {
+				return null;
+			}
+			return parsed;
+		}
+
+		function renderBlockTimeLeft() {
+			if (!blockTimeLeftEl) {
+				return;
+			}
+			if (isBlockTimeOverdue) {
+				blockTimeLeftEl.textContent = `overdue ${formatDuration(blockTimeOverdueSec)}`;
+				return;
+			}
+			if (typeof blockTimeLeftSec !== 'number') {
+				blockTimeLeftEl.textContent = '--';
+				return;
+			}
+			blockTimeLeftEl.textContent = formatDuration(blockTimeLeftSec);
+		}
+
+		function renderBlockHistory(recentBlockTimes) {
+			if (!blockHistoryEl) {
+				return;
+			}
+			if (!recentBlockTimes || recentBlockTimes.length === 0) {
+				blockHistoryEl.innerHTML = '--';
+				return;
+			}
+
+			const durations = [];
+			for (let i = recentBlockTimes.length - 1; i >= 1; i--) {
+				const prev = new Date(recentBlockTimes[i - 1]).getTime();
+				const curr = new Date(recentBlockTimes[i]).getTime();
+				const durationSec = Math.floor((curr - prev) / 1000);
+				if (durationSec <= 0) {
+					durations.push('Timestamp skew');
+				} else {
+					durations.push(formatDurationDetailed(durationSec));
+				}
+				if (durations.length >= 3) break;
+			}
+
+			if (durations.length === 0) {
+				blockHistoryEl.innerHTML = '--';
+			} else {
+				blockHistoryEl.innerHTML = durations.join('<br>');
+			}
+		}
+
+		function updateHashrateDisplay(rate) {
+			if (!valueEl) return;
+			const formatted = formatHashrate(rate);
+			if (valueEl.textContent !== formatted) {
+				valueEl.textContent = formatted;
+			}
+		}
+
+		function fetchOverview() {
+			fetch('/api/overview')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					updateOverviewDOM(data);
+				})
+				.catch(err => {
+					console.error('Error fetching overview stats:', err);
+				});
+		}
+
+		function fetchHashrate() {
+			fetch('/api/pool-hashrate')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					const updatedAt = response.headers.get('X-JSON-Updated-At');
+					return response.json().then(data => ({ data, updatedAt }));
+				})
+				.then(({ data, updatedAt }) => {
+					if (data && typeof data.pool_hashrate === 'number') {
+						updateHashrateDisplay(data.pool_hashrate);
+					}
+					if (data && typeof data.template_tx_fees_sats === 'number') {
+						templateTxFeesSats = data.template_tx_fees_sats;
+					} else {
+						templateTxFeesSats = null;
+					}
+					templateUpdatedAtMillis = getUpdatedAtMillis(data?.template_updated_at) ?? getUpdatedAtMillis(updatedAt || data?.updated_at);
+					renderTemplateTxFees();
+					if (blockHeightEl && typeof data.block_height === 'number' && data.block_height > 0) {
+						const height = data.block_height;
+						blockHeightEl.textContent = height.toLocaleString();
+						if (blockHeightContextEl) {
+							const retarget = data.next_difficulty_retarget;
+							if (retarget && typeof retarget.height === 'number' && retarget.height > 0) {
+								const parts = [];
+								if (typeof retarget.blocks_away === 'number') {
+									parts.push(null);
+								}
+								if (retarget.duration_estimate) {
+									parts.push(`~${retarget.duration_estimate}`);
+								}
+								if (parts.length === 0) {
+									parts.push('~--');
+								}
+								const summary = parts.filter(Boolean).join(' · ');
+								blockHeightContextEl.innerHTML = `${retarget.height.toLocaleString()}<br><span class="text-sm" style="color:var(--text-muted);">(${summary})</span>`;
+							} else {
+								const interval = 2016;
+								const next = (Math.floor(height / interval) + 1) * interval;
+								const remaining = Math.max(0, next - height);
+								const durationSeconds = remaining * 10 * 60;
+								const durationText = formatDuration(durationSeconds);
+								blockHeightContextEl.innerHTML = `${next.toLocaleString()}<br><span class="text-sm" style="color:var(--text-muted);">(~${durationText})</span>`;
+							}
+						}
+					} else if (blockHeightEl) {
+						blockHeightEl.textContent = '--';
+						if (blockHeightContextEl) {
+							blockHeightContextEl.textContent = '--';
+						}
+					}
+					let networkHashrate = null;
+					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
+						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
+						networkHashrate = data.block_difficulty * 4294967296 / (10 * 60);
+					}
+					if (networkHashrateEl) {
+						const networkHashrateText = networkHashrate ? formatHashrate(networkHashrate) : '--';
+						networkHashrateEl.textContent = networkHashrateText;
+					}
+					if (blockChanceEl) {
+						let chanceText = '--';
+						if (networkHashrate && typeof data.pool_hashrate === 'number' && data.pool_hashrate > 0) {
+							const share = Math.min(1, data.pool_hashrate / networkHashrate);
+							const chance = 1 - Math.pow(1 - share, 52560);
+							chanceText = formatOddsText(chance);
+						}
+						blockChanceEl.textContent = chanceText;
+					}
+					if (blockTimeLeftEl) {
+						let secondsLeft = null;
+
+						if (typeof data.block_time_left_sec === 'number' && data.block_time_left_sec >= 0) {
+							secondsLeft = data.block_time_left_sec;
+							const updatedMillis = getUpdatedAtMillis(updatedAt || data.updated_at);
+							if (updatedMillis !== null) {
+								const ageSec = Math.max(0, (Date.now() - updatedMillis) / 1000);
+								secondsLeft = secondsLeft - ageSec;
+							}
+						} else if (data.recent_block_times && data.recent_block_times.length > 0) {
+							const mostRecentBlockTime = new Date(data.recent_block_times[data.recent_block_times.length - 1]).getTime();
+							const targetInterval = 10 * 60 * 1000;
+							const expectedEndTime = mostRecentBlockTime + targetInterval;
+							secondsLeft = Math.floor((expectedEndTime - Date.now()) / 1000);
+						}
+
+						if (secondsLeft === null) {
+							blockTimeLeftSec = null;
+							isBlockTimeOverdue = false;
+							blockTimeOverdueSec = 0;
+						} else if (secondsLeft <= 0) {
+							blockTimeLeftSec = 0;
+							isBlockTimeOverdue = true;
+							blockTimeOverdueSec = Math.floor(Math.max(0, -secondsLeft));
+						} else {
+							blockTimeLeftSec = secondsLeft;
+							isBlockTimeOverdue = false;
+							blockTimeOverdueSec = 0;
+						}
+						renderBlockTimeLeft();
+					}
+					if (data.recent_block_times) {
+						renderBlockHistory(data.recent_block_times);
+					}
+				})
+				.catch(err => {
+					console.error('Error fetching pool hashrate:', err);
+				});
+		}
+
+		fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
+		fetchOverview();
+		fetchHashrate();
+		setInterval(fetchOverview, REFRESH_INTERVAL);
+		setInterval(fetchHashrate, REFRESH_INTERVAL);
+		setInterval(() => {
+			renderTemplateTxFees();
+			if (typeof blockTimeLeftSec !== 'number') {
+				return;
+			}
+			if (isBlockTimeOverdue) {
+				blockTimeOverdueSec += 1;
+			} else {
+				blockTimeLeftSec -= 1;
+				if (blockTimeLeftSec <= 0) {
+					blockTimeLeftSec = 0;
+					isBlockTimeOverdue = true;
+					blockTimeOverdueSec = 0;
+				}
+			}
+			renderBlockTimeLeft();
+		}, 1000);
 	})();
 	</script>
 	{{end}}

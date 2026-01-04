@@ -620,6 +620,7 @@ type StatusData struct {
 	OperatorDonationName            string                `json:"operator_donation_name,omitempty"`
 	OperatorDonationURL             string                `json:"operator_donation_url,omitempty"`
 	CoinbaseMessage                 string                `json:"coinbase_message,omitempty"`
+	CoinbasePoolTag                 string                `json:"coinbase_pool_tag,omitempty"`
 	DisplayPayoutAddress            string                `json:"display_payout_address,omitempty"`
 	DisplayOperatorDonationAddress  string                `json:"display_operator_donation_address,omitempty"`
 	DisplayCoinbaseMessage          string                `json:"display_coinbase_message,omitempty"`
@@ -735,6 +736,7 @@ type OverviewPageData struct {
 	ActiveTLSMiners int              `json:"active_tls_miners"`
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
+	PoolTag         string           `json:"pool_tag,omitempty"`
 	BTCPriceFiat    float64          `json:"btc_price_fiat,omitempty"`
 	BTCPriceUpdated string           `json:"btc_price_updated_at,omitempty"`
 	FiatCurrency    string           `json:"fiat_currency,omitempty"`

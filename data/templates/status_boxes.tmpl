@@ -1,0 +1,72 @@
+{{define "status_boxes"}}
+<div class="grid">
+	<div class="card">
+		<div class="label">Open connections</div>
+		<div class="value">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Shares per minute</div>
+		<div class="value">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Estimated pool hashrate</div>
+		<div class="value" id="status-pool-hashrate">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Block height</div>
+		<div class="value mono" id="status-block-height">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Annual block odds</div>
+		<div class="value mono" id="status-block-chance">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Network difficulty</div>
+		<div class="value mono" id="status-block-difficulty">--</div>
+	</div>
+	<div class="card">
+		<div class="label">WORLD HASHRATE</div>
+		<div class="value mono" id="status-network-hashrate">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Next diff change</div>
+		<div class="value mono" id="status-block-height-context">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Transaction Fees</div>
+		<div class="value mono" id="status-template-tx-fees">--</div>
+	</div>
+	<div class="card">
+		<div class="label">BTC price</div>
+		<div class="value mono" id="status-btc-price">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Pool tag</div>
+		<div class="value mono" id="status-pool-tag">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Time left for block</div>
+		<div class="value mono" id="status-block-time-left">--</div>
+		<div class="card-context" id="status-block-history">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Pool fee</div>
+		{{if gt .PoolFeePercent 0.0}}
+			<div class="value">
+				{{printf "%.2f" .PoolFeePercent}}%
+			</div>
+			{{if gt .OperatorDonationPercent 0.0}}
+				<div class="card-context">Split coinbase, pays directly to miner<br>
+				<span style="opacity: 0.8;">{{printf "%.1f" .OperatorDonationPercent}}% of pool fee donated{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</span><br>
+				</div>
+			{{else}}
+				<div class="card-context">Split coinbase, pays directly to miner<br>
+				</div>
+			{{end}}
+		{{else}}
+			<div class="value">None</div>
+			<div class="card-context">No fee charged</div>
+		{{end}}
+	</div>
+</div>
+{{end}}

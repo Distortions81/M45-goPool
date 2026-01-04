@@ -379,6 +379,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	// Build template paths
 	layoutPath := filepath.Join(dataDir, "templates", "layout.tmpl")
 	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
+	statusBoxesPath := filepath.Join(dataDir, "templates", "status_boxes.tmpl")
 	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
 	signInPath := filepath.Join(dataDir, "templates", "sign_in.tmpl")
@@ -397,6 +398,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	statusHTML, err := os.ReadFile(statusPath)
 	if err != nil {
 		return nil, fmt.Errorf("load status template: %w", err)
+	}
+	statusBoxesHTML, err := os.ReadFile(statusBoxesPath)
+	if err != nil {
+		return nil, fmt.Errorf("load status boxes template: %w", err)
 	}
 	serverInfoHTML, err := os.ReadFile(serverInfoPath)
 	if err != nil {
@@ -439,6 +444,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	tmpl := template.New("overview").Funcs(funcs)
 	template.Must(tmpl.Parse(string(layoutHTML)))
 	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
+	template.Must(tmpl.New("status_boxes").Parse(string(statusBoxesHTML)))
 	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
 	template.Must(tmpl.New("sign_in").Parse(string(signInHTML)))

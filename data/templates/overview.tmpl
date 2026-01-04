@@ -79,75 +79,7 @@
 				</p>
 			</div>
 		</div>
-		<div class="grid">
-			<div class="card">
-				<div class="label">Open connections</div>
-				<div class="value">--</div>
-				<div class="card-context">Number of mining devices currently connected</div>
-			</div>
-			<div class="card">
-				<div class="label">Shares per minute</div>
-				<div class="value">--</div>
-				<div class="card-context">Indicative of server load</div>
-			</div>
-			<div class="card">
-				<div class="label">Estimated pool hashrate</div>
-				<div class="value" id="status-pool-hashrate">--</div>
-				<div class="card-context">
-					Network hashrate:
-					<span id="status-network-hashrate">--</span>
-				</div>
-			</div>
-			<div class="card">
-				<div class="label">Block height</div>
-				<div class="value mono" id="status-block-height">--</div>
-				<div class="card-context" id="status-block-height-context">Current chain tip</div>
-			</div>
-			<div class="card">
-				<div class="label">Annual block odds</div>
-				<div class="value mono" id="status-block-chance">--</div>
-				<div class="card-context">Transaction Fees</div>
-				<div class="value mono" id="status-template-tx-fees">--</div>
-				<div class="card-context" id="status-template-tx-fees-updated">Updated --</div>
-			</div>
-			<div class="card">
-				<div class="label">Network stats</div>
-				<div class="card-metrics-grid">
-					<div>
-						<div class="value mono" id="status-block-difficulty">--</div>
-						<div class="card-context">Network target difficulty</div>
-					</div>
-					<div>
-						<div class="value mono" id="status-btc-price">--</div>
-						<div class="card-context" id="status-btc-price-updated">Updated --</div>
-					</div>
-				</div>
-			</div>
-			<div class="card">
-				<div class="label">Time left for block</div>
-				<div class="value mono" id="status-block-time-left">--</div>
-				<div class="card-context" id="status-block-history">--</div>
-			</div>
-			<div class="card">
-				<div class="label">Pool fee</div>
-				{{if gt .PoolFeePercent 0.0}}
-					<div class="value">
-						{{printf "%.2f" .PoolFeePercent}}%
-					</div>
-					{{if gt .OperatorDonationPercent 0.0}}
-						<div class="card-context">Split coinbase, pays directly to miner<br>
-						<span style="opacity: 0.8;">{{printf "%.1f" .OperatorDonationPercent}}% of pool fee donated{{if .OperatorDonationName}} to {{if .OperatorDonationURL}}<a href="{{.OperatorDonationURL}}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">{{.OperatorDonationName}}</a>{{else}}{{.OperatorDonationName}}{{end}}{{end}}</span><br>
-						<span style="opacity: 0.7; font-size: 0.9em;">See exact payout under worker login</span></div>
-					{{else}}
-						<div class="card-context">Split coinbase, pays directly to miner<br>
-						<span style="opacity: 0.7; font-size: 0.9em;">See exact payout under worker login</span></div>
-					{{end}}
-				{{else}}
-					<div class="value">None</div>
-					<div class="card-context">No fee charged</div>
-				{{end}}
-			</div>
-		</div>
+		{{template "status_boxes" .}}
 
 		<!-- Pool Hashrate Graph -->
 		<div class="card" style="margin-top:16px;">
@@ -766,6 +698,12 @@
 			renderTimeEl.textContent = ms.toFixed(2) + 'ms';
 		}
 
+		function normalizePoolTag(tag) {
+			if (!tag) return '';
+			if (tag[0] === '/') return tag;
+			return '/' + tag;
+		}
+
 		function updateBTCPrice(newData) {
 			if (!newData) return;
 			const priceEl = document.getElementById('status-btc-price');
@@ -783,7 +721,9 @@
 				if (ts) {
 					try {
 						const d = new Date(ts);
-						updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+						const millis = d.getTime();
+						const ago = formatTimeAgoMillis(millis);
+						updatedEl.textContent = ago ? `Updated ${ago}` : 'Updated --';
 					} catch (_) {
 						updatedEl.textContent = 'Updated --';
 					}
@@ -795,6 +735,11 @@
 
 		function updateDOM(newData) {
 			if (!newData) return;
+			const poolTagEl = document.getElementById('status-pool-tag');
+			if (poolTagEl) {
+				const tag = normalizePoolTag(newData.pool_tag);
+				poolTagEl.textContent = tag || '--';
+			}
 			updateGridCards(newData);
 			updateBTCPrice(newData);
 			renderWorkersTable(newData.workers);
@@ -1004,12 +949,8 @@
 				? `${btcText}<br><span style="opacity:0.7; font-size:0.85em;">(${fiatText} ${currency})</span>`
 				: btcText;
 			if (templateTxFeesUpdatedEl) {
-				const when = formatHHMMSSUTC(templateUpdatedAtMillis);
 				const ago = formatTimeAgoMillis(templateUpdatedAtMillis);
-				const parts = [];
-				if (when) parts.push(when);
-				if (ago) parts.push(`(${ago})`);
-				templateTxFeesUpdatedEl.textContent = parts.length ? `Updated ${parts.join(' ')}` : 'Updated --';
+				templateTxFeesUpdatedEl.textContent = ago ? `Updated ${ago}` : 'Updated --';
 			}
 		}
 
@@ -1074,7 +1015,11 @@
 				const prev = new Date(recentBlockTimes[i - 1]).getTime();
 				const curr = new Date(recentBlockTimes[i]).getTime();
 				const durationSec = Math.floor((curr - prev) / 1000);
-				durations.push(formatDurationDetailed(durationSec));
+				if (durationSec <= 0) {
+					durations.push('Timestamp skew');
+				} else {
+					durations.push(formatDurationDetailed(durationSec));
+				}
 				// Stop after 3 durations
 				if (durations.length >= 3) break;
 			}
@@ -1124,22 +1069,23 @@
 								if (retarget && typeof retarget.height === 'number' && retarget.height > 0) {
 									const parts = [];
 									if (typeof retarget.blocks_away === 'number') {
-										parts.push(`${retarget.blocks_away.toLocaleString()} blocks away`);
+										parts.push(null);
 									}
 									if (retarget.duration_estimate) {
 										parts.push(`~${retarget.duration_estimate}`);
 									}
 									if (parts.length === 0) {
-										parts.push('blocks away');
+										parts.push('~--');
 									}
-									blockHeightContextEl.innerHTML = `Next difficulty retarget: ${retarget.height.toLocaleString()}<br>(${parts.join(' · ')})`;
+									const summary = parts.filter(Boolean).join(' · ');
+									blockHeightContextEl.innerHTML = `${retarget.height.toLocaleString()}<br><span class="text-sm" style="color:var(--text-muted);">(${summary})</span>`;
 							} else {
 								const interval = 2016;
 								const next = (Math.floor(height / interval) + 1) * interval;
 								const remaining = Math.max(0, next - height);
 								const durationSeconds = remaining * 10 * 60;
 								const durationText = formatDuration(durationSeconds);
-								blockHeightContextEl.innerHTML = `Next difficulty retarget: ${next.toLocaleString()}<br>(${remaining.toLocaleString()} blocks away · ~${durationText})`;
+								blockHeightContextEl.innerHTML = `${next.toLocaleString()}<br><span class="text-sm" style="color:var(--text-muted);">(~${durationText})</span>`;
 							}
 						}
 					} else if (blockHeightEl) {

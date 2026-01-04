@@ -663,7 +663,10 @@ func buildCoinbaseMsgWithSuffix(base, poolTag string, suffixChars int) (string, 
 	if suffix == "" {
 		return base, nil
 	}
-	return fmt.Sprintf("%s-%s", base, suffix), nil
+	if strings.HasSuffix(base, "/") {
+		return base + suffix, nil
+	}
+	return fmt.Sprintf("%s/%s", base, suffix), nil
 }
 
 func buildPoolSuffix(poolTag string, suffixChars int) (string, error) {

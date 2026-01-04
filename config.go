@@ -287,8 +287,7 @@ type EffectiveConfig struct {
 	Extranonce2Size                   int     `json:"extranonce2_size"`
 	TemplateExtraNonce2Size           int     `json:"template_extranonce2_size,omitempty"`
 	CoinbaseSuffixBytes               int     `json:"coinbase_suffix_bytes"`
-	CoinbasePoolTag                   string  `json:"coinbase_pool_tag,omitempty"`
-	CoinbaseMsg                       string  `json:"coinbase_message"`
+	PoolID                            string  `json:"pool_id,omitempty"`
 	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
 	ZMQBlockAddr                      string  `json:"zmq_block_addr,omitempty"`
 	BackblazeBackupEnabled            bool    `json:"backblaze_backup_enabled,omitempty"`
@@ -1272,8 +1271,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
 		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
-		CoinbasePoolTag:                   cfg.CoinbasePoolTag,
-		CoinbaseMsg:                       cfg.CoinbaseMsg,
+		PoolID:                            cfg.CoinbasePoolTag,
 		CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
 		ZMQBlockAddr:                      cfg.ZMQBlockAddr,
 		BackblazeBackupEnabled:            cfg.BackblazeBackupEnabled,
