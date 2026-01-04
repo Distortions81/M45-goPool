@@ -81,10 +81,8 @@
 		</div>
 		{{template "status_boxes" .}}
 
-		<!-- Pool Hashrate Graph -->
-		<div class="card" style="margin-top:16px;">
-			<div class="label">Pool Hashrate</div>
-			<canvas id="hashrateChart" style="width:100%;height:200px;"></canvas>
+		<div style="margin-top:16px;">
+			{{template "hashrate_graph" .}}
 		</div>
 
 		<h2 id="workers">Recent work</h2>
@@ -193,234 +191,8 @@
 
 		{{template "footer" .}}
 	</div>
+	{{template "hashrate_graph_script" .}}
 	<script>
-	// Pool Hashrate Graph
-	(function() {
-		const canvas = document.getElementById('hashrateChart');
-		if (!canvas) return;
-
-		// Set canvas size to match display size for crisp rendering
-		function resizeCanvas() {
-			const dpr = window.devicePixelRatio || 1;
-			const rect = canvas.getBoundingClientRect();
-			canvas.width = rect.width * dpr;
-			canvas.height = rect.height * dpr;
-			const ctx = canvas.getContext('2d');
-			ctx.scale(dpr, dpr);
-			return ctx;
-		}
-
-		let ctx = resizeCanvas();
-
-		// Re-render on window resize
-		window.addEventListener('resize', function() {
-			ctx = resizeCanvas();
-			drawGraph();
-		});
-		const maxDataPoints = 60; // 5 minutes at 5-second intervals
-		const hashrateData = [];
-		const timestamps = [];
-		const blockHeights = [];
-		let smoothedHashrate = null;
-		let initialZeroPrepended = false;
-
-		function drawGraph() {
-			// Use display dimensions (logical pixels) for drawing
-			const rect = canvas.getBoundingClientRect();
-			const width = rect.width;
-			const height = rect.height;
-			const paddingLeft = 70; // Extra padding for Y-axis labels
-			const paddingRight = 20;
-			const paddingTop = 20;
-			const paddingBottom = 30;
-			const graphWidth = width - paddingLeft - paddingRight;
-			const graphHeight = height - paddingTop - paddingBottom;
-
-			// Clear canvas
-			ctx.clearRect(0, 0, width, height);
-
-			if (hashrateData.length === 0) {
-				ctx.fillStyle = '#b3bbd4';
-				ctx.font = '14px monospace';
-				ctx.textAlign = 'center';
-				ctx.fillText('Waiting for data...', width / 2, height / 2);
-				return;
-			}
-
-			// Find min/max for scaling, with headroom so peaks don't peg the top.
-			// Keep a minimum Y-axis floor so low-hashrate pools aren't rendered
-			// against an always-zero baseline.
-			const minScale = 0;
-			const dataMax = Math.max(...hashrateData);
-
-			const headroomFactor = 2.0;
-			const defaultMaxScale = 100e6; // 100 MH/s in H/s
-			const maxHashrate = Math.max(dataMax * headroomFactor, defaultMaxScale);
-			const minHashrate = minScale;
-			const range = Math.max(1, maxHashrate - minHashrate);
-
-			// Draw grid lines
-			ctx.strokeStyle = '#2a2f3a';
-			ctx.lineWidth = 1;
-			for (let i = 0; i <= 4; i++) {
-				const y = paddingTop + (graphHeight / 4) * i;
-				ctx.beginPath();
-				ctx.moveTo(paddingLeft, y);
-				ctx.lineTo(width - paddingRight, y);
-				ctx.stroke();
-			}
-
-			// Draw Y-axis labels (hashrate)
-			ctx.fillStyle = '#b3bbd4';
-			ctx.font = '11px monospace';
-			ctx.textAlign = 'right';
-			for (let i = 0; i <= 4; i++) {
-				const y = paddingTop + (graphHeight / 4) * i;
-				const value = maxHashrate - (range / 4) * i;
-				const formatted = formatHashrateShort(value);
-				ctx.fillText(formatted, paddingLeft - 8, y + 4);
-			}
-
-			// Draw block-height change markers (vertical dividers with labels).
-			if (blockHeights.length > 1) {
-				ctx.save();
-				ctx.strokeStyle = '#f3d36b';
-				ctx.fillStyle = '#f3d36b';
-				ctx.lineWidth = 1;
-				ctx.setLineDash([4, 3]);
-				ctx.font = '11px monospace';
-				for (let i = 1; i < blockHeights.length; i++) {
-					const prev = blockHeights[i - 1];
-					const cur = blockHeights[i];
-					if (!prev || !cur || cur === prev) {
-						continue;
-					}
-					const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
-					ctx.beginPath();
-					ctx.moveTo(x, paddingTop);
-					ctx.lineTo(x, height - paddingBottom);
-					ctx.stroke();
-					ctx.setLineDash([]);
-					const label = `#${cur}`;
-					const labelY = paddingTop + 12;
-					const paddingX = 6;
-					const maxX = width - paddingRight - paddingX;
-					const desiredX = x + paddingX;
-					if (desiredX > maxX) {
-						ctx.textAlign = 'right';
-						ctx.fillText(label, x - paddingX, labelY);
-					} else {
-						ctx.textAlign = 'left';
-						ctx.fillText(label, desiredX, labelY);
-					}
-					ctx.setLineDash([4, 3]);
-				}
-				ctx.restore();
-			}
-
-			// Draw the line graph
-			ctx.strokeStyle = '#4a9eff';
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-
-			hashrateData.forEach((hashrate, index) => {
-				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
-				const y = paddingTop + graphHeight - ((hashrate - minHashrate) / range) * graphHeight;
-
-				if (index === 0) {
-					ctx.moveTo(x, y);
-				} else {
-					ctx.lineTo(x, y);
-				}
-			});
-
-			ctx.stroke();
-
-			// Draw points
-			ctx.fillStyle = '#4a9eff';
-			hashrateData.forEach((hashrate, index) => {
-				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
-				const y = paddingTop + graphHeight - ((hashrate - minHashrate) / range) * graphHeight;
-				ctx.beginPath();
-				ctx.arc(x, y, 3, 0, Math.PI * 2);
-				ctx.fill();
-			});
-
-			// Draw X-axis tickmarks and labels
-			ctx.fillStyle = '#b3bbd4';
-			ctx.strokeStyle = '#b3bbd4';
-			ctx.font = '11px monospace';
-			ctx.textAlign = 'center';
-			const now = new Date();
-			for (let i = 0; i <= 4; i++) {
-				const x = paddingLeft + (graphWidth / 4) * i;
-				const secondsAgo = (maxDataPoints - 1 - (maxDataPoints / 4) * i) * 5;
-				const minutes = Math.floor(secondsAgo / 60);
-
-				// Draw tickmark
-				ctx.beginPath();
-				ctx.moveTo(x, height - paddingBottom);
-				ctx.lineTo(x, height - paddingBottom + 5);
-				ctx.stroke();
-			}
-
-			// Draw "minutes" label centered below the axis
-			ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
-		}
-
-		function formatHashrateShort(h) {
-			if (!h) return '0';
-			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
-			let val = h, idx = 0;
-			while (val >= 1000 && idx < units.length - 1) {
-				val /= 1000;
-				idx++;
-			}
-			return val.toFixed(1) + ' ' + units[idx];
-		}
-
-		function updateHashrateGraph(newHashrate, blockHeight) {
-			if (!newHashrate || newHashrate <= 0) return;
-
-			// Apply a small client-side EMA so the graph transitions smoothly
-			// between backend updates instead of stepping sharply each poll.
-			if (!initialZeroPrepended && hashrateData.length === 0) {
-				hashrateData.push(0);
-				timestamps.push(new Date(Date.now() - 5000));
-				blockHeights.push(blockHeight || null);
-				initialZeroPrepended = true;
-			}
-			if (smoothedHashrate === null) {
-				smoothedHashrate = newHashrate;
-			} else {
-				const alpha = 0.25; // smoothing factor (0..1); lower = smoother
-				smoothedHashrate = smoothedHashrate + alpha * (newHashrate - smoothedHashrate);
-			}
-
-			hashrateData.push(smoothedHashrate);
-			timestamps.push(new Date());
-			blockHeights.push(blockHeight || null);
-
-			// Keep only last maxDataPoints
-			if (hashrateData.length > maxDataPoints) {
-				hashrateData.shift();
-				timestamps.shift();
-				blockHeights.shift();
-			}
-
-			drawGraph();
-		}
-
-		// Initial draw
-		drawGraph();
-
-		// Expose update function globally so auto-refresh can call it
-		window.updateHashrateGraph = updateHashrateGraph;
-
-		// Redraw on window resize
-		window.addEventListener('resize', drawGraph);
-	})();
-
 	(function() {
 		const REFRESH_INTERVAL = 10000; // 10 seconds
 		const FIAT_CURRENCY = '{{.FiatCurrency}}';
@@ -682,6 +454,7 @@
 						}
 						break;
 					case 'Estimated pool hashrate':
+					case 'Pool hashrate':
 						valueEl.textContent = formatHashrate(newData.pool_hashrate);
 						if (window.updateHashrateGraph && newData.pool_hashrate) {
 							window.updateHashrateGraph(newData.pool_hashrate);

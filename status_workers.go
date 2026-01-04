@@ -261,6 +261,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		SavedWorkersOnline   int
 		SavedWorkersMax      int
 	}{StatusData: base}
+	data.HashrateGraphTitle = "Total Hashrate"
+	data.HashrateGraphID = "savedWorkersHashrateChart"
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	if data.ClerkUser == nil {

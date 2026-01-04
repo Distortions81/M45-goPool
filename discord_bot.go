@@ -938,7 +938,7 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 	}
 
 	if url := n.savedWorkersURL(); url != "" {
-		footer := "[check status / pings off](" + url + ")"
+		footer := "[[check status]](" + url + ")"
 		if len(msg)+2+len(footer) <= 1000 {
 			msg = msg + "\n" + footer
 		}

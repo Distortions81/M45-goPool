@@ -380,6 +380,8 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	layoutPath := filepath.Join(dataDir, "templates", "layout.tmpl")
 	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
 	statusBoxesPath := filepath.Join(dataDir, "templates", "status_boxes.tmpl")
+	hashrateGraphPath := filepath.Join(dataDir, "templates", "hashrate_graph.tmpl")
+	hashrateGraphScriptPath := filepath.Join(dataDir, "templates", "hashrate_graph_script.tmpl")
 	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
 	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
 	signInPath := filepath.Join(dataDir, "templates", "sign_in.tmpl")
@@ -402,6 +404,14 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	statusBoxesHTML, err := os.ReadFile(statusBoxesPath)
 	if err != nil {
 		return nil, fmt.Errorf("load status boxes template: %w", err)
+	}
+	hashrateGraphHTML, err := os.ReadFile(hashrateGraphPath)
+	if err != nil {
+		return nil, fmt.Errorf("load hashrate graph template: %w", err)
+	}
+	hashrateGraphScriptHTML, err := os.ReadFile(hashrateGraphScriptPath)
+	if err != nil {
+		return nil, fmt.Errorf("load hashrate graph script template: %w", err)
 	}
 	serverInfoHTML, err := os.ReadFile(serverInfoPath)
 	if err != nil {
@@ -445,6 +455,8 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	template.Must(tmpl.Parse(string(layoutHTML)))
 	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
 	template.Must(tmpl.New("status_boxes").Parse(string(statusBoxesHTML)))
+	template.Must(tmpl.New("hashrate_graph").Parse(string(hashrateGraphHTML)))
+	template.Must(tmpl.New("hashrate_graph_script").Parse(string(hashrateGraphScriptHTML)))
 	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
 	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
 	template.Must(tmpl.New("sign_in").Parse(string(signInHTML)))

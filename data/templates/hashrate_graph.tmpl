@@ -1,0 +1,11 @@
+{{define "hashrate_graph"}}
+<div class="card graph-card">
+	<div class="graph-card-header">
+		<div class="label">{{.HashrateGraphTitle}}</div>
+		{{if .HashrateGraphDescription}}
+			<p class="text-sm graph-card-description">{{.HashrateGraphDescription}}</p>
+		{{end}}
+	</div>
+	<canvas id="{{.HashrateGraphID}}" style="width:100%;height:200px;"></canvas>
+</div>
+{{end}}

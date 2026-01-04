@@ -621,6 +621,9 @@ type StatusData struct {
 	OperatorDonationURL             string                `json:"operator_donation_url,omitempty"`
 	CoinbaseMessage                 string                `json:"coinbase_message,omitempty"`
 	CoinbasePoolTag                 string                `json:"coinbase_pool_tag,omitempty"`
+	HashrateGraphTitle             string                `json:"-"`
+	HashrateGraphDescription       string                `json:"-"`
+	HashrateGraphID                string                `json:"-"`
 	DisplayPayoutAddress            string                `json:"display_payout_address,omitempty"`
 	DisplayOperatorDonationAddress  string                `json:"display_operator_donation_address,omitempty"`
 	DisplayCoinbaseMessage          string                `json:"display_coinbase_message,omitempty"`
