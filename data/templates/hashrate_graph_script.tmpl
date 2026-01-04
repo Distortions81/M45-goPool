@@ -60,7 +60,7 @@
 		const dataMax = Math.max(...hashrateData);
 
 		const headroomFactor = 2.0;
-		const defaultMaxScale = 100e6; // 100 MH/s in H/s
+		const defaultMaxScale = 100e3; // 100 kH/s in H/s
 		const maxHashrate = Math.max(dataMax * headroomFactor, defaultMaxScale);
 		const minHashrate = minScale;
 		const range = Math.max(1, maxHashrate - minHashrate);
