@@ -440,12 +440,16 @@
 					case 'Shares per minute':
 						{
 							const rate = newData.shares_per_minute ?? 0;
-							valueEl.textContent = formatShareRate(rate);
+							const workers = newData.active_miners ?? 0;
+							const avgPerWorker = workers > 0 ? rate / workers : 0;
+							if (workers > 0) {
+								valueEl.innerHTML = `${formatShareRate(rate)} <span class="text-sm" style="color:#666;">(${formatShareRate(avgPerWorker)}/worker)</span>`;
+							} else {
+								valueEl.textContent = formatShareRate(rate);
+							}
 							const contextEl = card.querySelector('.card-context');
 							if (contextEl) {
-								const workers = newData.active_miners ?? 0;
 								if (workers > 0) {
-									const avgPerWorker = rate / workers;
 									contextEl.textContent = `${formatShareRate(avgPerWorker)} avg/worker`;
 								} else {
 									contextEl.textContent = 'Indicative of server load';
