@@ -750,8 +750,11 @@ func (mc *MinerConn) handle() {
 				return
 			}
 			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
-				logger.Warn("closing miner for read timeout", "remote", mc.id)
-				return
+				if expired, reason := mc.idleExpired(now); expired {
+					logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
+					return
+				}
+				continue
 			}
 			if err != io.EOF && !errors.Is(err, net.ErrClosed) {
 				logger.Error("read error", "remote", mc.id, "error", err)
