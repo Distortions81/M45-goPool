@@ -1,5 +1,7 @@
 {{define "status_boxes"}}
-<div class="grid">
+<div class="status-group">
+<div class="text-sm status-group-title">Pool</div>
+<div class="grid status-grid">
 	<div class="card">
 		<div class="label">Open connections</div>
 		<div class="value">--</div>
@@ -20,34 +22,18 @@
 		<div class="label">Annual block odds</div>
 		<div class="value mono" id="status-block-chance">--</div>
 	</div>
-	<div class="card">
-		<div class="label">Network difficulty</div>
-		<div class="value mono" id="status-block-difficulty">--</div>
-	</div>
-	<div class="card">
-		<div class="label">WORLD HASHRATE</div>
-		<div class="value mono" id="status-network-hashrate">--</div>
-	</div>
-	<div class="card">
+	{{/* <div class="card">
 		<div class="label">Next diff change</div>
 		<div class="value mono" id="status-block-height-context">--</div>
-	</div>
-	<div class="card">
-		<div class="label">Transaction Fees</div>
-		<div class="value mono" id="status-template-tx-fees">--</div>
-	</div>
-	<div class="card">
-		<div class="label">BTC price</div>
-		<div class="value mono" id="status-btc-price">--</div>
-	</div>
-	<div class="card">
-		<div class="label">Pool tag</div>
-		<div class="value mono" id="status-pool-tag">--</div>
-	</div>
+	</div> */}}
 	<div class="card">
 		<div class="label">Time left for block</div>
 		<div class="value mono" id="status-block-time-left">--</div>
 		<div class="card-context" id="status-block-history">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Pool tag</div>
+		<div class="value mono" id="status-pool-tag">--</div>
 	</div>
 	<div class="card">
 		<div class="label">Pool fee</div>
@@ -68,5 +54,27 @@
 			<div class="card-context">No fee charged</div>
 		{{end}}
 	</div>
+</div>
+</div>
+<div class="status-group">
+<div class="text-sm status-group-title">BTC / Network</div>
+<div class="grid status-grid">
+	<div class="card">
+		<div class="label">WORLD HASHRATE</div>
+		<div class="value mono" id="status-network-hashrate">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Network difficulty</div>
+		<div class="value mono" id="status-block-difficulty">--</div>
+	</div>
+	<div class="card">
+		<div class="label">Transaction Fees</div>
+		<div class="value mono" id="status-template-tx-fees">--</div>
+	</div>
+	<div class="card">
+		<div class="label">BTC price</div>
+		<div class="value mono" id="status-btc-price">--</div>
+	</div>
+</div>
 </div>
 {{end}}

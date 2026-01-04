@@ -1016,7 +1016,7 @@
 				const curr = new Date(recentBlockTimes[i]).getTime();
 				const durationSec = Math.floor((curr - prev) / 1000);
 				if (durationSec <= 0) {
-					durations.push('Timestamp skew');
+					durations.push('timestamp skew');
 				} else {
 					durations.push(formatDurationDetailed(durationSec));
 				}

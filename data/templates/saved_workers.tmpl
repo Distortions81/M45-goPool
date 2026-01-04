@@ -71,7 +71,7 @@
 	{{template "header" .}}
 	<div class="page">
 		{{if .ClerkUser}}
-		<div class="panel-stack">
+		<div class="panel-stack panel-stack-wide">
 			<div class="card">
 				<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
 					<div>
@@ -133,7 +133,9 @@
 				</div>
 			</div>
 
-			{{template "status_boxes" .}}
+			<div class="saved-workers-status">
+				{{template "status_boxes" .}}
+			</div>
 
 			{{$offlineCount := len .OfflineWorkerEntries}}
 			<div class="card offline-card" id="offlineSection">
@@ -1555,7 +1557,7 @@
 				const curr = new Date(recentBlockTimes[i]).getTime();
 				const durationSec = Math.floor((curr - prev) / 1000);
 				if (durationSec <= 0) {
-					durations.push('Timestamp skew');
+					durations.push('timestamp skew');
 				} else {
 					durations.push(formatDurationDetailed(durationSec));
 				}
