@@ -28,7 +28,6 @@
 	const timestamps = [];
 	const blockHeights = [];
 	let smoothedHashrate = null;
-	let initialZeroPrepended = false;
 	let lastBlockHeight = null;
 
 	function drawGraph() {
@@ -191,12 +190,6 @@
 
 		// Apply a small client-side EMA so the graph transitions smoothly
 		// between backend updates instead of stepping sharply each poll.
-		if (!initialZeroPrepended && hashrateData.length === 0) {
-			hashrateData.push(0);
-			timestamps.push(new Date(Date.now() - 5000));
-			blockHeights.push(effectiveBlockHeight || null);
-			initialZeroPrepended = true;
-		}
 		if (smoothedHashrate === null) {
 			smoothedHashrate = newHashrate;
 		} else {
