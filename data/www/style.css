@@ -899,6 +899,36 @@ header {
 	box-shadow: 0 6px 16px rgba(36, 41, 47, 0.3);
 }
 
+.header-link.poolcensus-link {
+	background: linear-gradient(135deg, #f7c948 0%, #f2a65a 100%);
+	border-color: #f2a65a;
+	color: #2a1a00;
+	font-weight: 700;
+	box-shadow: 0 4px 12px rgba(242, 166, 90, 0.45);
+}
+
+.header-link.poolcensus-link:hover {
+	background: linear-gradient(135deg, #ffd46a 0%, #f7c948 100%);
+	border-color: #ffd46a;
+	transform: translateY(-1px);
+	box-shadow: 0 6px 16px rgba(255, 212, 106, 0.55);
+}
+
+[data-theme="light"] .header-link.poolcensus-link {
+	background: linear-gradient(135deg, #f2b94b 0%, #e09a3b 100%);
+	border-color: #e09a3b;
+	color: #221401;
+	box-shadow: 0 4px 10px rgba(224, 154, 59, 0.35);
+}
+
+[data-theme="light"] .header-link.poolcensus-link:hover {
+	background: linear-gradient(135deg, #f5c15a 0%, #f2b94b 100%);
+	border-color: #f5c15a;
+	transform: translateY(-1px);
+	box-shadow: 0 6px 14px rgba(245, 193, 90, 0.4);
+}
+
+
 h1 {
 	margin: 0 0 18px 0;
 	font-weight: 600;

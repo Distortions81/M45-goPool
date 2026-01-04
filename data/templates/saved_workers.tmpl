@@ -1411,7 +1411,8 @@
 			if (durations.length === 0) {
 				blockHistoryEl.innerHTML = '--';
 			} else {
-				blockHistoryEl.innerHTML = durations.join('<br>');
+				// Render left-to-right to save vertical space.
+				blockHistoryEl.textContent = durations.join(' | ');
 			}
 		}
 

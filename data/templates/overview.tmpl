@@ -800,8 +800,8 @@
 			if (durations.length === 0) {
 				blockHistoryEl.innerHTML = '--';
 			} else {
-				// Display each previous block duration on its own line
-				blockHistoryEl.innerHTML = durations.join('<br>');
+				// Render left-to-right to save vertical space.
+				blockHistoryEl.textContent = durations.join(' | ');
 			}
 		}
 
