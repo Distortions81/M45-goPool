@@ -29,13 +29,14 @@
 	const blockHeights = [];
 	let smoothedHashrate = null;
 	let initialZeroPrepended = false;
+	let lastBlockHeight = null;
 
 	function drawGraph() {
 		// Use display dimensions (logical pixels) for drawing
 		const rect = canvas.getBoundingClientRect();
 		const width = rect.width;
 		const height = rect.height;
-		const paddingLeft = 70; // Extra padding for Y-axis labels
+		const paddingLeft = 90; // Extra padding for Y-axis labels
 		const paddingRight = 20;
 		const paddingTop = 20;
 		const paddingBottom = 30;
@@ -136,34 +137,37 @@
 		});
 		ctx.stroke();
 
-		// Draw X-axis tick marks (minutes)
-		ctx.strokeStyle = '#2a2f3a';
+		// Draw X-axis tick marks (no labels)
+		ctx.strokeStyle = '#ffffff';
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		ctx.moveTo(paddingLeft, height - paddingBottom);
 		ctx.lineTo(width - paddingRight, height - paddingBottom);
 		ctx.stroke();
+		const interval = Math.floor(maxDataPoints / 6);
+		for (let i = 0; i < maxDataPoints; i += interval) {
+			const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
+			ctx.beginPath();
+			ctx.moveTo(x, height - paddingBottom);
+			ctx.lineTo(x, height - paddingBottom + 5);
+			ctx.stroke();
+		}
 
-		// Draw X-axis labels (time)
+		// Draw "minutes" label centered below the axis (no numeric labels)
 		ctx.fillStyle = '#b3bbd4';
 		ctx.font = '10px monospace';
 		ctx.textAlign = 'center';
-		const interval = Math.floor(maxDataPoints / 6);
-		for (let i = 0; i < maxDataPoints; i += interval) {
-			if (timestamps[i]) {
-				const minutesAgo = Math.floor((maxDataPoints - 1 - i) * (5 / maxDataPoints));
-				const label = minutesAgo === 0 ? 'now' : `${minutesAgo}m`;
-				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
-				ctx.fillText(label, x, height - paddingBottom + 15);
-				ctx.beginPath();
-				ctx.moveTo(x, height - paddingBottom);
-				ctx.lineTo(x, height - paddingBottom + 5);
-				ctx.stroke();
-			}
-		}
-
-		// Draw "minutes" label centered below the axis
 		ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
+
+		// Draw data points
+		ctx.fillStyle = '#4a9eff';
+		hashrateData.forEach((hashrate, index) => {
+			const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
+			const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
+			ctx.beginPath();
+			ctx.arc(x, y, 2, 0, Math.PI * 2);
+			ctx.fill();
+		});
 	}
 
 	function formatHashrateShort(h) {
@@ -180,12 +184,17 @@
 	function updateHashrateGraph(newHashrate, blockHeight) {
 		if (!newHashrate || newHashrate <= 0) return;
 
+		const effectiveBlockHeight = typeof blockHeight === 'number' && blockHeight > 0 ? blockHeight : lastBlockHeight;
+		if (typeof blockHeight === 'number' && blockHeight > 0) {
+			lastBlockHeight = blockHeight;
+		}
+
 		// Apply a small client-side EMA so the graph transitions smoothly
 		// between backend updates instead of stepping sharply each poll.
 		if (!initialZeroPrepended && hashrateData.length === 0) {
 			hashrateData.push(0);
 			timestamps.push(new Date(Date.now() - 5000));
-			blockHeights.push(blockHeight || null);
+			blockHeights.push(effectiveBlockHeight || null);
 			initialZeroPrepended = true;
 		}
 		if (smoothedHashrate === null) {
@@ -197,7 +206,7 @@
 
 		hashrateData.push(smoothedHashrate);
 		timestamps.push(new Date());
-		blockHeights.push(blockHeight || null);
+		blockHeights.push(effectiveBlockHeight || null);
 
 		// Keep only last maxDataPoints
 		if (hashrateData.length > maxDataPoints) {
