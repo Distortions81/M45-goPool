@@ -468,6 +468,11 @@
 			const renderTimeEl = document.getElementById('overview-render-time');
 			if (!renderTimeEl || !duration) return;
 			const ms = duration / 1000000;
+			if (ms < 1) {
+				const us = duration / 1000;
+				renderTimeEl.textContent = Math.round(us) + 'µs';
+				return;
+			}
 			renderTimeEl.textContent = ms.toFixed(2) + 'ms';
 		}
 
