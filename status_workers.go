@@ -32,14 +32,18 @@ func safeRedirectPath(value string) string {
 	return value
 }
 
-func isSameOriginRequest(r *http.Request) bool {
+func isSameOriginRequest(r *http.Request, host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = "localhost"
+	}
 	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
-		if parsed, err := url.Parse(origin); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, r.Host) {
+		if parsed, err := url.Parse(origin); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, host) {
 			return false
 		}
 	}
 	if referer := strings.TrimSpace(r.Header.Get("Referer")); referer != "" {
-		if parsed, err := url.Parse(referer); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, r.Host) {
+		if parsed, err := url.Parse(referer); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, host) {
 			return false
 		}
 	}
@@ -182,11 +186,7 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 					HttpOnly: true,
 					SameSite: http.SameSiteLaxMode,
 				}
-				if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-					cookie.Secure = strings.EqualFold(proto, "https")
-				} else {
-					cookie.Secure = r.TLS != nil
-				}
+				cookie.Secure = s.clerkCookieSecure(r)
 				if claims != nil && claims.ExpiresAt != nil {
 					cookie.Expires = claims.ExpiresAt.Time
 				}
@@ -815,11 +815,7 @@ func (s *StatusServer) handleClerkLogout(w http.ResponseWriter, r *http.Request)
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(0, 0),
 	}
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		cookie.Secure = strings.EqualFold(proto, "https")
-	} else {
-		cookie.Secure = r.TLS != nil
-	}
+	cookie.Secure = s.clerkCookieSecure(r)
 	http.SetCookie(w, cookie)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
@@ -839,7 +835,7 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 	}
 
 	// Deny cross-site refresh attempts so only same-origin flows can replace the session cookie.
-	if !isSameOriginRequest(r) {
+	if !isSameOriginRequest(r, s.canonicalStatusHost(r)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -873,11 +869,7 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		cookie.Secure = strings.EqualFold(proto, "https")
-	} else {
-		cookie.Secure = r.TLS != nil
-	}
+	cookie.Secure = s.clerkCookieSecure(r)
 	if claims.ExpiresAt != nil {
 		cookie.Expires = claims.ExpiresAt.Time
 	}

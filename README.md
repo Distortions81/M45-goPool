@@ -58,6 +58,8 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 - To override cookie path for a single launch, use `-rpc-cookie-path`. To override the RPC URL, use `-rpc-url`.
 - `-allow-rpc-credentials` allows `rpc_user`/`rpc_pass` from `data/config/secrets.toml`, but is deprecated/insecure compared to the cookie.
 - To connect to intentionally unauthenticated public RPC endpoints, set `node.allow_public_rpc = true` (and still understand the security implications).
+- When you know the final pool URL (e.g. you're not routing through another proxy), set `server.status_public_url` so login redirects and session cookies are anchored to that origin instead of trusting each request's `Host`/`X-Forwarded-Proto`.
+- If you run multiple Clerk apps under the same issuer, configure `auth.clerk_session_audience` to the audience string issued by your Clerk project so session JWTs from other apps are rejected.
 - ZMQ can be disabled with `-no-zmq` (pool will rely on RPC/longpoll only).
 - goPool always uses RPC longpoll for frequent `getblocktemplate` updates (including `coinbasevalue` / transaction fees); ZMQ is used for fast new-block detection and status metrics.
 

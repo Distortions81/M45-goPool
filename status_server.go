@@ -41,43 +41,43 @@ func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // PoolStatsData contains essential pool statistics without worker details
 type PoolStatsData struct {
-	APIVersion              string              `json:"api_version"`
-	BrandName               string              `json:"brand_name"`
-	BrandDomain             string              `json:"brand_domain"`
-	ListenAddr              string              `json:"listen_addr"`
-	StratumTLSListen        string              `json:"stratum_tls_listen,omitempty"`
-	PoolSoftware            string              `json:"pool_software"`
-	BuildTime               string              `json:"build_time"`
-	Uptime                  time.Duration       `json:"uptime"`
-	ActiveMiners            int                 `json:"active_miners"`
-	PoolHashrate            float64             `json:"pool_hashrate"`
-	SharesPerSecond         float64             `json:"shares_per_second"`
-	Accepted                uint64              `json:"accepted"`
-	Rejected                uint64              `json:"rejected"`
-	StaleShares             uint64              `json:"stale_shares"`
-	LowDiffShares           uint64              `json:"low_diff_shares"`
-	RejectReasons           map[string]uint64   `json:"reject_reasons,omitempty"`
-	WindowAccepted          uint64              `json:"window_accepted"`
-	WindowSubmissions       uint64              `json:"window_submissions"`
-	WindowStart             string              `json:"window_start"`
-	VardiffUp               uint64              `json:"vardiff_up"`
-	VardiffDown             uint64              `json:"vardiff_down"`
-	BlocksAccepted          uint64              `json:"blocks_accepted"`
-	BlocksErrored           uint64              `json:"blocks_errored"`
-	MinDifficulty           float64             `json:"min_difficulty"`
-	MaxDifficulty           float64             `json:"max_difficulty"`
-	PoolFeePercent          float64             `json:"pool_fee_percent"`
-	OperatorDonationPercent float64             `json:"operator_donation_percent,omitempty"`
-	OperatorDonationName    string              `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL     string              `json:"operator_donation_url,omitempty"`
-	CurrentJob              *Job                `json:"current_job,omitempty"`
-	JobCreated              string              `json:"job_created"`
-	TemplateTime            string              `json:"template_time"`
-	JobFeed                 JobFeedView         `json:"job_feed"`
-	BTCPriceFiat            float64             `json:"btc_price_fiat,omitempty"`
-	BTCPriceUpdatedAt       string              `json:"btc_price_updated_at,omitempty"`
-	FiatCurrency            string              `json:"fiat_currency,omitempty"`
-	Warnings                []string            `json:"warnings,omitempty"`
+	APIVersion              string            `json:"api_version"`
+	BrandName               string            `json:"brand_name"`
+	BrandDomain             string            `json:"brand_domain"`
+	ListenAddr              string            `json:"listen_addr"`
+	StratumTLSListen        string            `json:"stratum_tls_listen,omitempty"`
+	PoolSoftware            string            `json:"pool_software"`
+	BuildTime               string            `json:"build_time"`
+	Uptime                  time.Duration     `json:"uptime"`
+	ActiveMiners            int               `json:"active_miners"`
+	PoolHashrate            float64           `json:"pool_hashrate"`
+	SharesPerSecond         float64           `json:"shares_per_second"`
+	Accepted                uint64            `json:"accepted"`
+	Rejected                uint64            `json:"rejected"`
+	StaleShares             uint64            `json:"stale_shares"`
+	LowDiffShares           uint64            `json:"low_diff_shares"`
+	RejectReasons           map[string]uint64 `json:"reject_reasons,omitempty"`
+	WindowAccepted          uint64            `json:"window_accepted"`
+	WindowSubmissions       uint64            `json:"window_submissions"`
+	WindowStart             string            `json:"window_start"`
+	VardiffUp               uint64            `json:"vardiff_up"`
+	VardiffDown             uint64            `json:"vardiff_down"`
+	BlocksAccepted          uint64            `json:"blocks_accepted"`
+	BlocksErrored           uint64            `json:"blocks_errored"`
+	MinDifficulty           float64           `json:"min_difficulty"`
+	MaxDifficulty           float64           `json:"max_difficulty"`
+	PoolFeePercent          float64           `json:"pool_fee_percent"`
+	OperatorDonationPercent float64           `json:"operator_donation_percent,omitempty"`
+	OperatorDonationName    string            `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL     string            `json:"operator_donation_url,omitempty"`
+	CurrentJob              *Job              `json:"current_job,omitempty"`
+	JobCreated              string            `json:"job_created"`
+	TemplateTime            string            `json:"template_time"`
+	JobFeed                 JobFeedView       `json:"job_feed"`
+	BTCPriceFiat            float64           `json:"btc_price_fiat,omitempty"`
+	BTCPriceUpdatedAt       string            `json:"btc_price_updated_at,omitempty"`
+	FiatCurrency            string            `json:"fiat_currency,omitempty"`
+	Warnings                []string          `json:"warnings,omitempty"`
 }
 
 // NodePageData contains Bitcoin node information for the node page
@@ -602,6 +602,93 @@ func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (s *StatusServer) storeStatusPublicURL(raw string) {
+	parsed := parseStatusPublicURL(raw)
+	s.statusPublicURL.Store(parsed)
+}
+
+func parseStatusPublicURL(raw string) *url.URL {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		logger.Warn("invalid status_public_url", "url", raw, "error", err)
+		return nil
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		logger.Warn("invalid status_public_url", "url", raw, "error", "missing scheme or host")
+		return nil
+	}
+	return parsed
+}
+
+func (s *StatusServer) getStatusPublicURL() *url.URL {
+	if s == nil {
+		return nil
+	}
+	if v := s.statusPublicURL.Load(); v != nil {
+		if u, ok := v.(*url.URL); ok {
+			return u
+		}
+	}
+	return nil
+}
+
+func (s *StatusServer) baseURLForRequest(r *http.Request) *url.URL {
+	if s == nil {
+		return nil
+	}
+	if parsed := s.getStatusPublicURL(); parsed != nil {
+		return parsed
+	}
+	if r == nil {
+		return nil
+	}
+	scheme := "http"
+	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+		scheme = strings.ToLower(proto)
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		host = "localhost"
+	}
+	return &url.URL{
+		Scheme: scheme,
+		Host:   host,
+	}
+}
+
+func (s *StatusServer) canonicalStatusHost(r *http.Request) string {
+	if parsed := s.getStatusPublicURL(); parsed != nil && parsed.Host != "" {
+		return parsed.Host
+	}
+	if r == nil {
+		return "localhost"
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		host = "localhost"
+	}
+	return host
+}
+
+func (s *StatusServer) clerkCookieSecure(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if base := s.baseURLForRequest(r); base != nil {
+		return strings.EqualFold(base.Scheme, "https")
+	}
+	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+		return strings.EqualFold(proto, "https")
+	}
+	return r.TLS != nil
+}
+
 func (s *StatusServer) clerkUserFromRequest(r *http.Request) *ClerkUser {
 	if s == nil || s.clerk == nil {
 		return nil
@@ -682,7 +769,7 @@ func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
 	}
 	redirectURL := s.clerkRedirectURL(r, redirect)
 	if s.clerk != nil {
-		login := s.clerk.LoginURL(r, s.clerk.CallbackPath(), s.Config().ClerkFrontendAPIURL)
+		login := s.clerk.LoginURL(redirectURL, s.Config().ClerkFrontendAPIURL)
 		if redirect == "" {
 			return login
 		}
@@ -713,19 +800,10 @@ func (s *StatusServer) clerkRedirectURL(r *http.Request, redirect string) string
 	if redirectPath == "" {
 		redirectPath = "/worker"
 	}
-	scheme := "http"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if r.TLS != nil {
-		scheme = "https"
+	base := s.baseURLForRequest(r)
+	if base == nil {
+		return redirectPath
 	}
-	host := r.Host
-	if host == "" {
-		host = "localhost"
-	}
-	return (&url.URL{
-		Scheme: scheme,
-		Host:   host,
-		Path:   redirectPath,
-	}).String()
+	ref := &url.URL{Path: redirectPath}
+	return base.ResolveReference(ref).String()
 }

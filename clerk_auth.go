@@ -88,6 +88,7 @@ type ClerkVerifier struct {
 	secretKey       string
 	clerkClients    *clerkclient.Client
 	clerkSessions   *clerksession.Client
+	audience        string
 	keys            map[string]*rsa.PublicKey
 	mu              sync.RWMutex
 	lastKeyRefresh  time.Time
@@ -116,6 +117,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 		callbackPath = defaultClerkCallbackPath
 	}
 	secretKey := strings.TrimSpace(cfg.ClerkSecretKey)
+	audience := strings.TrimSpace(cfg.ClerkSessionAudience)
 
 	v := &ClerkVerifier{
 		client: &http.Client{
@@ -127,6 +129,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 		sessionCookie:   sessionCookie,
 		signInURL:       signInURL,
 		secretKey:       secretKey,
+		audience:        audience,
 		keyRefreshLimit: 5 * time.Minute,
 	}
 	if secretKey != "" {
@@ -205,12 +208,22 @@ func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {
 		}
 		return pub, nil
 	}
-	tok, err := jwt.ParseWithClaims(token, claims, keyFunc, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(v.issuer))
+	opts := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{"RS256"}),
+		jwt.WithIssuer(v.issuer),
+	}
+	if v.audience != "" {
+		opts = append(opts, jwt.WithAudience(v.audience))
+	}
+	tok, err := jwt.ParseWithClaims(token, claims, keyFunc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	if !tok.Valid {
 		return nil, errors.New("invalid session token")
+	}
+	if strings.TrimSpace(claims.Subject) == "" {
+		return nil, errors.New("missing subject")
 	}
 	return claims, nil
 }
@@ -268,29 +281,14 @@ func (v *ClerkVerifier) ExchangeDevBrowserJWT(ctx context.Context, devBrowserJWT
 	return jwtToken, claims, nil
 }
 
-func (v *ClerkVerifier) LoginURL(r *http.Request, redirectPath string, frontendAPI string) string {
+func (v *ClerkVerifier) LoginURL(redirectURL string, frontendAPI string) string {
 	if v == nil {
 		return ""
 	}
-	var scheme string
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if r.TLS != nil {
-		scheme = "https"
-	} else {
-		scheme = "http"
-	}
-	host := r.Host
-	if host == "" {
-		host = "localhost"
-	}
-	redirect := &url.URL{
-		Scheme: scheme,
-		Host:   host,
-		Path:   redirectPath,
-	}
 	values := url.Values{}
-	values.Set("redirect_url", redirect.String())
+	if redirectURL != "" {
+		values.Set("redirect_url", redirectURL)
+	}
 	if frontendAPI != "" {
 		values.Set("frontend_api", frontendAPI)
 	}

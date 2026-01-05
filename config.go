@@ -37,7 +37,9 @@ type Config struct {
 	StatusTLSAddr     string // HTTPS status listen address, e.g. ":443"
 	StatusBrandName   string
 	StatusBrandDomain string
-	StatusTagline     string
+	// StatusPublicURL is the canonical HTTP(S) URL used for redirects and session cookies.
+	StatusPublicURL string
+	StatusTagline   string
 	// StatusConnectMinerTitleExtra is optional extra text appended to the
 	// "Connect your miner" header on the overview page.
 	StatusConnectMinerTitleExtra string
@@ -81,6 +83,8 @@ type Config struct {
 	ClerkFrontendAPIURL string
 	// ClerkSessionCookieName is the cookie that Clerk sets for authenticated sessions.
 	ClerkSessionCookieName string
+	// ClerkSessionAudience, if set, is the expected audience claim for session JWTs.
+	ClerkSessionAudience string
 	// ClerkSecretKey is the Clerk backend secret key (sk_test_... / sk_live_...).
 	// This should be stored in secrets.toml, not config.toml.
 	ClerkSecretKey string
@@ -152,12 +156,12 @@ type Config struct {
 	// (Legacy default suffix was `.b2last`; it is now `.bak`.)
 	//
 	// When set to a relative path, it is resolved relative to DataDir.
-	BackupSnapshotPath string
-	DataDir                        string
-	ShareLogBufferBytes            int
-	FsyncShareLog                  bool
-	ShareLogReplayBytes            int64
-	MaxConns                       int
+	BackupSnapshotPath  string
+	DataDir             string
+	ShareLogBufferBytes int
+	FsyncShareLog       bool
+	ShareLogReplayBytes int64
+	MaxConns            int
 	// MaxAcceptsPerSecond limits how many new TCP connections the pool
 	// will accept per second. Zero disables rate limiting.
 	MaxAcceptsPerSecond int
@@ -335,6 +339,7 @@ type serverConfig struct {
 	PoolListen      string `toml:"pool_listen"`
 	StatusListen    string `toml:"status_listen"`
 	StatusTLSListen string `toml:"status_tls_listen"`
+	StatusPublicURL string `toml:"status_public_url"`
 }
 
 type brandingConfig struct {
@@ -363,6 +368,7 @@ type authConfig struct {
 	ClerkCallbackPath      string `toml:"clerk_callback_path"`
 	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url"`
 	ClerkSessionCookieName string `toml:"clerk_session_cookie_name"`
+	ClerkSessionAudience   string `toml:"clerk_session_audience"`
 }
 
 type nodeConfig struct {
@@ -493,6 +499,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			PoolListen:      cfg.ListenAddr,
 			StatusListen:    cfg.StatusAddr,
 			StatusTLSListen: cfg.StatusTLSAddr,
+			StatusPublicURL: cfg.StatusPublicURL,
 		},
 		Branding: brandingConfig{
 			StatusBrandName:                 cfg.StatusBrandName,
@@ -539,6 +546,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ClerkCallbackPath:      cfg.ClerkCallbackPath,
 			ClerkFrontendAPIURL:    cfg.ClerkFrontendAPIURL,
 			ClerkSessionCookieName: cfg.ClerkSessionCookieName,
+			ClerkSessionAudience:   cfg.ClerkSessionAudience,
 		},
 		Backblaze: backblazeBackupConfig{
 			Enabled:         cfg.BackblazeBackupEnabled,
@@ -729,6 +737,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Server.StatusTLSListen != "" {
 		cfg.StatusTLSAddr = fc.Server.StatusTLSListen
 	}
+	if fc.Server.StatusPublicURL != "" {
+		cfg.StatusPublicURL = strings.TrimSpace(fc.Server.StatusPublicURL)
+	}
 	if fc.Branding.StatusBrandName != "" {
 		cfg.StatusBrandName = fc.Branding.StatusBrandName
 	}
@@ -789,6 +800,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Auth.ClerkSessionCookieName != "" {
 		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
+	}
+	if fc.Auth.ClerkSessionAudience != "" {
+		cfg.ClerkSessionAudience = strings.TrimSpace(fc.Auth.ClerkSessionAudience)
 	}
 	if fc.Node.RPCURL != "" {
 		cfg.RPCURL = fc.Node.RPCURL
