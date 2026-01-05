@@ -23,10 +23,31 @@ func safeRedirectPath(value string) string {
 	if !strings.HasPrefix(value, "/") {
 		return ""
 	}
+	if strings.HasPrefix(value, "//") {
+		return ""
+	}
 	if strings.ContainsAny(value, "\n\r") {
 		return ""
 	}
 	return value
+}
+
+func isSameOriginRequest(r *http.Request) bool {
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		if parsed, err := url.Parse(origin); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, r.Host) {
+			return false
+		}
+	}
+	if referer := strings.TrimSpace(r.Header.Get("Referer")); referer != "" {
+		if parsed, err := url.Parse(referer); err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, r.Host) {
+			return false
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) {
+	case "cross-site":
+		return false
+	}
+	return true
 }
 
 func savedWorkerLookupHashes(savedName, savedHash string) (primary string, fallbacks []string) {
@@ -814,6 +835,12 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 	}
 	if strings.TrimSpace(s.Config().ClerkPublishableKey) == "" {
 		http.NotFound(w, r)
+		return
+	}
+
+	// Deny cross-site refresh attempts so only same-origin flows can replace the session cookie.
+	if !isSameOriginRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
