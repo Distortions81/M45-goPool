@@ -76,7 +76,11 @@ type Job struct {
 const (
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
-	jobRetryDelay           = 100 * time.Millisecond
+)
+
+const (
+	jobRetryDelayMin = 5 * time.Second
+	jobRetryDelayMax = 20 * time.Second
 )
 
 var errStaleTemplate = errors.New("stale template")
@@ -139,6 +143,9 @@ type JobManager struct {
 	notifyWg    sizedwaitgroup.SizedWaitGroup
 	// Callback for new block notifications
 	onNewBlock func()
+	// Retry backoff state for job refresh loops
+	retryDelay time.Duration
+	retryMu    sync.Mutex
 }
 
 func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScript []byte, donationScript []byte) *JobManager {
@@ -191,6 +198,30 @@ func (jm *JobManager) appendJobFeedError(msg string) {
 	}
 }
 
+func (jm *JobManager) sleepRetry(ctx context.Context) error {
+	return sleepContext(ctx, jm.nextRetryDelay())
+}
+
+func (jm *JobManager) nextRetryDelay() time.Duration {
+	jm.retryMu.Lock()
+	defer jm.retryMu.Unlock()
+	if jm.retryDelay == 0 {
+		jm.retryDelay = jobRetryDelayMin
+		return jm.retryDelay
+	}
+	jm.retryDelay *= 2
+	if jm.retryDelay > jobRetryDelayMax {
+		jm.retryDelay = jobRetryDelayMax
+	}
+	return jm.retryDelay
+}
+
+func (jm *JobManager) resetRetryDelay() {
+	jm.retryMu.Lock()
+	jm.retryDelay = 0
+	jm.retryMu.Unlock()
+}
+
 func (jm *JobManager) recordJobSuccess(job *Job) {
 	jm.lastErrMu.Lock()
 	hadErr := jm.lastErr != nil
@@ -209,6 +240,7 @@ func (jm *JobManager) recordJobSuccess(job *Job) {
 		jm.appendJobFeedError("event: job feed recovered (rpc " + target + ")")
 	}
 	jm.lastErrMu.Unlock()
+	jm.resetRetryDelay()
 }
 
 func (jm *JobManager) FeedStatus() JobFeedStatus {

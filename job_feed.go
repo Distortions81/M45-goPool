@@ -62,7 +62,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if job == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("longpoll refresh (no job) error", "error", err)
-				if err := sleepContext(ctx, jobRetryDelay); err != nil {
+				if err := jm.sleepRetry(ctx); err != nil {
 					return
 				}
 				continue
@@ -75,7 +75,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("job refresh error", "error", err)
 			}
-			if err := sleepContext(ctx, jobRetryDelay); err != nil {
+			if err := jm.sleepRetry(ctx); err != nil {
 				return
 			}
 			continue
@@ -89,7 +89,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if err != nil {
 			jm.recordJobError(err)
 			logger.Error("longpoll gbt error", "error", err)
-			if err := sleepContext(ctx, jobRetryDelay); err != nil {
+			if err := jm.sleepRetry(ctx); err != nil {
 				return
 			}
 			continue
@@ -102,7 +102,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 					logger.Error("fallback refresh after stale template", "error", err)
 				}
 			}
-			if err := sleepContext(ctx, jobRetryDelay); err != nil {
+			if err := jm.sleepRetry(ctx); err != nil {
 				return
 			}
 			continue
@@ -212,7 +212,7 @@ zmqLoop:
 		if jm.CurrentJob() == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("zmq loop refresh (no job) error", "error", err)
-				if err := sleepContext(ctx, jobRetryDelay); err != nil {
+				if err := jm.sleepRetry(ctx); err != nil {
 					return
 				}
 				continue
