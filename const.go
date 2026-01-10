@@ -31,7 +31,7 @@ const (
 	defaultExtranonce2Size         = 4
 	defaultTemplateExtraNonce2Size = 8
 	defaultPoolFeePercent          = 2.0
-	defaultRecentJobs              = 3
+	defaultRecentJobs              = 10
 	defaultConnectionTimeout       = 90 * time.Second
 
 	defaultMaxAcceptsPerSecond               = 500
