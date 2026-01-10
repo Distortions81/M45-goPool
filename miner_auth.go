@@ -175,9 +175,10 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 
 	// Now that the worker is authorized and its wallet-style ID is known
 	// to be valid, send initial difficulty and a job so hashing can start.
+	// First job always has clean_jobs=true so the miner starts fresh.
 	if job := mc.jobMgr.CurrentJob(); job != nil {
 		mc.setDifficulty(mc.vardiff.MinDiff)
-		mc.sendNotifyFor(job, false)
+		mc.sendNotifyFor(job, true)
 	}
 }
 
@@ -324,7 +325,10 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	// Opportunistically adjust difficulty before notifying about the job.
-	mc.maybeAdjustDifficulty(time.Now())
+	// If difficulty changed, force clean so the miner uses the new difficulty.
+	if mc.maybeAdjustDifficulty(time.Now()) {
+		forceClean = true
+	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
 	if maskChanged && mc.versionRoll {
