@@ -114,6 +114,10 @@ const (
 	// previous-difficulty grace logic. This caps vardiff moves for a given
 	// miner so we don't thrash difficulty on every small fluctuation.
 	minDiffChangeInterval = 60 * time.Second
+	// previousDiffGracePeriod is how long after a difficulty change we still
+	// accept shares at the previous difficulty. This handles in-flight shares
+	// that were computed before the miner received the new difficulty.
+	previousDiffGracePeriod = 30 * time.Second
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
 

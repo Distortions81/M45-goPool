@@ -398,6 +398,22 @@ func (mc *MinerConn) assignedDifficulty(jobID string) float64 {
 	return curDiff
 }
 
+// meetsPreDiffGrace returns true if the share difficulty is acceptable under
+// the previous-difficulty grace period. This allows shares computed at the
+// old difficulty to be accepted for a short window after a vardiff change.
+func (mc *MinerConn) meetsPrevDiffGrace(shareDiff float64, now time.Time) bool {
+	lastChange := time.Unix(0, mc.lastDiffChange.Load())
+	if lastChange.IsZero() || now.Sub(lastChange) > previousDiffGracePeriod {
+		return false
+	}
+	prevDiff := atomicLoadFloat64(&mc.previousDifficulty)
+	if prevDiff <= 0 {
+		return false
+	}
+	ratio := shareDiff / prevDiff
+	return ratio >= 0.98
+}
+
 func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()

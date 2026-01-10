@@ -479,7 +479,10 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	if !isBlock && thresholdDiff > 0 {
 		ratio := shareDiff / thresholdDiff
 		if ratio < 0.98 {
-			lowDiff = true
+			// Check if the share meets the previous difficulty within grace period
+			if !mc.meetsPrevDiffGrace(shareDiff, now) {
+				lowDiff = true
+			}
 		}
 	}
 
