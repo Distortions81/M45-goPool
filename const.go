@@ -32,7 +32,7 @@ const (
 	defaultTemplateExtraNonce2Size = 8
 	defaultPoolFeePercent          = 2.0
 	defaultRecentJobs              = 10
-	defaultConnectionTimeout       = 90 * time.Second
+	defaultConnectionTimeout       = 300 * time.Second
 
 	defaultMaxAcceptsPerSecond               = 500
 	defaultMaxAcceptBurst                    = 1000
@@ -104,7 +104,7 @@ const (
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second
 	defaultVersionMask    = uint32(0x1fffe000)
-	minMinerTimeout       = 60 * time.Second
+	minMinerTimeout       = 300 * time.Second
 	// initialReadTimeout limits how long we keep a connection around
 	// before it has proven itself by submitting valid shares. This helps
 	// protect against floods of idle connections.

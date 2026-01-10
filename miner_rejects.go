@@ -130,7 +130,7 @@ func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason)
 	if threshold <= 0 {
 		threshold = mc.vardiff.MaxBurstShares
 		if threshold <= 0 {
-			threshold = 60
+			threshold = 300
 		}
 	}
 	if mc.invalidSubs >= threshold {
