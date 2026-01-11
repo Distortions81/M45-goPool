@@ -117,7 +117,7 @@ const (
 	// previousDiffGracePeriod is how long after a difficulty change we still
 	// accept shares at the previous difficulty. This handles in-flight shares
 	// that were computed before the miner received the new difficulty.
-	previousDiffGracePeriod = 30 * time.Second
+	previousDiffGracePeriod = time.Minute
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
 
