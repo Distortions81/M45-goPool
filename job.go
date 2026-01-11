@@ -553,7 +553,15 @@ func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]in
 }
 
 func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
-	clean := jm.templateChanged(tpl)
+	needsNewJob, clean := jm.templateChanged(tpl)
+
+	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
+	// This avoids unnecessary job churn and duplicate JobIDs for the same work.
+	if !needsNewJob {
+		jm.updateBlockTipFromTemplate(tpl)
+		return nil
+	}
+
 	job, err := jm.buildJob(ctx, tpl)
 	if err != nil {
 		jm.recordJobError(err)
@@ -954,35 +962,40 @@ func validateBits(bitsStr, targetStr string) (*big.Int, error) {
 	return target, nil
 }
 
-func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) bool {
+// templateChanged returns (needsNewJob, clean).
+// needsNewJob is true if any meaningful change occurred (prev/height/bits/transactions).
+// clean is true only if prev/height/bits changed, indicating miners must discard old work.
+// Transaction-only changes require a new job (for updated merkle branches) but not clean=true,
+// allowing miners to continue using their current nonce range.
+func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, clean bool) {
 	jm.mu.RLock()
 	cur := jm.curJob
 	jm.mu.RUnlock()
 
 	if cur == nil {
-		return true
+		return true, true
 	}
 	prev := cur.Template
 
-	// Only treat a template as "new work" when previousblockhash, height or
-	// bits change. Changes to curtime or the transaction set alone do not
-	// invalidate existing jobs, allowing miners to continue working on
-	// slightly stale templates.
+	// Check if previousblockhash, height, or bits changed - these require clean=true.
 	if tpl.Previous != prev.Previous ||
 		tpl.Height != prev.Height ||
 		tpl.Bits != prev.Bits {
-		return true
+		return true, true
 	}
 
+	// Check if transactions changed - requires new job but not clean.
 	if len(tpl.Transactions) != len(prev.Transactions) {
-		return true
+		return true, false
 	}
 	for i, tx := range tpl.Transactions {
 		if tx.Txid != prev.Transactions[i].Txid {
-			return true
+			return true, false
 		}
 	}
-	return false
+
+	// No meaningful changes.
+	return false, false
 }
 
 func (jm *JobManager) CurrentJob() *Job {
