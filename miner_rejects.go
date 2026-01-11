@@ -343,6 +343,10 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	// The eviction logic below will handle cleanup when we exceed maxRecentJobs
 	if _, ok := mc.activeJobs[job.JobID]; !ok {
 		mc.jobOrder = append(mc.jobOrder, job.JobID)
+	} else {
+		// Job re-sent (e.g. difficulty change) - clear share cache since
+		// coinbase may have changed (dual-payout becoming active, etc.)
+		delete(mc.shareCache, job.JobID)
 	}
 	mc.activeJobs[job.JobID] = job
 	mc.lastJob = job
