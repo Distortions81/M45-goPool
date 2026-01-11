@@ -339,12 +339,8 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
-	if clean {
-		mc.activeJobs = make(map[string]*Job, mc.maxRecentJobs)
-		mc.shareCache = make(map[string]*duplicateShareSet, mc.maxRecentJobs)
-		mc.jobOrder = mc.jobOrder[:0]
-		mc.jobDifficulty = make(map[string]float64, mc.maxRecentJobs)
-	}
+	// No longer clear old jobs on clean - preserve them for miners with latency
+	// The eviction logic below will handle cleanup when we exceed maxRecentJobs
 	if _, ok := mc.activeJobs[job.JobID]; !ok {
 		mc.jobOrder = append(mc.jobOrder, job.JobID)
 	}
