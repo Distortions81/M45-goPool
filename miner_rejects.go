@@ -511,18 +511,19 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 		return false
 	}
 
-	accRate := 0.0
-	if snap.RollingHashrate > 0 {
-		accRate = (snap.RollingHashrate / hashPerShare) * 60
-	}
-
 	mc.resetShareWindow(now)
-	logger.Info("vardiff adjust",
-		"miner", mc.minerName(""),
-		"shares_per_min", accRate,
-		"old_diff", currentDiff,
-		"new_diff", newDiff,
-	)
+	if logger.Enabled(logLevelInfo) {
+		accRate := 0.0
+		if snap.RollingHashrate > 0 {
+			accRate = (snap.RollingHashrate / hashPerShare) * 60
+		}
+		logger.Info("vardiff adjust",
+			"miner", mc.minerName(""),
+			"shares_per_min", accRate,
+			"old_diff", currentDiff,
+			"new_diff", newDiff,
+		)
+	}
 	if mc.metrics != nil {
 		dir := "down"
 		if newDiff > currentDiff {
@@ -707,12 +708,14 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 	mc.lastDiffChange.Store(now.UnixNano())
 
 	target := mc.shareTarget.Load()
-	logger.Info("set difficulty",
-		"miner", mc.minerName(""),
-		"requested_diff", requested,
-		"clamped_diff", diff,
-		"share_target", fmt.Sprintf("%064x", target),
-	)
+	if logger.Enabled(logLevelInfo) {
+		logger.Info("set difficulty",
+			"miner", mc.minerName(""),
+			"requested_diff", requested,
+			"clamped_diff", diff,
+			"share_target", fmt.Sprintf("%064x", target),
+		)
+	}
 
 	msg := map[string]interface{}{
 		"id":     nil,

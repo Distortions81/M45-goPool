@@ -55,6 +55,13 @@ type simpleLogger struct {
 	closing     atomic.Bool
 }
 
+func (l *simpleLogger) Enabled(level logLevel) bool {
+	if l.closing.Load() {
+		return false
+	}
+	return level >= l.level
+}
+
 func newSimpleLogger() *simpleLogger {
 	l := &simpleLogger{
 		level:       logLevelError,
