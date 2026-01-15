@@ -76,7 +76,6 @@ type Job struct {
 const (
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
-	jobNotifyTimeout        = 500 * time.Millisecond
 )
 
 const (
@@ -1052,28 +1051,44 @@ func (jm *JobManager) broadcastJob(job *Job) {
 	}
 }
 
+// sendJobNonBlocking attempts to deliver the latest job to a subscriber channel
+// without blocking. If the channel is full, it drops one pending job and retries
+// so the subscriber converges to the newest template.
+func sendJobNonBlocking(ch chan *Job, job *Job) (dropped bool) {
+	select {
+	case ch <- job:
+		return false
+	default:
+	}
+
+	// Channel full: drop one stale job, then retry once.
+	select {
+	case <-ch:
+		dropped = true
+	default:
+	}
+	select {
+	case ch <- job:
+	default:
+		dropped = true
+	}
+	return dropped
+}
+
 // broadcastJobSync performs synchronous job notification (fallback only)
 func (jm *JobManager) broadcastJobSync(job *Job) {
-	// Snapshot subscribers under lock, then release before sending
 	jm.subsMu.Lock()
-	subs := make([]chan *Job, 0, len(jm.subs))
+	dropped := 0
+	subscribers := len(jm.subs)
 	for ch := range jm.subs {
-		subs = append(subs, ch)
+		if sendJobNonBlocking(ch, job) {
+			dropped++
+		}
 	}
 	jm.subsMu.Unlock()
 
-	// Send to each subscriber with timeout (no lock held)
-	timedOut := 0
-	for _, ch := range subs {
-		select {
-		case ch <- job:
-		case <-time.After(jobNotifyTimeout):
-			timedOut++
-		}
-	}
-
-	if timedOut > 0 {
-		logger.Warn("job broadcast timed out (sync)", "subscribers", len(subs), "timedOut", timedOut)
+	if dropped > 0 {
+		logger.Warn("job broadcast dropped stale updates (sync)", "subscribers", subscribers, "dropped", dropped)
 	}
 }
 
@@ -1090,28 +1105,20 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			// Snapshot subscribers under lock, then release before sending
-			// to avoid holding lock during potentially blocking operations
+			// Keep lock held during sends so Unsubscribe can't close channels
+			// concurrently. Sends are non-blocking (drop/replace semantics).
 			jm.subsMu.Lock()
-			subs := make([]chan *Job, 0, len(jm.subs))
+			dropped := 0
+			subscribers := len(jm.subs)
 			for ch := range jm.subs {
-				subs = append(subs, ch)
+				if sendJobNonBlocking(ch, job) {
+					dropped++
+				}
 			}
 			jm.subsMu.Unlock()
 
-			// Send to each subscriber with timeout (no lock held)
-			timedOut := 0
-			for _, ch := range subs {
-				select {
-				case ch <- job:
-					// Successfully sent
-				case <-time.After(jobNotifyTimeout):
-					timedOut++
-				}
-			}
-
-			if timedOut > 0 {
-				logger.Warn("job broadcast timed out", "worker", workerID, "subscribers", len(subs), "timedOut", timedOut)
+			if dropped > 0 {
+				logger.Warn("job broadcast dropped stale updates", "worker", workerID, "subscribers", subscribers, "dropped", dropped)
 			}
 		}
 	}
