@@ -56,20 +56,7 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 		en2Size = 4
 	}
 
-	var initialJob *Job
-	select {
-	case job := <-mc.jobCh:
-		initialJob = job
-	default:
-		initialJob = mc.jobMgr.CurrentJob()
-	}
-
-	if !mc.listenerOn {
-		mc.listenerOn = true
-		// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
-		// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
-		go mc.listenJobs()
-	}
+	initialJob := mc.jobMgr.CurrentJob()
 
 	mc.writeResponse(StratumResponse{
 		ID: req.ID,
@@ -102,6 +89,17 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 
 // Handle mining.authorize.
 func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
+	if !mc.subscribed {
+		logger.Warn("authorize rejected: not subscribed", "remote", mc.id)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(20, "subscribe required"),
+		})
+		mc.Close("authorize without subscribe")
+		return
+	}
+
 	worker := ""
 	if len(req.Params) > 0 {
 		if w, ok := req.Params[0].(string); ok {
@@ -134,10 +132,10 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	workerName := mc.updateWorker(worker)
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style
-		// address so we can construct dual-payout coinbases. Invalid workers are
-		// rejected immediately.
-		if workerName != "" {
-			if _, _, ok := mc.ensureWorkerWallet(workerName); !ok {
+	// address so we can construct dual-payout coinbases. Invalid workers are
+	// rejected immediately.
+	if workerName != "" {
+		if _, _, ok := mc.ensureWorkerWallet(workerName); !ok {
 			addr := workerBaseAddress(workerName)
 			if addr == "" {
 				addr = "(invalid)"
@@ -152,19 +150,19 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 				Error:  newStratumError(20, "wallet worker validation failed"),
 			}
 			mc.writeResponse(resp)
-				mc.Close("wallet validation failed")
-				return
-			}
-			// Assign a connection sequence before registering so the saved-workers
-			// dashboard can look up active connections via the worker registry.
-			mc.assignConnectionSeq()
-			mc.registerWorker(workerName)
+			mc.Close("wallet validation failed")
+			return
 		}
+		// Assign a connection sequence before registering so the saved-workers
+		// dashboard can look up active connections via the worker registry.
+		mc.assignConnectionSeq()
+		mc.registerWorker(workerName)
+	}
 
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
-		mc.authorized = true
+	mc.authorized = true
 
 	resp := StratumResponse{
 		ID:     req.ID,
@@ -172,6 +170,24 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 		Error:  nil,
 	}
 	mc.writeResponse(resp)
+
+	if !mc.listenerOn {
+		// Drain any buffered notifications that may have accumulated between
+		// subscribe and authorize; we'll send the current job explicitly below.
+		for {
+			select {
+			case <-mc.jobCh:
+			default:
+				goto drained
+			}
+		}
+	drained:
+
+		mc.listenerOn = true
+		// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
+		// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
+		go mc.listenJobs()
+	}
 
 	// Now that the worker is authorized and its wallet-style ID is known
 	// to be valid, send initial difficulty and a job so hashing can start.

@@ -163,7 +163,32 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 	nonce := params.nonce
 	submittedVersion := params.submittedVersion
 
-	workerName := mc.updateWorker(worker)
+	if !mc.authorized {
+		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("unauthorized")
+		}
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "unauthorized")})
+		return submissionTask{}, false
+	}
+
+	authorizedWorker := strings.TrimSpace(mc.currentWorker())
+	submitWorker := strings.TrimSpace(worker)
+	if authorizedWorker != "" && submitWorker != authorizedWorker {
+		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
+		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("worker_mismatch")
+		}
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "unauthorized")})
+		return submissionTask{}, false
+	}
+
+	workerName := authorizedWorker
+	if workerName == "" {
+		workerName = worker
+	}
 	if mc.isBanned(now) {
 		until, reason, _ := mc.banDetails()
 		logger.Warn("submit rejected: banned", "miner", mc.minerName(workerName), "ban_until", until, "reason", reason)
