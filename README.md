@@ -74,6 +74,7 @@ Solo Bitcoin pool that connects to Bitcoin Core (`bitcoind`) over JSON-RPC + ZMQ
 - Certificates:
   - On first run, goPool generates a self-signed cert at `data/tls_cert.pem` / `data/tls_key.pem`.
   - Replacing those files (e.g. with certbot output) is supported; goPool auto-reloads the cert hourly.
+  - Helper script: `scripts/certbot-gopool.sh` can run certbot and then link/copy `fullchain.pem` + `privkey.pem` into `data/tls_cert.pem` + `data/tls_key.pem`.
 - Live reload:
   - `SIGUSR1` reloads HTML templates.
   - `SIGUSR2` reloads config/secrets/tuning for status pages (restart for listener/auth-path changes).
