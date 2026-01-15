@@ -352,26 +352,39 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastClean = clean
 
 	// Evict oldest jobs if we exceed the max limit
-	now := time.Now()
+	dupEnabled := mc.cfg.CheckDuplicateShares
+	now := time.Time{}
 	for len(mc.jobOrder) > mc.maxRecentJobs && len(mc.jobOrder) > 0 {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
 		delete(mc.activeJobs, oldest)
-		// Move share cache to evicted storage instead of deleting
-		if cache := mc.shareCache[oldest]; cache != nil {
-			mc.evictedShareCache[oldest] = &evictedCacheEntry{
-				cache:     cache,
-				evictedAt: now,
+		if dupEnabled {
+			if cache := mc.shareCache[oldest]; cache != nil {
+				if now.IsZero() {
+					now = time.Now()
+				}
+				if mc.evictedShareCache == nil {
+					mc.evictedShareCache = make(map[string]*evictedCacheEntry)
+				}
+				mc.evictedShareCache[oldest] = &evictedCacheEntry{
+					cache:     cache,
+					evictedAt: now,
+				}
 			}
 		}
 		delete(mc.shareCache, oldest)
 		delete(mc.jobDifficulty, oldest)
 	}
 
-	// Clean up expired evicted caches
-	for jobID, entry := range mc.evictedShareCache {
-		if now.Sub(entry.evictedAt) > evictedShareCacheGrace {
-			delete(mc.evictedShareCache, jobID)
+	if dupEnabled && mc.evictedShareCache != nil {
+		if now.IsZero() {
+			now = time.Now()
+		}
+		// Clean up expired evicted caches
+		for jobID, entry := range mc.evictedShareCache {
+			if now.Sub(entry.evictedAt) > evictedShareCacheGrace {
+				delete(mc.evictedShareCache, jobID)
+			}
 		}
 	}
 }
@@ -454,6 +467,14 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionH
 
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
+
+	if mc.shareCache == nil {
+		// Allocate lazily so disabling duplicate checks avoids per-connection maps.
+		mc.shareCache = make(map[string]*duplicateShareSet, mc.maxRecentJobs)
+	}
+	if mc.evictedShareCache == nil {
+		mc.evictedShareCache = make(map[string]*evictedCacheEntry)
+	}
 
 	var dk duplicateShareKey
 	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, versionHex)

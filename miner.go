@@ -696,37 +696,44 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		initialDiff = cfg.MinDifficulty
 	}
 
+	var shareCache map[string]*duplicateShareSet
+	var evictedShareCache map[string]*evictedCacheEntry
+	if cfg.CheckDuplicateShares {
+		shareCache = make(map[string]*duplicateShareSet, maxRecentJobs)
+		evictedShareCache = make(map[string]*evictedCacheEntry)
+	}
+
 	mc := &MinerConn{
-		ctx:             ctx,
-		id:              c.RemoteAddr().String(),
-		conn:            c,
-		writer:          bufio.NewWriter(c),
-		reader:          bufio.NewReaderSize(c, maxStratumMessageSize),
-		jobMgr:          jobMgr,
-		rpc:             rpc,
-		cfg:             cfg,
-		extranonce1:     en1,
-		jobCh:           jobCh,
-		vardiff:         vdiff,
-		metrics:         metrics,
-		accounting:      accounting,
-		workerRegistry:  workerRegistry,
-		activeJobs:      make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
-		connectedAt:     now,
-		lastActivity:    now,
-		jobDifficulty:   make(map[string]float64, maxRecentJobs),            // Pre-allocate for expected job count
-		shareCache:        make(map[string]*duplicateShareSet, maxRecentJobs), // Pre-allocate for expected job count
-		evictedShareCache: make(map[string]*evictedCacheEntry),
+		ctx:               ctx,
+		id:                c.RemoteAddr().String(),
+		conn:              c,
+		writer:            bufio.NewWriter(c),
+		reader:            bufio.NewReaderSize(c, maxStratumMessageSize),
+		jobMgr:            jobMgr,
+		rpc:               rpc,
+		cfg:               cfg,
+		extranonce1:       en1,
+		jobCh:             jobCh,
+		vardiff:           vdiff,
+		metrics:           metrics,
+		accounting:        accounting,
+		workerRegistry:    workerRegistry,
+		activeJobs:        make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
+		connectedAt:       now,
+		lastActivity:      now,
+		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
+		shareCache:        shareCache,
+		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,
-		lastPenalty:     time.Now(),
-		versionRoll:     false,
-		versionMask:     0,
-		poolMask:        mask,
-		minerMask:       0,
-		minVerBits:      minBits,
-		bootstrapDone:   false,
-		isTLSConnection: isTLS,
-		statsUpdates:    make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
+		lastPenalty:       time.Now(),
+		versionRoll:       false,
+		versionMask:       0,
+		poolMask:          mask,
+		minerMask:         0,
+		minVerBits:        minBits,
+		bootstrapDone:     false,
+		isTLSConnection:   isTLS,
+		statsUpdates:      make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
 	}
 
 	// Initialize atomic fields

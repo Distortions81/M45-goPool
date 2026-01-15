@@ -303,7 +303,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		return submissionTask{}, false
 	}
 
-	if mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
+	if mc.cfg.CheckDuplicateShares && mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
 		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
 		mc.rejectShareWithBan(req, workerName, rejectDuplicateShare, 22, "duplicate share", now)
 		return submissionTask{}, false

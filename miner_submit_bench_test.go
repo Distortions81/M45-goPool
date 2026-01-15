@@ -68,9 +68,14 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 		extranonce1:    []byte{0x01, 0x02, 0x03, 0x04},
 		lockDifficulty: true,
 		connectedAt:    time.Now(),
-		jobDifficulty:  make(map[string]float64, 1),
-		shareCache:     make(map[string]*duplicateShareSet, 1),
-		maxRecentJobs:  1,
+		authorized:     true,
+		subscribed:     true,
+		stats: MinerStats{
+			Worker:       "worker1",
+			WorkerSHA256: workerNameHash("worker1"),
+		},
+		jobDifficulty: make(map[string]float64, 1),
+		maxRecentJobs: 1,
 		// Leave statsUpdates nil so recordShare executes synchronously; the
 		// CPU cost is still representative, without goroutine scheduling noise.
 		statsUpdates: nil,
@@ -189,4 +194,82 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare(b *testing.B) {
 			}
 		}
 	}
+}
+
+func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckDisabled(b *testing.B) {
+	job := benchmarkSubmitJob(b)
+	metrics := NewPoolMetrics()
+
+	ntimeHex := fmt.Sprintf("%08x", uint32(job.Template.CurTime))
+	jobID := job.JobID
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		mc := benchmarkMinerConnForSubmit(metrics)
+		mc.cfg.CheckDuplicateShares = false
+		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.jobMu.Lock()
+		mc.activeJobs = map[string]*Job{jobID: job}
+		mc.lastJob = job
+		mc.jobDifficulty[jobID] = 1e-12
+		mc.jobMu.Unlock()
+
+		var i uint32
+		for pb.Next() {
+			i++
+			nonceHex := fmt.Sprintf("%08x", i)
+			en2Hex := fmt.Sprintf("%08x", i^0x9e3779b9)
+
+			req := &StratumRequest{
+				ID:     1,
+				Method: "mining.submit",
+				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+			}
+
+			now := time.Unix(1700000000+int64(i), 0)
+			if _, ok := mc.prepareSubmissionTask(req, now); !ok {
+				b.Fatalf("prepareSubmissionTask unexpectedly rejected a bench share")
+			}
+		}
+	})
+}
+
+func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckEnabled(b *testing.B) {
+	job := benchmarkSubmitJob(b)
+	metrics := NewPoolMetrics()
+
+	ntimeHex := fmt.Sprintf("%08x", uint32(job.Template.CurTime))
+	jobID := job.JobID
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		mc := benchmarkMinerConnForSubmit(metrics)
+		mc.cfg.CheckDuplicateShares = true
+		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.jobMu.Lock()
+		mc.activeJobs = map[string]*Job{jobID: job}
+		mc.lastJob = job
+		mc.jobDifficulty[jobID] = 1e-12
+		mc.jobMu.Unlock()
+
+		var i uint32
+		for pb.Next() {
+			i++
+			nonceHex := fmt.Sprintf("%08x", i)
+			en2Hex := fmt.Sprintf("%08x", i^0x9e3779b9)
+
+			req := &StratumRequest{
+				ID:     1,
+				Method: "mining.submit",
+				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+			}
+
+			now := time.Unix(1700000000+int64(i), 0)
+			if _, ok := mc.prepareSubmissionTask(req, now); !ok {
+				b.Fatalf("prepareSubmissionTask unexpectedly rejected a bench share")
+			}
+		}
+	})
 }
