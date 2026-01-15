@@ -238,6 +238,7 @@ func main() {
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)
 	metrics.SetBestSharesDB(cfg.DataDir)
+	migrateLegacyStateFiles(cfg.DataDir)
 	clerkVerifier, clerkErr := NewClerkVerifier(cfg)
 	if clerkErr != nil {
 		logger.Warn("initialize clerk verifier", "error", clerkErr)
