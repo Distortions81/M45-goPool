@@ -76,6 +76,7 @@ type Job struct {
 const (
 	jobSubscriberBuffer     = 4
 	coinbaseExtranonce1Size = 4
+	jobNotifyTimeout        = 500 * time.Millisecond
 )
 
 const (
@@ -1053,20 +1054,26 @@ func (jm *JobManager) broadcastJob(job *Job) {
 
 // broadcastJobSync performs synchronous job notification (fallback only)
 func (jm *JobManager) broadcastJobSync(job *Job) {
+	// Snapshot subscribers under lock, then release before sending
 	jm.subsMu.Lock()
-	blocked := 0
-	subscribers := len(jm.subs)
+	subs := make([]chan *Job, 0, len(jm.subs))
 	for ch := range jm.subs {
-		select {
-		case ch <- job:
-		default:
-			blocked++
-		}
+		subs = append(subs, ch)
 	}
 	jm.subsMu.Unlock()
 
-	if blocked > 0 {
-		logger.Warn("job broadcast blocked; dropping update", "subscribers", subscribers, "blocked", blocked)
+	// Send to each subscriber with timeout (no lock held)
+	timedOut := 0
+	for _, ch := range subs {
+		select {
+		case ch <- job:
+		case <-time.After(jobNotifyTimeout):
+			timedOut++
+		}
+	}
+
+	if timedOut > 0 {
+		logger.Warn("job broadcast timed out (sync)", "subscribers", len(subs), "timedOut", timedOut)
 	}
 }
 
@@ -1083,24 +1090,28 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			// Send directly to all subscribers - no snapshot needed since
-			// the send operations are non-blocking (select/default)
+			// Snapshot subscribers under lock, then release before sending
+			// to avoid holding lock during potentially blocking operations
 			jm.subsMu.Lock()
-			blocked := 0
-			subscriberCount := len(jm.subs)
+			subs := make([]chan *Job, 0, len(jm.subs))
 			for ch := range jm.subs {
-				select {
-				case ch <- job:
-					// Successfully sent
-				default:
-					// Channel full, drop the notification
-					blocked++
-				}
+				subs = append(subs, ch)
 			}
 			jm.subsMu.Unlock()
 
-			if blocked > 0 {
-				logger.Warn("job broadcast blocked; dropping update", "worker", workerID, "subscribers", subscriberCount, "blocked", blocked)
+			// Send to each subscriber with timeout (no lock held)
+			timedOut := 0
+			for _, ch := range subs {
+				select {
+				case ch <- job:
+					// Successfully sent
+				case <-time.After(jobNotifyTimeout):
+					timedOut++
+				}
+			}
+
+			if timedOut > 0 {
+				logger.Warn("job broadcast timed out", "worker", workerID, "subscribers", len(subs), "timedOut", timedOut)
 			}
 		}
 	}
