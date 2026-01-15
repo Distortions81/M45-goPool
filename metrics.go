@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"math"
 	"os"
 	"path/filepath"
@@ -57,7 +58,8 @@ type PoolMetrics struct {
 	bestShares     [defaultBestShareLimit]BestShare
 	bestShareCount int
 	bestSharesMu   sync.RWMutex
-	bestSharesFile string
+	bestSharesDB   *sql.DB
+	bestSharesDBMu sync.Mutex
 	bestShareChan  chan BestShare
 
 	// Simple RPC latency summaries for diagnostics (seconds).
@@ -141,20 +143,60 @@ func (m *PoolMetrics) RemoveConnectionHashrate(connSeq uint64) {
 }
 
 func (m *PoolMetrics) SetBestSharesFile(path string) {
-	if m == nil || path == "" {
+	if m == nil {
 		return
 	}
-	m.bestSharesFile = path
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		logger.Warn("create best shares directory", "error", err, "path", filepath.Dir(path))
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
 	}
-	if err := m.loadBestSharesFile(path); err != nil {
-		logger.Warn("load best shares file", "error", err, "path", path)
+	// Historically this accepted a file path under `data_dir/state/`.
+	// Keep the signature but treat the parent `data_dir` as the DB location.
+	dataDir := filepath.Dir(filepath.Dir(path))
+	m.SetBestSharesDB(dataDir)
+}
+
+func (m *PoolMetrics) SetBestSharesDB(dataDir string) {
+	if m == nil {
+		return
+	}
+	if strings.TrimSpace(dataDir) == "" {
+		dataDir = defaultDataDir
+	}
+
+	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
+	if err != nil {
+		logger.Warn("open best shares sqlite db", "error", err)
+		return
+	}
+
+	m.bestSharesDBMu.Lock()
+	if m.bestSharesDB != nil {
+		_ = m.bestSharesDB.Close()
+	}
+	m.bestSharesDB = db
+	m.bestSharesDBMu.Unlock()
+
+	legacy := filepath.Join(strings.TrimSpace(dataDir), "state", "best_shares.json")
+	if err := m.migrateBestSharesFileToDB(legacy); err != nil {
+		logger.Warn("migrate best shares file to sqlite", "error", err, "path", legacy)
+	}
+	if err := m.loadBestSharesFromDB(); err != nil {
+		logger.Warn("load best shares from sqlite", "error", err)
 	}
 }
 
-func (m *PoolMetrics) loadBestSharesFile(path string) error {
-	if m == nil || path == "" {
+func (m *PoolMetrics) migrateBestSharesFileToDB(path string) error {
+	if m == nil || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	m.bestSharesDBMu.Lock()
+	db := m.bestSharesDB
+	m.bestSharesDBMu.Unlock()
+	if done, err := hasStateMigration(db, stateMigrationBestSharesJSON); err == nil && done {
+		if err := renameLegacyFileToOld(path); err != nil {
+			logger.Warn("rename legacy best shares file", "error", err, "from", path)
+		}
 		return nil
 	}
 	data, err := os.ReadFile(path)
@@ -194,14 +236,67 @@ func (m *PoolMetrics) loadBestSharesFile(path string) error {
 			rewrote = true
 		}
 	}
-	if rewrote {
-		// Opportunistically rewrite legacy files so long worker names aren't kept on disk.
-		// This happens during startup when SetBestSharesFile calls loadBestSharesFile.
-		m.persistBestShares(shares)
+	_ = rewrote
+
+	if err := m.persistBestSharesToDB(sanitizeBestSharesForDB(shares)); err != nil {
+		return err
+	}
+	_ = recordStateMigration(db, stateMigrationBestSharesJSON, time.Now())
+	if err := renameLegacyFileToOld(path); err != nil {
+		logger.Warn("rename legacy best shares file", "error", err, "from", path)
+	}
+	return nil
+}
+
+func (m *PoolMetrics) loadBestSharesFromDB() error {
+	if m == nil {
+		return nil
+	}
+	m.bestSharesDBMu.Lock()
+	db := m.bestSharesDB
+	m.bestSharesDBMu.Unlock()
+	if db == nil {
+		return nil
+	}
+
+	rows, err := db.Query("SELECT worker, difficulty, timestamp_unix, hash FROM best_shares ORDER BY position ASC")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var shares []BestShare
+	for rows.Next() {
+		var (
+			worker string
+			diff   float64
+			tsUnix int64
+			hash   sql.NullString
+		)
+		if err := rows.Scan(&worker, &diff, &tsUnix, &hash); err != nil {
+			return err
+		}
+		if diff <= 0 {
+			continue
+		}
+		s := BestShare{
+			Worker:     strings.TrimSpace(worker),
+			Difficulty: diff,
+			Hash:       strings.TrimSpace(hash.String),
+		}
+		if tsUnix > 0 {
+			s.Timestamp = time.Unix(tsUnix, 0).UTC()
+		}
+		shares = append(shares, s)
+		if len(shares) >= defaultBestShareLimit {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	m.bestSharesMu.Lock()
-	defer m.bestSharesMu.Unlock()
 	m.bestShareCount = 0
 	for _, share := range shares {
 		if share.Difficulty <= 0 {
@@ -213,6 +308,7 @@ func (m *PoolMetrics) loadBestSharesFile(path string) error {
 		m.bestShares[m.bestShareCount] = share
 		m.bestShareCount++
 	}
+	m.bestSharesMu.Unlock()
 	return nil
 }
 
@@ -653,7 +749,10 @@ func (m *PoolMetrics) recordBestShare(share BestShare) {
 	}
 
 	var snapshot []BestShare
-	if m.bestSharesFile != "" && m.bestShareCount > 0 {
+	m.bestSharesDBMu.Lock()
+	hasDB := m.bestSharesDB != nil
+	m.bestSharesDBMu.Unlock()
+	if hasDB && m.bestShareCount > 0 {
 		snapshot = make([]BestShare, m.bestShareCount)
 		copy(snapshot, m.bestShares[:m.bestShareCount])
 	}
@@ -674,28 +773,58 @@ func sanitizeLabel(val, fallback string) string {
 }
 
 func (m *PoolMetrics) persistBestShares(shares []BestShare) {
-	if m == nil || len(shares) == 0 || m.bestSharesFile == "" {
+	if m == nil || len(shares) == 0 {
 		return
 	}
-	data, err := sonic.ConfigDefault.MarshalIndent(sanitizeBestSharesForFile(shares), "", "  ")
-	if err != nil {
-		logger.Warn("marshal best shares", "error", err)
-		return
-	}
-	tmp := m.bestSharesFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		logger.Warn("write best shares temp file", "error", err, "path", tmp)
-		return
-	}
-	if err := os.Rename(tmp, m.bestSharesFile); err != nil {
-		logger.Warn("rename best shares file", "error", err, "tmp", tmp, "target", m.bestSharesFile)
-		return
+	shares = sanitizeBestSharesForDB(shares)
+	if err := m.persistBestSharesToDB(shares); err != nil {
+		logger.Warn("persist best shares to sqlite", "error", err)
 	}
 }
 
-// sanitizeBestSharesForFile censors worker names so persisted files don't retain
+func (m *PoolMetrics) persistBestSharesToDB(shares []BestShare) error {
+	if m == nil || len(shares) == 0 {
+		return nil
+	}
+	m.bestSharesDBMu.Lock()
+	db := m.bestSharesDB
+	m.bestSharesDBMu.Unlock()
+	if db == nil {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("DELETE FROM best_shares"); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare("INSERT INTO best_shares (position, worker, difficulty, timestamp_unix, hash) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i := range shares {
+		if i >= defaultBestShareLimit {
+			break
+		}
+		s := shares[i]
+		if s.Difficulty <= 0 {
+			continue
+		}
+		if _, err := stmt.Exec(i, strings.TrimSpace(s.Worker), s.Difficulty, unixOrZero(s.Timestamp), strings.TrimSpace(s.Hash)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// sanitizeBestSharesForDB censors worker names so persisted state doesn't retain
 // sensitive identifiers.
-func sanitizeBestSharesForFile(shares []BestShare) []BestShare {
+func sanitizeBestSharesForDB(shares []BestShare) []BestShare {
 	if len(shares) == 0 {
 		return nil
 	}

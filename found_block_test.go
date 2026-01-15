@@ -10,8 +10,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -484,38 +482,17 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	}
 	appendPendingSubmissionRecord(pendingPath, rec)
 
-	// Verify the pending log exists and contains our record
-	data, err := os.ReadFile(pendingPath)
+	db, err := openStateDB(stateDBPathFromDataDir(cfg.DataDir))
 	if err != nil {
-		t.Fatalf("read pending log: %v", err)
+		t.Fatalf("openStateDB: %v", err)
 	}
-
-	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
-	if len(lines) == 0 {
-		t.Fatal("pending log is empty")
+	defer db.Close()
+	var status string
+	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", hashHex).Scan(&status); err != nil {
+		t.Fatalf("query pending submission: %v", err)
 	}
-
-	var foundRecord bool
-	for _, line := range lines {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		var r pendingSubmissionRecord
-		if err := json.Unmarshal(line, &r); err != nil {
-			t.Fatalf("unmarshal pending record: %v", err)
-		}
-		if strings.EqualFold(r.Hash, hashHex) && r.Height == job.Template.Height {
-			foundRecord = true
-			if r.Status != "pending" {
-				t.Errorf("expected status 'pending', got '%s'", r.Status)
-			}
-			break
-		}
-	}
-
-	if !foundRecord {
-		t.Fatal("pending submission record not found in log")
+	if status != "pending" {
+		t.Errorf("expected status 'pending', got '%s'", status)
 	}
 
 	t.Logf("Failed block submission logged to pending log for height %d", job.Template.Height)

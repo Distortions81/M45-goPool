@@ -237,7 +237,7 @@ func main() {
 	startTime := time.Now()
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)
-	metrics.SetBestSharesFile(filepath.Join(cfg.DataDir, "state", "best_shares.json"))
+	metrics.SetBestSharesDB(cfg.DataDir)
 	clerkVerifier, clerkErr := NewClerkVerifier(cfg)
 	if clerkErr != nil {
 		logger.Warn("initialize clerk verifier", "error", clerkErr)
@@ -285,7 +285,7 @@ func main() {
 	// can see connection state while bitcoind starts up.
 	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
 	statusServer.startOneTimeCodeJanitor(ctx)
-	statusServer.loadOneTimeCodesFromDisk(cfg.DataDir)
+	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)
 	statusServer.startOneTimeCodePersistence(ctx)
 	// Opportunistically warm node-info cache from normal RPC traffic without
 	// changing how callers issue RPCs.

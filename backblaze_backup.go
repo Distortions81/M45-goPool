@@ -23,12 +23,12 @@ type dbBackuper interface {
 type backblazeBackupService struct {
 	bucket       *b2.Bucket
 	dbPath       string
+	stateDB      *sql.DB
 	interval     time.Duration
 	objectPrefix string
 
 	lastBackup      time.Time
 	lastDataVersion int64
-	lastBackupPath  string
 	snapshotPath    string
 }
 
@@ -36,6 +36,7 @@ const lastBackupStampFilename = "last_backup"
 const legacyBackblazeLastBackupFilename = "backblaze_last_backup"
 const backupLocalCopySuffix = ".bak"
 const legacyBackblazeLocalCopySuffix = ".b2last"
+const backupStateKeyWorkerDB = "worker_db"
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
 	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy && strings.TrimSpace(cfg.BackupSnapshotPath) == "" {
@@ -75,23 +76,37 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		return nil, fmt.Errorf("create state dir for backblaze timestamp: %w", err)
 	}
 
-	lastBackupPath := filepath.Join(stateDir, lastBackupStampFilename)
-	lastBackup, lastDataVersion, err := readLastBackupStamp(lastBackupPath)
+	stateDB, err := openStateDB(dbPath)
 	if err != nil {
-		logger.Warn("read last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
+		return nil, fmt.Errorf("open sqlite state db: %w", err)
 	}
-	if _, statErr := os.Stat(lastBackupPath); statErr != nil && errors.Is(statErr, os.ErrNotExist) {
-		legacyPath := filepath.Join(stateDir, legacyBackblazeLastBackupFilename)
-		legacyBackup, legacyDataVersion, legacyErr := readLastBackupStamp(legacyPath)
-		if legacyErr != nil {
-			logger.Warn("read legacy last backup stamp failed (ignored)", "error", legacyErr, "path", legacyPath)
-		} else if !legacyBackup.IsZero() || legacyDataVersion != 0 {
+
+	lastBackup, lastDataVersion, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDB)
+	if err != nil {
+		logger.Warn("read last backup stamp from sqlite failed (ignored)", "error", err)
+	}
+
+	lastBackupPath := filepath.Join(stateDir, lastBackupStampFilename)
+	legacyPath := filepath.Join(stateDir, legacyBackblazeLastBackupFilename)
+	if lastBackup.IsZero() && lastDataVersion == 0 {
+		if legacyBackup, legacyDataVersion, legacyErr := readLastBackupStampFile(lastBackupPath); legacyErr == nil && (!legacyBackup.IsZero() || legacyDataVersion != 0) {
 			lastBackup = legacyBackup
 			lastDataVersion = legacyDataVersion
-			if err := writeLastBackupStamp(lastBackupPath, legacyBackup, legacyDataVersion); err != nil {
-				logger.Warn("migrate legacy last backup stamp failed (ignored)", "error", err, "path", lastBackupPath)
+		} else if legacyBackup, legacyDataVersion, legacyErr := readLastBackupStampFile(legacyPath); legacyErr == nil && (!legacyBackup.IsZero() || legacyDataVersion != 0) {
+			lastBackup = legacyBackup
+			lastDataVersion = legacyDataVersion
+		}
+		if !lastBackup.IsZero() || lastDataVersion != 0 {
+			if err := writeLastBackupStampToDB(stateDB, backupStateKeyWorkerDB, lastBackup, lastDataVersion); err != nil {
+				logger.Warn("migrate last backup stamp to sqlite failed (ignored)", "error", err)
 			} else {
-				logger.Info("migrated legacy last backup stamp", "from", legacyPath, "to", lastBackupPath)
+				_ = recordStateMigration(stateDB, stateMigrationBackupStampFiles, time.Now())
+				if err := renameLegacyFileToOld(lastBackupPath); err != nil {
+					logger.Warn("rename legacy backup stamp file", "error", err, "from", lastBackupPath)
+				}
+				if err := renameLegacyFileToOld(legacyPath); err != nil {
+					logger.Warn("rename legacy backup stamp file", "error", err, "from", legacyPath)
+				}
 			}
 		}
 	}
@@ -121,12 +136,12 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	return &backblazeBackupService{
 		bucket:       bucket,
 		dbPath:       dbPath,
+		stateDB:      stateDB,
 		objectPrefix: objectPrefix,
 		interval:     interval,
 		lastBackup:   lastBackup,
 
 		lastDataVersion: lastDataVersion,
-		lastBackupPath:  lastBackupPath,
 		snapshotPath:    snapshotPath,
 	}, nil
 }
@@ -203,8 +218,8 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	s.lastBackup = now
 	s.lastDataVersion = stampDataVersion
-	if err := writeLastBackupStamp(s.lastBackupPath, now, stampDataVersion); err != nil {
-		logger.Warn("record backup timestamp", "error", err, "path", s.lastBackupPath)
+	if err := writeLastBackupStampToDB(s.stateDB, backupStateKeyWorkerDB, now, stampDataVersion); err != nil {
+		logger.Warn("record backup timestamp", "error", err)
 	}
 	if uploaded {
 		logger.Info("backblaze backup uploaded", "object", s.objectName())
@@ -286,7 +301,51 @@ func atomicCopyFile(srcPath, dstPath string, mode os.FileMode) error {
 	return nil
 }
 
-func readLastBackupStamp(path string) (time.Time, int64, error) {
+func readLastBackupStampFromDB(db *sql.DB, key string) (time.Time, int64, error) {
+	if db == nil {
+		return time.Time{}, 0, nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return time.Time{}, 0, nil
+	}
+	var (
+		lastBackupUnix int64
+		dataVersion    int64
+	)
+	if err := db.QueryRow("SELECT last_backup_unix, data_version FROM backup_state WHERE key = ?", key).Scan(&lastBackupUnix, &dataVersion); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return time.Time{}, 0, nil
+		}
+		return time.Time{}, 0, err
+	}
+	if lastBackupUnix <= 0 {
+		return time.Time{}, dataVersion, nil
+	}
+	return time.Unix(lastBackupUnix, 0), dataVersion, nil
+}
+
+func writeLastBackupStampToDB(db *sql.DB, key string, ts time.Time, dataVersion int64) error {
+	if db == nil {
+		return nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	now := time.Now().Unix()
+	_, err := db.Exec(`
+		INSERT INTO backup_state (key, last_backup_unix, data_version, updated_at_unix)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET
+			last_backup_unix = excluded.last_backup_unix,
+			data_version = excluded.data_version,
+			updated_at_unix = excluded.updated_at_unix
+	`, key, unixOrZero(ts), dataVersion, now)
+	return err
+}
+
+func readLastBackupStampFile(path string) (time.Time, int64, error) {
 	if strings.TrimSpace(path) == "" {
 		return time.Time{}, 0, os.ErrInvalid
 	}
@@ -310,18 +369,6 @@ func readLastBackupStamp(path string) (time.Time, int64, error) {
 		dataVersion, _ = strconv.ParseInt(strings.TrimSpace(lines[1]), 10, 64)
 	}
 	return ts, dataVersion, nil
-}
-
-func writeLastBackupStamp(path string, ts time.Time, dataVersion int64) error {
-	if strings.TrimSpace(path) == "" {
-		return nil
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	data := []byte(ts.UTC().Format(time.RFC3339Nano) + "\n" + strconv.FormatInt(dataVersion, 10) + "\n")
-	return os.WriteFile(path, data, 0o644)
 }
 
 func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {

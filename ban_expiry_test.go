@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,79 +11,51 @@ import (
 // permanent and still-active entries.
 func TestBanListPersistPrunesExpired(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bans.json")
+	dbPath := filepath.Join(dir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
 
 	now := time.Now()
 	expiredTime := now.Add(-time.Hour)
 	futureTime := now.Add(time.Hour)
 
-	bl := &banList{
-		entries: map[string]banEntry{
-			"expired": {
-				Worker: "expired",
-				Until:  expiredTime,
-				Reason: "too many invalid shares",
-			},
-			"permanent": {
-				Worker: "permanent",
-				// Until zero => permanent ban
-				Until:  time.Time{},
-				Reason: "manual ban",
-			},
-			"active": {
-				Worker: "active",
-				Until:  futureTime,
-				Reason: "temporary ban",
-			},
-		},
-		path: path,
+	// Insert expired, permanent, and active bans.
+	if _, err := db.Exec(`INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix) VALUES (?, ?, ?, ?, ?)`,
+		"expired", workerNameHash("expired"), expiredTime.Unix(), "too many invalid shares", now.Unix()); err != nil {
+		t.Fatalf("insert expired ban: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix) VALUES (?, ?, ?, ?, ?)`,
+		"permanent", workerNameHash("permanent"), int64(0), "manual ban", now.Unix()); err != nil {
+		t.Fatalf("insert permanent ban: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix) VALUES (?, ?, ?, ?, ?)`,
+		"active", workerNameHash("active"), futureTime.Unix(), "temporary ban", now.Unix()); err != nil {
+		t.Fatalf("insert active ban: %v", err)
 	}
 
-	if err := bl.persistLocked(); err != nil {
-		t.Fatalf("persistLocked error: %v", err)
-	}
-
-	// Expired entry should be removed from the in-memory map.
-	if _, ok := bl.entries["expired"]; ok {
-		t.Fatalf("expected expired ban to be pruned from entries")
-	}
-	// Permanent and active entries should remain.
-	if _, ok := bl.entries["permanent"]; !ok {
-		t.Fatalf("expected permanent ban to remain in entries")
-	}
-	if _, ok := bl.entries["active"]; !ok {
-		t.Fatalf("expected active ban to remain in entries")
-	}
-
-	// File should exist and contain only the non-expired entries.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read ban file error: %v", err)
-	}
-	bans, err := decodeBanEntries(data)
-	if err != nil {
-		t.Fatalf("decodeBanEntries error: %v", err)
-	}
-
-	if len(bans) != 2 {
-		t.Fatalf("expected 2 bans on disk, got %d", len(bans))
+	bans := &banStore{db: db}
+	if err := bans.cleanExpired(now); err != nil {
+		t.Fatalf("cleanExpired error: %v", err)
 	}
 
 	seen := make(map[string]banEntry)
-	for _, b := range bans {
+	for _, b := range bans.snapshot(now) {
 		seen[b.Worker] = b
 	}
 	if _, ok := seen["expired"]; ok {
-		t.Fatalf("expired ban should not be persisted on disk")
+		t.Fatalf("expired ban should be pruned")
 	}
 	if p, ok := seen["permanent"]; !ok {
-		t.Fatalf("permanent ban missing on disk")
+		t.Fatalf("permanent ban missing")
 	} else if !p.Until.IsZero() {
 		t.Fatalf("permanent ban should have zero Until, got %v", p.Until)
 	}
 	if a, ok := seen["active"]; !ok {
-		t.Fatalf("active ban missing on disk")
+		t.Fatalf("active ban missing")
 	} else if !a.Until.After(now) {
-		t.Fatalf("active ban Until should be in the future relative to persist time, got %v (now %v)", a.Until, now)
+		t.Fatalf("active ban Until should be in the future, got %v (now %v)", a.Until, now)
 	}
 }

@@ -32,11 +32,16 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", path+"?_foreign_keys=1&_journal=WAL")
+	db, err := sql.Open("sqlite", path+"?_foreign_keys=1&_journal=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	if err := ensureStateTables(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

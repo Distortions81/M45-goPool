@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -237,12 +239,16 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	path := filepath.Join(dataDir, "state", "found_blocks.jsonl")
-	f, err := os.Open(path)
+	legacyPath := filepath.Join(dataDir, "state", "found_blocks.jsonl")
+	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer db.Close()
+
+	if err := migrateFoundBlocksJSONLToDB(db, legacyPath); err != nil {
+		logger.Warn("migrate found block log to sqlite", "error", err)
+	}
 
 	type foundRecord struct {
 		Timestamp        time.Time `json:"timestamp"`
@@ -255,14 +261,29 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 	}
 
 	var recs []FoundBlockView
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(strings.TrimSpace(string(line))) == 0 {
+	q := "SELECT json FROM found_blocks_log ORDER BY id DESC"
+	args := []any{}
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			continue
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
 		var r foundRecord
-		if err := sonic.Unmarshal(line, &r); err != nil {
+		if err := sonic.Unmarshal([]byte(line), &r); err != nil {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(r.Hash), "dummyhash") {
@@ -280,16 +301,71 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 			WorkerPayoutSats: r.WorkerPayoutSats,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
 	if len(recs) == 0 {
 		return nil
 	}
 	sort.Slice(recs, func(i, j int) bool {
 		return recs[i].Timestamp.After(recs[j].Timestamp)
 	})
-	if limit > 0 && len(recs) > limit {
-		recs = recs[:limit]
-	}
 	return recs
+}
+
+func migrateFoundBlocksJSONLToDB(db *sql.DB, path string) error {
+	if db == nil || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if done, err := hasStateMigration(db, stateMigrationFoundBlocksJSONL); err == nil && done {
+		if err := renameLegacyFileToOld(path); err != nil {
+			logger.Warn("rename legacy found blocks log", "error", err, "from", path)
+		}
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare("INSERT INTO found_blocks_log (created_at_unix, json) VALUES (?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	nowUnix := time.Now().Unix()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if _, err := stmt.Exec(nowUnix, line); err != nil {
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	_ = recordStateMigration(db, stateMigrationFoundBlocksJSONL, time.Now())
+	if err := renameLegacyFileToOld(path); err != nil {
+		logger.Warn("rename legacy found blocks log", "error", err, "from", path)
+	}
+	return nil
 }
 
 // readProcessRSS returns the current process resident set size (RSS) in bytes.

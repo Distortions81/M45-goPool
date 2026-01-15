@@ -2,14 +2,13 @@ package main
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -67,7 +66,6 @@ type RecentWorkView struct {
 	Accepted        uint64  `json:"accepted"`
 	ConnectionID    string  `json:"connection_id"`
 }
-
 
 // ShareDetail holds detailed data for each share, including coinbase transaction details.
 type ShareDetail struct {
@@ -314,253 +312,151 @@ type BestShare struct {
 }
 
 type AccountStore struct {
-	ban   *banList
+	ban   *banStore
 	ready bool
 	err   error
 }
 
-// banList holds the persisted bans and synchronizes access via an RWMutex.
-type banList struct {
-	mu       sync.RWMutex
-	entries  map[string]banEntry
-	path     string
-	writeMu  sync.Mutex
-	appendCh chan appendRequest
+type banStore struct {
+	db *sql.DB
 }
 
-type appendRequest struct {
-	entry banEntry
-	done  chan error
-}
-
-func newBanList(path string) (*banList, error) {
-	bl := &banList{
-		entries: make(map[string]banEntry),
-		path:    path,
-	}
-	if err := bl.load(); err != nil {
-		return nil, err
-	}
-	if path != "" {
-		bl.appendCh = make(chan appendRequest, 32)
-		go bl.appendWorker()
-	}
-	return bl, nil
-}
-
-func (b *banList) load() error {
-	if b.path == "" {
+func (b *banStore) cleanExpired(now time.Time) error {
+	if b == nil || b.db == nil {
 		return nil
 	}
-	data, err := os.ReadFile(b.path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	if len(data) == 0 {
-		return nil
-	}
-	entries, err := decodeBanEntries(data)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	hasActiveBans := false
-	for _, entry := range entries {
-		if entry.Worker == "" {
-			continue
-		}
-		if entry.Until.IsZero() || now.Before(entry.Until) {
-			b.entries[entry.Worker] = entry
-			hasActiveBans = true
-		}
-	}
-
-	if !hasActiveBans && len(entries) > 0 {
-		_ = os.Remove(b.path)
-	}
-
-	return nil
+	_, err := b.db.Exec("DELETE FROM bans WHERE until_unix != 0 AND until_unix <= ?", now.Unix())
+	return err
 }
 
-func (b *banList) appendWorker() {
-	if b.appendCh == nil {
-		return
-	}
-	for req := range b.appendCh {
-		if req.entry.Worker == "" {
-			if req.done != nil {
-				req.done <- nil
-				close(req.done)
-			}
-			continue
-		}
-		err := b.appendBanLocked(req.entry)
-		if err != nil {
-			logger.Warn("append ban entry", "error", err)
-		}
-		if req.done != nil {
-			req.done <- err
-			close(req.done)
-		}
-	}
-}
-
-func (b *banList) markBan(worker string, until time.Time, reason string) error {
-	if b == nil || b.path == "" || worker == "" {
+func (b *banStore) markBan(worker string, until time.Time, reason string, now time.Time) error {
+	if b == nil || b.db == nil {
 		return nil
 	}
-	b.mu.Lock()
+	worker = strings.TrimSpace(worker)
+	if worker == "" {
+		return nil
+	}
 	if until.IsZero() {
-		delete(b.entries, worker)
-		// When unbanning, we need to rewrite the file
-		err := b.persistLocked()
-		b.mu.Unlock()
+		_, err := b.db.Exec("DELETE FROM bans WHERE worker = ?", worker)
 		return err
 	}
-
-	// Add to in-memory map
-	entry := banEntry{
-		Worker: worker,
-		Until:  until,
-		Reason: reason,
+	workerHash := strings.ToLower(strings.TrimSpace(workerNameHash(worker)))
+	if workerHash == "" {
+		return nil
 	}
-	b.entries[worker] = entry
-	ch := b.appendCh
-	b.mu.Unlock()
-
-	if ch != nil {
-		req := appendRequest{
-			entry: entry,
-			done:  make(chan error, 1),
-		}
-		ch <- req
-		return <-req.done
-	}
-	return b.appendBanLocked(entry)
+	_, err := b.db.Exec(`
+		INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(worker) DO UPDATE SET
+			worker_hash = excluded.worker_hash,
+			until_unix = excluded.until_unix,
+			reason = excluded.reason,
+			updated_at_unix = excluded.updated_at_unix
+	`, worker, workerHash, unixOrZero(until), strings.TrimSpace(reason), now.Unix())
+	return err
 }
 
-func (b *banList) appendBanLocked(entry banEntry) error {
-	if b.path == "" {
-		return nil
-	}
-
-	b.writeMu.Lock()
-	defer b.writeMu.Unlock()
-
-	f, err := os.OpenFile(b.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	w := bufio.NewWriter(f)
-	if info.Size() > 0 {
-		if _, err := w.Write([]byte{'\n'}); err != nil {
-			return err
-		}
-	}
-
-	data, err := encodeBanEntry(entry)
-	if err != nil {
-		return err
-	}
-	if _, err := w.Write(data); err != nil {
-		return err
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (b *banList) persist() error {
-	if b == nil {
-		return nil
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.persistLocked()
-}
-
-func (b *banList) persistLocked() error {
-	if b.path == "" {
-		return nil
-	}
-	now := time.Now()
-	entries := make([]banEntry, 0, len(b.entries))
-	for k, entry := range b.entries {
-		// Drop expired bans from both the in-memory map and the persisted
-		// file so short-lived bans do not accumulate indefinitely.
-		if !entry.Until.IsZero() && now.After(entry.Until) {
-			delete(b.entries, k)
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	b.writeMu.Lock()
-	defer b.writeMu.Unlock()
-
-	if len(entries) == 0 {
-		if err := os.Remove(b.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove ban file: %w", err)
-		}
-		return nil
-	}
-	data, err := encodeBanEntries(entries)
-	if err != nil {
-		return err
-	}
-	if err := writeFileAtomically(b.path, data, 0, false); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (b *banList) cleanExpired() error {
-	if b == nil {
-		return nil
-	}
-	now := time.Now()
-	b.mu.Lock()
-	removed := false
-	for k, entry := range b.entries {
-		if entry.Until.IsZero() || now.Before(entry.Until) {
-			continue
-		}
-		delete(b.entries, k)
-		removed = true
-	}
-	b.mu.Unlock()
-	if !removed {
-		return nil
-	}
-	return b.persist()
-}
-
-func (b *banList) lookup(worker string) (banEntry, bool) {
-	if b == nil || worker == "" {
+func (b *banStore) lookup(worker string, now time.Time) (banEntry, bool) {
+	if b == nil || b.db == nil {
 		return banEntry{}, false
 	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	entry, ok := b.entries[worker]
-	if !ok {
+	worker = strings.TrimSpace(worker)
+	if worker == "" {
 		return banEntry{}, false
 	}
-	if entry.Until.IsZero() || time.Now().After(entry.Until) {
+	var (
+		untilUnix int64
+		reason    sql.NullString
+	)
+	if err := b.db.QueryRow("SELECT until_unix, reason FROM bans WHERE worker = ?", worker).Scan(&untilUnix, &reason); err != nil {
+		return banEntry{}, false
+	}
+	if untilUnix != 0 && now.Unix() >= untilUnix {
+		return banEntry{}, false
+	}
+	entry := banEntry{Worker: worker}
+	if untilUnix != 0 {
+		entry.Until = time.Unix(untilUnix, 0)
+	}
+	if reason.Valid {
+		entry.Reason = strings.TrimSpace(reason.String)
+	}
+	return entry, true
+}
+
+func (b *banStore) lookupByHash(workerHash string, now time.Time) (banEntry, bool) {
+	if b == nil || b.db == nil {
+		return banEntry{}, false
+	}
+	workerHash = strings.ToLower(strings.TrimSpace(workerHash))
+	if workerHash == "" {
+		return banEntry{}, false
+	}
+	var (
+		worker    string
+		untilUnix int64
+		reason    sql.NullString
+	)
+	if err := b.db.QueryRow(`
+		SELECT worker, until_unix, reason
+		FROM bans
+		WHERE worker_hash = ? AND (until_unix = 0 OR until_unix > ?)
+		LIMIT 1
+	`, workerHash, now.Unix()).Scan(&worker, &untilUnix, &reason); err != nil {
+		return banEntry{}, false
+	}
+	entry := banEntry{Worker: strings.TrimSpace(worker)}
+	if untilUnix != 0 {
+		entry.Until = time.Unix(untilUnix, 0)
+	}
+	if reason.Valid {
+		entry.Reason = strings.TrimSpace(reason.String)
+	}
+	if entry.Worker == "" {
 		return banEntry{}, false
 	}
 	return entry, true
+}
+
+func (b *banStore) snapshot(now time.Time) []banEntry {
+	if b == nil || b.db == nil {
+		return nil
+	}
+	rows, err := b.db.Query(`
+		SELECT worker, until_unix, reason
+		FROM bans
+		WHERE until_unix = 0 OR until_unix > ?
+	`, now.Unix())
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var out []banEntry
+	for rows.Next() {
+		var (
+			worker    string
+			untilUnix int64
+			reason    sql.NullString
+		)
+		if err := rows.Scan(&worker, &untilUnix, &reason); err != nil {
+			continue
+		}
+		worker = strings.TrimSpace(worker)
+		if worker == "" {
+			continue
+		}
+		entry := banEntry{Worker: worker}
+		if untilUnix != 0 {
+			entry.Until = time.Unix(untilUnix, 0)
+		}
+		if reason.Valid {
+			entry.Reason = strings.TrimSpace(reason.String)
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func writeFileAtomically(path string, data []byte, bufSize int, syncWrite bool) error {
@@ -640,18 +536,22 @@ func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountS
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, err
 	}
-	banPath := filepath.Join(stateDir, banFileName)
-	banList, err := newBanList(banPath)
+	db, err := openStateDB(filepath.Join(stateDir, "workers.db"))
 	if err != nil {
 		return nil, err
 	}
+	bans := &banStore{db: db}
+
+	if err := migrateBansFileToDB(db, filepath.Join(stateDir, banFileName)); err != nil {
+		logger.Warn("migrate bans.json to sqlite", "error", err)
+	}
 	if cleanBans {
-		if err := banList.cleanExpired(); err != nil {
+		if err := bans.cleanExpired(time.Now()); err != nil {
 			return nil, err
 		}
 	}
 	return &AccountStore{
-		ban:   banList,
+		ban:   bans,
 		ready: true,
 	}, nil
 }
@@ -660,7 +560,7 @@ func (s *AccountStore) WorkerViewByName(workerName string) (WorkerView, bool) {
 	if s == nil || workerName == "" || s.ban == nil {
 		return WorkerView{}, false
 	}
-	entry, ok := s.ban.lookup(workerName)
+	entry, ok := s.ban.lookup(workerName, time.Now())
 	if !ok {
 		return WorkerView{}, false
 	}
@@ -671,18 +571,11 @@ func (s *AccountStore) WorkerViewBySHA256(sha256Hash string) (WorkerView, bool) 
 	if s == nil || sha256Hash == "" || s.ban == nil {
 		return WorkerView{}, false
 	}
-	s.ban.mu.RLock()
-	defer s.ban.mu.RUnlock()
-	now := time.Now()
-	for _, entry := range s.ban.entries {
-		if entry.Until.IsZero() || now.After(entry.Until) {
-			continue
-		}
-		if strings.EqualFold(workerNameHash(entry.Worker), sha256Hash) {
-			return bannedWorkerView(entry), true
-		}
+	entry, ok := s.ban.lookupByHash(sha256Hash, time.Now())
+	if !ok {
+		return WorkerView{}, false
 	}
-	return WorkerView{}, false
+	return bannedWorkerView(entry), true
 }
 
 func bannedWorkerView(entry banEntry) WorkerView {
@@ -701,14 +594,13 @@ func (s *AccountStore) WorkersSnapshot() []WorkerView {
 	if s == nil || s.ban == nil {
 		return nil
 	}
-	s.ban.mu.RLock()
-	defer s.ban.mu.RUnlock()
 	now := time.Now()
-	out := make([]WorkerView, 0, len(s.ban.entries))
-	for _, entry := range s.ban.entries {
-		if entry.Until.IsZero() || now.After(entry.Until) {
-			continue
-		}
+	entries := s.ban.snapshot(now)
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]WorkerView, 0, len(entries))
+	for _, entry := range entries {
 		out = append(out, bannedWorkerView(entry))
 	}
 	return out
@@ -718,7 +610,7 @@ func (s *AccountStore) MarkBan(worker string, until time.Time, reason string) {
 	if s == nil || s.ban == nil {
 		return
 	}
-	if err := s.ban.markBan(worker, until, reason); err != nil {
+	if err := s.ban.markBan(worker, until, reason, time.Now()); err != nil {
 		s.err = err
 	}
 }
@@ -735,9 +627,79 @@ func (s *AccountStore) Flush() error {
 	if s == nil || s.ban == nil {
 		return s.LastError()
 	}
-	if err := s.ban.persist(); err != nil {
-		s.err = err
+	return s.LastError()
+}
+
+func migrateBansFileToDB(db *sql.DB, path string) error {
+	if db == nil || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if done, err := hasStateMigration(db, stateMigrationBansJSON); err == nil && done {
+		if err := renameLegacyFileToOld(path); err != nil {
+			logger.Warn("rename legacy bans file", "error", err, "from", path)
+		}
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return err
 	}
-	return s.LastError()
+	entries, err := decodeBanEntries(data)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(worker) DO UPDATE SET
+			worker_hash = excluded.worker_hash,
+			until_unix = excluded.until_unix,
+			reason = excluded.reason,
+			updated_at_unix = excluded.updated_at_unix
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	active := 0
+	for _, e := range entries {
+		worker := strings.TrimSpace(e.Worker)
+		if worker == "" {
+			continue
+		}
+		if !e.Until.IsZero() && now.After(e.Until) {
+			continue
+		}
+		workerHash := strings.ToLower(strings.TrimSpace(workerNameHash(worker)))
+		if workerHash == "" {
+			continue
+		}
+		if _, err := stmt.Exec(worker, workerHash, unixOrZero(e.Until), strings.TrimSpace(e.Reason), now.Unix()); err != nil {
+			return err
+		}
+		active++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	_ = recordStateMigration(db, stateMigrationBansJSON, now)
+	if active == 0 {
+		_, _ = db.Exec("DELETE FROM bans WHERE until_unix != 0 AND until_unix <= ?", now.Unix())
+	}
+	if err := renameLegacyFileToOld(path); err != nil {
+		logger.Warn("rename legacy bans file", "error", err, "from", path)
+	}
+	return nil
 }

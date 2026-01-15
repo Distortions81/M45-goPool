@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -67,31 +64,17 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 		t.Fatalf("expected submitblock to be called at least once")
 	}
 
-	data, err := os.ReadFile(path)
+	db, err := openStateDB(stateDBPathFromDataDir(tmpDir))
 	if err != nil {
-		t.Fatalf("read pending log: %v", err)
+		t.Fatalf("openStateDB: %v", err)
 	}
-	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
-	if len(lines) == 0 {
-		t.Fatalf("pending log is empty after replay")
-	}
+	defer db.Close()
 
-	var foundSubmitted bool
-	for _, line := range lines {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		var r pendingSubmissionRecord
-		if err := fastJSONUnmarshal(line, &r); err != nil {
-			t.Fatalf("unmarshal line: %v", err)
-		}
-		if strings.EqualFold(r.Hash, "test-hash") && strings.EqualFold(r.Status, "submitted") {
-			foundSubmitted = true
-			break
-		}
+	var status string
+	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", "test-hash").Scan(&status); err != nil {
+		t.Fatalf("query status: %v", err)
 	}
-	if !foundSubmitted {
-		t.Fatalf("expected a submitted record for hash test-hash, got none")
+	if status != "submitted" {
+		t.Fatalf("expected status=submitted, got %q", status)
 	}
 }

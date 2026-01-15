@@ -1,9 +1,10 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
+	"database/sql"
+	"strings"
 	"sync"
+	"time"
 )
 
 // foundBlockLogEntry represents a single JSONL line to append to the
@@ -26,8 +27,8 @@ func init() {
 
 func startFoundBlockLogger() {
 	go func() {
-		var f *os.File
-		var curPath string
+		var db *sql.DB
+		var curDBPath string
 		for entry := range foundBlockLogCh {
 			if entry.Done != nil {
 				close(entry.Done)
@@ -37,35 +38,34 @@ func startFoundBlockLogger() {
 			if dir == "" {
 				dir = defaultDataDir
 			}
-			stateDir := filepath.Join(dir, "state")
-			path := filepath.Join(stateDir, "found_blocks.jsonl")
-			// Lazily (re)open the log file when the target path changes.
-			if path != curPath || f == nil {
-				if f != nil {
-					_ = f.Close()
-					f = nil
+			dbPath := stateDBPathFromDataDir(dir)
+			if dbPath != curDBPath || db == nil {
+				if db != nil {
+					_ = db.Close()
+					db = nil
 				}
-				if err := os.MkdirAll(stateDir, 0o755); err != nil {
-					logger.Warn("found block log mkdir", "error", err)
-					continue
-				}
-				nf, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+				ndb, err := openStateDB(dbPath)
 				if err != nil {
-					logger.Warn("found block log open", "error", err)
+					logger.Warn("found block sqlite open", "error", err, "path", dbPath)
 					continue
 				}
-				f = nf
-				curPath = path
+				db = ndb
+				curDBPath = dbPath
 			}
-			if f == nil {
+			if db == nil {
 				continue
 			}
-			if _, err := f.Write(entry.Line); err != nil {
-				logger.Warn("found block log write", "error", err)
+
+			line := strings.TrimSpace(string(entry.Line))
+			if line == "" {
+				continue
+			}
+			if _, err := db.Exec("INSERT INTO found_blocks_log (created_at_unix, json) VALUES (?, ?)", time.Now().Unix(), line); err != nil {
+				logger.Warn("found block sqlite insert", "error", err)
 			}
 		}
-		if f != nil {
-			_ = f.Close()
+		if db != nil {
+			_ = db.Close()
 		}
 	}()
 }

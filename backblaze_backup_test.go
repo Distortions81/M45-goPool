@@ -49,15 +49,17 @@ func TestBackups_WriteStampAndLocalSnapshot_DefaultPath(t *testing.T) {
 	}
 	svc.run(context.Background())
 
-	if _, err := os.Stat(svc.lastBackupPath); err != nil {
-		t.Fatalf("stamp file missing: %v", err)
-	}
-	ts, _, err := readLastBackupStamp(svc.lastBackupPath)
+	db, err := openStateDB(dbPath)
 	if err != nil {
-		t.Fatalf("read stamp: %v", err)
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
 	}
 	if ts.IsZero() {
-		t.Fatalf("expected non-zero stamp time")
+		t.Fatalf("expected non-zero sqlite stamp time")
 	}
 
 	if svc.snapshotPath == "" {
@@ -96,8 +98,17 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	if _, err := os.Stat(wantSnapshot); err != nil {
 		t.Fatalf("snapshot file missing: %v", err)
 	}
-	if _, err := os.Stat(svc.lastBackupPath); err != nil {
-		t.Fatalf("stamp file missing: %v", err)
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if ts.IsZero() {
+		t.Fatalf("expected non-zero sqlite stamp time")
 	}
 }
 

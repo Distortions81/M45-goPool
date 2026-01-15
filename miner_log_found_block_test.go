@@ -1,34 +1,50 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"math"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-// readLastFoundBlockRecord polls for found_blocks.jsonl in dir and returns the
+func flushFoundBlockLogger(t *testing.T) {
+	t.Helper()
+	done := make(chan struct{})
+	select {
+	case foundBlockLogCh <- foundBlockLogEntry{Done: done}:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out sending found block flush marker")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for found block flush marker")
+	}
+}
+
+// readLastFoundBlockRecord polls the sqlite state DB in dir and returns the
 // last JSON object written. It is used to verify logFoundBlock behaviour.
 func readLastFoundBlockRecord(t *testing.T, dir string) map[string]interface{} {
 	t.Helper()
-	path := filepath.Join(dir, "state", "found_blocks.jsonl")
+	flushFoundBlockLogger(t)
+	dbPath := stateDBPathFromDataDir(dir)
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		data, err := os.ReadFile(path)
-		if err == nil && len(data) > 0 {
-			lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
-			last := lines[len(lines)-1]
+		db, err := openStateDB(dbPath)
+		if err == nil {
 			var rec map[string]interface{}
-			if err := json.Unmarshal(last, &rec); err != nil {
-				t.Fatalf("unmarshal found block record: %v", err)
+			var line string
+			if err := db.QueryRow("SELECT json FROM found_blocks_log ORDER BY id DESC LIMIT 1").Scan(&line); err == nil && line != "" {
+				_ = db.Close()
+				if err := json.Unmarshal([]byte(line), &rec); err != nil {
+					t.Fatalf("unmarshal found block record: %v", err)
+				}
+				return rec
 			}
-			return rec
+			_ = db.Close()
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for found_blocks.jsonl at %s", path)
+			t.Fatalf("timed out waiting for found block sqlite row in %s", dbPath)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

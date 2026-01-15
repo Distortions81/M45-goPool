@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,22 +254,59 @@ func (s *StatusServer) oneTimeCodePersistPath(dataDir string) string {
 	return filepath.Join(dataDir, "state", "one_time_codes.json")
 }
 
-func (s *StatusServer) loadOneTimeCodesFromDisk(dataDir string) {
+func (s *StatusServer) loadOneTimeCodesFromDB(dataDir string) {
 	if s == nil {
 		return
 	}
-	path := s.oneTimeCodePersistPath(dataDir)
-	raw, err := os.ReadFile(path)
+	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
 	if err != nil {
+		logger.Warn("one-time code sqlite open", "error", err)
 		return
 	}
-	var payload oneTimeCodePersistPayload
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		logger.Warn("one-time code state load failed", "error", err, "path", path)
+	defer db.Close()
+
+	legacyPath := s.oneTimeCodePersistPath(dataDir)
+	if err := migrateOneTimeCodesFileToDB(db, legacyPath); err != nil {
+		logger.Warn("one-time code state migrate failed", "error", err, "path", legacyPath)
+	}
+
+	// Match the old semantics: load any persisted codes on startup and then
+	// clear the persistence store so crashes don't keep stale codes.
+	rows, err := db.Query("SELECT user_id, code, created_at_unix, expires_at_unix FROM one_time_codes")
+	if err != nil {
+		logger.Warn("one-time code sqlite query failed", "error", err)
 		return
 	}
-	// Delete after successful read so we don't keep stale state around.
-	_ = os.Remove(path)
+	var persisted []oneTimeCodePersistEntry
+	for rows.Next() {
+		var (
+			userID    string
+			code      string
+			createdAt int64
+			expiresAt int64
+		)
+		if err := rows.Scan(&userID, &code, &createdAt, &expiresAt); err != nil {
+			continue
+		}
+		userID = strings.TrimSpace(userID)
+		code = strings.TrimSpace(code)
+		if userID == "" || code == "" {
+			continue
+		}
+		entry := oneTimeCodePersistEntry{
+			UserID: userID,
+			Code:   code,
+		}
+		if createdAt > 0 {
+			entry.CreatedAt = time.Unix(createdAt, 0).UTC()
+		}
+		if expiresAt > 0 {
+			entry.ExpiresAt = time.Unix(expiresAt, 0).UTC()
+		}
+		persisted = append(persisted, entry)
+	}
+	_ = rows.Close()
+	_, _ = db.Exec("DELETE FROM one_time_codes")
 
 	now := time.Now()
 	s.oneTimeCodeMu.Lock()
@@ -277,7 +316,7 @@ func (s *StatusServer) loadOneTimeCodesFromDisk(dataDir string) {
 	s.cleanupExpiredOneTimeCodesLocked(now)
 	s.evictOneTimeCodesLocked(now)
 
-	for _, e := range payload.Codes {
+	for _, e := range persisted {
 		uid := strings.TrimSpace(e.UserID)
 		code := strings.TrimSpace(e.Code)
 		if uid == "" || code == "" {
@@ -301,25 +340,24 @@ func (s *StatusServer) loadOneTimeCodesFromDisk(dataDir string) {
 	s.evictOneTimeCodesLocked(now)
 }
 
-func (s *StatusServer) persistOneTimeCodesToDisk(dataDir string) {
+func (s *StatusServer) persistOneTimeCodesToDB(dataDir string) {
 	if s == nil {
 		return
 	}
-	path := s.oneTimeCodePersistPath(dataDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		logger.Warn("one-time code state mkdir failed", "error", err, "path", path)
+	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
+	if err != nil {
+		logger.Warn("one-time code sqlite open", "error", err)
 		return
 	}
+	defer db.Close()
 
 	now := time.Now()
-	payload := oneTimeCodePersistPayload{
-		Version: 1,
-		SavedAt: now.UTC(),
-	}
+	_, _ = db.Exec("DELETE FROM one_time_codes")
 
 	s.oneTimeCodeMu.Lock()
 	s.initOneTimeCodesLocked()
 	s.cleanupExpiredOneTimeCodesLocked(now)
+	var codes []oneTimeCodePersistEntry
 	for uid, entry := range s.oneTimeCodes {
 		if strings.TrimSpace(uid) == "" || strings.TrimSpace(entry.Code) == "" {
 			continue
@@ -327,7 +365,7 @@ func (s *StatusServer) persistOneTimeCodesToDisk(dataDir string) {
 		if entry.ExpiresAt.IsZero() || now.After(entry.ExpiresAt) {
 			continue
 		}
-		payload.Codes = append(payload.Codes, oneTimeCodePersistEntry{
+		codes = append(codes, oneTimeCodePersistEntry{
 			UserID:    uid,
 			Code:      entry.Code,
 			CreatedAt: entry.CreatedAt,
@@ -336,24 +374,31 @@ func (s *StatusServer) persistOneTimeCodesToDisk(dataDir string) {
 	}
 	s.oneTimeCodeMu.Unlock()
 
-	if len(payload.Codes) == 0 {
-		_ = os.Remove(path)
+	if len(codes) == 0 {
 		return
 	}
-	out, err := json.Marshal(payload)
+
+	tx, err := db.Begin()
 	if err != nil {
-		logger.Warn("one-time code state marshal failed", "error", err)
+		logger.Warn("one-time code sqlite begin failed", "error", err)
 		return
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o600); err != nil {
-		logger.Warn("one-time code state write failed", "error", err, "path", tmp)
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare("INSERT OR REPLACE INTO one_time_codes (user_id, code, created_at_unix, expires_at_unix) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		logger.Warn("one-time code sqlite prepare failed", "error", err)
 		return
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		logger.Warn("one-time code state rename failed", "error", err, "from", tmp, "to", path)
-		_ = os.Remove(tmp)
-		return
+	for _, e := range codes {
+		if _, err := stmt.Exec(strings.TrimSpace(e.UserID), strings.TrimSpace(e.Code), unixOrZero(e.CreatedAt), unixOrZero(e.ExpiresAt)); err != nil {
+			_ = stmt.Close()
+			logger.Warn("one-time code sqlite insert failed", "error", err)
+			return
+		}
+	}
+	_ = stmt.Close()
+	if err := tx.Commit(); err != nil {
+		logger.Warn("one-time code sqlite commit failed", "error", err)
 	}
 }
 
@@ -364,6 +409,62 @@ func (s *StatusServer) startOneTimeCodePersistence(ctx context.Context) {
 	dataDir := s.Config().DataDir
 	go func() {
 		<-ctx.Done()
-		s.persistOneTimeCodesToDisk(dataDir)
+		s.persistOneTimeCodesToDB(dataDir)
 	}()
+}
+
+func migrateOneTimeCodesFileToDB(db *sql.DB, path string) error {
+	if db == nil || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if done, err := hasStateMigration(db, stateMigrationOneTimeCodesJSON); err == nil && done {
+		if err := renameLegacyFileToOld(path); err != nil {
+			logger.Warn("rename legacy one-time codes file", "error", err, "from", path)
+		}
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var payload oneTimeCodePersistPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	if len(payload.Codes) == 0 {
+		_ = os.Remove(path)
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare("INSERT OR REPLACE INTO one_time_codes (user_id, code, created_at_unix, expires_at_unix) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	for _, e := range payload.Codes {
+		uid := strings.TrimSpace(e.UserID)
+		code := strings.TrimSpace(e.Code)
+		if uid == "" || code == "" {
+			continue
+		}
+		if _, err := stmt.Exec(uid, code, unixOrZero(e.CreatedAt), unixOrZero(e.ExpiresAt)); err != nil {
+			_ = stmt.Close()
+			return err
+		}
+	}
+	_ = stmt.Close()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	_ = recordStateMigration(db, stateMigrationOneTimeCodesJSON, time.Now())
+	if err := renameLegacyFileToOld(path); err != nil {
+		logger.Warn("rename legacy one-time codes file", "error", err, "from", path)
+	}
+	return nil
 }

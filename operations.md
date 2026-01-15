@@ -17,7 +17,7 @@
   - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
   - `keep_local_copy` (default `true`) stores a local copy of the last snapshot in `data/state/` even if Backblaze uploads are disabled.
   - `snapshot_path` (default empty) overrides where the local snapshot is written; when set to a relative path it is resolved relative to `data_dir`.
-  - The most recent snapshot time is recorded in `data/state/last_backup` (migrated from the legacy `data/state/backblaze_last_backup`).
+  - The most recent snapshot time is recorded in the `backup_state` table inside `data/state/workers.db` (migrated from the legacy `data/state/last_backup` / `data/state/backblaze_last_backup` files).
   - When backing up outside of goPool (rsync/tar/system backups), back up the snapshot file (`snapshot_path` / `data/state/workers.db.bak`) rather than the live `data/state/workers.db`; copying a live SQLite DB can fail or produce a corrupt backup. If you must back up `workers.db` directly, stop goPool first.
 
 ## Tuning highlights

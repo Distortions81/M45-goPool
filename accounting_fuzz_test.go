@@ -53,28 +53,32 @@ func FuzzBanListRoundTrip(f *testing.F) {
 			return
 		}
 		dir := t.TempDir()
-		path := filepath.Join(dir, "bans.json")
-
-		bl, err := newBanList(path)
+		dbPath := filepath.Join(dir, "state", "workers.db")
+		db, err := openStateDB(dbPath)
 		if err != nil {
-			t.Fatalf("newBanList error: %v", err)
+			t.Fatalf("openStateDB error: %v", err)
 		}
+		defer db.Close()
+
+		bl := &banStore{db: db}
 
 		now := time.Now()
 		var until time.Time
 		if horizonSec > 0 {
 			until = now.Add(time.Duration(horizonSec) * time.Second)
 		}
-		if err := bl.markBan(worker, until, "fuzz-test"); err != nil {
+		if err := bl.markBan(worker, until, "fuzz-test", now); err != nil {
 			t.Fatalf("markBan error: %v", err)
 		}
 
 		// Reload from disk and verify lookup semantics.
-		bl2, err := newBanList(path)
+		db2, err := openStateDB(dbPath)
 		if err != nil {
-			t.Fatalf("reload banList error: %v", err)
+			t.Fatalf("reload sqlite db error: %v", err)
 		}
-		entry, ok := bl2.lookup(worker)
+		defer db2.Close()
+		bl2 := &banStore{db: db2}
+		entry, ok := bl2.lookup(worker, now)
 
 		if horizonSec <= 0 {
 			// Zero/negative horizon means unbanned.
