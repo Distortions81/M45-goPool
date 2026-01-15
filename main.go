@@ -54,6 +54,7 @@ func main() {
 	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
 	stdoutLogFlag := flag.Bool("stdoutlog", false, "mirror logs to stdout in addition to writing to files")
 	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
+	checkDuplicatesFlag := flag.Bool("check-duplicates", false, "enable duplicate share checking (disabled by default for solo pools)")
 	flag.Parse()
 	overrides := runtimeOverrides{
 		bind:                *bindFlag,
@@ -124,6 +125,9 @@ func main() {
 	if err := validateConfig(cfg); err != nil {
 		fatal("config", err)
 	}
+
+	// Apply command-line flag for duplicate share checking (disabled by default for solo pools)
+	cfg.CheckDuplicateShares = *checkDuplicatesFlag
 
 	// Select btcd network params for local address validation based on the
 	// configured/selected network. Defaults to mainnet when no explicit
