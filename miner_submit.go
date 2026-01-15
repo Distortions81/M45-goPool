@@ -286,7 +286,10 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		}
 	}
 
-	versionHex := fmt.Sprintf("%08x", useVersion)
+	versionHex := ""
+	if mc.cfg.CheckDuplicateShares || debugLogging || verboseLogging {
+		versionHex = fmt.Sprintf("%08x", useVersion)
+	}
 	if versionDiff != 0 && !mc.versionRoll {
 		logger.Warn("submit rejected: version rolling disabled", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
 		mc.rejectShareWithBan(req, workerName, rejectInvalidVersion, 20, "version rolling not enabled", now)
@@ -451,15 +454,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	expectedMerkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 	if merkleRoot == nil || expectedMerkle == nil || !bytes.Equal(merkleRoot, expectedMerkle) {
 		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
-		detail := &ShareDetail{
-			Header:         hex.EncodeToString(header),
-			ShareHash:      hex.EncodeToString(reverseBytes(headerHash)),
-			MerkleBranches: append([]string{}, job.MerkleBranches...),
-			MerkleRootBE:   hex.EncodeToString(expectedMerkle),
-			MerkleRootLE:   hex.EncodeToString(reverseBytes(expectedMerkle)),
-			Coinbase:       hex.EncodeToString(cbTx),
-		}
-		detail.DecodeCoinbaseFields()
+		detail := mc.buildShareDetailFromCoinbase(job, workerName, header, nil, nil, expectedMerkle, cbTx)
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
 			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
@@ -521,7 +516,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 				"hash", hashHex,
 			)
 		}
-		detail := mc.buildShareDetail(job, workerName, header, hashLE, nil, extranonce2, merkleRoot)
+		detail := mc.buildShareDetailFromCoinbase(job, workerName, header, hashLE, nil, merkleRoot, cbTx)
 		acceptedForStats := false
 		mc.recordShare(workerName, acceptedForStats, 0, shareDiff, "lowDiff", hashHex, detail, now)
 
@@ -539,7 +534,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	}
 
 	shareHash := hashHex
-	detail := mc.buildShareDetail(job, workerName, header, hashLE, job.Target, extranonce2, merkleRoot)
+	detail := mc.buildShareDetailFromCoinbase(job, workerName, header, hashLE, job.Target, merkleRoot, cbTx)
 
 	if isBlock {
 		mc.handleBlockShare(reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
