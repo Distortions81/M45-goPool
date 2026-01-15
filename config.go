@@ -225,6 +225,10 @@ type Config struct {
 	// NTimeForwardSlackSeconds bounds how far ntime may roll forward from
 	// the template's curtime/mintime before being rejected.
 	NTimeForwardSlackSeconds int
+	// CheckDuplicateShares enables duplicate share detection. Disabled by
+	// default for solo pools where duplicate checking is unnecessary overhead.
+	// Enable with -check-duplicates flag for testing.
+	CheckDuplicateShares bool
 
 	// BanInvalidSubmissionsAfter controls how many clearly invalid share
 	// submissions (bad extranonce/ntime/nonce/coinbase, etc.) are allowed
