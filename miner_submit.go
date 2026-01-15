@@ -199,7 +199,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		return submissionTask{}, false
 	}
 
-	job, curLast, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
 		// Use "job not found" for missing/expired jobs.
@@ -318,6 +318,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		nonce:            nonce,
 		versionHex:       versionHex,
 		useVersion:       useVersion,
+		scriptTime:       notifiedScriptTime,
 		receivedAt:       now,
 	}
 	return task, true
@@ -333,6 +334,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	nonce := task.nonce
 	versionHex := task.versionHex
 	useVersion := task.useVersion
+	scriptTime := task.scriptTime
 	reqID := task.reqID
 	now := task.receivedAt
 
@@ -358,6 +360,10 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		err              error
 	)
 
+	if scriptTime == 0 {
+		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)
+	}
+
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
@@ -374,7 +380,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				scriptTime,
 			)
 		} else {
 			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
@@ -389,7 +395,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				scriptTime,
 			)
 		}
 		if err == nil && len(cbTxid) == 32 {
@@ -418,7 +424,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 			job.witnessCommitScript,
 			job.coinbaseFlagsBytes,
 			job.CoinbaseMsg,
-			job.ScriptTime,
+			scriptTime,
 		)
 		if err != nil || len(cbTxid) != 32 {
 			logger.Warn("submit coinbase rebuild failed", "remote", mc.id, "error", err)
@@ -577,6 +583,8 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 		submitRes interface{}
 		err       error
 	)
+	scriptTime := mc.scriptTimeForJob(job.JobID, job.ScriptTime)
+
 	// Only construct the full block (including all non-coinbase transactions)
 	// when the share actually satisfies the network target.
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
@@ -597,7 +605,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				scriptTime,
 			)
 		} else {
 			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
@@ -612,7 +620,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 				job.witnessCommitScript,
 				job.coinbaseFlagsBytes,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				scriptTime,
 			)
 		}
 		if err == nil && len(cbTxid) == 32 {
@@ -644,7 +652,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 		// Fallback to single-output block build if dual-payout params are
 		// unavailable or any step fails. This reuses the existing helper that
 		// constructs a canonical block for submission.
-		blockHex, _, _, _, err = buildBlock(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion))
+		blockHex, _, _, _, err = buildBlockWithScriptTime(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion), scriptTime)
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")

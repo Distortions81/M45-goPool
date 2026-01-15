@@ -358,6 +358,9 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
 		delete(mc.activeJobs, oldest)
+		if mc.jobScriptTime != nil {
+			delete(mc.jobScriptTime, oldest)
+		}
 		if dupEnabled {
 			if cache := mc.shareCache[oldest]; cache != nil {
 				if now.IsZero() {
@@ -389,6 +392,19 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	}
 }
 
+func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {
+	if jobID == "" {
+		return fallback
+	}
+	mc.jobMu.Lock()
+	st, ok := mc.jobScriptTime[jobID]
+	mc.jobMu.Unlock()
+	if ok {
+		return st
+	}
+	return fallback
+}
+
 func (mc *MinerConn) jobForID(jobID string) (*Job, bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
@@ -396,13 +412,17 @@ func (mc *MinerConn) jobForID(jobID string) (*Job, bool) {
 	return job, ok
 }
 
-// jobForIDWithLast returns the job for the given ID along with the current lastJob,
-// both under a single lock acquisition to avoid race conditions.
-func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, ok bool) {
+// jobForIDWithLast returns the job for the given ID along with the current lastJob
+// and the scriptTime used when this job was notified to this connection, all
+// under a single lock acquisition to avoid race conditions.
+func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, scriptTime int64, ok bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
 	job, ok = mc.activeJobs[jobID]
-	return job, mc.lastJob, ok
+	if mc.jobScriptTime != nil {
+		scriptTime = mc.jobScriptTime[jobID]
+	}
+	return job, mc.lastJob, scriptTime, ok
 }
 
 func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {

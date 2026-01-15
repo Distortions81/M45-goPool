@@ -44,7 +44,7 @@ func benchmarkSubmitJob(b *testing.B) *Job {
 		PayoutScript:            []byte{0x51}, // OP_TRUE; structure-only benchmark script
 		WitnessCommitment:       "",
 		CoinbaseMsg:             "goPool-bench-submit",
-		ScriptTime:              0,
+		ScriptTime:              tpl.CurTime,
 		MerkleBranches:          nil,
 		Transactions:            nil,
 		CoinbaseValue:           tpl.CoinbaseValue,
@@ -113,6 +113,7 @@ func BenchmarkProcessSubmissionTaskAcceptedShare(b *testing.B) {
 			nonce:            "00000000",
 			versionHex:       "00000001",
 			useVersion:       1,
+			scriptTime:       job.ScriptTime,
 			receivedAt:       time.Unix(1700000000, 0),
 		}
 

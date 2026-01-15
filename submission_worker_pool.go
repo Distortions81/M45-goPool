@@ -42,6 +42,7 @@ type submissionTask struct {
 	nonce            string
 	versionHex       string
 	useVersion       uint32
+	scriptTime       int64
 	receivedAt       time.Time
 }
 

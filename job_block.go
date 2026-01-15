@@ -204,11 +204,15 @@ func (job *Job) buildBlockHeader(merkleRootBE []byte, ntimeHex string, nonceHex 
 }
 
 func buildBlock(job *Job, extranonce1 []byte, extranonce2 []byte, ntimeHex string, nonceHex string, version int32) (string, []byte, []byte, []byte, error) {
+	return buildBlockWithScriptTime(job, extranonce1, extranonce2, ntimeHex, nonceHex, version, job.ScriptTime)
+}
+
+func buildBlockWithScriptTime(job *Job, extranonce1 []byte, extranonce2 []byte, ntimeHex string, nonceHex string, version int32, scriptTime int64) (string, []byte, []byte, []byte, error) {
 	if len(extranonce2) != job.Extranonce2Size {
 		return "", nil, nil, nil, fmt.Errorf("extranonce2 must be %d bytes", job.Extranonce2Size)
 	}
 
-	coinbaseTx, coinbaseTxid, err := serializeCoinbaseTx(job.Template.Height, extranonce1, extranonce2, job.TemplateExtraNonce2Size, job.PayoutScript, job.CoinbaseValue, job.WitnessCommitment, job.Template.CoinbaseAux.Flags, job.CoinbaseMsg, job.ScriptTime)
+	coinbaseTx, coinbaseTxid, err := serializeCoinbaseTx(job.Template.Height, extranonce1, extranonce2, job.TemplateExtraNonce2Size, job.PayoutScript, job.CoinbaseValue, job.WitnessCommitment, job.Template.CoinbaseAux.Flags, job.CoinbaseMsg, scriptTime)
 	if err != nil {
 		return "", nil, nil, nil, fmt.Errorf("coinbase build: %w", err)
 	}

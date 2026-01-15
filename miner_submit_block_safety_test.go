@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -38,6 +39,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	job.Target = new(big.Int).Set(maxUint256)
 	jobID := job.JobID
 	mc.jobDifficulty[jobID] = 1e-12
+	mc.jobScriptTime = map[string]int64{jobID: job.ScriptTime}
 
 	ntimeHex := "6553f100" // 1700000000
 	task := submissionTask{
@@ -52,6 +54,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 		nonce:            "00000000",
 		versionHex:       "00000001",
 		useVersion:       1,
+		scriptTime:       job.ScriptTime,
 		receivedAt:       time.Unix(1700000000, 0),
 	}
 
@@ -59,6 +62,129 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	// were applied to winning blocks, this would cause an incorrect rejection.
 	if dup := mc.isDuplicateShare(jobID, task.extranonce2, task.ntime, task.nonce, task.versionHex); dup {
 		t.Fatalf("unexpected duplicate when seeding cache")
+	}
+
+	mc.conn = nopConn{}
+	mc.writer = bufio.NewWriterSize(mc.conn, 256)
+	mc.processSubmissionTask(task)
+
+	rpc := mc.rpc.(*countingSubmitRPC)
+	if got := rpc.submitCalls.Load(); got != 1 {
+		t.Fatalf("expected submitblock to be called once, got %d", got)
+	}
+}
+
+func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
+	metrics := NewPoolMetrics()
+	mc := benchmarkMinerConnForSubmit(metrics)
+	mc.cfg.CheckDuplicateShares = false
+	mc.cfg.DataDir = t.TempDir()
+	mc.rpc = &countingSubmitRPC{}
+
+	job := benchmarkSubmitJobForTest(t)
+	job.MerkleBranches = nil
+	job.Transactions = nil
+	job.Target = new(big.Int).SetBytes([]byte{
+		0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	})
+
+	jobID := job.JobID
+	ex2 := []byte{0, 0, 0, 0}
+	ntimeHex := "6553f100" // 1700000000
+	useVersion := uint32(1)
+
+	// Simulate that we notified this miner using a unique scriptTime.
+	notifiedScriptTime := job.ScriptTime + 1
+	mc.jobScriptTime = map[string]int64{jobID: notifiedScriptTime}
+
+	// Find a nonce such that the block condition is true for notifiedScriptTime,
+	// but false for the fallback job.ScriptTime. This ensures we submit the block
+	// only if we rebuild with the notified coinbase.
+	var chosenNonce string
+	for i := uint32(0); i < 500000; i++ {
+		nonceHex := fmt.Sprintf("%08x", i)
+
+		cbTx, cbTxid, err := serializeCoinbaseTxPredecoded(
+			job.Template.Height,
+			mc.extranonce1,
+			ex2,
+			job.TemplateExtraNonce2Size,
+			job.PayoutScript,
+			job.CoinbaseValue,
+			job.witnessCommitScript,
+			job.coinbaseFlagsBytes,
+			job.CoinbaseMsg,
+			notifiedScriptTime,
+		)
+		if err != nil || len(cbTxid) != 32 || len(cbTx) == 0 {
+			t.Fatalf("coinbase build: %v", err)
+		}
+		merkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
+		hdr, err := job.buildBlockHeader(merkle, ntimeHex, nonceHex, int32(useVersion))
+		if err != nil {
+			t.Fatalf("build header: %v", err)
+		}
+		hh := doubleSHA256Array(hdr)
+		var hhLE [32]byte
+		copy(hhLE[:], hh[:])
+		reverseBytes32(&hhLE)
+		if new(big.Int).SetBytes(hhLE[:]).Cmp(job.Target) > 0 {
+			continue
+		}
+
+		// Same nonce with fallback scriptTime should not be a block (high probability).
+		cbTx2, cbTxid2, err := serializeCoinbaseTxPredecoded(
+			job.Template.Height,
+			mc.extranonce1,
+			ex2,
+			job.TemplateExtraNonce2Size,
+			job.PayoutScript,
+			job.CoinbaseValue,
+			job.witnessCommitScript,
+			job.coinbaseFlagsBytes,
+			job.CoinbaseMsg,
+			job.ScriptTime,
+		)
+		if err != nil || len(cbTxid2) != 32 || len(cbTx2) == 0 {
+			t.Fatalf("coinbase build fallback: %v", err)
+		}
+		merkle2 := computeMerkleRootFromBranches(cbTxid2, job.MerkleBranches)
+		hdr2, err := job.buildBlockHeader(merkle2, ntimeHex, nonceHex, int32(useVersion))
+		if err != nil {
+			t.Fatalf("build header fallback: %v", err)
+		}
+		hh2 := doubleSHA256Array(hdr2)
+		var hh2LE [32]byte
+		copy(hh2LE[:], hh2[:])
+		reverseBytes32(&hh2LE)
+		if new(big.Int).SetBytes(hh2LE[:]).Cmp(job.Target) <= 0 {
+			continue
+		}
+
+		chosenNonce = nonceHex
+		break
+	}
+	if chosenNonce == "" {
+		t.Fatalf("failed to find nonce for notified vs fallback scriptTime")
+	}
+
+	task := submissionTask{
+		mc:               mc,
+		reqID:            1,
+		job:              job,
+		jobID:            jobID,
+		workerName:       "worker1",
+		extranonce2:      "00000000",
+		extranonce2Bytes: ex2,
+		ntime:            ntimeHex,
+		nonce:            chosenNonce,
+		versionHex:       "00000001",
+		useVersion:       useVersion,
+		scriptTime:       notifiedScriptTime,
+		receivedAt:       time.Unix(1700000000, 0),
 	}
 
 	mc.conn = nopConn{}

@@ -80,6 +80,8 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 		cfg:         Config{PoolFeePercent: 0},
 		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 	}
+	// Ensure handleBlockShare uses the scriptTime that matches what was notified.
+	mc.jobScriptTime = map[string]int64{job.JobID: job.ScriptTime}
 	// Provide a no-op conn/writer so handleBlockShare can emit responses
 	// without panicking on a nil connection.
 	mc.conn = nopConn{}

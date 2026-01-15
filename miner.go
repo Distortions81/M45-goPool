@@ -231,6 +231,7 @@ type MinerConn struct {
 	lastJob              *Job
 	lastClean            bool
 	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
+	jobScriptTime        map[string]int64
 	banUntil             time.Time
 	banReason            string
 	lastPenalty          time.Time

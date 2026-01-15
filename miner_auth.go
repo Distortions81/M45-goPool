@@ -357,8 +357,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	mc.jobMu.Lock()
 	mc.notifySeq++
 	seq := mc.notifySeq
-	mc.jobMu.Unlock()
+	if mc.jobScriptTime == nil {
+		mc.jobScriptTime = make(map[string]int64, mc.maxRecentJobs)
+	}
 	uniqueScriptTime := job.ScriptTime + int64(seq)
+	mc.jobScriptTime[job.JobID] = uniqueScriptTime
+	mc.jobMu.Unlock()
 
 	worker := mc.currentWorker()
 	var (
