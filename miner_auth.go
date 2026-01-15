@@ -335,6 +335,15 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		mc.sendVersionMask()
 	}
 
+	// Generate unique scriptTime for this send to prevent duplicate work.
+	// Each notification produces a different coinbase, ensuring miners can't
+	// produce duplicate shares even if they restart their nonce search.
+	mc.jobMu.Lock()
+	mc.notifySeq++
+	seq := mc.notifySeq
+	mc.jobMu.Unlock()
+	uniqueScriptTime := job.ScriptTime + int64(seq)
+
 	worker := mc.currentWorker()
 	var (
 		coinb1 string
@@ -359,7 +368,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 				job.WitnessCommitment,
 				job.Template.CoinbaseAux.Flags,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				uniqueScriptTime,
 			)
 		} else {
 			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
@@ -374,7 +383,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 				job.WitnessCommitment,
 				job.Template.CoinbaseAux.Flags,
 				job.CoinbaseMsg,
-				job.ScriptTime,
+				uniqueScriptTime,
 			)
 		}
 	}
@@ -396,7 +405,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 			job.WitnessCommitment,
 			job.Template.CoinbaseAux.Flags,
 			job.CoinbaseMsg,
-			job.ScriptTime,
+			uniqueScriptTime,
 		)
 	}
 	if err != nil {
