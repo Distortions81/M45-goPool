@@ -306,12 +306,6 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		return submissionTask{}, false
 	}
 
-	if mc.cfg.CheckDuplicateShares && mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
-		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
-		mc.rejectShareWithBan(req, workerName, rejectDuplicateShare, 22, "duplicate share", now)
-		return submissionTask{}, false
-	}
-
 	task := submissionTask{
 		mc:               mc,
 		reqID:            req.ID,
@@ -487,6 +481,14 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	}
 
 	isBlock := hashNum.Cmp(job.Target) <= 0
+
+	// Duplicate-share detection is intentionally bypassed for winning blocks: we
+	// must never reject a valid block due to a cache collision or earlier state.
+	if !isBlock && mc.cfg.CheckDuplicateShares && mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
+		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
+		return
+	}
 
 	lowDiff := false
 	thresholdDiff := assignedDiff
