@@ -174,7 +174,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		return submissionTask{}, false
 	}
 
-	job, ok := mc.jobForID(jobID)
+	job, curLast, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
 		// Use "job not found" for missing/expired jobs.
@@ -184,9 +184,6 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
-	mc.jobMu.Lock()
-	curLast := mc.lastJob
-	mc.jobMu.Unlock()
 	if curLast != nil && curLast.Template.Previous != job.Template.Previous {
 		logger.Warn("submit rejected: stale job prevhash mismatch", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
 		mc.rejectShareWithBan(req, workerName, rejectStaleJob, 21, "job not found", now)
