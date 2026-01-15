@@ -548,18 +548,20 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		mc.sendNotifyFor(job, true)
 	}
 
-	accRate, subRate := mc.shareRates(now)
-	stats := mc.snapshotStats()
-	logger.Info("share accepted",
-		"miner", mc.minerName(workerName),
-		"difficulty", shareDiff,
-		"hash", hashHex,
-		"accepted_total", stats.Accepted,
-		"rejected_total", stats.Rejected,
-		"worker_difficulty", stats.TotalDifficulty,
-		"accept_rate_per_min", accRate,
-		"submit_rate_per_min", subRate,
-	)
+	if logger.Enabled(logLevelInfo) {
+		accRate, subRate := mc.shareRates(now)
+		stats := mc.snapshotStats()
+		logger.Info("share accepted",
+			"miner", mc.minerName(workerName),
+			"difficulty", shareDiff,
+			"hash", hashHex,
+			"accepted_total", stats.Accepted,
+			"rejected_total", stats.Rejected,
+			"worker_difficulty", stats.TotalDifficulty,
+			"accept_rate_per_min", accRate,
+			"submit_rate_per_min", subRate,
+		)
+	}
 	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
 }
 
@@ -678,7 +680,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 	// For solo mining, treat the worker that submitted the block as the
 	// beneficiary of the block reward. We always split the reward between
 	// the pool fee and worker payout for logging purposes.
-	if workerName != "" && job != nil && job.CoinbaseValue > 0 {
+	if logger.Enabled(logLevelInfo) && workerName != "" && job != nil && job.CoinbaseValue > 0 {
 		total := job.CoinbaseValue
 		feePct := mc.cfg.PoolFeePercent
 		if feePct < 0 {
@@ -708,16 +710,21 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 		}
 	}
 
-	stats := mc.snapshotStats()
+	var stats MinerStats
+	if logger.Enabled(logLevelInfo) {
+		stats = mc.snapshotStats()
+	}
 	mc.logFoundBlock(job, workerName, hashHex, shareDiff)
-	logger.Info("block found",
-		"miner", mc.minerName(workerName),
-		"height", job.Template.Height,
-		"hash", hashHex,
-		"accepted_total", stats.Accepted,
-		"rejected_total", stats.Rejected,
-		"worker_difficulty", stats.TotalDifficulty,
-	)
+	if logger.Enabled(logLevelInfo) {
+		logger.Info("block found",
+			"miner", mc.minerName(workerName),
+			"height", job.Template.Height,
+			"hash", hashHex,
+			"accepted_total", stats.Accepted,
+			"rejected_total", stats.Rejected,
+			"worker_difficulty", stats.TotalDifficulty,
+		)
+	}
 	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
 }
 
