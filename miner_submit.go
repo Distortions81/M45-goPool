@@ -209,10 +209,10 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
+	policyReject := submitPolicyReject{reason: rejectUnknown}
 	if curLast != nil && curLast.Template.Previous != job.Template.Previous {
-		logger.Warn("submit rejected: stale job prevhash mismatch", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
-		mc.rejectShareWithBan(req, workerName, rejectStaleJob, 21, "job not found", now)
-		return submissionTask{}, false
+		logger.Warn("submit: stale job prevhash mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
 	}
 
 	if len(extranonce2) != job.Extranonce2Size*2 {
@@ -252,9 +252,12 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 	}
 	maxNTime := minNTime + int64(ntimeForwardSlack)
 	if int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime {
-		logger.Warn("submit ntime outside window", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
-		mc.rejectShareWithBan(req, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
-		return submissionTask{}, false
+		// Policy-only: for safety we still run the PoW check and, if the share is
+		// a real block, submit it even if ntime violates the pool's tighter window.
+		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"}
+		}
 	}
 
 	if len(nonce) != 8 {
@@ -291,19 +294,22 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		versionHex = fmt.Sprintf("%08x", useVersion)
 	}
 	if versionDiff != 0 && !mc.versionRoll {
-		logger.Warn("submit rejected: version rolling disabled", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
-		mc.rejectShareWithBan(req, workerName, rejectInvalidVersion, 20, "version rolling not enabled", now)
-		return submissionTask{}, false
+		logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
+		}
 	}
 	if versionDiff&^mc.versionMask != 0 {
-		logger.Warn("submit rejected: version outside mask", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
-		mc.rejectShareWithBan(req, workerName, rejectInvalidVersionMask, 20, "invalid version mask", now)
-		return submissionTask{}, false
+		logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
+		}
 	}
 	if versionDiff != 0 && mc.minVerBits > 0 && bits.OnesCount32(versionDiff&mc.versionMask) < mc.minVerBits {
-		logger.Warn("submit rejected: insufficient version rolling bits", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
-		mc.rejectShareWithBan(req, workerName, rejectInsufficientVersionBits, 20, "insufficient version bits", now)
-		return submissionTask{}, false
+		logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+		}
 	}
 
 	task := submissionTask{
@@ -319,6 +325,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
+		policyReject:     policyReject,
 		receivedAt:       now,
 	}
 	return task, true
@@ -335,6 +342,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	versionHex := task.versionHex
 	useVersion := task.useVersion
 	scriptTime := task.scriptTime
+	policyReject := task.policyReject
 	reqID := task.reqID
 	now := task.receivedAt
 
@@ -487,6 +495,13 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	}
 
 	isBlock := hashNum.Cmp(job.Target) <= 0
+
+	// If the pool's policy checks failed but this isn't a block, reject now.
+	// For blocks, policy violations are bypassed (node consensus decides).
+	if !isBlock && policyReject.reason != rejectUnknown {
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
+		return
+	}
 
 	// Duplicate-share detection is intentionally bypassed for winning blocks: we
 	// must never reject a valid block due to a cache collision or earlier state.

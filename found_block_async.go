@@ -12,6 +12,7 @@ import (
 type foundBlockLogEntry struct {
 	Dir  string
 	Line []byte
+	Done chan struct{}
 }
 
 var (
@@ -28,6 +29,10 @@ func startFoundBlockLogger() {
 		var f *os.File
 		var curPath string
 		for entry := range foundBlockLogCh {
+			if entry.Done != nil {
+				close(entry.Done)
+				continue
+			}
 			dir := entry.Dir
 			if dir == "" {
 				dir = defaultDataDir

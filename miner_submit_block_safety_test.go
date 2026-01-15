@@ -26,6 +26,21 @@ func (c *countingSubmitRPC) callCtx(_ context.Context, method string, params int
 	return nil
 }
 
+func flushFoundBlockLog(t *testing.T) {
+	t.Helper()
+	done := make(chan struct{})
+	select {
+	case foundBlockLogCh <- foundBlockLogEntry{Done: done}:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatalf("timed out enqueueing found block log flush")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for found block log flush")
+	}
+}
+
 func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	metrics := NewPoolMetrics()
 	mc := benchmarkMinerConnForSubmit(metrics)
@@ -67,6 +82,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	mc.conn = nopConn{}
 	mc.writer = bufio.NewWriterSize(mc.conn, 256)
 	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {
@@ -190,6 +206,51 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 	mc.conn = nopConn{}
 	mc.writer = bufio.NewWriterSize(mc.conn, 256)
 	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
+
+	rpc := mc.rpc.(*countingSubmitRPC)
+	if got := rpc.submitCalls.Load(); got != 1 {
+		t.Fatalf("expected submitblock to be called once, got %d", got)
+	}
+}
+
+func TestBlockBypassesPolicyRejects(t *testing.T) {
+	metrics := NewPoolMetrics()
+	mc := benchmarkMinerConnForSubmit(metrics)
+	mc.cfg.CheckDuplicateShares = false
+	mc.cfg.DataDir = t.TempDir()
+	mc.rpc = &countingSubmitRPC{}
+
+	job := benchmarkSubmitJobForTest(t)
+	job.Target = new(big.Int).Set(maxUint256)
+	jobID := job.JobID
+
+	// Use a notified scriptTime to avoid coinbase mismatch issues.
+	mc.jobScriptTime = map[string]int64{jobID: job.ScriptTime + 1}
+
+	task := submissionTask{
+		mc:               mc,
+		reqID:            1,
+		job:              job,
+		jobID:            jobID,
+		workerName:       "worker1",
+		extranonce2:      "00000000",
+		extranonce2Bytes: []byte{0, 0, 0, 0},
+		ntime:            "6553f100",
+		nonce:            "00000000",
+		versionHex:       "00000001",
+		useVersion:       1,
+		scriptTime:       job.ScriptTime + 1,
+		// Simulate a policy rejection (e.g. strict ntime/version rules) that
+		// should not prevent submitting a real block.
+		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"},
+		receivedAt:   time.Unix(1700000000, 0),
+	}
+
+	mc.conn = nopConn{}
+	mc.writer = bufio.NewWriterSize(mc.conn, 256)
+	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {

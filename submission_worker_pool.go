@@ -43,7 +43,14 @@ type submissionTask struct {
 	versionHex       string
 	useVersion       uint32
 	scriptTime       int64
+	policyReject     submitPolicyReject
 	receivedAt       time.Time
+}
+
+type submitPolicyReject struct {
+	reason  submitRejectReason
+	errCode int
+	errMsg  string
 }
 
 type submissionWorkerPool struct {
