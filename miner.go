@@ -117,10 +117,16 @@ type duplicateShareKey struct {
 }
 
 // duplicateShareSet is a hash-based duplicate detection cache with bounded size.
-// When full, it clears and restarts (simple eviction strategy).
+// Uses LRU eviction to remove oldest entries when at capacity.
 type duplicateShareSet struct {
 	m     map[duplicateShareKey]struct{}
-	count int
+	order []duplicateShareKey // Track insertion order for LRU eviction
+}
+
+// evictedCacheEntry holds a share cache for an evicted job during grace period.
+type evictedCacheEntry struct {
+	cache     *duplicateShareSet
+	evictedAt time.Time
 }
 
 func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, versionHex string) {
@@ -158,25 +164,32 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, ve
 }
 
 // seenOrAdd reports whether key has already been seen, and records it if not.
-// O(1) lookup via hash map. Clears map when reaching duplicateShareHistory limit.
+// O(1) lookup via hash map. Uses LRU eviction when reaching capacity.
 func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
 	if s.m == nil {
 		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
+		s.order = make([]duplicateShareKey, 0, duplicateShareHistory)
 	}
 
 	if _, seen := s.m[key]; seen {
 		return true
 	}
 
+	// Evict oldest 10% when at capacity (keeps 90% of recent history)
+	if len(s.order) >= duplicateShareHistory {
+		evictCount := duplicateShareHistory / 10
+		if evictCount < 1 {
+			evictCount = 1
+		}
+		for i := 0; i < evictCount; i++ {
+			delete(s.m, s.order[i])
+		}
+		s.order = s.order[evictCount:]
+	}
+
 	// Add new key
 	s.m[key] = struct{}{}
-	s.count++
-
-	// Clear map when full (simple eviction strategy)
-	if s.count >= duplicateShareHistory {
-		clear(s.m)
-		s.count = 0
-	}
+	s.order = append(s.order, key)
 
 	return false
 }
@@ -214,8 +227,10 @@ type MinerConn struct {
 	jobOrder             []string
 	maxRecentJobs        int
 	shareCache           map[string]*duplicateShareSet
+	evictedShareCache    map[string]*evictedCacheEntry
 	lastJob              *Job
 	lastClean            bool
+	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
 	banUntil             time.Time
 	banReason            string
 	lastPenalty          time.Time
@@ -287,6 +302,9 @@ type rpcCaller interface {
 func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blockHex string, submitRes *interface{}) error {
 	const (
 		retryInterval = 100 * time.Millisecond
+		// rpcCallTimeout bounds each individual RPC call so a hung bitcoind
+		// doesn't block the retry loop indefinitely.
+		rpcCallTimeout = 5 * time.Second
 		// maxRetryWindow is a final safety cap; in practice we expect to
 		// stop much sooner when a new block is seen. Using a full block
 		// interval keeps us racing hard for rare finds.
@@ -299,7 +317,13 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 
 	for {
 		attempt++
-		err := mc.rpc.call("submitblock", []interface{}{blockHex}, submitRes)
+
+		// Use a per-call timeout to prevent indefinite hangs on unresponsive RPC.
+		// The retry loop continues regardless; we just don't want one call to block forever.
+		callCtx, cancel := context.WithTimeout(context.Background(), rpcCallTimeout)
+		err := mc.rpc.callCtx(callCtx, "submitblock", []interface{}{blockHex}, submitRes)
+		cancel()
+
 		if err == nil {
 			if attempt > 1 {
 				logger.Info("submitblock succeeded after retries",
@@ -691,8 +715,9 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		connectedAt:     now,
 		lastActivity:    now,
 		jobDifficulty:   make(map[string]float64, maxRecentJobs),            // Pre-allocate for expected job count
-		shareCache:      make(map[string]*duplicateShareSet, maxRecentJobs), // Pre-allocate for expected job count
-		maxRecentJobs:   maxRecentJobs,
+		shareCache:        make(map[string]*duplicateShareSet, maxRecentJobs), // Pre-allocate for expected job count
+		evictedShareCache: make(map[string]*evictedCacheEntry),
+		maxRecentJobs:     maxRecentJobs,
 		lastPenalty:     time.Now(),
 		versionRoll:     false,
 		versionMask:     0,
@@ -861,6 +886,15 @@ func (mc *MinerConn) writeResponse(resp StratumResponse) {
 }
 
 func (mc *MinerConn) listenJobs() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("listenJobs panic recovered", "remote", mc.id, "panic", r)
+			// Restart the listener after a brief delay to avoid tight panic loops
+			time.Sleep(100 * time.Millisecond)
+			go mc.listenJobs()
+		}
+	}()
+
 	for job := range mc.jobCh {
 		mc.sendNotifyFor(job, false)
 	}
