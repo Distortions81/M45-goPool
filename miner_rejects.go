@@ -343,22 +343,36 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	// The eviction logic below will handle cleanup when we exceed maxRecentJobs
 	if _, ok := mc.activeJobs[job.JobID]; !ok {
 		mc.jobOrder = append(mc.jobOrder, job.JobID)
-	} else {
-		// Job re-sent (e.g. difficulty change) - clear share cache since
-		// coinbase may have changed (dual-payout becoming active, etc.)
-		delete(mc.shareCache, job.JobID)
 	}
+	// Note: Don't clear shareCache on job re-send - coinbase is stable for a
+	// given job (payouts configured at boot). Clearing would allow duplicate
+	// shares after difficulty changes, wasting miner work.
 	mc.activeJobs[job.JobID] = job
 	mc.lastJob = job
 	mc.lastClean = clean
 
 	// Evict oldest jobs if we exceed the max limit
+	now := time.Now()
 	for len(mc.jobOrder) > mc.maxRecentJobs && len(mc.jobOrder) > 0 {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
 		delete(mc.activeJobs, oldest)
+		// Move share cache to evicted storage instead of deleting
+		if cache := mc.shareCache[oldest]; cache != nil {
+			mc.evictedShareCache[oldest] = &evictedCacheEntry{
+				cache:     cache,
+				evictedAt: now,
+			}
+		}
 		delete(mc.shareCache, oldest)
 		delete(mc.jobDifficulty, oldest)
+	}
+
+	// Clean up expired evicted caches
+	for jobID, entry := range mc.evictedShareCache {
+		if now.Sub(entry.evictedAt) > evictedShareCacheGrace {
+			delete(mc.evictedShareCache, jobID)
+		}
 	}
 }
 
@@ -367,6 +381,15 @@ func (mc *MinerConn) jobForID(jobID string) (*Job, bool) {
 	defer mc.jobMu.Unlock()
 	job, ok := mc.activeJobs[jobID]
 	return job, ok
+}
+
+// jobForIDWithLast returns the job for the given ID along with the current lastJob,
+// both under a single lock acquisition to avoid race conditions.
+func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, ok bool) {
+	mc.jobMu.Lock()
+	defer mc.jobMu.Unlock()
+	job, ok = mc.activeJobs[jobID]
+	return job, mc.lastJob, ok
 }
 
 func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
@@ -424,15 +447,31 @@ func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 }
 
 func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionHex string) bool {
+	// Skip duplicate checking if disabled (default for solo pools)
+	if !mc.cfg.CheckDuplicateShares {
+		return false
+	}
+
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
-	cache := mc.shareCache[jobID]
-	if cache == nil {
-		cache = &duplicateShareSet{}
-		mc.shareCache[jobID] = cache
-	}
+
 	var dk duplicateShareKey
 	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, versionHex)
+
+	// Check active job cache first
+	cache := mc.shareCache[jobID]
+	if cache != nil {
+		return cache.seenOrAdd(dk)
+	}
+
+	// Check evicted job cache (for late shares on evicted jobs)
+	if entry := mc.evictedShareCache[jobID]; entry != nil {
+		return entry.cache.seenOrAdd(dk)
+	}
+
+	// No cache exists - create new one in active cache
+	cache = &duplicateShareSet{}
+	mc.shareCache[jobID] = cache
 	return cache.seenOrAdd(dk)
 }
 
