@@ -8,9 +8,12 @@ const (
 	poolSoftwareName = "goPool"
 
 	// duplicateShareHistory controls how many recent submissions per job are
-	// tracked for duplicate-share detection. It is implemented as a fixed-size
-	// ring so memory usage is bounded and independent of share rate.
+	// tracked for duplicate-share detection. Uses LRU eviction when at capacity.
 	duplicateShareHistory = 100
+
+	// evictedShareCacheGrace is how long share caches are kept for evicted jobs.
+	// This allows duplicate detection for late shares on jobs that were evicted.
+	evictedShareCacheGrace = 60 * time.Second
 
 	// workerPageCacheLimit bounds the number of cached worker_status pages kept
 	// in memory. Entries also expire after overviewRefreshInterval.
