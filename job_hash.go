@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"slices"
 	"strconv"
@@ -61,17 +62,47 @@ func targetFromDifficulty(diff float64) *big.Int {
 
 // difficultyFromHash converts the block hash to a difficulty value relative to diff=1.
 // The hash parameter should be big-endian bytes from SHA256.
+//
+// Fast approximation: uses the most-significant 64 bits (after Bitcoin's little-endian
+// interpretation) plus a power-of-two scaling factor. This avoids big.Int/big.Float
+// allocations on the share hot path.
 func difficultyFromHash(hash []byte) float64 {
-	// Bitcoin PoW uses little-endian interpretation
-	n := new(big.Int).SetBytes(reverseBytes(hash))
-	if n.Sign() == 0 {
+	msb := -1
+	for i := len(hash) - 1; i >= 0; i-- {
+		if hash[i] != 0 {
+			msb = i
+			break
+		}
+	}
+	if msb < 0 {
 		return defaultVarDiff.MaxDiff
 	}
 
-	f := new(big.Float).SetPrec(256).SetInt(diff1Target)
-	f.Quo(f, new(big.Float).SetInt(n))
-	val, _ := f.Float64()
-	return val
+	var top uint64
+	for j := 0; j < 8; j++ {
+		idx := msb - j
+		var b byte
+		if idx >= 0 {
+			b = hash[idx]
+		}
+		top = (top << 8) | uint64(b)
+	}
+	if top == 0 {
+		return defaultVarDiff.MaxDiff
+	}
+
+	// For msb==31 we used bytes [31..24], leaving 24 bytes below => exponentBits=192.
+	exponentBits := 8 * (msb - 7)
+
+	// diff = (65535 / top) * 2^(208 - exponentBits)
+	diff := math.Ldexp(65535.0/float64(top), 208-exponentBits)
+	if diff <= 0 || math.IsNaN(diff) {
+		return defaultVarDiff.MaxDiff
+	}
+	if math.IsInf(diff, 0) {
+		return math.MaxFloat64
+	}
+	return diff
 }
 
 func parseRawBlockTip(payload []byte) (ZMQBlockTip, error) {
