@@ -59,44 +59,6 @@ func (s *StatusServer) oneTimeCodeInUseLocked(code string) bool {
 	return false
 }
 
-func (s *StatusServer) getOrCreateOneTimeCode(userID string, now time.Time) (code string, expiresAt time.Time) {
-	if s == nil || strings.TrimSpace(userID) == "" {
-		return "", time.Time{}
-	}
-
-	s.oneTimeCodeMu.Lock()
-	defer s.oneTimeCodeMu.Unlock()
-
-	s.initOneTimeCodesLocked()
-	s.cleanupExpiredOneTimeCodesLocked(now)
-
-	if existing, ok := s.oneTimeCodes[userID]; ok && existing.Code != "" && now.Before(existing.ExpiresAt) {
-		return existing.Code, existing.ExpiresAt
-	}
-
-	s.evictOneTimeCodesLocked(now)
-
-	// Best-effort uniqueness and non-empty output.
-	for i := 0; i < 50; i++ {
-		code = strings.TrimSpace(oneTimeCodeGenerator())
-		if code == "" {
-			continue
-		}
-		if s.oneTimeCodeInUseLocked(code) {
-			continue
-		}
-		expiresAt = now.Add(oneTimeCodeTTL)
-		s.oneTimeCodes[userID] = oneTimeCodeEntry{
-			Code:      code,
-			CreatedAt: now,
-			ExpiresAt: expiresAt,
-		}
-		return code, expiresAt
-	}
-
-	return "", time.Time{}
-}
-
 func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code string, expiresAt time.Time) {
 	if s == nil || strings.TrimSpace(userID) == "" {
 		return "", time.Time{}

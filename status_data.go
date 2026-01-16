@@ -110,8 +110,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if s.metrics != nil {
 		bestShares = s.metrics.SnapshotBestShares()
 	}
-	var allWorkers []WorkerView
-	allWorkers = s.snapshotWorkerViews(snapshotTime)
+	allWorkers := s.snapshotWorkerViews(snapshotTime)
 	workers = make([]WorkerView, 0, len(allWorkers))
 	bannedWorkers = make([]WorkerView, 0, len(allWorkers))
 	seen := make(map[string]struct{}, len(allWorkers))
