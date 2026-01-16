@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,12 +19,21 @@ type foundBlockLogEntry struct {
 }
 
 var (
-	foundBlockLogCh   = make(chan foundBlockLogEntry, 64)
-	foundBlockLogOnce sync.Once
+	foundBlockLogCh        = make(chan foundBlockLogEntry, 64)
+	foundBlockLogOnce      sync.Once
+	foundBlockTestDropOnce sync.Once
 )
 
 func init() {
 	foundBlockLogOnce.Do(startFoundBlockLogger)
+}
+
+func runningUnderGoTest() bool {
+	if len(os.Args) == 0 {
+		return false
+	}
+	// `go test` binaries are typically named like `pkg.test`.
+	return strings.HasSuffix(filepath.Base(os.Args[0]), ".test")
 }
 
 func startFoundBlockLogger() {
@@ -37,6 +48,14 @@ func startFoundBlockLogger() {
 			dir := entry.Dir
 			if dir == "" {
 				dir = defaultDataDir
+			}
+			// Avoid polluting the real `data/` directory when running unit tests.
+			// Tests should set `cfg.DataDir = t.TempDir()` when they need persistence.
+			if runningUnderGoTest() && dir == defaultDataDir {
+				foundBlockTestDropOnce.Do(func() {
+					logger.Warn("dropping found-block log writes during go test; set DataDir to a temp dir to persist")
+				})
+				continue
 			}
 			dbPath := stateDBPathFromDataDir(dir)
 			if dbPath != curDBPath || db == nil {
