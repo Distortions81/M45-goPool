@@ -265,7 +265,7 @@ func main() {
 	// node RPC was unavailable in previous runs.
 	startPendingSubmissionReplayer(ctx, cfg, rpcClient)
 
-	accounting, err := NewAccountStore(cfg, debugEnabled(), cleanBansOnStartup)
+	accounting, err := NewAccountStore(cfg, cleanBansOnStartup)
 	if err != nil {
 		fatal("accounting", err)
 	}

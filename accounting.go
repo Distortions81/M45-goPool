@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
@@ -459,59 +458,6 @@ func (b *banStore) snapshot(now time.Time) []banEntry {
 	return out
 }
 
-func writeFileAtomically(path string, data []byte, bufSize int, syncWrite bool) error {
-	tmp := path + ".tmp"
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-	w := bufio.NewWriterSize(f, bufSize)
-	if _, err := w.Write(data); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := w.Flush(); err != nil {
-		f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if syncWrite {
-		if err := f.Sync(); err != nil {
-			f.Close()
-			_ = os.Remove(tmp)
-			return err
-		}
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if syncWrite {
-		if err := syncDir(dir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func syncDir(dir string) error {
-	df, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer df.Close()
-	return df.Sync()
-}
-
 func syncFileIfExists(path string) error {
 	if path == "" {
 		return nil
@@ -527,7 +473,7 @@ func syncFileIfExists(path string) error {
 	return f.Sync()
 }
 
-func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountStore, error) {
+func NewAccountStore(cfg Config, cleanBans bool) (*AccountStore, error) {
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
