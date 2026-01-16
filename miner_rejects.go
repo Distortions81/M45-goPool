@@ -209,6 +209,35 @@ func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, 
 	})
 }
 
+// rejectShareWithBanMaybeSilent performs the same accounting/ban logic as
+// rejectShareWithBan but optionally suppresses the Stratum response.
+//
+// This is used for optimistic-share-response mode, where the miner has already
+// received an "accepted" reply and invalid shares should be silently rejected.
+func (mc *MinerConn) rejectShareWithBanMaybeSilent(reqID interface{}, workerName string, reason submitRejectReason, errCode int, errMsg string, now time.Time, silent bool) {
+	reasonText := reason.String()
+	mc.recordShare(workerName, false, 0, 0, reasonText, "", nil, now)
+	if banned, invalids := mc.noteInvalidSubmit(now, reason); banned {
+		mc.logBan(reasonText, workerName, invalids)
+		if !silent {
+			mc.writeResponse(StratumResponse{
+				ID:     reqID,
+				Result: false,
+				Error:  newStratumError(24, "banned"),
+			})
+		}
+		return
+	}
+	if silent {
+		return
+	}
+	mc.writeResponse(StratumResponse{
+		ID:     reqID,
+		Result: false,
+		Error:  newStratumError(errCode, errMsg),
+	})
+}
+
 func (mc *MinerConn) shareRates(now time.Time) (float64, float64) {
 	mc.statsMu.Lock()
 	defer mc.statsMu.Unlock()

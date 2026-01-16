@@ -135,19 +135,23 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// [worker_name, job_id, extranonce2, ntime, nonce]
 	now := time.Now()
 
-	task, ok := mc.prepareSubmissionTask(req, now)
-	if !ok {
-		return
-	}
-
 	// Optimistic mode: respond immediately, validate async. This minimizes
 	// displayed latency at the cost of not catching invalid shares until
 	// after the response. Invalid shares are still not counted.
 	if mc.cfg.OptimisticShareResponse {
+		task, ok := mc.prepareSubmissionTaskOptimistic(req, now)
+		if !ok {
+			return
+		}
 		mc.writeAcceptResponse(req.ID)
 		task.optimistic = true
 		ensureSubmissionWorkerPool()
 		submissionWorkers.submit(task)
+		return
+	}
+
+	task, ok := mc.prepareSubmissionTask(req, now)
+	if !ok {
 		return
 	}
 
@@ -160,6 +164,64 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 		ensureSubmissionWorkerPool()
 		submissionWorkers.submit(task)
 	}
+}
+
+// prepareSubmissionTaskOptimistic does minimal validation required to safely
+// send an immediate "accepted" response. Deeper validation (job lookup, PoW,
+// duplicate checks, etc.) happens asynchronously in processSubmissionTask.
+func (mc *MinerConn) prepareSubmissionTaskOptimistic(req *StratumRequest, now time.Time) (submissionTask, bool) {
+	params, ok := mc.parseSubmitParams(req, now)
+	if !ok {
+		return submissionTask{}, false
+	}
+
+	if !mc.authorized {
+		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		mc.recordShare(params.worker, false, 0, 0, "unauthorized", "", nil, now)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("unauthorized")
+		}
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "unauthorized")})
+		return submissionTask{}, false
+	}
+
+	authorizedWorker := strings.TrimSpace(mc.currentWorker())
+	submitWorker := strings.TrimSpace(params.worker)
+	if authorizedWorker != "" && submitWorker != authorizedWorker {
+		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
+		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("worker_mismatch")
+		}
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "unauthorized")})
+		return submissionTask{}, false
+	}
+
+	workerName := authorizedWorker
+	if workerName == "" {
+		workerName = params.worker
+	}
+	if mc.isBanned(now) {
+		until, reason, _ := mc.banDetails()
+		logger.Warn("submit rejected: banned", "miner", mc.minerName(workerName), "ban_until", until, "reason", reason)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("banned")
+		}
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(24, "banned")})
+		return submissionTask{}, false
+	}
+
+	return submissionTask{
+		mc:               mc,
+		reqID:            req.ID,
+		jobID:            params.jobID,
+		workerName:       workerName,
+		extranonce2:      params.extranonce2,
+		ntime:            params.ntime,
+		nonce:            params.nonce,
+		submittedVersion: params.submittedVersion,
+		receivedAt:       now,
+	}, true
 }
 
 // prepareSubmissionTask validates a mining.submit request and, if valid, returns
@@ -341,6 +403,7 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		extranonce2Bytes: en2,
 		ntime:            ntime,
 		nonce:            nonce,
+		submittedVersion: submittedVersion,
 		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
@@ -350,7 +413,145 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 	return task, true
 }
 
+func (mc *MinerConn) completeSubmissionTaskForProcessing(task submissionTask) (submissionTask, bool) {
+	now := task.receivedAt
+	silent := task.optimistic
+
+	workerName := task.workerName
+	jobID := task.jobID
+	extranonce2 := task.extranonce2
+	ntime := task.ntime
+	nonce := task.nonce
+	submittedVersion := task.submittedVersion
+
+	job, curLast, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	if !ok || job == nil {
+		logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("stale_job")
+		}
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectStaleJob, 21, "job not found", now, silent)
+		return submissionTask{}, false
+	}
+
+	// Defensive: ensure the job template still matches what we advertised to this
+	// connection (prevhash/height). If it changed underneath us, reject as stale.
+	policyReject := submitPolicyReject{reason: rejectUnknown}
+	if curLast != nil && curLast.Template.Previous != job.Template.Previous {
+		logger.Warn("submit: stale job prevhash mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
+	}
+
+	if len(extranonce2) != job.Extranonce2Size*2 {
+		logger.Warn("submit invalid extranonce2 length", "remote", mc.id, "got", len(extranonce2)/2, "expected", job.Extranonce2Size)
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now, silent)
+		return submissionTask{}, false
+	}
+	en2, err := hex.DecodeString(extranonce2)
+	if err != nil {
+		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now, silent)
+		return submissionTask{}, false
+	}
+
+	if len(ntime) != 8 {
+		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidNTime, 20, "invalid ntime", now, silent)
+		return submissionTask{}, false
+	}
+	ntimeVal, err := parseUint32BEHex(ntime)
+	if err != nil {
+		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidNTime, 20, "invalid ntime", now, silent)
+		return submissionTask{}, false
+	}
+
+	minNTime := job.Template.CurTime
+	if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
+		minNTime = job.Template.Mintime
+	}
+	ntimeForwardSlack := mc.cfg.NTimeForwardSlackSeconds
+	if ntimeForwardSlack <= 0 {
+		ntimeForwardSlack = defaultNTimeForwardSlackSeconds
+	}
+	maxNTime := minNTime + int64(ntimeForwardSlack)
+	if int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime {
+		// Policy-only: for safety we still run the PoW check and, if the share is
+		// a real block, submit it even if ntime violates the pool's tighter window.
+		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"}
+		}
+	}
+
+	if len(nonce) != 8 {
+		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidNonce, 20, "invalid nonce", now, silent)
+		return submissionTask{}, false
+	}
+	if _, err := parseUint32BEHex(nonce); err != nil {
+		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
+		mc.rejectShareWithBanMaybeSilent(task.reqID, workerName, rejectInvalidNonce, 20, "invalid nonce", now, silent)
+		return submissionTask{}, false
+	}
+
+	baseVersion := uint32(job.Template.Version)
+	useVersion := baseVersion
+	versionDiff := uint32(0)
+	if submittedVersion != 0 {
+		// ESP-Miner sends the delta (rolled_version ^ base_version), while other
+		// miners send the full rolled version. Treat values that fit entirely
+		// inside the negotiated mask as a delta, otherwise as a full version.
+		if submittedVersion&^mc.versionMask == 0 {
+			useVersion = baseVersion ^ submittedVersion
+			versionDiff = submittedVersion
+		} else {
+			useVersion = submittedVersion
+			versionDiff = useVersion ^ baseVersion
+		}
+	}
+
+	versionHex := ""
+	if mc.cfg.CheckDuplicateShares || debugLogging || verboseLogging {
+		versionHex = fmt.Sprintf("%08x", useVersion)
+	}
+	if versionDiff != 0 && !mc.versionRoll {
+		logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
+		}
+	}
+	if versionDiff&^mc.versionMask != 0 {
+		logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
+		}
+	}
+	if versionDiff != 0 && mc.minVerBits > 0 && bits.OnesCount32(versionDiff&mc.versionMask) < mc.minVerBits {
+		logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
+		if policyReject.reason == rejectUnknown {
+			policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+		}
+	}
+
+	task.job = job
+	task.extranonce2Bytes = en2
+	task.useVersion = useVersion
+	task.versionHex = versionHex
+	task.scriptTime = notifiedScriptTime
+	task.policyReject = policyReject
+	return task, true
+}
+
 func (mc *MinerConn) processSubmissionTask(task submissionTask) {
+	if task.job == nil || task.extranonce2Bytes == nil {
+		var ok bool
+		task, ok = mc.completeSubmissionTaskForProcessing(task)
+		if !ok {
+			return
+		}
+	}
+
 	job := task.job
 	workerName := task.workerName
 	jobID := task.jobID
@@ -457,11 +658,13 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		if err != nil || len(cbTxid) != 32 {
 			logger.Warn("submit coinbase rebuild failed", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, rejectInvalidCoinbase.String(), "", nil, now)
-			mc.writeResponse(StratumResponse{
-				ID:     reqID,
-				Result: false,
-				Error:  newStratumError(20, "invalid coinbase"),
-			})
+			if !optimistic {
+				mc.writeResponse(StratumResponse{
+					ID:     reqID,
+					Result: false,
+					Error:  newStratumError(20, "invalid coinbase"),
+				})
+			}
 			return
 		}
 		merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
@@ -523,7 +726,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	// If the pool's policy checks failed but this isn't a block, reject now.
 	// For blocks, policy violations are bypassed (node consensus decides).
 	if !isBlock && policyReject.reason != rejectUnknown {
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
+		mc.rejectShareWithBanMaybeSilent(reqID, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now, optimistic)
 		return
 	}
 
@@ -531,7 +734,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	// must never reject a valid block due to a cache collision or earlier state.
 	if !isBlock && mc.cfg.CheckDuplicateShares && mc.isDuplicateShare(job.JobID, extranonce2, ntime, nonce, versionHex) {
 		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
+		mc.rejectShareWithBanMaybeSilent(reqID, workerName, rejectDuplicateShare, 22, "duplicate share", now, optimistic)
 		return
 	}
 

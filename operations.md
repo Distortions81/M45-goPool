@@ -26,7 +26,7 @@
 
 - `sync_share_processing` (default `true`) – processes share submissions synchronously in the miner's read goroutine for lower latency. Set to `false` for high-traffic pools to use the async worker pool for better throughput under heavy load.
 
-- `optimistic_share_response` (default `true`) – sends the "accepted" response immediately after basic parameter validation, before full share verification. This dramatically reduces displayed ping (~1-2ms instead of 20-40ms) but means invalid shares get "accepted" feedback before being silently rejected. Safe for solo pools. Set to `false` if you prefer responses only after full validation.
+- `optimistic_share_response` (default `true`) – sends the "accepted" response immediately after minimal validation (JSON params + auth/banned checks), before job lookup and full share verification. This dramatically reduces displayed ping (~1-2ms instead of 20-40ms) but means invalid shares get "accepted" feedback before being silently rejected. Safe for solo pools. Set to `false` if you prefer responses only after full validation.
 
 See [performance.md](performance.md) for details on latency tuning.
 

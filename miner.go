@@ -858,18 +858,19 @@ func (mc *MinerConn) handle() {
 }
 
 func (mc *MinerConn) writeJSON(v interface{}) error {
-	mc.writeMu.Lock()
-	defer mc.writeMu.Unlock()
-
-	if err := mc.conn.SetWriteDeadline(time.Now().Add(stratumWriteTimeout)); err != nil {
-		return err
-	}
 	b, err := fastJSONMarshal(v)
 	if err != nil {
 		return err
 	}
 	b = append(b, '\n')
 	logNetMessage("send", b)
+
+	mc.writeMu.Lock()
+	defer mc.writeMu.Unlock()
+
+	if err := mc.conn.SetWriteDeadline(time.Now().Add(stratumWriteTimeout)); err != nil {
+		return err
+	}
 	if _, err := mc.writer.Write(b); err != nil {
 		return err
 	}

@@ -40,6 +40,7 @@ type submissionTask struct {
 	extranonce2Bytes []byte
 	ntime            string
 	nonce            string
+	submittedVersion uint32
 	versionHex       string
 	useVersion       uint32
 	scriptTime       int64
