@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,6 +16,17 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
+
+	// Set up the shared DB for this test
+	dbPath := filepath.Join(tmpDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	cleanup := setSharedStateDBForTest(db)
+	defer cleanup()
+
 	cfg := Config{DataDir: tmpDir}
 	path := pendingSubmissionsPath(cfg)
 
@@ -64,12 +76,7 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 		t.Fatalf("expected submitblock to be called at least once")
 	}
 
-	db, err := openStateDB(stateDBPathFromDataDir(tmpDir))
-	if err != nil {
-		t.Fatalf("openStateDB: %v", err)
-	}
-	defer db.Close()
-
+	// Use the shared DB that was set up earlier
 	var status string
 	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", "test-hash").Scan(&status); err != nil {
 		t.Fatalf("query status: %v", err)

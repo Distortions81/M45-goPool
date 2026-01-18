@@ -58,8 +58,6 @@ type PoolMetrics struct {
 	bestShares     [defaultBestShareLimit]BestShare
 	bestShareCount int
 	bestSharesMu   sync.RWMutex
-	bestSharesDB   *sql.DB
-	bestSharesDBMu sync.Mutex
 	bestShareChan  chan BestShare
 
 	// Simple RPC latency summaries for diagnostics (seconds).
@@ -164,18 +162,12 @@ func (m *PoolMetrics) SetBestSharesDB(dataDir string) {
 		dataDir = defaultDataDir
 	}
 
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("open best shares sqlite db", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("shared state db not initialized for best shares")
 		return
 	}
-
-	m.bestSharesDBMu.Lock()
-	if m.bestSharesDB != nil {
-		_ = m.bestSharesDB.Close()
-	}
-	m.bestSharesDB = db
-	m.bestSharesDBMu.Unlock()
 
 	legacy := filepath.Join(strings.TrimSpace(dataDir), "state", "best_shares.json")
 	if err := m.migrateBestSharesFileToDB(legacy); err != nil {
@@ -190,9 +182,10 @@ func (m *PoolMetrics) migrateBestSharesFileToDB(path string) error {
 	if m == nil || strings.TrimSpace(path) == "" {
 		return nil
 	}
-	m.bestSharesDBMu.Lock()
-	db := m.bestSharesDB
-	m.bestSharesDBMu.Unlock()
+	db := getSharedStateDB()
+	if db == nil {
+		return nil
+	}
 	if done, err := hasStateMigration(db, stateMigrationBestSharesJSON); err == nil && done {
 		if err := renameLegacyFileToOld(path); err != nil {
 			logger.Warn("rename legacy best shares file", "error", err, "from", path)
@@ -252,9 +245,7 @@ func (m *PoolMetrics) loadBestSharesFromDB() error {
 	if m == nil {
 		return nil
 	}
-	m.bestSharesDBMu.Lock()
-	db := m.bestSharesDB
-	m.bestSharesDBMu.Unlock()
+	db := getSharedStateDB()
 	if db == nil {
 		return nil
 	}
@@ -749,9 +740,7 @@ func (m *PoolMetrics) recordBestShare(share BestShare) {
 	}
 
 	var snapshot []BestShare
-	m.bestSharesDBMu.Lock()
-	hasDB := m.bestSharesDB != nil
-	m.bestSharesDBMu.Unlock()
+	hasDB := getSharedStateDB() != nil
 	if hasDB && m.bestShareCount > 0 {
 		snapshot = make([]BestShare, m.bestShareCount)
 		copy(snapshot, m.bestShares[:m.bestShareCount])
@@ -786,9 +775,7 @@ func (m *PoolMetrics) persistBestSharesToDB(shares []BestShare) error {
 	if m == nil || len(shares) == 0 {
 		return nil
 	}
-	m.bestSharesDBMu.Lock()
-	db := m.bestSharesDB
-	m.bestSharesDBMu.Unlock()
+	db := getSharedStateDB()
 	if db == nil {
 		return nil
 	}

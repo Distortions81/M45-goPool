@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -10,7 +11,17 @@ import (
 )
 
 func newDummyAccountStore(t *testing.T) *AccountStore {
-	cfg := Config{DataDir: t.TempDir()}
+	dataDir := t.TempDir()
+	dbPath := filepath.Join(dataDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	cfg := Config{DataDir: dataDir}
 	store, err := NewAccountStore(cfg, false, true)
 	if err != nil {
 		t.Fatalf("NewAccountStore failed: %v", err)

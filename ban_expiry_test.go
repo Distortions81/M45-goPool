@@ -18,6 +18,10 @@ func TestBanListPersistPrunesExpired(t *testing.T) {
 	}
 	defer db.Close()
 
+	// Set up the shared DB for this test
+	cleanup := setSharedStateDBForTest(db)
+	defer cleanup()
+
 	now := time.Now()
 	expiredTime := now.Add(-time.Hour)
 	futureTime := now.Add(time.Hour)
@@ -36,7 +40,7 @@ func TestBanListPersistPrunesExpired(t *testing.T) {
 		t.Fatalf("insert active ban: %v", err)
 	}
 
-	bans := &banStore{db: db}
+	bans := &banStore{}
 	if err := bans.cleanExpired(now); err != nil {
 		t.Fatalf("cleanExpired error: %v", err)
 	}

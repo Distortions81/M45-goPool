@@ -10,12 +10,12 @@ func migrateLegacyStateFiles(dataDir string) {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("open sqlite state db for legacy migrations", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("shared state db not initialized for legacy migrations")
 		return
 	}
-	defer db.Close()
 
 	legacyFoundBlocks := filepath.Join(dataDir, "state", "found_blocks.jsonl")
 	if err := migrateFoundBlocksJSONLToDB(db, legacyFoundBlocks); err != nil {
