@@ -60,7 +60,11 @@ func FuzzBanListRoundTrip(f *testing.F) {
 		}
 		defer db.Close()
 
-		bl := &banStore{db: db}
+		// Set up the shared DB for this test
+		cleanup := setSharedStateDBForTest(db)
+		defer cleanup()
+
+		bl := &banStore{}
 
 		now := time.Now()
 		var until time.Time
@@ -77,7 +81,12 @@ func FuzzBanListRoundTrip(f *testing.F) {
 			t.Fatalf("reload sqlite db error: %v", err)
 		}
 		defer db2.Close()
-		bl2 := &banStore{db: db2}
+
+		// Update the shared DB for lookup
+		cleanup2 := setSharedStateDBForTest(db2)
+		defer cleanup2()
+
+		bl2 := &banStore{}
 		entry, ok := bl2.lookup(worker, now)
 
 		if horizonSec <= 0 {

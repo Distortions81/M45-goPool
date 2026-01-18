@@ -234,6 +234,12 @@ func main() {
 	}
 	cfg.ClerkCallbackPath = callbackPath
 
+	// Initialize shared state database connection (singleton for all components)
+	if err := initSharedStateDB(cfg.DataDir); err != nil {
+		fatal("initialize shared state database", err)
+	}
+	defer closeSharedStateDB()
+
 	startTime := time.Now()
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)

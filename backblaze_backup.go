@@ -23,7 +23,6 @@ type dbBackuper interface {
 type backblazeBackupService struct {
 	bucket       *b2.Bucket
 	dbPath       string
-	stateDB      *sql.DB
 	interval     time.Duration
 	objectPrefix string
 
@@ -76,9 +75,10 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		return nil, fmt.Errorf("create state dir for backblaze timestamp: %w", err)
 	}
 
-	stateDB, err := openStateDB(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite state db: %w", err)
+	// Use the shared state database connection
+	stateDB := getSharedStateDB()
+	if stateDB == nil {
+		return nil, fmt.Errorf("shared state db not initialized")
 	}
 
 	lastBackup, lastDataVersion, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDB)
@@ -134,13 +134,11 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	}
 
 	return &backblazeBackupService{
-		bucket:       bucket,
-		dbPath:       dbPath,
-		stateDB:      stateDB,
-		objectPrefix: objectPrefix,
-		interval:     interval,
-		lastBackup:   lastBackup,
-
+		bucket:          bucket,
+		dbPath:          dbPath,
+		objectPrefix:    objectPrefix,
+		interval:        interval,
+		lastBackup:      lastBackup,
 		lastDataVersion: lastDataVersion,
 		snapshotPath:    snapshotPath,
 	}, nil
@@ -218,7 +216,7 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 	s.lastBackup = now
 	s.lastDataVersion = stampDataVersion
-	if err := writeLastBackupStampToDB(s.stateDB, backupStateKeyWorkerDB, now, stampDataVersion); err != nil {
+	if err := writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDB, now, stampDataVersion); err != nil {
 		logger.Warn("record backup timestamp", "error", err)
 	}
 	if uploaded {

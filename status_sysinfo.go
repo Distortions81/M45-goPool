@@ -240,11 +240,11 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 		dataDir = defaultDataDir
 	}
 	legacyPath := filepath.Join(dataDir, "state", "found_blocks.jsonl")
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
 		return nil
 	}
-	defer db.Close()
 
 	if err := migrateFoundBlocksJSONLToDB(db, legacyPath); err != nil {
 		logger.Warn("migrate found block log to sqlite", "error", err)

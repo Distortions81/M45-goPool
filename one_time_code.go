@@ -258,12 +258,12 @@ func (s *StatusServer) loadOneTimeCodesFromDB(dataDir string) {
 	if s == nil {
 		return
 	}
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("one-time code sqlite open", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("one-time code: shared state db not initialized")
 		return
 	}
-	defer db.Close()
 
 	legacyPath := s.oneTimeCodePersistPath(dataDir)
 	if err := migrateOneTimeCodesFileToDB(db, legacyPath); err != nil {
@@ -344,12 +344,12 @@ func (s *StatusServer) persistOneTimeCodesToDB(dataDir string) {
 	if s == nil {
 		return
 	}
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("one-time code sqlite open", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("one-time code: shared state db not initialized")
 		return
 	}
-	defer db.Close()
 
 	now := time.Now()
 	_, _ = db.Exec("DELETE FROM one_time_codes")

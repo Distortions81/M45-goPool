@@ -65,13 +65,12 @@ func startPendingSubmissionReplayer(ctx context.Context, cfg Config, rpc *RPCCli
 }
 
 func replayPendingSubmissions(ctx context.Context, rpc *RPCClient, path string) {
-	dataDir := strings.TrimSpace(filepath.Dir(path))
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("pending block sqlite open", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("pending block: shared state db not initialized")
 		return
 	}
-	defer db.Close()
 
 	if err := migratePendingSubmissionsJSONLToDB(db, path); err != nil {
 		logger.Warn("migrate pending submissions log to sqlite", "error", err)
@@ -177,13 +176,12 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient, path string) 
 }
 
 func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
-	dataDir := strings.TrimSpace(filepath.Dir(path))
-	db, err := openStateDB(stateDBPathFromDataDir(dataDir))
-	if err != nil {
-		logger.Warn("pending block sqlite open", "error", err)
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("pending block: shared state db not initialized")
 		return
 	}
-	defer db.Close()
 
 	if err := migratePendingSubmissionsJSONLToDB(db, path); err != nil {
 		logger.Warn("migrate pending submissions log to sqlite", "error", err)
@@ -205,7 +203,7 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 	if status == "" {
 		status = "pending"
 	}
-	_, err = db.Exec(`
+	if _, err := db.Exec(`
 		INSERT INTO pending_submissions (
 			submission_key, timestamp_unix, height, hash, worker, block_hex, rpc_error, rpc_url, payout_addr, status
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -220,8 +218,7 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 			payout_addr = excluded.payout_addr,
 			status = excluded.status
 	`, key, unixOrZero(rec.Timestamp), rec.Height, strings.TrimSpace(rec.Hash), strings.TrimSpace(rec.Worker), blockHex,
-		strings.TrimSpace(rec.RPCError), strings.TrimSpace(rec.RPCURL), strings.TrimSpace(rec.PayoutAddr), status)
-	if err != nil {
+		strings.TrimSpace(rec.RPCError), strings.TrimSpace(rec.RPCURL), strings.TrimSpace(rec.PayoutAddr), status); err != nil {
 		logger.Warn("pending block sqlite upsert", "error", err)
 	}
 }

@@ -5,7 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+)
+
+// sharedStateDB holds the singleton database connection for workers.db.
+// All components should use getSharedStateDB() instead of opening their own connections
+// to avoid SQLite page cache corruption from concurrent access with modernc.org/sqlite.
+var (
+	sharedStateDB     *sql.DB
+	sharedStateDBOnce sync.Once
+	sharedStateDBMu   sync.RWMutex
+	sharedStateDBPath string
 )
 
 const (
@@ -37,6 +48,8 @@ func openStateDB(dbPath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Limit to single connection to prevent modernc.org/sqlite page cache issues
+	db.SetMaxOpenConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -46,6 +59,59 @@ func openStateDB(dbPath string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// initSharedStateDB initializes the shared state database connection.
+// Must be called once during startup before any component accesses the DB.
+func initSharedStateDB(dataDir string) error {
+	var initErr error
+	sharedStateDBOnce.Do(func() {
+		dbPath := stateDBPathFromDataDir(dataDir)
+		db, err := openStateDB(dbPath)
+		if err != nil {
+			initErr = err
+			return
+		}
+		sharedStateDBMu.Lock()
+		sharedStateDB = db
+		sharedStateDBPath = dbPath
+		sharedStateDBMu.Unlock()
+	})
+	return initErr
+}
+
+// getSharedStateDB returns the shared state database connection.
+// Returns nil if initSharedStateDB was not called or failed.
+func getSharedStateDB() *sql.DB {
+	sharedStateDBMu.RLock()
+	defer sharedStateDBMu.RUnlock()
+	return sharedStateDB
+}
+
+// closeSharedStateDB closes the shared state database connection.
+// Should be called during graceful shutdown.
+func closeSharedStateDB() {
+	sharedStateDBMu.Lock()
+	defer sharedStateDBMu.Unlock()
+	if sharedStateDB != nil {
+		_ = sharedStateDB.Close()
+		sharedStateDB = nil
+	}
+}
+
+// setSharedStateDBForTest allows tests to set a custom shared DB.
+// Returns a cleanup function that restores the previous state.
+// This is only for testing purposes.
+func setSharedStateDBForTest(db *sql.DB) func() {
+	sharedStateDBMu.Lock()
+	oldDB := sharedStateDB
+	sharedStateDB = db
+	sharedStateDBMu.Unlock()
+	return func() {
+		sharedStateDBMu.Lock()
+		sharedStateDB = oldDB
+		sharedStateDBMu.Unlock()
+	}
 }
 
 func ensureStateTables(db *sql.DB) error {

@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/hex"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -73,7 +74,17 @@ func buildBlockCoinbase(t *testing.T, mc *MinerConn, job *Job, worker string, en
 
 func newTestAccountStore(t *testing.T) *AccountStore {
 	t.Helper()
-	cfg := Config{DataDir: t.TempDir()}
+	dataDir := t.TempDir()
+	dbPath := filepath.Join(dataDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	cfg := Config{DataDir: dataDir}
 	s, err := NewAccountStore(cfg, false, true)
 	if err != nil {
 		t.Fatalf("NewAccountStore error: %v", err)

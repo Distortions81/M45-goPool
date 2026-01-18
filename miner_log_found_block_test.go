@@ -3,9 +3,23 @@ package main
 import (
 	"encoding/json"
 	"math"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+// setupTestStateDB initializes a test-specific shared state DB.
+func setupTestStateDB(t *testing.T, dataDir string) {
+	t.Helper()
+	dbPath := filepath.Join(dataDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+}
 
 func flushFoundBlockLogger(t *testing.T) {
 	t.Helper()
@@ -55,6 +69,7 @@ func readLastFoundBlockRecord(t *testing.T, dir string) map[string]interface{} {
 // pool-only payout and sets dual_payout_fallback=true.
 func TestLogFoundBlockFallback_NoWorkerScript(t *testing.T) {
 	dir := t.TempDir()
+	setupTestStateDB(t, dir)
 	job := &Job{
 		JobID: "log-test",
 		Template: GetBlockTemplateResult{
@@ -101,6 +116,7 @@ func TestLogFoundBlockFallback_NoWorkerScript(t *testing.T) {
 // script is cached.
 func TestLogFoundBlockFallback_SameWorkerAddress(t *testing.T) {
 	dir := t.TempDir()
+	setupTestStateDB(t, dir)
 	addr := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" // valid mainnet address
 
 	job := &Job{
@@ -157,6 +173,7 @@ func TestLogFoundBlockFallback_SameWorkerAddress(t *testing.T) {
 // and dual_payout_fallback=false.
 func TestLogFoundBlock_NoFallbackDifferentAddress(t *testing.T) {
 	dir := t.TempDir()
+	setupTestStateDB(t, dir)
 	poolAddr := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"   // valid mainnet
 	workerAddr := "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" // another valid mainnet
 

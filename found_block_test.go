@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -405,6 +406,16 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 		DataDir: tmpDir,
 	}
 
+	// Set up the shared DB for this test
+	dbPath := filepath.Join(tmpDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
 	// Mock RPC server that fails submitblock
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -482,11 +493,7 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	}
 	appendPendingSubmissionRecord(pendingPath, rec)
 
-	db, err := openStateDB(stateDBPathFromDataDir(cfg.DataDir))
-	if err != nil {
-		t.Fatalf("openStateDB: %v", err)
-	}
-	defer db.Close()
+	// Use the shared DB that was set up earlier
 	var status string
 	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", hashHex).Scan(&status); err != nil {
 		t.Fatalf("query pending submission: %v", err)

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 // TestCreditBlockReward_SingleAndDualPayout verifies that the payout math used
 // on block found (pool fee + worker amount) is consistent for both single-
@@ -8,7 +11,17 @@ import "testing"
 // regardless of DualPayoutEnabled; dual mode only affects coinbase layout and
 // logging.
 func TestAccountStoreStartsEmpty(t *testing.T) {
-	cfg := Config{DataDir: t.TempDir()}
+	dataDir := t.TempDir()
+	dbPath := filepath.Join(dataDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	cleanup := setSharedStateDBForTest(db)
+	defer cleanup()
+
+	cfg := Config{DataDir: dataDir}
 	store, err := NewAccountStore(cfg, false, true)
 	if err != nil {
 		t.Fatalf("NewAccountStore failed: %v", err)

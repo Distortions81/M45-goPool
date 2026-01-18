@@ -318,19 +318,21 @@ type AccountStore struct {
 }
 
 type banStore struct {
-	db *sql.DB
+	// Uses getSharedStateDB() for all database operations
 }
 
 func (b *banStore) cleanExpired(now time.Time) error {
-	if b == nil || b.db == nil {
+	db := getSharedStateDB()
+	if b == nil || db == nil {
 		return nil
 	}
-	_, err := b.db.Exec("DELETE FROM bans WHERE until_unix != 0 AND until_unix <= ?", now.Unix())
+	_, err := db.Exec("DELETE FROM bans WHERE until_unix != 0 AND until_unix <= ?", now.Unix())
 	return err
 }
 
 func (b *banStore) markBan(worker string, until time.Time, reason string, now time.Time) error {
-	if b == nil || b.db == nil {
+	db := getSharedStateDB()
+	if b == nil || db == nil {
 		return nil
 	}
 	worker = strings.TrimSpace(worker)
@@ -338,14 +340,14 @@ func (b *banStore) markBan(worker string, until time.Time, reason string, now ti
 		return nil
 	}
 	if until.IsZero() {
-		_, err := b.db.Exec("DELETE FROM bans WHERE worker = ?", worker)
+		_, err := db.Exec("DELETE FROM bans WHERE worker = ?", worker)
 		return err
 	}
 	workerHash := strings.ToLower(strings.TrimSpace(workerNameHash(worker)))
 	if workerHash == "" {
 		return nil
 	}
-	_, err := b.db.Exec(`
+	_, err := db.Exec(`
 		INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(worker) DO UPDATE SET
@@ -358,7 +360,8 @@ func (b *banStore) markBan(worker string, until time.Time, reason string, now ti
 }
 
 func (b *banStore) lookup(worker string, now time.Time) (banEntry, bool) {
-	if b == nil || b.db == nil {
+	db := getSharedStateDB()
+	if b == nil || db == nil {
 		return banEntry{}, false
 	}
 	worker = strings.TrimSpace(worker)
@@ -369,7 +372,7 @@ func (b *banStore) lookup(worker string, now time.Time) (banEntry, bool) {
 		untilUnix int64
 		reason    sql.NullString
 	)
-	if err := b.db.QueryRow("SELECT until_unix, reason FROM bans WHERE worker = ?", worker).Scan(&untilUnix, &reason); err != nil {
+	if err := db.QueryRow("SELECT until_unix, reason FROM bans WHERE worker = ?", worker).Scan(&untilUnix, &reason); err != nil {
 		return banEntry{}, false
 	}
 	if untilUnix != 0 && now.Unix() >= untilUnix {
@@ -386,7 +389,8 @@ func (b *banStore) lookup(worker string, now time.Time) (banEntry, bool) {
 }
 
 func (b *banStore) lookupByHash(workerHash string, now time.Time) (banEntry, bool) {
-	if b == nil || b.db == nil {
+	db := getSharedStateDB()
+	if b == nil || db == nil {
 		return banEntry{}, false
 	}
 	workerHash = strings.ToLower(strings.TrimSpace(workerHash))
@@ -398,7 +402,7 @@ func (b *banStore) lookupByHash(workerHash string, now time.Time) (banEntry, boo
 		untilUnix int64
 		reason    sql.NullString
 	)
-	if err := b.db.QueryRow(`
+	if err := db.QueryRow(`
 		SELECT worker, until_unix, reason
 		FROM bans
 		WHERE worker_hash = ? AND (until_unix = 0 OR until_unix > ?)
@@ -420,10 +424,11 @@ func (b *banStore) lookupByHash(workerHash string, now time.Time) (banEntry, boo
 }
 
 func (b *banStore) snapshot(now time.Time) []banEntry {
-	if b == nil || b.db == nil {
+	db := getSharedStateDB()
+	if b == nil || db == nil {
 		return nil
 	}
-	rows, err := b.db.Query(`
+	rows, err := db.Query(`
 		SELECT worker, until_unix, reason
 		FROM bans
 		WHERE until_unix = 0 OR until_unix > ?
@@ -536,11 +541,13 @@ func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountS
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := openStateDB(filepath.Join(stateDir, "workers.db"))
-	if err != nil {
-		return nil, err
+
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		return nil, os.ErrInvalid
 	}
-	bans := &banStore{db: db}
+	bans := &banStore{}
 
 	if err := migrateBansFileToDB(db, filepath.Join(stateDir, banFileName)); err != nil {
 		logger.Warn("migrate bans.json to sqlite", "error", err)

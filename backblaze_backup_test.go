@@ -40,6 +40,15 @@ func TestBackups_WriteStampAndLocalSnapshot_DefaultPath(t *testing.T) {
 	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
 	createTestWorkerDB(t, dbPath)
 
+	// Set up the shared DB for this test
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
 	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
@@ -49,11 +58,7 @@ func TestBackups_WriteStampAndLocalSnapshot_DefaultPath(t *testing.T) {
 	}
 	svc.run(context.Background())
 
-	db, err := openStateDB(dbPath)
-	if err != nil {
-		t.Fatalf("openStateDB: %v", err)
-	}
-	defer db.Close()
+	// Use the shared DB that was set up earlier
 	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
 	if err != nil {
 		t.Fatalf("read sqlite stamp: %v", err)
@@ -82,6 +87,15 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
 	createTestWorkerDB(t, dbPath)
 
+	// Set up the shared DB for this test
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
 	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
@@ -98,11 +112,7 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	if _, err := os.Stat(wantSnapshot); err != nil {
 		t.Fatalf("snapshot file missing: %v", err)
 	}
-	db, err := openStateDB(dbPath)
-	if err != nil {
-		t.Fatalf("openStateDB: %v", err)
-	}
-	defer db.Close()
+	// Use the shared DB that was set up earlier
 	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
 	if err != nil {
 		t.Fatalf("read sqlite stamp: %v", err)
