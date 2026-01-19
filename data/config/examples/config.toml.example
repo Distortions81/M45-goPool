@@ -1,0 +1,62 @@
+# Generated base config example (copy to a real config and edit as needed)
+
+
+[auth]
+  clerk_callback_path = "/clerk/callback"
+  clerk_frontend_api_url = ""
+  clerk_issuer_url = "https://clerk.clerk.dev"
+  clerk_jwks_url = "https://clerk.clerk.dev/.well-known/jwks.json"
+  clerk_session_audience = ""
+  clerk_session_cookie_name = "__session"
+  clerk_signin_url = "https://auth.clerk.dev/sign-in"
+
+[backblaze_backup]
+  bucket = ""
+  enabled = false
+  interval_seconds = 43200
+  keep_local_copy = true
+  prefix = ""
+  snapshot_path = ""
+
+[branding]
+  discord_notify_channel_id = ""
+  discord_server_id = ""
+  discord_url = ""
+  fiat_currency = "usd"
+  github_url = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
+  pool_donation_address = "OPTIONAL_POOL_DONATION_WALLET"
+  server_location = ""
+  status_brand_domain = ""
+  status_brand_name = ""
+  status_connect_miner_title_extra = ""
+  status_connect_miner_title_extra_url = ""
+  status_tagline = "Solo Mining Pool"
+
+[mining]
+  coinbase_message = "goPool"
+  coinbase_scriptsig_max_bytes = 100
+  coinbase_suffix_bytes = 4
+  extranonce2_size = 4
+  operator_donation_address = ""
+  operator_donation_name = ""
+  operator_donation_percent = 0.0
+  operator_donation_url = ""
+  pool_fee_percent = 2.0
+  template_extra_nonce2_size = 8
+
+[node]
+  allow_public_rpc = false
+  data_dir = "data"
+  payout_address = "YOUR_POOL_WALLET_ADDRESS_HERE"
+  rpc_cookie_path = ""
+  rpc_url = "http://127.0.0.1:8332"
+  zmq_block_addr = "tcp://127.0.0.1:28332"
+
+[server]
+  pool_listen = ":3333"
+  status_listen = ":80"
+  status_public_url = ""
+  status_tls_listen = ":443"
+
+[stratum]
+  stratum_tls_listen = ":4333"

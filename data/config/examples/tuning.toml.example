@@ -1,0 +1,48 @@
+# Generated tuning config example (copy to a real config and edit as needed)
+
+
+[bans]
+  ban_invalid_submissions_after = 60
+  ban_invalid_submissions_duration_seconds = 900
+  ban_invalid_submissions_window_seconds = 60
+  reconnect_ban_duration_seconds = 300
+  reconnect_ban_threshold = 0
+  reconnect_ban_window_seconds = 60
+
+[difficulty]
+  lock_suggested_difficulty = false
+  max_difficulty = 65536.0
+  min_difficulty = 256.0
+
+[hashrate]
+  hashrate_ema_min_shares = 10
+  hashrate_ema_tau_seconds = 600.0
+  ntime_forward_slack_seconds = 7000
+
+[logging]
+  fsync_share_log = false
+  share_log_buffer_bytes = 0
+  share_log_replay_bytes = 16777216
+
+[peer_cleaning]
+  enabled = true
+  max_ping_ms = 150.0
+  min_peers = 20
+
+[rate_limits]
+  accept_burst_window = 5
+  accept_reconnect_window = 15
+  accept_steady_state_rate = 50
+  accept_steady_state_reconnect_percent = 5.0
+  accept_steady_state_reconnect_window = 60
+  accept_steady_state_window = 100
+  auto_accept_rate_limits = true
+  max_accept_burst = 1000
+  max_accepts_per_second = 500
+  max_conns = 50000
+
+[timeouts]
+  connection_timeout_seconds = 300
+
+[version]
+  min_version_bits = 1

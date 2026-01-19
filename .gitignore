@@ -3,7 +3,6 @@ data/*.pem
 data/*.toml
 data/config/*.toml
 data/config/*.toml.bak
-data/config/examples/*.toml.example
 data/state/
 data/logs/
 data/banlist.json
