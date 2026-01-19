@@ -116,18 +116,15 @@ jobs:
           ==================================
 
           Quick Start:
-          1. Run the binary once to generate example configuration files:
-             ./goPool
-
-          2. Copy and edit the configuration:
+          1. Copy and edit the configuration:
              cp data/config/examples/config.toml.example data/config/config.toml
              nano data/config/config.toml
 
-          3. Set your Bitcoin payout address in config.toml:
+          2. Set your Bitcoin payout address in config.toml:
              [node]
              payout_address = "YOUR_BITCOIN_ADDRESS"
 
-          4. Run the pool:
+          3. Run the pool:
              ./goPool
 
           For detailed setup instructions, see README.md
@@ -258,16 +255,13 @@ jobs:
           1. Install ZeroMQ:
              brew install zeromq
 
-          2. Run the binary once to generate example configuration files:
-             ./goPool
-
-          3. Copy and edit the configuration:
+          2. Copy and edit the configuration:
              cp data/config/examples/config.toml.example data/config/config.toml
              nano data/config/config.toml
 
-          4. Set your Bitcoin payout address in config.toml
+          3. Set your Bitcoin payout address in config.toml
 
-          5. Run the pool:
+          4. Run the pool:
              ./goPool
 
           For detailed setup, see README.md
@@ -377,13 +371,11 @@ jobs:
           ==================================
 
           Quick Start:
-          1. Double-click goPool.exe to run once (generates example configs)
+          1. Copy data\config\examples\config.toml.example to data\config\config.toml
 
-          2. Copy data\config\examples\config.toml.example to data\config\config.toml
+          2. Edit data\config\config.toml with Notepad and set your payout address
 
-          3. Edit data\config\config.toml with Notepad and set your payout address
-
-          4. Run goPool.exe again to start the pool
+          3. Run goPool.exe to start the pool
 
           For detailed setup, see README.md
 
