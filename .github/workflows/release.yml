@@ -111,43 +111,43 @@ jobs:
           cp scripts/*.sh "$PACKAGE_NAME/scripts/" 2>/dev/null || true
 
           # Create README for the package
-          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
-goPool - Bitcoin Solo Mining Pool
-==================================
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" <<EOF
+          goPool - Bitcoin Solo Mining Pool
+          ==================================
 
-Quick Start:
-1. Run the binary once to generate example configuration files:
-   ./goPool
+          Quick Start:
+          1. Run the binary once to generate example configuration files:
+             ./goPool
 
-2. Copy and edit the configuration:
-   cp data/config/examples/config.toml.example data/config/config.toml
-   nano data/config/config.toml
+          2. Copy and edit the configuration:
+             cp data/config/examples/config.toml.example data/config/config.toml
+             nano data/config/config.toml
 
-3. Set your Bitcoin payout address in config.toml:
-   [node]
-   payout_address = "YOUR_BITCOIN_ADDRESS"
+          3. Set your Bitcoin payout address in config.toml:
+             [node]
+             payout_address = "YOUR_BITCOIN_ADDRESS"
 
-4. Run the pool:
-   ./goPool
+          4. Run the pool:
+             ./goPool
 
-For detailed setup instructions, see README.md
-For configuration options, see operations.md
-For performance tuning, see performance.md
+          For detailed setup instructions, see README.md
+          For configuration options, see operations.md
+          For performance tuning, see performance.md
 
-Requirements:
-- Bitcoin Core with RPC enabled and ZMQ support
-- ZeroMQ library (libzmq5 or zeromq package)
+          Requirements:
+          - Bitcoin Core with RPC enabled and ZMQ support
+          - ZeroMQ library (libzmq5 or zeromq package)
 
-Default Ports:
-- Stratum (plain): 3333
-- Stratum (TLS): 4333
-- Status UI (HTTP): 8080
-- Status UI (HTTPS): 4443
+          Default Ports:
+          - Stratum (plain): 3333
+          - Stratum (TLS): 4333
+          - Status UI (HTTP): 8080
+          - Status UI (HTTPS): 4443
 
-Documentation:
-- https://github.com/Distortions81/M45-Core-goPool
+          Documentation:
+          - https://github.com/Distortions81/M45-Core-goPool
 
-EOF
+          EOF
 
           # Create tar.gz file
           tar czf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
@@ -246,29 +246,29 @@ EOF
           mkdir -p "$PACKAGE_NAME/scripts"
           cp scripts/*.sh "$PACKAGE_NAME/scripts/" 2>/dev/null || true
 
-          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
-goPool - Bitcoin Solo Mining Pool
-==================================
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" <<EOF
+          goPool - Bitcoin Solo Mining Pool
+          ==================================
 
-Quick Start:
-1. Install ZeroMQ:
-   brew install zeromq
+          Quick Start:
+          1. Install ZeroMQ:
+             brew install zeromq
 
-2. Run the binary once to generate example configuration files:
-   ./goPool
+          2. Run the binary once to generate example configuration files:
+             ./goPool
 
-3. Copy and edit the configuration:
-   cp data/config/examples/config.toml.example data/config/config.toml
-   nano data/config/config.toml
+          3. Copy and edit the configuration:
+             cp data/config/examples/config.toml.example data/config/config.toml
+             nano data/config/config.toml
 
-4. Set your Bitcoin payout address in config.toml
+          4. Set your Bitcoin payout address in config.toml
 
-5. Run the pool:
-   ./goPool
+          5. Run the pool:
+             ./goPool
 
-For detailed setup, see README.md
+          For detailed setup, see README.md
 
-EOF
+          EOF
 
           tar czf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
           echo "ASSET_NAME=${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
@@ -357,26 +357,26 @@ EOF
           cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
           cp data/config/examples/autogen.md "$PACKAGE_NAME/data/config/examples/"
 
-          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
-goPool - Bitcoin Solo Mining Pool
-==================================
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" <<EOF
+          goPool - Bitcoin Solo Mining Pool
+          ==================================
 
-Quick Start:
-1. Double-click goPool.exe to run once (generates example configs)
+          Quick Start:
+          1. Double-click goPool.exe to run once (generates example configs)
 
-2. Copy data\config\examples\config.toml.example to data\config\config.toml
+          2. Copy data\config\examples\config.toml.example to data\config\config.toml
 
-3. Edit data\config\config.toml with Notepad and set your payout address
+          3. Edit data\config\config.toml with Notepad and set your payout address
 
-4. Run goPool.exe again to start the pool
+          4. Run goPool.exe again to start the pool
 
-For detailed setup, see README.md
+          For detailed setup, see README.md
 
-Requirements:
-- Bitcoin Core with RPC enabled
-- ZeroMQ DLL (may need to be in PATH or same directory)
+          Requirements:
+          - Bitcoin Core with RPC enabled
+          - ZeroMQ DLL (may need to be in PATH or same directory)
 
-EOF
+          EOF
 
           # Create zip file for Windows
           powershell Compress-Archive -Path "$PACKAGE_NAME" -DestinationPath "${PACKAGE_NAME}.zip"
