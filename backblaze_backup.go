@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -86,30 +85,6 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		logger.Warn("read last backup stamp from sqlite failed (ignored)", "error", err)
 	}
 
-	lastBackupPath := filepath.Join(stateDir, lastBackupStampFilename)
-	legacyPath := filepath.Join(stateDir, legacyBackblazeLastBackupFilename)
-	if lastBackup.IsZero() && lastDataVersion == 0 {
-		if legacyBackup, legacyDataVersion, legacyErr := readLastBackupStampFile(lastBackupPath); legacyErr == nil && (!legacyBackup.IsZero() || legacyDataVersion != 0) {
-			lastBackup = legacyBackup
-			lastDataVersion = legacyDataVersion
-		} else if legacyBackup, legacyDataVersion, legacyErr := readLastBackupStampFile(legacyPath); legacyErr == nil && (!legacyBackup.IsZero() || legacyDataVersion != 0) {
-			lastBackup = legacyBackup
-			lastDataVersion = legacyDataVersion
-		}
-		if !lastBackup.IsZero() || lastDataVersion != 0 {
-			if err := writeLastBackupStampToDB(stateDB, backupStateKeyWorkerDB, lastBackup, lastDataVersion); err != nil {
-				logger.Warn("migrate last backup stamp to sqlite failed (ignored)", "error", err)
-			} else {
-				_ = recordStateMigration(stateDB, stateMigrationBackupStampFiles, time.Now())
-				if err := renameLegacyFileToOld(lastBackupPath); err != nil {
-					logger.Warn("rename legacy backup stamp file", "error", err, "from", lastBackupPath)
-				}
-				if err := renameLegacyFileToOld(legacyPath); err != nil {
-					logger.Warn("rename legacy backup stamp file", "error", err, "from", legacyPath)
-				}
-			}
-		}
-	}
 
 	snapshotPath := strings.TrimSpace(cfg.BackupSnapshotPath)
 	if snapshotPath != "" && !filepath.IsAbs(snapshotPath) {
@@ -343,31 +318,6 @@ func writeLastBackupStampToDB(db *sql.DB, key string, ts time.Time, dataVersion 
 	return err
 }
 
-func readLastBackupStampFile(path string) (time.Time, int64, error) {
-	if strings.TrimSpace(path) == "" {
-		return time.Time{}, 0, os.ErrInvalid
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return time.Time{}, 0, nil
-		}
-		return time.Time{}, 0, err
-	}
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
-		return time.Time{}, 0, nil
-	}
-	ts, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(lines[0]))
-	if err != nil {
-		return time.Time{}, 0, err
-	}
-	var dataVersion int64
-	if len(lines) >= 2 {
-		dataVersion, _ = strconv.ParseInt(strings.TrimSpace(lines[1]), 10, 64)
-	}
-	return ts, dataVersion, nil
-}
 
 func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {
 	if srcPath == "" {

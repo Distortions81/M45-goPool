@@ -5,7 +5,6 @@ data/config/*.toml
 data/config/*.toml.bak
 data/state/
 data/logs/
-data/banlist.json
 
 scripts/bitcoin-node
 gopool-test

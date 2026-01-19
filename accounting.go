@@ -14,8 +14,14 @@ import (
 
 const (
 	defaultDataDir = "data"
-	banFileName    = "bans.json"
 )
+
+// banEntry represents a banned worker with expiration time and reason.
+type banEntry struct {
+	Worker string    `json:"worker"`
+	Until  time.Time `json:"until"`
+	Reason string    `json:"reason,omitempty"`
+}
 
 // WorkerView is the subset of worker data that is exposed to the status UI.
 type WorkerView struct {
@@ -549,9 +555,6 @@ func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountS
 	}
 	bans := &banStore{}
 
-	if err := migrateBansFileToDB(db, filepath.Join(stateDir, banFileName)); err != nil {
-		logger.Warn("migrate bans.json to sqlite", "error", err)
-	}
 	if cleanBans {
 		if err := bans.cleanExpired(time.Now()); err != nil {
 			return nil, err
@@ -637,76 +640,3 @@ func (s *AccountStore) Flush() error {
 	return s.LastError()
 }
 
-func migrateBansFileToDB(db *sql.DB, path string) error {
-	if db == nil || strings.TrimSpace(path) == "" {
-		return nil
-	}
-	if done, err := hasStateMigration(db, stateMigrationBansJSON); err == nil && done {
-		if err := renameLegacyFileToOld(path); err != nil {
-			logger.Warn("rename legacy bans file", "error", err, "from", path)
-		}
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	entries, err := decodeBanEntries(data)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO bans (worker, worker_hash, until_unix, reason, updated_at_unix)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(worker) DO UPDATE SET
-			worker_hash = excluded.worker_hash,
-			until_unix = excluded.until_unix,
-			reason = excluded.reason,
-			updated_at_unix = excluded.updated_at_unix
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	active := 0
-	for _, e := range entries {
-		worker := strings.TrimSpace(e.Worker)
-		if worker == "" {
-			continue
-		}
-		if !e.Until.IsZero() && now.After(e.Until) {
-			continue
-		}
-		workerHash := strings.ToLower(strings.TrimSpace(workerNameHash(worker)))
-		if workerHash == "" {
-			continue
-		}
-		if _, err := stmt.Exec(worker, workerHash, unixOrZero(e.Until), strings.TrimSpace(e.Reason), now.Unix()); err != nil {
-			return err
-		}
-		active++
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	_ = recordStateMigration(db, stateMigrationBansJSON, now)
-	if active == 0 {
-		_, _ = db.Exec("DELETE FROM bans WHERE until_unix != 0 AND until_unix <= ?", now.Unix())
-	}
-	if err := renameLegacyFileToOld(path); err != nil {
-		logger.Warn("rename legacy bans file", "error", err, "from", path)
-	}
-	return nil
-}
