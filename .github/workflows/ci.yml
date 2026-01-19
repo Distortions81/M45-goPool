@@ -10,7 +10,7 @@ on:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
 
       - name: Install native dependencies
         run: |
-          sudo apt-get update
+          sudo apt-get update || true
           sudo apt-get install -y libzmq3-dev pkg-config
 
       - name: Run go test with coverage
