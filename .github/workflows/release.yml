@@ -17,23 +17,7 @@ permissions:
 jobs:
   build-linux:
     name: Build Linux
-    runs-on: ${{ matrix.runner || 'ubuntu-latest' }}
-    strategy:
-      matrix:
-        include:
-          - goarch: amd64
-            platform: linux-amd64
-            cc: gcc
-          - goarch: arm64
-            platform: linux-arm64
-            cc: aarch64-linux-gnu-gcc
-            packages: gcc-aarch64-linux-gnu
-          - goarch: arm
-            goarm: 7
-            platform: linux-armv7
-            cc: arm-linux-gnueabihf-gcc
-            packages: gcc-arm-linux-gnueabihf
-            runner: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -47,20 +31,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update || true
-          sudo apt-get install -y pkg-config gcc
-
-          # Install architecture-specific ZMQ libraries
-          if [ "${{ matrix.goarch }}" = "amd64" ]; then
-            sudo apt-get install -y libzmq3-dev
-          elif [ "${{ matrix.goarch }}" = "arm64" ]; then
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update || true
-            sudo apt-get install -y gcc-aarch64-linux-gnu libzmq3-dev:arm64
-          elif [ "${{ matrix.goarch }}" = "arm" ]; then
-            sudo dpkg --add-architecture armhf
-            sudo apt-get update || true
-            sudo apt-get install -y gcc-arm-linux-gnueabihf libzmq3-dev:armhf
-          fi
+          sudo apt-get install -y pkg-config gcc libzmq3-dev
 
       - name: Determine version
         id: version
@@ -73,12 +44,7 @@ jobs:
 
       - name: Build binary
         env:
-          GOOS: linux
-          GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
-          CC: ${{ matrix.cc }}
           CGO_ENABLED: "1"
-          PKG_CONFIG_PATH: ${{ matrix.goarch == 'arm64' && '/usr/lib/aarch64-linux-gnu/pkgconfig' || (matrix.goarch == 'arm' && '/usr/lib/arm-linux-gnueabihf/pkgconfig' || '') }}
         run: |
           go build -o goPool -trimpath -ldflags="-s -w" .
           ls -lh goPool
@@ -86,7 +52,7 @@ jobs:
       - name: Prepare release package
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          PLATFORM="${{ matrix.platform }}"
+          PLATFORM="linux-amd64"
           PACKAGE_NAME="goPool-${VERSION}-${PLATFORM}"
 
           # Create package directory
