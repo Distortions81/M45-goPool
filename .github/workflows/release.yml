@@ -188,10 +188,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             goarch: amd64
             platform: macos-amd64
-          - runner: macos-14
+          - runner: macos-latest
             goarch: arm64
             platform: macos-arm64
 
