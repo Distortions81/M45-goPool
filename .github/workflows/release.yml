@@ -1,0 +1,409 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v0.0.0-dev'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            platform: linux-amd64
+            cc: gcc
+          - goarch: arm64
+            platform: linux-arm64
+            cc: aarch64-linux-gnu-gcc
+            packages: gcc-aarch64-linux-gnu
+          - goarch: arm
+            goarm: 7
+            platform: linux-armv7
+            cc: arm-linux-gnueabihf-gcc
+            packages: gcc-arm-linux-gnueabihf
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.11
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libzmq3-dev pkg-config gcc
+          if [ -n "${{ matrix.packages }}" ]; then
+            sudo apt-get install -y ${{ matrix.packages }}
+          fi
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CC: ${{ matrix.cc }}
+          CGO_ENABLED: "1"
+        run: |
+          go build -o goPool -trimpath -ldflags="-s -w" .
+          ls -lh goPool
+
+      - name: Prepare release package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PLATFORM="${{ matrix.platform }}"
+          PACKAGE_NAME="goPool-${VERSION}-${PLATFORM}"
+
+          # Create package directory
+          mkdir -p "$PACKAGE_NAME"
+
+          # Copy binary
+          cp goPool "$PACKAGE_NAME/"
+
+          # Copy documentation
+          cp README.md "$PACKAGE_NAME/"
+          cp RELEASES.md "$PACKAGE_NAME/"
+          cp operations.md "$PACKAGE_NAME/"
+          cp performance.md "$PACKAGE_NAME/"
+          cp TESTING.md "$PACKAGE_NAME/"
+          cp LICENSE "$PACKAGE_NAME/"
+
+          # Copy data directory structure
+          mkdir -p "$PACKAGE_NAME/data/templates"
+          mkdir -p "$PACKAGE_NAME/data/www"
+          mkdir -p "$PACKAGE_NAME/data/config/examples"
+
+          # Copy templates
+          cp data/templates/*.tmpl "$PACKAGE_NAME/data/templates/"
+
+          # Copy www files
+          cp data/www/* "$PACKAGE_NAME/data/www/"
+
+          # Copy config examples
+          cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
+          cp data/config/examples/autogen.md "$PACKAGE_NAME/data/config/examples/"
+
+          # Copy scripts directory
+          mkdir -p "$PACKAGE_NAME/scripts"
+          cp scripts/*.sh "$PACKAGE_NAME/scripts/" 2>/dev/null || true
+
+          # Create README for the package
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
+goPool - Bitcoin Solo Mining Pool
+==================================
+
+Quick Start:
+1. Run the binary once to generate example configuration files:
+   ./goPool
+
+2. Copy and edit the configuration:
+   cp data/config/examples/config.toml.example data/config/config.toml
+   nano data/config/config.toml
+
+3. Set your Bitcoin payout address in config.toml:
+   [node]
+   payout_address = "YOUR_BITCOIN_ADDRESS"
+
+4. Run the pool:
+   ./goPool
+
+For detailed setup instructions, see README.md
+For configuration options, see operations.md
+For performance tuning, see performance.md
+
+Requirements:
+- Bitcoin Core with RPC enabled and ZMQ support
+- ZeroMQ library (libzmq5 or zeromq package)
+
+Default Ports:
+- Stratum (plain): 3333
+- Stratum (TLS): 4333
+- Status UI (HTTP): 8080
+- Status UI (HTTPS): 4443
+
+Documentation:
+- https://github.com/Distortions81/M45-Core-goPool
+
+EOF
+
+          # Create tar.gz file
+          tar czf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
+          echo "ASSET_NAME=${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
+
+          # Show package contents
+          echo "Package contents:"
+          tar tzf "${PACKAGE_NAME}.tar.gz" | head -20
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ env.ASSET_NAME }}
+          retention-days: 7
+
+      - name: Create checksum
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          sha256sum "${ASSET_NAME}" > "${ASSET_NAME}.sha256"
+          cat "${ASSET_NAME}.sha256"
+
+      - name: Upload to Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.ASSET_NAME }}
+            ${{ env.ASSET_NAME }}.sha256
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: Build macOS (native runners)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: macos-13
+            goarch: amd64
+            platform: macos-amd64
+          - runner: macos-14
+            goarch: arm64
+            platform: macos-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.11
+
+      - name: Install ZeroMQ
+        run: |
+          brew install zeromq pkg-config
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go build -o goPool -trimpath -ldflags="-s -w" .
+          ls -lh goPool
+
+      - name: Prepare release package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PLATFORM="${{ matrix.platform }}"
+          PACKAGE_NAME="goPool-${VERSION}-${PLATFORM}"
+
+          mkdir -p "$PACKAGE_NAME"
+          cp goPool "$PACKAGE_NAME/"
+          cp README.md RELEASES.md operations.md performance.md TESTING.md LICENSE "$PACKAGE_NAME/"
+
+          mkdir -p "$PACKAGE_NAME/data/templates"
+          mkdir -p "$PACKAGE_NAME/data/www"
+          mkdir -p "$PACKAGE_NAME/data/config/examples"
+
+          cp data/templates/*.tmpl "$PACKAGE_NAME/data/templates/"
+          cp data/www/* "$PACKAGE_NAME/data/www/"
+          cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
+          cp data/config/examples/autogen.md "$PACKAGE_NAME/data/config/examples/"
+
+          mkdir -p "$PACKAGE_NAME/scripts"
+          cp scripts/*.sh "$PACKAGE_NAME/scripts/" 2>/dev/null || true
+
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
+goPool - Bitcoin Solo Mining Pool
+==================================
+
+Quick Start:
+1. Install ZeroMQ:
+   brew install zeromq
+
+2. Run the binary once to generate example configuration files:
+   ./goPool
+
+3. Copy and edit the configuration:
+   cp data/config/examples/config.toml.example data/config/config.toml
+   nano data/config/config.toml
+
+4. Set your Bitcoin payout address in config.toml
+
+5. Run the pool:
+   ./goPool
+
+For detailed setup, see README.md
+
+EOF
+
+          tar czf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
+          echo "ASSET_NAME=${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ env.ASSET_NAME }}
+          retention-days: 7
+
+      - name: Create checksum
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          sha256sum "${ASSET_NAME}" > "${ASSET_NAME}.sha256"
+          cat "${ASSET_NAME}.sha256"
+
+      - name: Upload to Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.ASSET_NAME }}
+            ${{ env.ASSET_NAME }}.sha256
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.11
+
+      - name: Install vcpkg and ZeroMQ
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg
+          .\vcpkg\bootstrap-vcpkg.bat
+          .\vcpkg\vcpkg install zeromq:x64-windows
+          echo "VCPKG_ROOT=$pwd\vcpkg" >> $env:GITHUB_ENV
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          PKG_CONFIG_PATH: ${{ github.workspace }}\vcpkg\packages\zeromq_x64-windows\lib\pkgconfig
+        run: |
+          go build -o goPool.exe -trimpath -ldflags="-s -w" .
+          ls -lh goPool.exe
+
+      - name: Prepare release package
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE_NAME="goPool-${VERSION}-windows-amd64"
+
+          mkdir -p "$PACKAGE_NAME"
+          cp goPool.exe "$PACKAGE_NAME/"
+          cp README.md RELEASES.md operations.md performance.md TESTING.md LICENSE "$PACKAGE_NAME/"
+
+          mkdir -p "$PACKAGE_NAME/data/templates"
+          mkdir -p "$PACKAGE_NAME/data/www"
+          mkdir -p "$PACKAGE_NAME/data/config/examples"
+
+          cp data/templates/*.tmpl "$PACKAGE_NAME/data/templates/"
+          cp data/www/* "$PACKAGE_NAME/data/www/"
+          cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
+          cp data/config/examples/autogen.md "$PACKAGE_NAME/data/config/examples/"
+
+          cat > "$PACKAGE_NAME/GETTING_STARTED.txt" << 'EOF'
+goPool - Bitcoin Solo Mining Pool
+==================================
+
+Quick Start:
+1. Double-click goPool.exe to run once (generates example configs)
+
+2. Copy data\config\examples\config.toml.example to data\config\config.toml
+
+3. Edit data\config\config.toml with Notepad and set your payout address
+
+4. Run goPool.exe again to start the pool
+
+For detailed setup, see README.md
+
+Requirements:
+- Bitcoin Core with RPC enabled
+- ZeroMQ DLL (may need to be in PATH or same directory)
+
+EOF
+
+          # Create zip file for Windows
+          powershell Compress-Archive -Path "$PACKAGE_NAME" -DestinationPath "${PACKAGE_NAME}.zip"
+          echo "ASSET_NAME=${PACKAGE_NAME}.zip" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ env.ASSET_NAME }}
+          retention-days: 7
+
+      - name: Create checksum
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          sha256sum "${ASSET_NAME}" > "${ASSET_NAME}.sha256"
+          cat "${ASSET_NAME}.sha256"
+
+      - name: Upload to Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.ASSET_NAME }}
+            ${{ env.ASSET_NAME }}.sha256
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

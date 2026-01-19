@@ -6,6 +6,8 @@
 [![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Distortions81/M45-Core-goPool)](https://go.dev)
 
+> **⬇️ [Download Pre-Built Releases](https://github.com/Distortions81/M45-Core-goPool/releases)** - Ready-to-run binaries for Linux, macOS, and Windows. See [RELEASES.md](RELEASES.md) for details.
+
 ## About
 
 goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core (`bitcoind`) over JSON-RPC and ZMQ. It serves miners via Stratum v1 (with optional TLS) and provides a web-based status UI with JSON APIs for monitoring.
@@ -276,6 +278,7 @@ By default (`-https-only=true`), HTTP serves only a safe subset and redirects to
 
 ### Additional Documentation
 
+- [RELEASES.md](RELEASES.md) - Pre-built release packages and upgrade guide
 - [operations.md](operations.md) - Detailed configuration, flags, API reference, logging
 - [performance.md](performance.md) - Capacity planning and benchmark data
 - [TESTING.md](TESTING.md) - Test suite overview and instructions
