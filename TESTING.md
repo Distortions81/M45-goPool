@@ -1,85 +1,82 @@
 # Testing goPool
 
-> **See also:** [Main README](https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md) for setup, configuration, and usage.
+> **See also:** [Main README](README.md) for setup and configuration.
 
-This project includes a mix of unit tests, compatibility tests against btcd/pogolo
-behaviour, and end-to-end style tests that exercise block construction and share
-validation. All tests run with the standard Go toolchain; no external services
-are required.
+goPool includes comprehensive test coverage:
+- **Unit tests** for core pool logic
+- **Compatibility tests** against btcd/pogolo behavior
+- **End-to-end tests** for block construction and share validation
+- **Fuzzing tests** for input validation
 
-## Running the tests
+All tests run with the standard Go toolchain without external dependencies.
 
-To run the full test suite:
+## Running Tests
+
+### Full Test Suite
 
 ```bash
+# Run all tests
 go test ./...
-```
 
-To run with verbose output:
-
-```bash
+# Run with verbose output
 go test -v ./...
+
+# Using the helper script
+./scripts/run-tests.sh
 ```
 
-You can also run individual tests or files using the usual `-run` and package
-selectors, for example:
+### Individual Tests
 
 ```bash
+# Run specific test
 go test -v ./... -run TestBuildBlock_ParsesWithBtcdAndHasValidMerkle
+
+# Run tests in specific package
+go test -v ./stratum
+
+# Run with race detector
+go test -race ./...
 ```
 
-## Test categories
+## Test Categories
 
-- **Core pool logic**
-  - `block_test.go` - block assembly and header/merkle construction.
-  - `coinbase_test.go` - coinbase script layout and BIP34 height encoding.
-  - `difficulty_test.go` - bits/target/difficulty conversions.
-  - `pending_submissions_test.go` - pending submitblock replay and JSONL handling.
+### Core Pool Logic
+- **`block_test.go`** - Block assembly, header construction, merkle tree building
+- **`coinbase_test.go`** - Coinbase script layout and BIP34 height encoding
+- **`difficulty_test.go`** - Bits/target/difficulty conversions
+- **`pending_submissions_test.go`** - Pending submitblock replay and JSONL handling
 
-- **Status / API / security**
-  - `path_traversal_test.go` - static file serving and path traversal hardening.
-  - `worker_status_test.go` - worker status view and privacy redaction behaviour.
+### Status / API / Security
+- **`path_traversal_test.go`** - Static file serving and path traversal hardening
+- **`worker_status_test.go`** - Worker status view and privacy redaction
 
-- **Compatibility tests**
-  - `cross_impl_sanity_test.go` - compatibility with btcd address parsing,
-    merkle trees, compact difficulty bits, and script encoding.
-  - `pogolo_compat_test.go` - behavioural compatibility with the pogolo pool
-    around extranonce handling, difficulty/target mapping, version masks,
-    coinbase construction, and ntime behaviour.
-  - `found_block_test.go` - end-to-end block construction tests, including
-    dual-payout coinbases and pogolo-style block layouts.
-  - `pow_compat_test.go` - builds headers via goPool and asks btcd
-    `blockchain.CheckProofOfWork` to validate our PoW view.
-  - `difficulty_compat_test.go` - checks `difficultyFromHash` against btcd's
-    difficulty/work calculations for known targets.
-  - `witness_strip_compat_test.go` - validates `stripWitnessData` by comparing
-    txid/wtxid against btcd's `TxHash` / `WitnessHash` for SegWit and legacy
-    transactions.
-  - `block_validity_compat_test.go` - builds a block with goPool's share path
-    and feeds it into btcd `ProcessBlock` on a regtest chain (with PoW checks
-    disabled) to confirm full-block validity, not just serialization.
+### Compatibility Tests (btcd/pogolo)
+- **`cross_impl_sanity_test.go`** - Address parsing, merkle trees, compact difficulty bits, script encoding
+- **`pogolo_compat_test.go`** - Extranonce handling, difficulty/target mapping, version masks, coinbase construction, ntime behavior
+- **`found_block_test.go`** - End-to-end block construction including dual-payout coinbases and pogolo-style layouts
+- **`pow_compat_test.go`** - Header construction validated against btcd's `blockchain.CheckProofOfWork`
+- **`difficulty_compat_test.go`** - `difficultyFromHash` validation against btcd's difficulty/work calculations
+- **`witness_strip_compat_test.go`** - `stripWitnessData` validation comparing txid/wtxid against btcd's `TxHash`/`WitnessHash`
+- **`block_validity_compat_test.go`** - Full-block validity via btcd `ProcessBlock` on regtest chain
 
-- **Wallet / address validation**
-  - `wallet_validation_test.go`, `wallet_fuzz_test.go` - payout address
-    validation, fuzz tests, and network-specific address handling.
+### Wallet / Address Validation
+- **`wallet_validation_test.go`** - Payout address validation and network-specific handling
+- **`wallet_fuzz_test.go`** - Fuzz testing for address validation
 
-- **Accounting / payouts**
-  - `payout_test.go`, `payout_debug_test.go` - payout accounting logic and
-    debugging helpers.
-  - `worker_status_test.go` - worker accounting and best-share tracking.
+### Accounting / Payouts
+- **`payout_test.go`** - Payout accounting logic
+- **`payout_debug_test.go`** - Debugging helpers for payout calculations
+- **`worker_status_test.go`** - Worker accounting and best-share tracking
 
-- **Performance / timing**
-  - `submit_timing_test.go` - measures the time from entering the
-    `handleBlockShare` path to the point where `submitblock` is invoked, using
-    a fake `rpcCaller` so the test does not depend on network latency.
-  - `performance.md` - benchmark notes and capacity planning guidance.
+### Performance / Timing
+- **`submit_timing_test.go`** - Measures latency from `handleBlockShare` entry to `submitblock` invocation
+- See [performance.md](performance.md) for detailed benchmark notes and capacity planning
 
-## Profiling with simulated miners
+## CPU Profiling with Simulated Miners
 
-The `TestGenerateGoProfileWithSimulatedMiners` helper can capture a CPU
-profile while a configurable number of simulated miners exercise hashing and
-big-int work. It is gated behind an environment variable so it never runs as
-part of the normal suite. To emit a profile:
+Generate CPU profiles using the `TestGenerateGoProfileWithSimulatedMiners` test. This test is gated behind environment variables and doesn't run in the normal test suite.
+
+### Generate Profile
 
 ```bash
 GO_PROFILE_SIMULATED_MINERS=1 \
@@ -89,46 +86,67 @@ GO_PROFILE_OUTPUT=default.pgo \
 go test -run TestGenerateGoProfileWithSimulatedMiners ./...
 ```
 
-Use `GO_PROFILE_MINER_COUNT` to adjust how many goroutines run, `GO_PROFILE_DURATION`
-to shorten or lengthen the capture window, and `GO_PROFILE_OUTPUT` to change the
-file name written by `runtime/pprof`. After the test completes, feed the output
-via `go tool pprof default.pgo ./gopool` (or whichever binary you profiled) to
-inspect or convert the profile.
+### Configuration Variables
 
-## Rough code coverage
+- **`GO_PROFILE_SIMULATED_MINERS`** - Set to `1` to enable profiling
+- **`GO_PROFILE_MINER_COUNT`** - Number of simulated miner goroutines
+- **`GO_PROFILE_DURATION`** - Profile capture duration
+- **`GO_PROFILE_OUTPUT`** - Output filename for the profile
 
-For a quick, overall coverage number:
+### Analyze Profile
 
 ```bash
+# Interactive analysis
+go tool pprof default.pgo ./goPool
+
+# Generate visualization
+go tool pprof -http=:8080 default.pgo ./goPool
+
+# Or use the helper script
+./scripts/profile-graph.sh default.pgo profile.svg
+```
+
+## Code Coverage
+
+### Quick Coverage Check
+
+```bash
+# Overall coverage summary
 go test ./... -cover
 ```
 
-To generate a coverage profile and inspect it in detail:
+### Detailed Coverage Analysis
 
 ```bash
+# Generate coverage profile
 go test ./... -coverprofile=coverage.out
-go tool cover -func=coverage.out   # function-by-function coverage
-go tool cover -html=coverage.out   # open in a browser for a visual view
+
+# View function-by-function coverage
+go tool cover -func=coverage.out
+
+# Open visual coverage report in browser
+go tool cover -html=coverage.out
 ```
 
-As of the latest changes, running:
+### Current Coverage
+
+As of the latest changes, overall coverage is approximately **24.6% of statements**. Highest coverage areas:
+
+- **Share validation and block construction** - `block_test.go`, `coinbase_test.go`, `found_block_test.go`
+- **Accounting and payout logic** - `payout_test.go`, `payout_debug_test.go`, `worker_status_test.go`
+- **Compatibility layers** - `cross_impl_sanity_test.go`, `pogolo_compat_test.go`, `*_compat_test.go`
+
+## Helper Scripts
+
+### Run Tests Script
+
+The [scripts/run-tests.sh](scripts/run-tests.sh) script runs the full test suite with verbose output:
 
 ```bash
-go test ./... -cover
+# Run all tests
+./scripts/run-tests.sh
+
+# Pass additional arguments to go test
+./scripts/run-tests.sh -race
+./scripts/run-tests.sh -run TestSpecificTest
 ```
-
-locally reports coverage of about **24.6% of statements** (this will drift as
-tests are added), with the highest coverage concentrated in:
-
-- share validation and block/coinbase construction (`block_test.go`,
-  `coinbase_test.go`, `found_block_test.go`)
-- accounting and payout logic (`payout_test.go`, `payout_debug_test.go`,
-  `worker_status_test.go`)
-- btcd/pogolo compatibility shims (`cross_impl_sanity_test.go`,
-  `pogolo_compat_test.go`, the *_compat_test.go files above)
-
-## Scripted test run
-
-For convenience there is a helper script under `scripts/` that runs the full
-test suite with verbose output and forwards any additional arguments to
-`go test`. See `scripts/run-tests.sh` for details.

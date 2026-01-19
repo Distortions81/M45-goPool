@@ -1,67 +1,174 @@
-# Configuration & operations
+# Configuration & Operations
 
-## Configuration files
+> **Quick Start:** See the [main README](README.md) for initial setup and build instructions.
 
-- `data/config/config.toml` (**required**): primary, user-facing options such as ports, branding, payout address, RPC URL, and basic difficulty/fee settings.
-- `data/config/secrets.toml` (**required** only when you run with `-allow-rpc-credentials`): store `rpc_user` / `rpc_pass` and optional Clerk secrets for the pool. Without that flag goPool refuses to use RPC credentials so you must configure `node.rpc_cookie_path` (or rely on the automatic detection below) to point at bitcoind's auth cookie.
-- `data/config/tuning.toml` (optional): advanced tuning and limits. Deleting this file reverts to the built-in defaults. See `data/config/examples/tuning.toml.example` for the current list.
-- Branding options in `config.toml` include `discord_url` and `github_url`, which control the header and About-page links.
+This document covers detailed configuration options, operational procedures, and runtime management for goPool.
 
-## Database snapshots & Backblaze uploads
+## Configuration Files
 
-- goPool can produce a periodic local snapshot of `data/state/workers.db` for safe backups. Backblaze B2 uploads are optional and are **not** required for local snapshots.
-- Backblaze B2 integration is configured via a `[backblaze_backup]` table in `data/config/config.toml`. Uploads stay disabled unless `enabled = true` and the required fields are populated.
-  - `account_id`, `bucket`, and optional `prefix` belong in the base config so you can keep namespace settings under version control. Backblaze requires the bucket name to be lowercase.
-  - The sensitive `application_key` (and optionally `backblaze_account_id`) must live in `data/config/secrets.toml` so it never shows up in the checked-in config (`backblaze_application_key`, `backblaze_account_id`). Use the master application key (not the key’s ID); if you don’t already have one, generate a new application key with write permissions for your bucket. The `backblaze_account_id` in the secrets file should match the Key ID associated with that master application key.
-- `interval_seconds` controls how often goPool snapshots `state/workers.db` and uploads that file (default `43200`, i.e. every 12 hours); the configured prefix is prepended so you can namespace the upload, and Backblaze keeps every version unless you add lifecycle rules.
-  - Backups only succeed when the configured B2 bucket already exists and the credentials have permissions to write objects; errors are logged but do not stop the pool from running.
-  - `keep_local_copy` (default `true`) stores a local copy of the last snapshot in `data/state/` even if Backblaze uploads are disabled.
-  - `snapshot_path` (default empty) overrides where the local snapshot is written; when set to a relative path it is resolved relative to `data_dir`.
-  - The most recent snapshot time is recorded in the `backup_state` table inside `data/state/workers.db` (migrated from the legacy `data/state/last_backup` / `data/state/backblaze_last_backup` files).
-  - When backing up outside of goPool (rsync/tar/system backups), back up the snapshot file (`snapshot_path` / `data/state/workers.db.bak`) rather than the live `data/state/workers.db`; copying a live SQLite DB can fail or produce a corrupt backup. If you must back up `workers.db` directly, stop goPool first.
+goPool uses three TOML configuration files located in `data/config/`:
 
-## Tuning highlights
+- **`config.toml`** (required) - Primary pool configuration including ports, branding, payout address, RPC URL, difficulty, and fee settings
+- **`secrets.toml`** (optional) - Sensitive credentials such as Discord tokens, Clerk keys, and optionally `rpc_user`/`rpc_pass` when using `-allow-rpc-credentials`
+- **`tuning.toml`** (optional) - Advanced tuning and operational limits. Deleting this file reverts to built-in defaults. See [data/config/examples/tuning.toml.example](data/config/examples/tuning.toml.example)
 
-- `hashrate_ema_tau_seconds` – time constant (seconds) for the per-connection hashrate EMA used in worker stats. Larger values smooth the reports but react more slowly; default `600` (~10 minutes).
-- `ntime_forward_slack_seconds` – how far miners may roll `ntime` beyond the template’s `curtime` / `mintime`; default `7000`.
+**Branding Options:** The `config.toml` includes `discord_url` and `github_url` settings that control header and About page links.
 
-## Launch flags
+## Database Backups
 
-- `-sha256-no-avx` (default `false`): disables the AVX-accelerated `sha256-simd` backend so the pool falls back to the platform-independent `crypto/sha256`.
-- `-allow-rpc-credentials` (default `false`): force goPool to use `rpc_user`/`rpc_pass` from `data/config/secrets.toml` instead of the auth cookie; this is deprecated and insecure, so avoid it whenever possible. The flag logs a warning each launch and is the only way to load credentials from secrets.toml.
-- If `node.rpc_cookie_path` is empty, goPool attempts to mimic `btcsuite/btcd/rpcclient`'s cookie autodetection: it first checks `$BITCOIN_DATADIR`, then btcd's `AppDataDir("btcd", false)/data` layout, and finally a collection of common Linux cookie locations (`~/.bitcoin/.cookie`, `/var/lib/bitcoin/.cookie`, `/home/bitcoin/.bitcoin/.cookie`, `/etc/bitcoin/.cookie`, plus the regtest/testnet3/testnet4/signet/simnet variants) before failing.
-- When a working RPC cookie is detected (either through autodetection or a manual `node.rpc_cookie_path` override), goPool rewrites `data/config/config.toml` so the discovered path is persisted for subsequent restarts.
-- `-rpc-cookie-path` (default empty): explicitly set the RPC cookie path at launch and skip autodetection. This is handy for temporary overrides or debugging when the cookie lives somewhere unusual.
-- `node.rpc_cookie_path` may point at a directory (for example, your Bitcoin datadir); goPool will look for a `.cookie` file inside that directory so you can stop worrying about the exact filename.
-- `node.allow_public_rpc` (default `false`): set this to `true` when connecting to intentionally unauthenticated RPC endpoints (only recommended for public/testing nodes such as `https://bitcoin-rpc.publicnode.com`). When enabled and `node.rpc_cookie_path` remains empty, goPool skips credential loading and connects without Basic auth, which lets you test the pool against services that offer open RPC access.
+### Local Snapshots
 
-## Bitcoin Core ZMQ topics
+goPool automatically creates periodic snapshots of `data/state/workers.db` for safe backups. These local snapshots work independently of cloud uploads.
 
-goPool reads Bitcoin Core's ZMQ notifications from `node.zmq_block_addr` and subscribes to these topics:
+**Configuration:**
+- `keep_local_copy` (default `true`) - Stores a local snapshot in `data/state/`
+- `snapshot_path` (default empty) - Override snapshot location (relative to `data_dir` if not absolute)
+- `interval_seconds` (default `43200`) - Snapshot frequency (12 hours)
 
-- `rawblock` (required): used to trigger job/template refresh on new blocks (mining still works with only this).
-- `hashblock` (optional): redundant refresh trigger; goPool can use either.
-- `rawtx` / `hashtx` (optional): used for status/metrics only.
+**Important:** When backing up outside of goPool (rsync/tar/system backups), always back up the snapshot file (`data/state/workers.db.bak`) rather than the live database. Copying a live SQLite database can produce corrupt backups. If you must back up `workers.db` directly, stop goPool first.
 
-Bitcoin Core allows publishing each topic to a different ZMQ address/port (e.g. `zmqpubrawblock=...`, `zmqpubrawtx=...`). goPool currently expects all topics it subscribes to to be available on the single configured `node.zmq_block_addr`, so publish the optional tx topics to the same endpoint if you want those UI stats to populate.
-goPool also uses RPC longpoll for frequent `getblocktemplate` updates (including `coinbasevalue` / transaction fees); ZMQ is used for fast new-block detection and status metrics.
+### Backblaze B2 Cloud Uploads (Optional)
 
-## Status pages & API
+Configure Backblaze B2 integration via the `[backblaze_backup]` section in `data/config/config.toml`. Uploads remain disabled until you set `enabled = true` and populate the required fields.
 
-- HTML status pages are served on `status_listen` (default `:80`) from Go `html/template` files in `data/templates/`.
-  - `overview.tmpl` – dashboard
-  - `worker_status.tmpl` – per-worker view
-  - `server.tmpl` – server stats page
-  - `about.tmpl` – about page
-  - `pool.tmpl` – pool info page
-  - `node.tmpl` – node info page
-  - `layout.tmpl` – shared layout
-- The main status page exposes per-worker statistics (rolling hashrate, recent share window, ban status) and a pool-wide hashrate graph based on the EMA, which is smoothed client-side for a stable curve.
-- APIs such as `/api/overview` and `/api/pool-hashrate` return JSON suitable for monitoring or dashboards.
+**Configuration Structure:**
 
-### Live template reloading
+In `config.toml`:
+```toml
+[backblaze_backup]
+enabled = true
+account_id = "your_account_id"
+bucket = "your-bucket-name"  # must be lowercase
+prefix = "gopool/"           # optional namespace prefix
+interval_seconds = 43200     # 12 hours
+```
 
-Templates can be reloaded without restarting the pool by sending a `SIGUSR1` signal to the process:
+In `secrets.toml`:
+```toml
+backblaze_application_key = "your_master_application_key"
+backblaze_account_id = "key_id_from_backblaze"
+```
+
+**Important Notes:**
+- Use the master application key (not the key's ID)
+- The `backblaze_account_id` in secrets should match the Key ID from your Backblaze application key
+- The bucket must already exist with write permissions configured
+- Backblaze keeps every version unless you configure lifecycle rules
+- Backup failures are logged but don't stop the pool
+- Snapshot metadata is tracked in the `backup_state` table within `workers.db`
+
+## Tuning Parameters
+
+Configure advanced tuning in `data/config/tuning.toml`. See [data/config/examples/tuning.toml.example](data/config/examples/tuning.toml.example) for all available options.
+
+**Key Parameters:**
+- `hashrate_ema_tau_seconds` (default `600`) - Time constant in seconds for per-connection hashrate EMA. Larger values smooth reports but react slower (~10 minutes default)
+- `ntime_forward_slack_seconds` (default `7000`) - How far miners may roll `ntime` beyond the template's `curtime`/`mintime`
+
+## Command-Line Flags
+
+### Performance Flags
+
+- `-sha256-no-avx` (default `false`) - Disables AVX-accelerated `sha256-simd` backend, falling back to platform-independent `crypto/sha256`
+
+### RPC Authentication Flags
+
+- `-rpc-cookie-path <path>` - Explicitly set RPC cookie path at launch, skipping autodetection. Useful for temporary overrides or non-standard cookie locations
+- `-rpc-url <url>` - Override the RPC URL from config
+- `-allow-rpc-credentials` (default `false`) - Force goPool to use `rpc_user`/`rpc_pass` from `secrets.toml` instead of cookie auth. **Deprecated and insecure** - avoid when possible. Logs a warning on each launch
+
+### ZMQ Flags
+
+- `-no-zmq` - Disable ZMQ, use RPC/longpoll only
+
+### HTTPS Flags
+
+- `-https-only` (default `true`) - Enable HTTPS-first mode where HTTP serves only safe routes and redirects to HTTPS
+
+## RPC Cookie Authentication
+
+goPool prefers cookie-based authentication over username/password credentials.
+
+### Cookie Path Resolution
+
+1. **Explicit configuration:** Set `node.rpc_cookie_path` in `config.toml`
+2. **Autodetection:** If empty, goPool searches in order:
+   - `$BITCOIN_DATADIR`
+   - btcd's `AppDataDir("btcd", false)/data` layout
+   - Common Linux locations:
+     - `~/.bitcoin/.cookie`
+     - `/var/lib/bitcoin/.cookie`
+     - `/home/bitcoin/.bitcoin/.cookie`
+     - `/etc/bitcoin/.cookie`
+   - Network-specific variants (regtest/testnet3/testnet4/signet/simnet)
+
+3. **Directory support:** `node.rpc_cookie_path` can point to a directory; goPool will search for `.cookie` inside
+
+4. **Persistence:** When a working cookie is found, goPool updates `config.toml` with the discovered path
+
+### Public RPC Endpoints
+
+Set `node.allow_public_rpc = true` to connect to intentionally unauthenticated endpoints (e.g., `https://bitcoin-rpc.publicnode.com`). When enabled with an empty `rpc_cookie_path`, goPool skips credential loading and connects without Basic auth. **Only use for public/testing nodes.**
+
+## Bitcoin Core ZMQ Integration
+
+goPool subscribes to Bitcoin Core ZMQ notifications via `node.zmq_block_addr` for fast block detection and status metrics. RPC longpoll handles frequent `getblocktemplate` updates (including `coinbasevalue` and transaction fees).
+
+### ZMQ Topics
+
+- **`rawblock`** (required) - Triggers job/template refresh on new blocks. Mining works with only this topic
+- **`hashblock`** (optional) - Redundant refresh trigger, goPool can use either rawblock or hashblock
+- **`rawtx` / `hashtx`** (optional) - Used for status UI metrics only
+
+### Configuration
+
+Bitcoin Core can publish each topic to different ZMQ endpoints. goPool expects **all subscribed topics on a single endpoint**, so configure them identically:
+
+```conf
+# bitcoin.conf
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubhashblock=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28332
+zmqpubhashtx=tcp://127.0.0.1:28332
+```
+
+Then set in `config.toml`:
+```toml
+[node]
+zmq_block_addr = "tcp://127.0.0.1:28332"
+```
+
+## Status UI & API
+
+### Web Interface
+
+HTML status pages are served from `data/templates/` using Go's `html/template` engine.
+
+**Available Templates:**
+- `overview.tmpl` - Main dashboard
+- `worker_status.tmpl` - Per-worker statistics view
+- `server.tmpl` - Server statistics
+- `about.tmpl` - About page
+- `pool.tmpl` - Pool information
+- `node.tmpl` - Node information
+- `layout.tmpl` - Shared layout wrapper
+
+**Features:**
+- Per-worker statistics: rolling hashrate, recent share window, ban status
+- Pool-wide hashrate graph with client-side EMA smoothing
+- Real-time metrics via JSON API endpoints
+
+### JSON API Endpoints
+
+- `/api/overview` - Pool overview and statistics
+- `/api/pool-hashrate` - Historical hashrate data
+- Additional endpoints available for monitoring and dashboard integration
+
+## Runtime Reloading
+
+### Template Reload (SIGUSR1)
+
+Reload HTML templates without restarting the pool:
 
 ```bash
 # Find the pool process ID
@@ -74,23 +181,95 @@ kill -SIGUSR1 <pid>
 systemctl kill -s SIGUSR1 gopool.service
 ```
 
-This is useful for updating the UI while the pool is running. If template parsing fails, the error is logged and the old templates remain active.
+If template parsing fails, the error is logged and old templates remain active.
 
-### Live config reloading
+### Configuration Reload (SIGUSR2)
 
-Status pages and API responses reflect the current configuration, so editing `data/config/*.toml` and sending `SIGUSR2` tells goPool to re-read the base config, tuning overrides, and secrets without restarting the whole pool. The reload refreshes the branding, payout, difficulty, and rate-limit summaries shown on the UI, but listeners or Clerk/Clerk callback paths stay tied to the values that were active at startup, so restart after making those kinds of changes.
+Reload configuration files (`config.toml`, `secrets.toml`, `tuning.toml`) without restarting:
 
 ```bash
-# Signal goPool to reload the config files
+# Signal goPool to reload config
 kill -SIGUSR2 <pid>
 
 # Or via systemd
 systemctl kill -s SIGUSR2 gopool.service
 ```
 
+**What gets reloaded:**
+- Branding settings
+- Payout configuration
+- Difficulty settings
+- Rate-limit parameters
+- Tuning parameters
+
+**What requires a restart:**
+- Network listeners (ports)
+- Clerk authentication paths
+- RPC connection settings
+
 ## Logging
 
-- Logs live under `data_dir/logs` (e.g. `data/logs`):
-  - `pool.log`: structured pool log. By default only errors are logged; build with `-tags debug` or `-tags verbose` for more output.
-  - `net-debug.log`: network traffic log emitted only when building with `-tags debug`.
-  - `errors.log`: error-only log for easier troubleshooting.
+Logs are stored in `data/logs/` (relative to `data_dir`):
+
+- **`pool.log`** - Structured pool log. By default only errors are logged
+- **`net-debug.log`** - Network traffic log (only with `-tags debug` build)
+- **`errors.log`** - Error-only log for troubleshooting
+
+### Build Tags
+
+goPool supports multiple build tags that can be combined:
+
+**Logging Levels:**
+```bash
+# Debug build with network traffic logging
+go build -tags debug -o goPool
+
+# Verbose build without network traffic logging
+go build -tags verbose -o goPool
+```
+
+**Disable Hardware-Accelerated SHA256:**
+```bash
+# Build without sha256-simd (forces crypto/sha256)
+go build -tags noavx -o goPool
+
+# Combine with logging
+go build -tags "debug noavx" -o goPool
+go build -tags "verbose noavx" -o goPool
+```
+
+The `noavx` tag disables [`github.com/minio/sha256-simd`](https://github.com/minio/sha256-simd) and uses standard [`crypto/sha256`](https://pkg.go.dev/crypto/sha256) instead.
+
+**About sha256-simd:** This library automatically detects and uses the best available instruction set:
+- **x86/x64:** AVX512, SHA Extensions, AVX2
+- **ARM64:** Cryptography Extensions (ARMv8)
+- **Unsupported platforms:** Pure Go fallback
+
+**When to use `noavx`:**
+- Debugging or benchmarking the standard library implementation
+- Working around rare sha256-simd issues
+- **Not needed** for platforms lacking hardware acceleration (the library handles this automatically)
+
+Alternatively, use the `-sha256-no-avx` runtime flag to disable hardware acceleration without rebuilding.
+
+**Disable Hardware-Accelerated JSON:**
+```bash
+# Build without sonic (forces encoding/json)
+go build -tags nojsonsimd -o goPool
+
+# Combine multiple tags
+go build -tags "debug noavx nojsonsimd" -o goPool
+go build -tags "verbose noavx nojsonsimd" -o goPool
+```
+
+The `nojsonsimd` tag disables [`github.com/bytedance/sonic`](https://github.com/bytedance/sonic) and uses standard [`encoding/json`](https://pkg.go.dev/encoding/json) instead.
+
+**About sonic:** Faster JSON encoding/decoding via JIT compilation and SIMD:
+- **Supported:** Linux, MacOS, Windows on AMD64 or ARM64
+- **Requirements:** Go 1.18+ (Go 1.20+ for ARM64)
+- **Unsupported platforms:** Falls back to standard library
+
+**When to use `nojsonsimd`:**
+- Debugging JSON serialization issues
+- Benchmarking standard library performance
+- Working around sonic compatibility issues

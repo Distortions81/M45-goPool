@@ -1,66 +1,71 @@
-# Performance (Operator Notes)
+# Performance & Capacity Planning
 
-This is a practical, operator-friendly reference for “how much can this box
-handle?” using simple benchmarks. Most of it focuses on **CPU**; there’s also a
-small **network bandwidth** section at the end for gigabit vs 10 gig ballparks.
+> **Quick Start:** See the [main README](README.md) for setup instructions.
 
-These numbers are meant as a *ballpark*, not a guarantee. Real deployments will
-hit other limits too (file descriptors, memory, kernel/network overhead, TLS,
-disk logging, etc.).
+This document provides practical capacity planning guidance for goPool operators. The benchmarks focus primarily on **CPU** with additional **network bandwidth** estimates for gigabit and 10 gigabit deployments.
 
-## Reference machine (for the numbers below)
+**Important:** These numbers are ballpark estimates. Real-world deployments encounter additional limits including file descriptors, memory, kernel/network overhead, TLS processing, and disk I/O.
 
-- CPU: AMD Ryzen 9 7950X 16-Core Processor
-- OS/Arch: linux/amd64
-- Go: go1.24.11
+## Reference Hardware
 
-## Quick capacity picture (CPU-only, network ignored)
+All benchmarks below were conducted on:
 
-We assume **15 shares/min per worker** for rough planning.
+- **CPU:** AMD Ryzen 9 7950X 16-Core Processor
+- **OS/Arch:** linux/amd64
+- **Go Version:** go1.24.11
 
-- **Share handling headroom is huge on this CPU.** Even including submit
-  parsing/validation, we measured about **~1.16M shares/sec** of CPU throughput.
-  At 15 shares/min/worker (0.25 shares/sec/worker), that’s a *theoretical*
-  **~4.6M workers at 100% CPU** for share checking alone.
-- **What will limit “snappy dashboard” first is status rebuilding**, because it
-  scales with the number of connected miners and is paid periodically (and on
-  the first request after the cache expires).
+## Executive Summary (CPU Only)
 
-In other words: for “web UI feels fast”, plan around the dashboard/status work,
-not around share hashing.
+Assuming **15 shares/min per worker** (0.25 shares/sec):
 
-## What uses CPU (and what it means)
+- **Share processing:** ~1.16M shares/sec throughput = ~4.6M workers at 100% CPU (theoretical maximum)
+- **Practical limit:** Status dashboard rebuilding, not share validation
+- **Planning guideline:** Design around dashboard refresh performance for a responsive UI, not share hashing capacity
 
-- **Every share submitted by miners**: parse the message, validate it, do the
-  proof-of-work checks, update stats, and send a response. More shares/min per
-  worker means more CPU per worker.
-- **Keeping the dashboard fresh**: the server rebuilds a status snapshot by
-  scanning connections. With more connected miners, this takes longer.
-- **Serving the web/API**: turning that snapshot into JSON responses costs some
-  CPU, but it’s usually smaller than the snapshot rebuild itself.
+**Key takeaway:** Share validation has massive headroom. The status UI rebuild scales with connected miners and runs periodically, making it the primary bottleneck for "snappy dashboard" experience.
 
-## “Low-latency max workers” (dashboard rebuild budget)
+## CPU Consumption Breakdown
 
-If you want the UI to feel responsive, a simple rule of thumb is:
+### Per-Share Processing
+For each miner submission:
+1. Parse Stratum message
+2. Validate share format
+3. Perform proof-of-work checks
+4. Update worker statistics
+5. Send response
 
-“How many connected workers can we scan/rebuild in **X ms**?”
+**Impact:** Higher shares/min per worker = proportionally higher CPU usage
 
-On the reference 7950X, measured rebuild budgets are roughly:
+### Status Dashboard Rebuilding
+Periodic snapshot generation by scanning all active connections:
+- Runs every ~10 seconds (configurable via `defaultRefreshInterval`)
+- Scales linearly with connected miner count
+- Usually the limiting factor for UI responsiveness
 
-- ~`2.7k` workers @ `5ms` (≈ `1.9k` @ ~70% CPU)
-- ~`5.3k` workers @ `10ms` (≈ `3.7k` @ ~70% CPU)
-- ~`8.0k` workers @ `15ms` (≈ `5.6k` @ ~70% CPU)
-- ~`16.0k` workers @ `30ms` (≈ `11.2k` @ ~70% CPU)
-- ~`32.1k` workers @ `60ms` (≈ `22.5k` @ ~70% CPU)
+### API/Web Serving
+Converting status snapshots to JSON/HTML responses:
+- Generally lower cost than snapshot rebuild
+- Cached snapshots minimize repeated work
 
-Notes:
+## Dashboard Rebuild Latency Targets
 
-- The status snapshot is cached and only rebuilt about once per
-  `defaultRefreshInterval` (currently 10s), so most requests are “cheap reads”.
-  The “spike” happens on rebuild.
-- At **15 shares/min per worker**, share CPU is not the limiting factor at these
-  worker counts (e.g. `10k workers` ≈ `2.5k shares/sec`, far below the measured
-  share-processing throughput).
+For a responsive UI, the key question is: **"How many workers can we scan/rebuild in X milliseconds?"**
+
+### Benchmark Results (Reference 7950X)
+
+| Target Latency | Max Workers (100% CPU) | Max Workers (~70% CPU) |
+|---------------|------------------------|------------------------|
+| 5ms           | ~2,700                 | ~1,900                 |
+| 10ms          | ~5,300                 | ~3,700                 |
+| 15ms          | ~8,000                 | ~5,600                 |
+| 30ms          | ~16,000                | ~11,200                |
+| 60ms          | ~32,100                | ~22,500                |
+
+### Important Notes
+
+- **Caching:** Status snapshots are cached and only rebuilt once per `defaultRefreshInterval` (~10s by default)
+- **Most requests are fast:** Cached reads are inexpensive; rebuild latency spikes occur periodically
+- **Share processing not the bottleneck:** At 15 shares/min/worker, even 10,000 workers only generate ~2,500 shares/sec, well below measured share-processing capacity (~1.16M shares/sec)
 
 ## Putting it together (realistic CPU-only ballparks)
 
