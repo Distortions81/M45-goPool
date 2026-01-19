@@ -145,6 +145,50 @@ go build -tags nojsonsimd -o goPool
 go build -tags noavx -o goPool
 ```
 
+## Command-Line Parameters
+
+Run `./goPool -h` to see all available command-line flags:
+
+| Flag | Description |
+|------|-------------|
+| `-allow-rpc-credentials` | Allow loading rpc_user/rpc_pass from secrets.toml when node.rpc_cookie_path is not set |
+| `-bind <ip>` | Bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100) |
+| `-check-duplicates` | Enable duplicate share checking (disabled by default for solo pools) |
+| `-disable-json-endpoint` | Disable JSON status endpoints for debugging |
+| `-flood` | Enable flood-test mode (force min/max difficulty to 0.01) |
+| `-https-only` | Serve status UI over HTTPS only (auto-generating a self-signed cert if none is present) (default: true) |
+| `-mainnet` | Force mainnet defaults for RPC/ZMQ ports |
+| `-no-clean-bans` | Skip rewriting the ban list on startup (keep expired bans) |
+| `-no-zmq` | Disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW) |
+| `-profile` | Collect a 60s CPU profile to default.pgo on startup |
+| `-regtest` | Force regtest defaults for RPC/ZMQ ports |
+| `-rewrite-config` | Rewrite config file with effective settings on startup |
+| `-rpc-cookie-path <path>` | Override node RPC cookie path (skips autodetection when set) |
+| `-rpc-url <url>` | Override RPC URL (e.g. http://127.0.0.1:8332) |
+| `-secrets <path>` | Path to secrets.toml (overrides default under data_dir/config) |
+| `-signet` | Force signet defaults for RPC/ZMQ ports |
+| `-stdoutlog` | Mirror logs to stdout in addition to writing to files |
+| `-testnet` | Force testnet defaults for RPC/ZMQ ports |
+
+**Common Usage Examples:**
+
+```bash
+# Run on testnet
+./goPool -testnet
+
+# Run on regtest for local development
+./goPool -regtest
+
+# Mirror logs to stdout for debugging
+./goPool -stdoutlog
+
+# Bind to specific IP address
+./goPool -bind 192.168.1.100
+
+# Override RPC URL
+./goPool -rpc-url http://127.0.0.1:8332
+```
+
 ## Configuration
 
 ### Quick Start Configuration
