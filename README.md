@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Distortions81/M45-Core-goPool)](https://go.dev)
 
-> **⬇️ [Download Pre-Built Releases](https://github.com/Distortions81/M45-Core-goPool/releases)** - Ready-to-run binaries for Linux, macOS, and Windows. See [RELEASES.md](RELEASES.md) for details.
+> **⬇️ [Download Pre-Built Releases](https://github.com/Distortions81/M45-Core-goPool/releases)** - Ready-to-run binaries for Linux (AMD64) and macOS (AMD64/ARM64). See [RELEASES.md](RELEASES.md) for details.
 
 ## About
 
