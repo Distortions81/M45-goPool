@@ -32,21 +32,9 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core (`bi
 
 **Install Go (all distributions):**
 
-goPool requires a recent Go version. Always use the official golang.org release rather than distribution packages.
+goPool requires Go 1.24.11 or later. Always use the official golang.org release rather than distribution packages.
 
-```bash
-# Download and install Go (check https://go.dev/dl/ for latest version)
-wget https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-
-# Add to PATH
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-
-# Verify installation
-go version
-```
+Visit [https://go.dev/dl/](https://go.dev/dl/) to download and install the latest Go version for your platform.
 
 **Install ZeroMQ:**
 
