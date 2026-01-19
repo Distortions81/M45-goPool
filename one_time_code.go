@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -265,11 +261,6 @@ func (s *StatusServer) loadOneTimeCodesFromDB(dataDir string) {
 		return
 	}
 
-	legacyPath := s.oneTimeCodePersistPath(dataDir)
-	if err := migrateOneTimeCodesFileToDB(db, legacyPath); err != nil {
-		logger.Warn("one-time code state migrate failed", "error", err, "path", legacyPath)
-	}
-
 	// Match the old semantics: load any persisted codes on startup and then
 	// clear the persistence store so crashes don't keep stale codes.
 	rows, err := db.Query("SELECT user_id, code, created_at_unix, expires_at_unix FROM one_time_codes")
@@ -413,58 +404,3 @@ func (s *StatusServer) startOneTimeCodePersistence(ctx context.Context) {
 	}()
 }
 
-func migrateOneTimeCodesFileToDB(db *sql.DB, path string) error {
-	if db == nil || strings.TrimSpace(path) == "" {
-		return nil
-	}
-	if done, err := hasStateMigration(db, stateMigrationOneTimeCodesJSON); err == nil && done {
-		if err := renameLegacyFileToOld(path); err != nil {
-			logger.Warn("rename legacy one-time codes file", "error", err, "from", path)
-		}
-		return nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	var payload oneTimeCodePersistPayload
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return err
-	}
-	if len(payload.Codes) == 0 {
-		_ = os.Remove(path)
-		return nil
-	}
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	stmt, err := tx.Prepare("INSERT OR REPLACE INTO one_time_codes (user_id, code, created_at_unix, expires_at_unix) VALUES (?, ?, ?, ?)")
-	if err != nil {
-		return err
-	}
-	for _, e := range payload.Codes {
-		uid := strings.TrimSpace(e.UserID)
-		code := strings.TrimSpace(e.Code)
-		if uid == "" || code == "" {
-			continue
-		}
-		if _, err := stmt.Exec(uid, code, unixOrZero(e.CreatedAt), unixOrZero(e.ExpiresAt)); err != nil {
-			_ = stmt.Close()
-			return err
-		}
-	}
-	_ = stmt.Close()
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	_ = recordStateMigration(db, stateMigrationOneTimeCodesJSON, time.Now())
-	if err := renameLegacyFileToOld(path); err != nil {
-		logger.Warn("rename legacy one-time codes file", "error", err, "from", path)
-	}
-	return nil
-}

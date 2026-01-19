@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
-	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -70,10 +67,6 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient, path string) 
 	if db == nil {
 		logger.Warn("pending block: shared state db not initialized")
 		return
-	}
-
-	if err := migratePendingSubmissionsJSONLToDB(db, path); err != nil {
-		logger.Warn("migrate pending submissions log to sqlite", "error", err)
 	}
 
 	rows, err := db.Query(`
@@ -183,10 +176,6 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 		return
 	}
 
-	if err := migratePendingSubmissionsJSONLToDB(db, path); err != nil {
-		logger.Warn("migrate pending submissions log to sqlite", "error", err)
-	}
-
 	key := strings.TrimSpace(rec.Hash)
 	if key == "" {
 		key = strings.TrimSpace(rec.BlockHex)
@@ -223,92 +212,3 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 	}
 }
 
-func migratePendingSubmissionsJSONLToDB(db *sql.DB, path string) error {
-	if db == nil || strings.TrimSpace(path) == "" {
-		return nil
-	}
-	if done, err := hasStateMigration(db, stateMigrationPendingSubmissionsJSONL); err == nil && done {
-		if err := renameLegacyFileToOld(path); err != nil {
-			logger.Warn("rename legacy pending submissions log", "error", err, "from", path)
-		}
-		return nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	defer f.Close()
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO pending_submissions (
-			submission_key, timestamp_unix, height, hash, worker, block_hex, rpc_error, rpc_url, payout_addr, status
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(submission_key) DO UPDATE SET
-			timestamp_unix = excluded.timestamp_unix,
-			height = excluded.height,
-			hash = excluded.hash,
-			worker = excluded.worker,
-			block_hex = excluded.block_hex,
-			rpc_error = excluded.rpc_error,
-			rpc_url = excluded.rpc_url,
-			payout_addr = excluded.payout_addr,
-			status = excluded.status
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	scanner := bufio.NewScanner(f)
-	const maxLine = 4 * 1024 * 1024
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, maxLine)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var rec pendingSubmissionRecord
-		if err := fastJSONUnmarshal([]byte(line), &rec); err != nil {
-			continue
-		}
-		key := strings.TrimSpace(rec.Hash)
-		if key == "" {
-			key = strings.TrimSpace(rec.BlockHex)
-		}
-		key = strings.TrimSpace(key)
-		blockHex := strings.TrimSpace(rec.BlockHex)
-		if key == "" || blockHex == "" {
-			continue
-		}
-		status := strings.TrimSpace(rec.Status)
-		if status == "" {
-			status = "pending"
-		}
-		if _, err := stmt.Exec(key, unixOrZero(rec.Timestamp), rec.Height, strings.TrimSpace(rec.Hash), strings.TrimSpace(rec.Worker), blockHex,
-			strings.TrimSpace(rec.RPCError), strings.TrimSpace(rec.RPCURL), strings.TrimSpace(rec.PayoutAddr), status); err != nil {
-			return err
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	_ = recordStateMigration(db, stateMigrationPendingSubmissionsJSONL, time.Now())
-	if err := renameLegacyFileToOld(path); err != nil {
-		logger.Warn("rename legacy pending submissions log", "error", err, "from", path)
-	}
-	return nil
-}

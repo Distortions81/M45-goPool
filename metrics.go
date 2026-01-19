@@ -3,15 +3,12 @@ package main
 import (
 	"database/sql"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/bytedance/sonic"
 )
 
 const defaultBestShareLimit = 12
@@ -169,76 +166,9 @@ func (m *PoolMetrics) SetBestSharesDB(dataDir string) {
 		return
 	}
 
-	legacy := filepath.Join(strings.TrimSpace(dataDir), "state", "best_shares.json")
-	if err := m.migrateBestSharesFileToDB(legacy); err != nil {
-		logger.Warn("migrate best shares file to sqlite", "error", err, "path", legacy)
-	}
 	if err := m.loadBestSharesFromDB(); err != nil {
 		logger.Warn("load best shares from sqlite", "error", err)
 	}
-}
-
-func (m *PoolMetrics) migrateBestSharesFileToDB(path string) error {
-	if m == nil || strings.TrimSpace(path) == "" {
-		return nil
-	}
-	db := getSharedStateDB()
-	if db == nil {
-		return nil
-	}
-	if done, err := hasStateMigration(db, stateMigrationBestSharesJSON); err == nil && done {
-		if err := renameLegacyFileToOld(path); err != nil {
-			logger.Warn("rename legacy best shares file", "error", err, "from", path)
-		}
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	var shares []BestShare
-	if err := sonic.Unmarshal(data, &shares); err != nil {
-		return err
-	}
-
-	rewrote := false
-	for i := range shares {
-		if shares[i].Worker != "" {
-			censored := shortWorkerName(shares[i].Worker, workerNamePrefix, workerNameSuffix)
-			if censored != "" && censored != shares[i].Worker {
-				shares[i].Worker = censored
-				rewrote = true
-			}
-		}
-		if shares[i].Hash != "" {
-			censored := shortDisplayID(shares[i].Hash, hashPrefix, hashSuffix)
-			if censored != "" && censored != shares[i].Hash {
-				shares[i].Hash = censored
-				rewrote = true
-			}
-		}
-		if shares[i].DisplayWorker != "" {
-			shares[i].DisplayWorker = ""
-			rewrote = true
-		}
-		if shares[i].DisplayHash != "" {
-			shares[i].DisplayHash = ""
-			rewrote = true
-		}
-	}
-	_ = rewrote
-
-	if err := m.persistBestSharesToDB(sanitizeBestSharesForDB(shares)); err != nil {
-		return err
-	}
-	_ = recordStateMigration(db, stateMigrationBestSharesJSON, time.Now())
-	if err := renameLegacyFileToOld(path); err != nil {
-		logger.Warn("rename legacy best shares file", "error", err, "from", path)
-	}
-	return nil
 }
 
 func (m *PoolMetrics) loadBestSharesFromDB() error {

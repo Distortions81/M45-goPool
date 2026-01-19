@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -239,15 +236,10 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	legacyPath := filepath.Join(dataDir, "state", "found_blocks.jsonl")
 	// Use the shared state database connection
 	db := getSharedStateDB()
 	if db == nil {
 		return nil
-	}
-
-	if err := migrateFoundBlocksJSONLToDB(db, legacyPath); err != nil {
-		logger.Warn("migrate found block log to sqlite", "error", err)
 	}
 
 	type foundRecord struct {
@@ -311,61 +303,6 @@ func loadFoundBlocks(dataDir string, limit int) []FoundBlockView {
 		return recs[i].Timestamp.After(recs[j].Timestamp)
 	})
 	return recs
-}
-
-func migrateFoundBlocksJSONLToDB(db *sql.DB, path string) error {
-	if db == nil || strings.TrimSpace(path) == "" {
-		return nil
-	}
-	if done, err := hasStateMigration(db, stateMigrationFoundBlocksJSONL); err == nil && done {
-		if err := renameLegacyFileToOld(path); err != nil {
-			logger.Warn("rename legacy found blocks log", "error", err, "from", path)
-		}
-		return nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	defer f.Close()
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	stmt, err := tx.Prepare("INSERT INTO found_blocks_log (created_at_unix, json) VALUES (?, ?)")
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	nowUnix := time.Now().Unix()
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		if _, err := stmt.Exec(nowUnix, line); err != nil {
-			return err
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	_ = recordStateMigration(db, stateMigrationFoundBlocksJSONL, time.Now())
-	if err := renameLegacyFileToOld(path); err != nil {
-		logger.Warn("rename legacy found blocks log", "error", err, "from", path)
-	}
-	return nil
 }
 
 // readProcessRSS returns the current process resident set size (RSS) in bytes.
