@@ -21,12 +21,8 @@ Each release includes pre-built binaries for multiple platforms, packaged with a
 | Platform | Architecture | Package Format | Notes |
 |----------|-------------|----------------|-------|
 | Linux | amd64 (x86_64) | `.tar.gz` | Most common, includes AVX/AVX2/AVX512 support |
-| Linux | arm64 (aarch64) | `.tar.gz` | ARM64 servers, includes ARM crypto extensions |
-| Linux | armv7 | `.tar.gz` | 32-bit ARM (Raspberry Pi, etc.) |
 | macOS | amd64 (Intel) | `.tar.gz` | Intel Macs |
 | macOS | arm64 (Apple Silicon) | `.tar.gz` | M1/M2/M3 Macs |
-| Windows | amd64 (x86_64) | `.zip` | Windows 10/11 64-bit |
-| Windows | arm64 | `.zip` | Windows on ARM |
 
 **Note:** All builds include hardware-accelerated SHA256 ([sha256-simd](https://github.com/minio/sha256-simd)) and JSON ([sonic](https://github.com/bytedance/sonic)) where supported by the platform.
 
@@ -36,11 +32,11 @@ Each release includes pre-built binaries for multiple platforms, packaged with a
 
 ```bash
 # Download release package
-wget https://github.com/Distortions81/M45-Core-goPool/releases/download/v1.0.0/goPool-v1.0.0-linux-amd64.tar.gz
+wget https://github.com/Distortions81/M45-Core-goPool/releases/download/v0.1.4/goPool-v0.1.4-linux-amd64.tar.gz
 
 # Extract
-tar xzf goPool-v1.0.0-linux-amd64.tar.gz
-cd goPool-v1.0.0-linux-amd64
+tar xzf goPool-v0.1.4-linux-amd64.tar.gz
+cd goPool-v0.1.4-linux-amd64
 
 # Run once to generate config examples
 ./goPool
@@ -54,25 +50,16 @@ nano data/config/config.toml
 ./goPool
 ```
 
-### Windows
-
-1. Download the `.zip` file from the releases page
-2. Extract to a folder (e.g., `C:\goPool\`)
-3. Double-click `goPool.exe` to run once (generates config examples)
-4. Copy `data\config\examples\config.toml.example` to `data\config\config.toml`
-5. Edit `data\config\config.toml` with Notepad and set your payout address
-6. Run `goPool.exe` again to start the pool
-
 ## Verifying Downloads
 
 Each release package includes a SHA256 checksum file:
 
 ```bash
-# Linux / macOS
-sha256sum -c goPool-v1.0.0-linux-amd64.tar.gz.sha256
+# Linux
+sha256sum -c goPool-v0.1.4-linux-amd64.tar.gz.sha256
 
-# Windows (PowerShell)
-(Get-FileHash goPool-v1.0.0-windows-amd64.zip -Algorithm SHA256).Hash -eq (Get-Content goPool-v1.0.0-windows-amd64.zip.sha256 -Raw).Split()[0]
+# macOS
+shasum -a 256 -c goPool-v0.1.4-macos-amd64.tar.gz.sha256
 ```
 
 ## Release Triggers
@@ -83,8 +70,8 @@ Releases are automatically built when you push a git tag:
 
 ```bash
 # Create and push a version tag
-git tag v1.0.0
-git push origin v1.0.0
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 This triggers the GitHub Actions workflow which:
@@ -98,7 +85,7 @@ This triggers the GitHub Actions workflow which:
 You can also trigger a manual build from the GitHub Actions tab:
 1. Go to Actions → Release Build
 2. Click "Run workflow"
-3. Enter a version tag (e.g., `v1.0.0-dev`)
+3. Enter a version tag (e.g., `v0.1.4-dev`)
 4. Artifacts will be available for download (not uploaded to Releases)
 
 ## Build Configuration
@@ -156,10 +143,6 @@ apk add zeromq
 ```bash
 brew install zeromq
 ```
-
-### Windows
-
-ZeroMQ DLLs should be included with the release package or available via the build. If you encounter issues, you may need to install ZeroMQ separately.
 
 ## Upgrading
 
