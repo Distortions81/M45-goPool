@@ -210,6 +210,7 @@ type Config struct {
 	ConnectionTimeout                time.Duration
 	VersionMask                      uint32
 	MinVersionBits                   int
+	IgnoreMinVersionBits             bool
 	VersionMaskConfigured            bool
 	MaxDifficulty                    float64
 	MinDifficulty                    float64
@@ -322,6 +323,7 @@ type EffectiveConfig struct {
 	ConnectionTimeout                 string  `json:"connection_timeout"`
 	VersionMask                       string  `json:"version_mask,omitempty"`
 	MinVersionBits                    int     `json:"min_version_bits,omitempty"`
+	IgnoreMinVersionBits              bool    `json:"ignore_min_version_bits,omitempty"`
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
@@ -483,7 +485,8 @@ type banTuning struct {
 }
 
 type versionTuning struct {
-	MinVersionBits *int `toml:"min_version_bits"`
+	MinVersionBits        *int  `toml:"min_version_bits"`
+	IgnoreMinVersionBits  *bool `toml:"ignore_min_version_bits"`
 }
 
 type tuningFileConfig struct {
@@ -609,7 +612,8 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			ReconnectBanDurationSeconds:      intPtr(cfg.ReconnectBanDurationSeconds),
 		},
 		Version: versionTuning{
-			MinVersionBits: intPtr(cfg.MinVersionBits),
+			MinVersionBits:       intPtr(cfg.MinVersionBits),
+			IgnoreMinVersionBits: boolPtr(cfg.IgnoreMinVersionBits),
 		},
 	}
 }
@@ -970,6 +974,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Version.MinVersionBits != nil {
 		cfg.MinVersionBits = *fc.Version.MinVersionBits
 	}
+	if fc.Version.IgnoreMinVersionBits != nil {
+		cfg.IgnoreMinVersionBits = *fc.Version.IgnoreMinVersionBits
+	}
 }
 
 func finalizeRPCCredentials(cfg *Config, secretsPath string, forceCredentials bool, configPath string) error {
@@ -1316,6 +1323,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
 		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
 		MinVersionBits:                    cfg.MinVersionBits,
+		IgnoreMinVersionBits:              cfg.IgnoreMinVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,
 		MinDifficulty:                     cfg.MinDifficulty,
 		// Effective config mirrors whether suggested difficulty locking is enabled.

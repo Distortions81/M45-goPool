@@ -306,9 +306,17 @@ func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (
 		}
 	}
 	if versionDiff != 0 && mc.minVerBits > 0 && bits.OnesCount32(versionDiff&mc.versionMask) < mc.minVerBits {
-		logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
-		if policyReject.reason == rejectUnknown {
-			policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+		if !mc.cfg.IgnoreMinVersionBits {
+			logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
+			if policyReject.reason == rejectUnknown {
+				policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+			}
+		} else {
+			// Log but don't reject (BIP310 permissive approach: allow degraded mode)
+			logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
+				"remote", mc.id, "version", fmt.Sprintf("%08x", useVersion),
+				"used_bits", bits.OnesCount32(versionDiff&mc.versionMask),
+				"negotiated_minimum", mc.minVerBits)
 		}
 	}
 

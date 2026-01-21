@@ -76,6 +76,7 @@ func defaultConfig() Config {
 		ConnectionTimeout:                 defaultConnectionTimeout,
 		VersionMask:                       defaultVersionMask,
 		MinVersionBits:                    defaultMinVersionBits,
+		IgnoreMinVersionBits:              true, // Default to ignoring minVerBits for BIP310 compliance
 		// Default difficulty range is bounded and power-of-two quantized.
 		MaxDifficulty:                 defaultMaxDifficulty,
 		MinDifficulty:                 defaultMinDifficulty,
