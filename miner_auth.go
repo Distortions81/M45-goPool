@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"math/big"
 	"math/bits"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -279,6 +281,73 @@ func parseSuggestedDifficulty(value interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func (mc *MinerConn) suggestTarget(req *StratumRequest) {
+	resp := StratumResponse{ID: req.ID}
+	if len(req.Params) == 0 {
+		resp.Error = newStratumError(20, "invalid params")
+		mc.writeResponse(resp)
+		return
+	}
+
+	targetHex, ok := req.Params[0].(string)
+	if !ok || targetHex == "" {
+		resp.Error = newStratumError(20, "invalid params")
+		mc.writeResponse(resp)
+		return
+	}
+
+	diff, ok := difficultyFromTargetHex(targetHex)
+	if !ok || diff <= 0 {
+		resp.Error = newStratumError(20, "invalid target")
+		mc.writeResponse(resp)
+		return
+	}
+
+	// Always acknowledge the request
+	resp.Result = true
+	mc.writeResponse(resp)
+
+	// Only process the first suggest_target during initialization (same as suggest_difficulty).
+	if mc.suggestDiffProcessed {
+		logger.Debug("suggest_target ignored (already processed once)", "remote", mc.id)
+		return
+	}
+	mc.suggestDiffProcessed = true
+
+	if mc.restoredRecentDiff {
+		return
+	}
+
+	if mc.cfg.LockSuggestedDifficulty {
+		mc.lockDifficulty = true
+	}
+	mc.setDifficulty(diff)
+}
+
+// difficultyFromTargetHex converts a target hex string to difficulty.
+// difficulty = diff1Target / target
+func difficultyFromTargetHex(targetHex string) (float64, bool) {
+	// Remove 0x prefix if present
+	targetHex = strings.TrimPrefix(targetHex, "0x")
+	targetHex = strings.TrimPrefix(targetHex, "0X")
+
+	target, ok := new(big.Int).SetString(targetHex, 16)
+	if !ok || target.Sign() <= 0 {
+		return 0, false
+	}
+
+	// diff = diff1Target / target
+	diff1 := new(big.Float).SetInt(diff1Target)
+	tgt := new(big.Float).SetInt(target)
+	result := new(big.Float).Quo(diff1, tgt)
+
+	diff, _ := result.Float64()
+	if diff <= 0 || math.IsInf(diff, 0) || math.IsNaN(diff) {
+		return 0, false
+	}
+	return diff, true
 }
 
 func (mc *MinerConn) handleConfigure(req *StratumRequest) {

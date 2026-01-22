@@ -836,13 +836,25 @@ func (mc *MinerConn) handle() {
 			mc.handleExtranonceSubscribe(&req)
 		case "mining.suggest_difficulty":
 			mc.suggestDifficulty(&req)
+		case "mining.suggest_target":
+			mc.suggestTarget(&req)
+		case "mining.ping":
+			// Respond to keepalive ping with pong
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: "pong", Error: nil})
+		case "mining.get_transactions":
+			// Client requests transaction hashes for current job. We don't
+			// support this but acknowledge to avoid breaking miners that send it.
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: []string{}, Error: nil})
+		case "mining.capabilities":
+			// Draft extension where client advertises its capabilities.
+			// Acknowledge receipt but we don't need to act on it.
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: true, Error: nil})
 		default:
-			logger.Warn("unknown stratum method", "remote", mc.id, "method", req.Method)
-			mc.writeResponse(StratumResponse{
-				ID:     req.ID,
-				Result: nil,
-				Error:  newStratumError(20, "Not supported."),
-			})
+			// Silently ignore unknown methods to avoid confusing miners that
+			// send non-standard extensions. Log at debug level for diagnostics.
+			if debugLogging {
+				logger.Debug("ignoring unknown stratum method", "remote", mc.id, "method", req.Method)
+			}
 		}
 
 	}
