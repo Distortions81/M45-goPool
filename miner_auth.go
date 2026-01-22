@@ -13,6 +13,11 @@ import (
 // Handle mining.subscribe request.
 // Very minimal: return fake subscription and extranonce1/size per docs/protocols/stratum-v1.mediawiki.
 func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
+	// Ignore duplicate subscribe requests - should only subscribe once
+	if mc.subscribed {
+		return
+	}
+
 	// Many miners send a client identifier as the first subscribe parameter.
 	// Capture it so we can summarize miner types on the status page.
 	if len(req.Params) > 0 {
