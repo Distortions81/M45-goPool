@@ -289,6 +289,10 @@ type MinerConn struct {
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64
+	// suggestDiffProcessed tracks whether we've already processed mining.suggest_difficulty
+	// during the initialization phase. Subsequent suggests will be ignored to prevent
+	// repeated keepalive messages from disrupting vardiff adjustments.
+	suggestDiffProcessed bool
 }
 
 type rpcCaller interface {

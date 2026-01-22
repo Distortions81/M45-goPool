@@ -213,12 +213,18 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		return
 	}
 
-	// Treat suggested difficulty as the miner's preferred starting point,
-	// clamped to the pool's min/max difficulty settings. Vardiff will still
-	// adjust difficulty up or down from this baseline over time, unless
-	// lock_suggested_difficulty is enabled.
+	// Always acknowledge the request
 	resp.Result = true
 	mc.writeResponse(resp)
+
+	// Only process the first mining.suggest_difficulty during initialization.
+	// Subsequent requests (from miner keepalive/reconnection) are ignored to
+	// prevent disrupting vardiff adjustments and grace period windows.
+	if mc.suggestDiffProcessed {
+		logger.Debug("suggest_difficulty ignored (already processed once)", "remote", mc.id)
+		return
+	}
+	mc.suggestDiffProcessed = true
 
 	// If we just restored a recent difficulty for this worker on a short
 	// reconnect, ignore suggested-difficulty overrides and keep the
