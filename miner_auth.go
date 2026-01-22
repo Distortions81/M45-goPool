@@ -107,7 +107,6 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 			Result: false,
 			Error:  newStratumError(20, "subscribe required"),
 		})
-		mc.Close("authorize without subscribe")
 		return
 	}
 
