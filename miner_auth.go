@@ -84,7 +84,14 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	if initialJob != nil {
 		mc.updateVersionMask(initialJob.VersionMask)
 	}
-	mc.sendSetExtranonce(ex1, en2Size)
+	// Only send mining.set_extranonce if the miner has explicitly subscribed
+	// to extranonce notifications via mining.extranonce.subscribe. Sending it
+	// unsolicited can confuse miners that don't expect it (e.g., NMAxe/Bitaxe)
+	// since the message arrives while they're still sending authorize/configure
+	// requests and expecting responses to those.
+	if mc.extranonceSubscribed {
+		mc.sendSetExtranonce(ex1, en2Size)
+	}
 	if initialJob == nil {
 		status := mc.jobMgr.FeedStatus()
 		fields := []interface{}{"remote", mc.id, "reason", "no job available"}

@@ -263,9 +263,10 @@ type MinerConn struct {
 	// difficulty after a short disconnect so we can skip bootstrap and
 	// suggested-difficulty overrides on reconnect.
 	restoredRecentDiff bool
-	minerType          string
-	minerClientName    string
-	minerClientVersion string
+	minerType              string
+	minerClientName        string
+	minerClientVersion     string
+	extranonceSubscribed   bool
 	// connectedAt is the time this miner connection was established,
 	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time

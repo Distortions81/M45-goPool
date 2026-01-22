@@ -826,6 +826,7 @@ func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
 }
 
 func (mc *MinerConn) handleExtranonceSubscribe(req *StratumRequest) {
+	mc.extranonceSubscribed = true
 	result := StratumResponse{
 		ID:     req.ID,
 		Result: true,
