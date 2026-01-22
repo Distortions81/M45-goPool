@@ -15,6 +15,12 @@ import (
 func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {
+		logger.Warn("subscribe rejected: already subscribed", "remote", mc.id)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: nil,
+			Error:  newStratumError(20, "already subscribed"),
+		})
 		return
 	}
 
