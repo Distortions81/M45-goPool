@@ -837,15 +837,11 @@ func (mc *MinerConn) handle() {
 			mc.suggestDifficulty(&req)
 		default:
 			logger.Warn("unknown stratum method", "remote", mc.id, "method", req.Method)
-			if banned, count := mc.noteProtocolViolation(now); banned {
-				mc.logBan("unknown stratum method", mc.currentWorker(), count)
-			}
 			mc.writeResponse(StratumResponse{
 				ID:     req.ID,
 				Result: nil,
 				Error:  newStratumError(20, "Not supported."),
 			})
-			return
 		}
 
 	}
