@@ -17,7 +17,6 @@ rpc_user = "bitcoinrpc"
 rpc_pass = "password"
 
 # Optional Discord notifications integration.
-# discord_server_id = "123456789012345678"
 # discord_token = "YOUR_DISCORD_BOT_TOKEN"
 
 # Optional Clerk backend API secret key (development only).
@@ -126,9 +125,10 @@ type Config struct {
 	OperatorDonationURL       string
 	Extranonce2Size           int
 	TemplateExtraNonce2Size   int
-	CoinbaseSuffixBytes       int
+	JobEntropy                int
 	CoinbaseMsg               string
-	CoinbasePoolTag           string
+	PoolEntropy               string
+	PoolTagPrefix             string
 	CoinbaseScriptSigMaxBytes int
 	ZMQBlockAddr              string
 	// BackblazeBackupEnabled toggles periodic uploads of the worker list
@@ -156,12 +156,9 @@ type Config struct {
 	// (Legacy default suffix was `.b2last`; it is now `.bak`.)
 	//
 	// When set to a relative path, it is resolved relative to DataDir.
-	BackupSnapshotPath  string
-	DataDir             string
-	ShareLogBufferBytes int
-	FsyncShareLog       bool
-	ShareLogReplayBytes int64
-	MaxConns            int
+	BackupSnapshotPath string
+	DataDir            string
+	MaxConns           int
 	// MaxAcceptsPerSecond limits how many new TCP connections the pool
 	// will accept per second. Zero disables rate limiting.
 	MaxAcceptsPerSecond int
@@ -295,7 +292,7 @@ type EffectiveConfig struct {
 	OperatorDonationURL               string  `json:"operator_donation_url,omitempty"`
 	Extranonce2Size                   int     `json:"extranonce2_size"`
 	TemplateExtraNonce2Size           int     `json:"template_extranonce2_size,omitempty"`
-	CoinbaseSuffixBytes               int     `json:"coinbase_suffix_bytes"`
+	JobEntropy                        int     `json:"job_entropy"`
 	PoolID                            string  `json:"pool_id,omitempty"`
 	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
 	ZMQBlockAddr                      string  `json:"zmq_block_addr,omitempty"`
@@ -306,9 +303,6 @@ type EffectiveConfig struct {
 	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
 	BackupSnapshotPath                string  `json:"backup_snapshot_path,omitempty"`
 	DataDir                           string  `json:"data_dir"`
-	ShareLogBufferBytes               int     `json:"share_log_buffer_bytes"`
-	FsyncShareLog                     bool    `json:"fsync_share_log"`
-	ShareLogReplayBytes               int64   `json:"share_log_replay_bytes"`
 	MaxConns                          int     `json:"max_conns,omitempty"`
 	MaxAcceptsPerSecond               int     `json:"max_accepts_per_second,omitempty"`
 	MaxAcceptBurst                    int     `json:"max_accept_burst,omitempty"`
@@ -342,71 +336,71 @@ type EffectiveConfig struct {
 }
 
 type serverConfig struct {
-	PoolListen      string `toml:"pool_listen"`
-	StatusListen    string `toml:"status_listen"`
-	StatusTLSListen string `toml:"status_tls_listen"`
-	StatusPublicURL string `toml:"status_public_url"`
+	PoolListen      string `toml:"pool_listen" comment:"TCP address for the plain stratum listener (default :3333)."`
+	StatusListen    string `toml:"status_listen" comment:"HTTP address for the status UI (default :80)."`
+	StatusTLSListen string `toml:"status_tls_listen" comment:"Optional HTTPS address that serves the status UI with TLS (default :443)."`
+	StatusPublicURL string `toml:"status_public_url" comment:"Canonical public URL used for redirects/session cookies; include scheme (http/https)."`
 }
 
 type brandingConfig struct {
-	StatusBrandName                 string `toml:"status_brand_name"`
-	StatusBrandDomain               string `toml:"status_brand_domain"`
-	StatusTagline                   string `toml:"status_tagline"`
-	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra"`
-	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url"`
-	FiatCurrency                    string `toml:"fiat_currency"`
-	PoolDonationAddress             string `toml:"pool_donation_address"`
-	DiscordURL                      string `toml:"discord_url"`
-	DiscordServerID                 string `toml:"discord_server_id"`
-	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id"`
-	GitHubURL                       string `toml:"github_url"`
-	ServerLocation                  string `toml:"server_location"`
+	StatusBrandName                 string `toml:"status_brand_name" comment:"Optional headline name shown at the top of the status page."`
+	StatusBrandDomain               string `toml:"status_brand_domain" comment:"Optional domain used to qualify the brand name in the status UI."`
+	StatusTagline                   string `toml:"status_tagline" comment:"Subtitle describing the pool on the status page (default 'Solo Mining Pool')."`
+	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra" comment:"Extra text appended to the 'Connect your miner' heading."`
+	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url" comment:"Optional URL to hyperlink the extra text added to the connect header."`
+	FiatCurrency                    string `toml:"fiat_currency" comment:"Fiat currency symbol (e.g. usd) used by the status UI price display."`
+	PoolDonationAddress             string `toml:"pool_donation_address" comment:"Optional wallet where miners can donate to the pool operator."`
+	DiscordURL                      string `toml:"discord_url" comment:"Discord server invite link shown in the status header."`
+	DiscordServerID                 string `toml:"discord_server_id" comment:"Discord server ID used for notification features."`
+	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id" comment:"Discord channel ID where notifications are posted when enabled."`
+	GitHubURL                       string `toml:"github_url" comment:"Optional GitHub repository link shown in the header/about pages."`
+	ServerLocation                  string `toml:"server_location" comment:"Optional textual location shown in the footer (e.g. city, datacenter)."`
 }
 
 type stratumConfig struct {
-	StratumTLSListen string `toml:"stratum_tls_listen"`
+	StratumTLSListen string `toml:"stratum_tls_listen" comment:"TLS address for the secure Stratum listener (leave blank to disable)."`
 }
 
 type authConfig struct {
-	ClerkIssuerURL         string `toml:"clerk_issuer_url"`
-	ClerkJWKSURL           string `toml:"clerk_jwks_url"`
-	ClerkSignInURL         string `toml:"clerk_signin_url"`
-	ClerkCallbackPath      string `toml:"clerk_callback_path"`
-	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url"`
-	ClerkSessionCookieName string `toml:"clerk_session_cookie_name"`
-	ClerkSessionAudience   string `toml:"clerk_session_audience"`
+	ClerkIssuerURL         string `toml:"clerk_issuer_url" comment:"Issuer URL used by Clerk for session tokens (typically https://clerk.clerk.dev)."`
+	ClerkJWKSURL           string `toml:"clerk_jwks_url" comment:"JWKS endpoint Clerk publishes for verifying tokens."`
+	ClerkSignInURL         string `toml:"clerk_signin_url" comment:"Hosted Clerk sign-in page that operators link to for authentication."`
+	ClerkCallbackPath      string `toml:"clerk_callback_path" comment:"Local path Clerk redirects to after sign-in (prefixed with '/')."`
+	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url" comment:"Frontend API URL passed to Clerk during session handling."`
+	ClerkSessionCookieName string `toml:"clerk_session_cookie_name" comment:"Cookie name Clerk uses for authenticated sessions (default __session)."`
+	ClerkSessionAudience   string `toml:"clerk_session_audience" comment:"Optional audience claim required for Clerk-issued JWTs."`
 }
 
 type nodeConfig struct {
-	RPCURL         string `toml:"rpc_url"`
-	PayoutAddress  string `toml:"payout_address"`
-	DataDir        string `toml:"data_dir"`
-	ZMQBlockAddr   string `toml:"zmq_block_addr"`
-	RPCCookiePath  string `toml:"rpc_cookie_path"`
-	AllowPublicRPC bool   `toml:"allow_public_rpc"`
+	RPCURL         string `toml:"rpc_url" comment:"RPC URL of the Bitcoin node used for getblocktemplate and submitblock."`
+	PayoutAddress  string `toml:"payout_address" comment:"Wallet where block payouts are sent to miners."`
+	DataDir        string `toml:"data_dir" comment:"Directory where goPool stores state, logs, and configs."`
+	ZMQBlockAddr   string `toml:"zmq_block_addr" comment:"ZMQ endpoint exposed by the node for block notifications."`
+	RPCCookiePath  string `toml:"rpc_cookie_path" comment:"Path to bitcoind's auth cookie (auto-detected if blank)."`
+	AllowPublicRPC bool   `toml:"allow_public_rpc" comment:"Allow connecting to RPC endpoints without authentication (useful for trusted/testing nodes)."`
 }
 
 type backblazeBackupConfig struct {
-	Enabled         bool   `toml:"enabled"`
-	Bucket          string `toml:"bucket"`
-	Prefix          string `toml:"prefix"`
-	IntervalSeconds *int   `toml:"interval_seconds"`
-	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
-	SnapshotPath    string `toml:"snapshot_path"`
+	Enabled         bool   `toml:"enabled" comment:"Toggle periodic uploads of the saved workers snapshot to Backblaze B2."`
+	Bucket          string `toml:"bucket" comment:"Backblaze B2 bucket where backups are stored."`
+	Prefix          string `toml:"prefix" comment:"Optional namespace prefix for Backblaze object keys."`
+	IntervalSeconds *int   `toml:"interval_seconds" comment:"Seconds between scheduled uploads (default 43200)."`
+	KeepLocalCopy   *bool  `toml:"keep_local_copy" comment:"Keep a local copy of the last successful snapshot even when backups run."`
+	SnapshotPath    string `toml:"snapshot_path" comment:"File path where the worker DB snapshot is stored locally."`
 }
 
 type miningConfig struct {
-	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
-	OperatorDonationPercent   *float64 `toml:"operator_donation_percent"`
-	OperatorDonationAddress   string   `toml:"operator_donation_address"`
-	OperatorDonationName      string   `toml:"operator_donation_name"`
-	OperatorDonationURL       string   `toml:"operator_donation_url"`
-	Extranonce2Size           *int     `toml:"extranonce2_size"`
-	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
-	CoinbaseSuffixBytes       *int     `toml:"coinbase_suffix_bytes"`
-	CoinbasePoolTag           *string  `toml:"coinbase_pool_tag"`
-	CoinbaseMsg               string   `toml:"coinbase_message"`
-	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
+	PoolFeePercent            *float64 `toml:"pool_fee_percent" comment:"Pool fee percentage applied to each block reward (default 2.0). Operator donation percent applies on top of this value."`
+	OperatorDonationPercent   *float64 `toml:"operator_donation_percent" comment:"Percentage of the pool fee (not total reward) to donate to another wallet. Requires operator_donation_address when >0."`
+	OperatorDonationAddress   string   `toml:"operator_donation_address" comment:"Wallet address where operator donations are sent when operator_donation_percent > 0."`
+	OperatorDonationName      string   `toml:"operator_donation_name" comment:"Optional display name for the donation recipient shown in the status UI."`
+	OperatorDonationURL       string   `toml:"operator_donation_url" comment:"Optional hyperlink for the operator donation recipient."`
+	Extranonce2Size           *int     `toml:"extranonce2_size" comment:"Number of extranonce2 bytes miners receive; larger values allow more workers per connection."`
+	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size" comment:"Extra placeholder for extranonce2 inside the template. Must be >= extranonce2_size."`
+	JobEntropy                *int     `toml:"job_entropy" comment:"Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'."`
+	PoolEntropy               *string  `toml:"pool_entropy" comment:"4-char alphanumeric pool identifier used in the coinbase suffix '<pool_entropy>-<job_entropy>'."`
+	PoolTagPrefix             string   `toml:"pooltag_prefix" comment:"Optional custom prefix (a-z, 0-9 only). Prepends '<prefix>-' to the goPool coinbase tag."`
+	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes" comment:"Clamp coinbase message length (bytes) inside the scriptSig; useful to stay below policy limits."`
 }
 
 type baseFileConfig struct {
@@ -430,70 +424,84 @@ func stringPtr(v string) *string {
 func boolPtr(v bool) *bool {
 	return &v
 }
-func int64Ptr(v int64) *int64 {
-	return &v
-}
 
-type loggingTuning struct {
-	ShareLogBufferBytes *int   `toml:"share_log_buffer_bytes"`
-	FsyncShareLog       *bool  `toml:"fsync_share_log"`
-	ShareLogReplayBytes *int64 `toml:"share_log_replay_bytes"`
+// filterAlphanumeric returns only lowercase a-z and 0-9 characters from s.
+func filterAlphanumeric(s string) string {
+	var buf []byte
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') {
+			buf = append(buf, b)
+		} else if b >= 'A' && b <= 'Z' {
+			buf = append(buf, b+32) // lowercase
+		}
+	}
+	return string(buf)
 }
 
 type rateLimitTuning struct {
-	MaxConns                          *int     `toml:"max_conns"`
-	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
-	MaxAcceptBurst                    *int     `toml:"max_accept_burst"`
-	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits"`
-	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window"`
-	AcceptBurstWindow                 *int     `toml:"accept_burst_window"`
-	AcceptSteadyStateWindow           *int     `toml:"accept_steady_state_window"`
-	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate"`
-	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent"`
-	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window"`
+	MaxConns                          *int     `toml:"max_conns" comment:"Maximum simultaneous connections tracked by the pool."`
+	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second" comment:"Rate limit for new TCP accepts per second."`
+	MaxAcceptBurst                    *int     `toml:"max_accept_burst" comment:"Short-term burst capacity before rate limits kick in."`
+	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits" comment:"Automatically compute accept limits based on max_conns."`
+	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window" comment:"Seconds during which reconnecting miners can reconnect smoothly after a restart."`
+	AcceptBurstWindow                 *int     `toml:"accept_burst_window" comment:"Duration of the initial burst phase before steady-state throttling."`
+	AcceptSteadyStateWindow           *int     `toml:"accept_steady_state_window" comment:"Time until pool switches from reconnect to steady-state rate limiting."`
+	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate" comment:"Maximum accepts per second during steady-state operation."`
+	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent" comment:"Expected percent of miners reconnecting during steady-state to size steady-state rate."`
+	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window" comment:"Time window (sec) to observe reconnects for steady-state calculations."`
 }
 
 type timeoutTuning struct {
-	ConnectionTimeoutSec *int `toml:"connection_timeout_seconds"`
+	ConnectionTimeoutSec *int `toml:"connection_timeout_seconds" comment:"Timeout (seconds) for miner connections before they are closed."`
 }
 
 type difficultyTuning struct {
-	MaxDifficulty           *float64 `toml:"max_difficulty"`
-	MinDifficulty           *float64 `toml:"min_difficulty"`
-	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty"`
+	MaxDifficulty           *float64 `toml:"max_difficulty" comment:"Maximum difficulty advertised to miners."`
+	MinDifficulty           *float64 `toml:"min_difficulty" comment:"Minimum difficulty advertised to miners."`
+	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty" comment:"Lock difficulties suggested by miners to prevent VarDiff adjustments."`
+}
+
+type miningTuning struct {
+	// DisablePoolJobEntropy, when true, disables adding the per-job
+	// "<pool entropy>-<job entropy>" suffix to the coinbase message.
+	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy" comment:"Disable the '<pool_entropy>-<job_entropy>' coinbase suffix"`
 }
 
 type hashrateTuning struct {
-	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
-	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares"`
-	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
+	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds" comment:"Time constant (seconds) for per-worker hashrate EMAs."`
+	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares" comment:"Minimum accepted shares before the EMA is considered valid."`
+	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds" comment:"Allowed future timestamps miners may submit to guard against time drift."`
 }
 
 type peerCleaningTuning struct {
-	Enabled   *bool    `toml:"enabled"`
-	MaxPingMs *float64 `toml:"max_ping_ms"`
-	MinPeers  *int     `toml:"min_peers"`
+	Enabled   *bool    `toml:"enabled" comment:"Enable periodic cleaning of peers that appear dead."`
+	MaxPingMs *float64 `toml:"max_ping_ms" comment:"Max ping time (ms) before a peer is cleaned."`
+	MinPeers  *int     `toml:"min_peers" comment:"Minimum peers the pool should keep during cleaning."`
 }
 
 type banTuning struct {
-	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
-	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
-	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds"`
-	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold"`
-	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds"`
-	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds"`
+	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after" comment:"Seconds before banning miners that submit invalid shares."`
+	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds" comment:"Observation window (seconds) for tracking invalid shares."`
+	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds" comment:"Duration (seconds) of bans triggered by invalid share thresholds."`
+	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold" comment:"Number of reconnects that trigger a ban."`
+	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds" comment:"Seconds over which reconnections are counted for bans."`
+	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds" comment:"Ban duration (seconds) applied when reconnect ban threshold is reached."`
 }
 
 type versionTuning struct {
-	MinVersionBits        *int  `toml:"min_version_bits"`
-	IgnoreMinVersionBits  *bool `toml:"ignore_min_version_bits"`
+	MinVersionBits       *int  `toml:"min_version_bits" comment:"Minimum number of version bits a miner must advertise."`
+	IgnoreMinVersionBits *bool `toml:"ignore_min_version_bits" comment:"Ignore the min version bits requirement when set."`
 }
 
+// tuningFileConfig captures the optional overrides that can be set via the
+// generated tuning.toml file. goPool merges this on top of the base config so
+// operators can tweak advanced knobs without modifying config.toml directly.
 type tuningFileConfig struct {
-	Logging      loggingTuning      `toml:"logging"`
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
 	Timeouts     timeoutTuning      `toml:"timeouts"`
 	Difficulty   difficultyTuning   `toml:"difficulty"`
+	Mining       miningTuning       `toml:"mining"`
 	Hashrate     hashrateTuning     `toml:"hashrate"`
 	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
 	Bans         banTuning          `toml:"bans"`
@@ -541,9 +549,9 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			OperatorDonationURL:       cfg.OperatorDonationURL,
 			Extranonce2Size:           intPtr(cfg.Extranonce2Size),
 			TemplateExtraNonce2Size:   intPtr(cfg.TemplateExtraNonce2Size),
-			CoinbaseSuffixBytes:       intPtr(cfg.CoinbaseSuffixBytes),
-			CoinbasePoolTag:           stringPtr(cfg.CoinbasePoolTag),
-			CoinbaseMsg:               cfg.CoinbaseMsg,
+			JobEntropy:                intPtr(cfg.JobEntropy),
+			PoolEntropy:               stringPtr(cfg.PoolEntropy),
+			PoolTagPrefix:             cfg.PoolTagPrefix,
 			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
 		},
 		Auth: authConfig{
@@ -568,11 +576,6 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 
 func buildTuningFileConfig(cfg Config) tuningFileConfig {
 	return tuningFileConfig{
-		Logging: loggingTuning{
-			ShareLogBufferBytes: intPtr(cfg.ShareLogBufferBytes),
-			FsyncShareLog:       boolPtr(cfg.FsyncShareLog),
-			ShareLogReplayBytes: int64Ptr(cfg.ShareLogReplayBytes),
-		},
 		RateLimits: rateLimitTuning{
 			MaxConns:                          intPtr(cfg.MaxConns),
 			MaxAcceptsPerSecond:               intPtr(cfg.MaxAcceptsPerSecond),
@@ -592,6 +595,9 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			MaxDifficulty:           float64Ptr(cfg.MaxDifficulty),
 			MinDifficulty:           float64Ptr(cfg.MinDifficulty),
 			LockSuggestedDifficulty: boolPtr(cfg.LockSuggestedDifficulty),
+		},
+		Mining: miningTuning{
+			DisablePoolJobEntropy: boolPtr(false),
 		},
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
@@ -619,15 +625,16 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 }
 
 // secretsConfig holds values from secrets.toml: Clerk secrets and (when enabled)
-// RPC user/password for fallback authentication.
+// RPC user/password for fallback authentication. This file is gitignored so only
+// store sensitive credentials here.
 type secretsConfig struct {
-	RPCUser                 string `toml:"rpc_user"`
-	RPCPass                 string `toml:"rpc_pass"`
-	DiscordBotToken         string `toml:"discord_token"`
-	ClerkSecretKey          string `toml:"clerk_secret_key"`
-	ClerkPublishableKey     string `toml:"clerk_publishable_key"`
-	BackblazeAccountID      string `toml:"backblaze_account_id"`
-	BackblazeApplicationKey string `toml:"backblaze_application_key"`
+	RPCUser                 string `toml:"rpc_user" comment:"Optional RPC username when cookie auth is unavailable (requires -allow-rpc-credentials)."`
+	RPCPass                 string `toml:"rpc_pass" comment:"RPC password paired with rpc_user for fallback authentication."`
+	DiscordBotToken         string `toml:"discord_token" comment:"Token for the Discord bot used in outgoing notifications."`
+	ClerkSecretKey          string `toml:"clerk_secret_key" comment:"Secret key for Clerk development integrations (used when exchanging JWTs)."`
+	ClerkPublishableKey     string `toml:"clerk_publishable_key" comment:"Publishable key used by the Clerk frontend UI."`
+	BackblazeAccountID      string `toml:"backblaze_account_id" comment:"Backblaze B2 account ID for uploading backups."`
+	BackblazeApplicationKey string `toml:"backblaze_application_key" comment:"Application key used with Backblaze B2 uploads."`
 }
 
 func loadConfig(configPath, secretsPath string) (Config, string) {
@@ -659,13 +666,13 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	}
 	ensureExampleFiles(cfg.DataDir)
 
-	if cfg.CoinbasePoolTag == "" {
-		cfg.CoinbasePoolTag = generatePoolTag()
+	if cfg.PoolEntropy == "" {
+		cfg.PoolEntropy = generatePoolEntropy()
 		if configFileExisted {
 			if err := rewriteConfigFile(configPath, cfg); err != nil {
-				logger.Warn("persist coinbase_pool_tag", "path", configPath, "error", err)
+				logger.Warn("persist pool_entropy", "path", configPath, "error", err)
 			} else {
-				logger.Info("generated coinbase_pool_tag and updated config", "path", configPath, "coinbase_pool_tag", cfg.CoinbasePoolTag)
+				logger.Info("generated pool_entropy and updated config", "path", configPath, "pool_entropy", cfg.PoolEntropy)
 			}
 		}
 	}
@@ -853,14 +860,14 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Mining.TemplateExtraNonce2Size != nil {
 		cfg.TemplateExtraNonce2Size = *fc.Mining.TemplateExtraNonce2Size
 	}
-	if fc.Mining.CoinbaseMsg != "" {
-		cfg.CoinbaseMsg = fc.Mining.CoinbaseMsg
+	if fc.Mining.PoolEntropy != nil {
+		cfg.PoolEntropy = *fc.Mining.PoolEntropy
 	}
-	if fc.Mining.CoinbasePoolTag != nil {
-		cfg.CoinbasePoolTag = *fc.Mining.CoinbasePoolTag
+	if fc.Mining.PoolTagPrefix != "" {
+		cfg.PoolTagPrefix = filterAlphanumeric(strings.TrimSpace(fc.Mining.PoolTagPrefix))
 	}
-	if fc.Mining.CoinbaseSuffixBytes != nil {
-		cfg.CoinbaseSuffixBytes = *fc.Mining.CoinbaseSuffixBytes
+	if fc.Mining.JobEntropy != nil {
+		cfg.JobEntropy = *fc.Mining.JobEntropy
 	}
 	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
 		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
@@ -884,15 +891,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 }
 
 func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
-	if fc.Logging.ShareLogBufferBytes != nil {
-		cfg.ShareLogBufferBytes = *fc.Logging.ShareLogBufferBytes
-	}
-	if fc.Logging.FsyncShareLog != nil {
-		cfg.FsyncShareLog = *fc.Logging.FsyncShareLog
-	}
-	if fc.Logging.ShareLogReplayBytes != nil {
-		cfg.ShareLogReplayBytes = *fc.Logging.ShareLogReplayBytes
-	}
 	if fc.RateLimits.MaxConns != nil {
 		cfg.MaxConns = *fc.RateLimits.MaxConns
 	}
@@ -934,6 +932,11 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Difficulty.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty
+	}
+	if fc.Mining.DisablePoolJobEntropy != nil && *fc.Mining.DisablePoolJobEntropy {
+		// Disables coinbase "<pool entropy>-<job entropy>" suffix by bypassing
+		// the suffix builder (which is gated on JobEntropy > 0).
+		cfg.JobEntropy = 0
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
@@ -1295,8 +1298,8 @@ func (cfg Config) Effective() EffectiveConfig {
 		OperatorDonationURL:               cfg.OperatorDonationURL,
 		Extranonce2Size:                   cfg.Extranonce2Size,
 		TemplateExtraNonce2Size:           cfg.TemplateExtraNonce2Size,
-		CoinbaseSuffixBytes:               cfg.CoinbaseSuffixBytes,
-		PoolID:                            cfg.CoinbasePoolTag,
+		JobEntropy:                        cfg.JobEntropy,
+		PoolID:                            cfg.PoolEntropy,
 		CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
 		ZMQBlockAddr:                      cfg.ZMQBlockAddr,
 		BackblazeBackupEnabled:            cfg.BackblazeBackupEnabled,
@@ -1306,9 +1309,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
 		BackupSnapshotPath:                cfg.BackupSnapshotPath,
 		DataDir:                           cfg.DataDir,
-		ShareLogBufferBytes:               cfg.ShareLogBufferBytes,
-		FsyncShareLog:                     cfg.FsyncShareLog,
-		ShareLogReplayBytes:               cfg.ShareLogReplayBytes,
 		MaxConns:                          cfg.MaxConns,
 		MaxAcceptsPerSecond:               cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                    cfg.MaxAcceptBurst,
