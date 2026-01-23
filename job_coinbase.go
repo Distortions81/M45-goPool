@@ -398,16 +398,16 @@ func serializeNumberScript(n int64) []byte {
 	return buf[:l+1]
 }
 
-// normalizeCoinbaseMessage trims spaces and ensures the message has '/' prefix and suffix.
-// If the message is empty after trimming, returns the default "/nodeStratum/" tag.
+// normalizeCoinbaseMessage trims spaces and ensures the message has a '/' prefix.
+// If the message is empty after trimming, returns the default "/nodeStratum" tag.
 func normalizeCoinbaseMessage(msg string) string {
 	msg = strings.TrimSpace(msg)
 	if msg == "" {
-		return "/nodeStratum/"
+		return "/nodeStratum"
 	}
 	msg = strings.TrimPrefix(msg, "/")
 	msg = strings.TrimSuffix(msg, "/")
-	return "/" + msg + "/"
+	return "/" + msg
 }
 
 func serializeStringScript(s string) []byte {
@@ -462,16 +462,15 @@ func clampCoinbaseMessage(message string, limit int, height int64, scriptTime in
 	}
 
 	normalized := normalizeCoinbaseMessage(message)
-	body := ""
-	if len(normalized) > 2 {
-		body = normalized[1 : len(normalized)-1]
-	}
+	// normalizeCoinbaseMessage ensures a leading '/' (but not a trailing one),
+	// so body is the message without the leading delimiter.
+	body := strings.TrimPrefix(normalized, "/")
 	if len(serializeStringScript(normalized)) <= allowed {
 		return body, false, nil
 	}
 	for len(body) > 0 {
 		body = body[:len(body)-1]
-		candidate := "/" + body + "/"
+		candidate := "/" + body
 		if len(serializeStringScript(candidate)) <= allowed {
 			return body, true, nil
 		}
