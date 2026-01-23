@@ -24,13 +24,6 @@
 		</div>
 
 		<div class="card">
-			<h2>Infrastructure</h2>
-			<p>Our server is located in Detroit, Michigan at a major peering location with direct connections to three tier 1 carriers: Cogent, Hurricane Electric, and GTT. Hardware includes dual-socket Xeon E5-2680 v4 processors, 64GB RAM, SSD storage, and a dedicated gigabit fiber link.</p>
-			<p><strong>Why infrastructure matters:</strong> A fast path from your miner to our stratum server is good, but what really matters is the complete chain: miner → stratum → Bitcoin node → network. We prioritize the entire path with local high-speed node connectivity and multiple tier 1 network paths for rapid block propagation to reduce orphan risk.</p>
-			<p>We perform approximately monthly maintenance reboots for kernel security updates.</p>
-		</div>
-
-		<div class="card">
 			<h2>Technical Stack</h2>
 			<p>Custom-built pool software written in Go, running a Bitcoin Core node with RPC and ZMQ for low-latency block template updates. Each miner connection runs independently on its own goroutine for responsive communication under load.</p>
 			{{if .GitHubURL}}
