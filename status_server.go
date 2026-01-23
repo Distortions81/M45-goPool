@@ -20,6 +20,9 @@ func (s *StatusServer) SetJobManager(jm *JobManager) {
 
 func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.URL.Path == "/favicon.png":
+			http.ServeFile(w, r, "logo.png")
+
 	case r.URL.Path == "/" || r.URL.Path == "":
 		start := time.Now()
 		data := s.baseTemplateData(start)
