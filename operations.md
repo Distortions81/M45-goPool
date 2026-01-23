@@ -37,10 +37,11 @@ In `config.toml`:
 ```toml
 [backblaze_backup]
 enabled = true
-account_id = "your_account_id"
 bucket = "your-bucket-name"  # must be lowercase
 prefix = "gopool/"           # optional namespace prefix
 interval_seconds = 43200     # 12 hours
+keep_local_copy = true       # optional local snapshot
+snapshot_path = ""           # optional override (relative to data_dir)
 ```
 
 In `secrets.toml`:
@@ -113,6 +114,13 @@ Set `node.allow_public_rpc = true` to connect to intentionally unauthenticated e
 ## Bitcoin Core ZMQ Integration
 
 goPool subscribes to Bitcoin Core ZMQ notifications via `node.zmq_block_addr` for fast block detection and status metrics. RPC longpoll handles frequent `getblocktemplate` updates (including `coinbasevalue` and transaction fees).
+
+## Coinbase Tag Format
+
+Coinbase tagging is constructed as:
+
+- Base tag: `/<pooltag_prefix>-goPool/` (if `pooltag_prefix` is empty, the dash is omitted)
+- Optional suffix: `<pool_entropy>-<job_entropy>` (controlled by `job_entropy`; can be disabled via `tuning.toml` with `[mining] disable_pool_job_entropy = true`)
 
 ### ZMQ Topics
 
