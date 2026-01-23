@@ -62,6 +62,16 @@ type Config struct {
 	// DiscordBotToken is the Discord bot token used for optional Discord
 	// notifications features. This should be stored in secrets.toml.
 	DiscordBotToken string
+	// DiscordWorkerNotifyThresholdSeconds controls the sustained threshold (in seconds)
+	// for worker offline/online notifications:
+	// - A worker must be online for at least this long before it can trigger an
+	//   "offline" notification.
+	// - A worker must be offline for at least this long before it can trigger a
+	//   "back online" notification (and it must then remain online for at least
+	//   this long before we notify).
+	//
+	// This is intentionally kept in tuning.toml (advanced knobs) and defaults to 5 minutes.
+	DiscordWorkerNotifyThresholdSeconds int
 	// GitHubURL is an optional GitHub link shown in the header and About page.
 	GitHubURL string
 	// ServerLocation is an optional server location string shown in the header.
@@ -272,6 +282,7 @@ type EffectiveConfig struct {
 	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
 	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
 	DiscordURL                        string  `json:"discord_url,omitempty"`
+	DiscordWorkerNotifyThresholdSec   int     `json:"discord_worker_notify_threshold_seconds,omitempty"`
 	GitHubURL                         string  `json:"github_url,omitempty"`
 	ServerLocation                    string  `json:"server_location,omitempty"`
 	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
@@ -474,6 +485,10 @@ type hashrateTuning struct {
 	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds" comment:"Allowed future timestamps miners may submit to guard against time drift."`
 }
 
+type discordTuning struct {
+	WorkerNotifyThresholdSeconds *int `toml:"worker_notify_threshold_seconds" comment:"Sustained threshold (seconds) for Discord worker offline/recovery notifications. Default: 300 (5 minutes)."`
+}
+
 type peerCleaningTuning struct {
 	Enabled   *bool    `toml:"enabled" comment:"Enable periodic cleaning of peers that appear dead."`
 	MaxPingMs *float64 `toml:"max_ping_ms" comment:"Max ping time (ms) before a peer is cleaned."`
@@ -503,6 +518,7 @@ type tuningFileConfig struct {
 	Difficulty   difficultyTuning   `toml:"difficulty"`
 	Mining       miningTuning       `toml:"mining"`
 	Hashrate     hashrateTuning     `toml:"hashrate"`
+	Discord      discordTuning      `toml:"discord"`
 	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
 	Bans         banTuning          `toml:"bans"`
 	Version      versionTuning      `toml:"version"`
@@ -603,6 +619,9 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
 			HashrateEMAMinShares:     intPtr(cfg.HashrateEMAMinShares),
 			NTimeForwardSlackSeconds: intPtr(cfg.NTimeForwardSlackSeconds),
+		},
+		Discord: discordTuning{
+			WorkerNotifyThresholdSeconds: intPtr(cfg.DiscordWorkerNotifyThresholdSeconds),
 		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   boolPtr(cfg.PeerCleanupEnabled),
@@ -947,6 +966,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
 		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds
 	}
+	if fc.Discord.WorkerNotifyThresholdSeconds != nil && *fc.Discord.WorkerNotifyThresholdSeconds > 0 {
+		cfg.DiscordWorkerNotifyThresholdSeconds = *fc.Discord.WorkerNotifyThresholdSeconds
+	}
 	if fc.PeerCleaning.Enabled != nil {
 		cfg.PeerCleanupEnabled = *fc.PeerCleaning.Enabled
 	}
@@ -1278,6 +1300,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		FiatCurrency:                      cfg.FiatCurrency,
 		PoolDonationAddress:               cfg.PoolDonationAddress,
 		DiscordURL:                        cfg.DiscordURL,
+		DiscordWorkerNotifyThresholdSec:   cfg.DiscordWorkerNotifyThresholdSeconds,
 		GitHubURL:                         cfg.GitHubURL,
 		ServerLocation:                    cfg.ServerLocation,
 		StratumTLSListen:                  cfg.StratumTLSListen,

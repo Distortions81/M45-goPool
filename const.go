@@ -60,6 +60,9 @@ const (
 	defaultReconnectBanWindowSeconds     = 60
 	defaultReconnectBanDurationSeconds   = 300
 
+	// Discord notification tuning defaults.
+	defaultDiscordWorkerNotifyThresholdSeconds = 300 // 5 minutes
+
 	defaultMaxDifficulty = 65536
 	defaultMinDifficulty = 256
 

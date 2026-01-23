@@ -539,21 +539,22 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 		return
 	}
 
+	thresholdLabel := formatNotifyThresholdLabel(n.workerNotifyThreshold())
 	detailed := len(offlineOverdue) <= 1 && len(onlineOverdue) <= 1
 	parts := make([]string, 0, 3)
 	if detailed {
 		if len(offlineOverdue) > 0 {
-			parts = append(parts, "Offline >2m: "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
+			parts = append(parts, "Offline >"+thresholdLabel+": "+strings.Join(renderNames(offlineOverdue, nameByHash), ", "))
 		}
 		if len(onlineOverdue) > 0 {
-			parts = append(parts, "Back online (2+ min): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
+			parts = append(parts, "Back online ("+thresholdLabel+"+): "+strings.Join(renderNames(onlineOverdue, nameByHash), ", "))
 		}
 	} else {
 		if len(offlineOverdue) > 0 {
-			parts = append(parts, fmt.Sprintf("%d miners offline >2m", len(offlineOverdue)))
+			parts = append(parts, fmt.Sprintf("%d miners offline >%s", len(offlineOverdue), thresholdLabel))
 		}
 		if len(onlineOverdue) > 0 {
-			parts = append(parts, fmt.Sprintf("%d miners back online (2+ min)", len(onlineOverdue)))
+			parts = append(parts, fmt.Sprintf("%d miners back online (%s+)", len(onlineOverdue), thresholdLabel))
 		}
 	}
 
@@ -561,11 +562,42 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 	n.enqueuePing(link.DiscordUserID, line)
 }
 
+func (n *discordNotifier) workerNotifyThreshold() time.Duration {
+	sec := defaultDiscordWorkerNotifyThresholdSeconds
+	if n != nil && n.s != nil {
+		if v := n.s.Config().DiscordWorkerNotifyThresholdSeconds; v > 0 {
+			sec = v
+		}
+	}
+	if sec <= 0 {
+		sec = defaultDiscordWorkerNotifyThresholdSeconds
+	}
+	return time.Duration(sec) * time.Second
+}
+
+func formatNotifyThresholdLabel(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	// Keep Discord messages short and stable.
+	if d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	}
+	if d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+	if d%time.Second == 0 {
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	}
+	return d.Truncate(time.Second).String()
+}
+
 func (n *discordNotifier) updateWorkerStates(userID string, current map[string]bool, now time.Time) (offlineOverdue, onlineOverdue []string) {
-	const (
-		offlineThreshold  = 2 * time.Minute
-		recoveryThreshold = 2 * time.Minute
-	)
+	// Use one sustained threshold to reduce flapping notifications and require
+	// meaningful state changes (tunable via tuning.toml).
+	offlineThreshold := n.workerNotifyThreshold()
+	onlineBeforeOfflineThreshold := offlineThreshold
+	recoveryThreshold := offlineThreshold
 
 	n.stateMu.Lock()
 	defer n.stateMu.Unlock()
@@ -597,12 +629,16 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 
 		// Transition: reset timers and notification flags.
 		if st.Online != online {
-			offlineDuration := time.Duration(0)
-			if st.Online && !online {
-				offlineDuration = 0
-			} else if !st.Online && online && !st.Since.IsZero() {
-				offlineDuration = now.Sub(st.Since)
+			// Compute how long we were in the previous state (best-effort).
+			prevDuration := time.Duration(0)
+			if !st.Since.IsZero() {
+				prevDuration = now.Sub(st.Since)
+				if prevDuration < 0 {
+					prevDuration = 0
+				}
 			}
+			wasOnline := st.Online
+
 			if online {
 				st.SeenOnline = true
 			} else {
@@ -612,10 +648,16 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 			st.Since = now
 			st.OfflineNotified = false
 			st.RecoveryNotified = false
-			if online {
-				st.RecoveryEligible = offlineDuration >= offlineThreshold
-			} else {
+			if wasOnline && !online {
+				// Online -> offline: qualify the offline notification based on the
+				// length of the preceding online period.
+				st.OfflineEligible = prevDuration >= onlineBeforeOfflineThreshold
 				st.RecoveryEligible = false
+			} else if !wasOnline && online {
+				// Offline -> online: qualify the recovery notification based on the
+				// length of the preceding offline period.
+				st.RecoveryEligible = prevDuration >= offlineThreshold
+				st.OfflineEligible = false
 			}
 			state[hash] = st
 			continue
@@ -628,6 +670,7 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 
 		if !online &&
 			st.SeenOnline &&
+			st.OfflineEligible &&
 			!st.OfflineNotified &&
 			!st.Since.IsZero() &&
 			now.Sub(st.Since) >= offlineThreshold {

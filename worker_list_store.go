@@ -94,6 +94,7 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 			since INTEGER NOT NULL,
 			seen_online INTEGER NOT NULL,
 			seen_offline INTEGER NOT NULL,
+			offline_eligible INTEGER NOT NULL DEFAULT 0,
 			offline_notified INTEGER NOT NULL,
 			recovery_eligible INTEGER NOT NULL,
 			recovery_notified INTEGER NOT NULL,
@@ -105,6 +106,10 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS discord_worker_state_user_idx ON discord_worker_state (user_id)`); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := addDiscordWorkerStateOfflineEligibleColumn(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -128,6 +133,17 @@ func addSavedWorkersNotifyEnabledColumn(db *sql.DB) error {
 		return nil
 	}
 	_, err := db.Exec("ALTER TABLE saved_workers ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 1")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	return nil
+}
+
+func addDiscordWorkerStateOfflineEligibleColumn(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("ALTER TABLE discord_worker_state ADD COLUMN offline_eligible INTEGER NOT NULL DEFAULT 0")
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return err
 	}
@@ -325,7 +341,7 @@ func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]wor
 		return nil, nil
 	}
 	rows, err := s.db.Query(`
-		SELECT worker_hash, online, since, seen_online, seen_offline, offline_notified, recovery_eligible, recovery_notified
+		SELECT worker_hash, online, since, seen_online, seen_offline, offline_eligible, offline_notified, recovery_eligible, recovery_notified
 		FROM discord_worker_state
 		WHERE user_id = ?
 	`, userID)
@@ -342,11 +358,12 @@ func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]wor
 			sinceUnix       int64
 			seenOnlineInt   int
 			seenOfflineInt  int
+			offlineEligInt  int
 			offlineNotInt   int
 			recoveryEligInt int
 			recoveryNotInt  int
 		)
-		if err := rows.Scan(&hash, &onlineInt, &sinceUnix, &seenOnlineInt, &seenOfflineInt, &offlineNotInt, &recoveryEligInt, &recoveryNotInt); err != nil {
+		if err := rows.Scan(&hash, &onlineInt, &sinceUnix, &seenOnlineInt, &seenOfflineInt, &offlineEligInt, &offlineNotInt, &recoveryEligInt, &recoveryNotInt); err != nil {
 			return nil, err
 		}
 		hash = strings.TrimSpace(hash)
@@ -357,6 +374,7 @@ func (s *workerListStore) LoadDiscordWorkerStates(userID string) (map[string]wor
 			Online:           onlineInt != 0,
 			SeenOnline:       seenOnlineInt != 0,
 			SeenOffline:      seenOfflineInt != 0,
+			OfflineEligible:  offlineEligInt != 0,
 			OfflineNotified:  offlineNotInt != 0,
 			RecoveryEligible: recoveryEligInt != 0,
 			RecoveryNotified: recoveryNotInt != 0,
@@ -405,6 +423,7 @@ func (s *workerListStore) ResetDiscordWorkerStateTimers(userID string, now time.
 		UPDATE discord_worker_state
 		SET
 			since = ?,
+			offline_eligible = 0,
 			offline_notified = 0,
 			recovery_eligible = 0,
 			recovery_notified = 0,
@@ -454,15 +473,16 @@ func (s *workerListStore) PersistDiscordWorkerStates(userID string, upserts map[
 		stmt, err := tx.Prepare(`
 			INSERT INTO discord_worker_state (
 				user_id, worker_hash, online, since,
-				seen_online, seen_offline,
+				seen_online, seen_offline, offline_eligible,
 				offline_notified, recovery_eligible, recovery_notified,
 				updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(user_id, worker_hash) DO UPDATE SET
 				online = excluded.online,
 				since = excluded.since,
 				seen_online = excluded.seen_online,
 				seen_offline = excluded.seen_offline,
+				offline_eligible = excluded.offline_eligible,
 				offline_notified = excluded.offline_notified,
 				recovery_eligible = excluded.recovery_eligible,
 				recovery_notified = excluded.recovery_notified,
@@ -493,6 +513,10 @@ func (s *workerListStore) PersistDiscordWorkerStates(userID string, upserts map[
 			if st.SeenOffline {
 				seenOffline = 1
 			}
+			offlineElig := 0
+			if st.OfflineEligible {
+				offlineElig = 1
+			}
 			offlineNot := 0
 			if st.OfflineNotified {
 				offlineNot = 1
@@ -507,7 +531,7 @@ func (s *workerListStore) PersistDiscordWorkerStates(userID string, upserts map[
 			}
 			if _, err := stmt.Exec(
 				userID, h, onlineInt, sinceUnix,
-				seenOnline, seenOffline,
+				seenOnline, seenOffline, offlineElig,
 				offlineNot, recoveryElig, recoveryNot,
 				ts,
 			); err != nil {

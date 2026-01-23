@@ -43,6 +43,11 @@
   # Allowed future timestamps miners may submit to guard against time drift.
   ntime_forward_slack_seconds = 7000
 
+[discord]
+
+  # Sustained threshold (seconds) for Discord worker offline/recovery notifications. Default: 300 (5 minutes).
+  worker_notify_threshold_seconds = 300
+
 [mining]
 
   # Disable the '<pool_entropy>-<job_entropy>' coinbase suffix

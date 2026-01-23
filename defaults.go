@@ -23,6 +23,7 @@ func defaultConfig() Config {
 		DiscordServerID:                 "",
 		DiscordNotifyChannelID:          "",
 		DiscordBotToken:                 "",
+		DiscordWorkerNotifyThresholdSeconds: defaultDiscordWorkerNotifyThresholdSeconds,
 		GitHubURL:                       defaultGitHubURL,
 		// StratumTLSListen defaults to empty (disabled) so operators
 		// explicitly opt in to TLS for miner connections.
