@@ -2,61 +2,153 @@
 
 
 [auth]
+
+  # Local path Clerk redirects to after sign-in (prefixed with '/').
   clerk_callback_path = "/clerk/callback"
+
+  # Frontend API URL passed to Clerk during session handling.
   clerk_frontend_api_url = ""
+
+  # Issuer URL used by Clerk for session tokens (typically https://clerk.clerk.dev).
   clerk_issuer_url = "https://clerk.clerk.dev"
+
+  # JWKS endpoint Clerk publishes for verifying tokens.
   clerk_jwks_url = "https://clerk.clerk.dev/.well-known/jwks.json"
+
+  # Optional audience claim required for Clerk-issued JWTs.
   clerk_session_audience = ""
+
+  # Cookie name Clerk uses for authenticated sessions (default __session).
   clerk_session_cookie_name = "__session"
+
+  # Hosted Clerk sign-in page that operators link to for authentication.
   clerk_signin_url = "https://auth.clerk.dev/sign-in"
 
 [backblaze_backup]
+
+  # Backblaze B2 bucket where backups are stored.
   bucket = ""
+
+  # Toggle periodic uploads of the saved workers snapshot to Backblaze B2.
   enabled = false
+
+  # Seconds between scheduled uploads (default 43200).
   interval_seconds = 43200
+
+  # Keep a local copy of the last successful snapshot even when backups run.
   keep_local_copy = true
+
+  # Optional namespace prefix for Backblaze object keys.
   prefix = ""
+
+  # File path where the worker DB snapshot is stored locally.
   snapshot_path = ""
 
 [branding]
+
+  # Discord channel ID where notifications are posted when enabled.
   discord_notify_channel_id = ""
+
+  # Discord server ID used for notification features.
   discord_server_id = ""
+
+  # Discord server invite link shown in the status header.
   discord_url = ""
+
+  # Fiat currency symbol (e.g. usd) used by the status UI price display.
   fiat_currency = "usd"
+
+  # Optional GitHub repository link shown in the header/about pages.
   github_url = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
+
+  # Optional wallet where miners can donate to the pool operator.
   pool_donation_address = "OPTIONAL_POOL_DONATION_WALLET"
+
+  # Optional textual location shown in the footer (e.g. city, datacenter).
   server_location = ""
+
+  # Optional domain used to qualify the brand name in the status UI.
   status_brand_domain = ""
+
+  # Optional headline name shown at the top of the status page.
   status_brand_name = ""
+
+  # Extra text appended to the 'Connect your miner' heading.
   status_connect_miner_title_extra = ""
+
+  # Optional URL to hyperlink the extra text added to the connect header.
   status_connect_miner_title_extra_url = ""
+
+  # Subtitle describing the pool on the status page (default 'Solo Mining Pool').
   status_tagline = "Solo Mining Pool"
 
 [mining]
-  coinbase_message = "goPool"
+
+  # Clamp coinbase message length (bytes) inside the scriptSig; useful to stay below policy limits.
   coinbase_scriptsig_max_bytes = 100
-  coinbase_suffix_bytes = 4
+
+  # Number of extranonce2 bytes miners receive; larger values allow more workers per connection.
   extranonce2_size = 4
+
+  # Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'.
+  job_entropy = 4
+
+  # Wallet address where operator donations are sent when operator_donation_percent > 0.
   operator_donation_address = ""
+
+  # Optional display name for the donation recipient shown in the status UI.
   operator_donation_name = ""
+
+  # Percentage of the pool fee (not total reward) to donate to another wallet. Requires operator_donation_address when >0.
   operator_donation_percent = 0.0
+
+  # Optional hyperlink for the operator donation recipient.
   operator_donation_url = ""
+
+  # Pool fee percentage applied to each block reward (default 2.0). Operator donation percent applies on top of this value.
   pool_fee_percent = 2.0
+
+  # Optional custom prefix (a-z, 0-9 only). Prepends '<prefix>-' to the goPool coinbase tag.
+  pooltag_prefix = ""
+
+  # Extra placeholder for extranonce2 inside the template. Must be >= extranonce2_size.
   template_extra_nonce2_size = 8
 
 [node]
+
+  # Allow connecting to RPC endpoints without authentication (useful for trusted/testing nodes).
   allow_public_rpc = false
+
+  # Directory where goPool stores state, logs, and configs.
   data_dir = "data"
+
+  # Wallet where block payouts are sent to miners.
   payout_address = "YOUR_POOL_WALLET_ADDRESS_HERE"
+
+  # Path to bitcoind's auth cookie (auto-detected if blank).
   rpc_cookie_path = ""
+
+  # RPC URL of the Bitcoin node used for getblocktemplate and submitblock.
   rpc_url = "http://127.0.0.1:8332"
+
+  # ZMQ endpoint exposed by the node for block notifications.
   zmq_block_addr = "tcp://127.0.0.1:28332"
 
 [server]
+
+  # TCP address for the plain stratum listener (default :3333).
   pool_listen = ":3333"
+
+  # HTTP address for the status UI (default :80).
   status_listen = ":80"
+
+  # Canonical public URL used for redirects/session cookies; include scheme (http/https).
   status_public_url = ""
+
+  # Optional HTTPS address that serves the status UI with TLS (default :443).
   status_tls_listen = ":443"
 
 [stratum]
+
+  # TLS address for the secure Stratum listener (leave blank to disable).
   stratum_tls_listen = ":4333"

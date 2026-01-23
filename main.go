@@ -143,16 +143,14 @@ func main() {
 		SetChainParams("mainnet")
 	}
 
-	// Derive a concise, pool-branded coinbase tag of the form
-	// "/goPool-<status_brand_name>/", truncated to at most 40 bytes and
-	// restricted to printable ASCII so it stays within standard coinbase
-	// scriptSig bounds.
-	tag := "/" + poolSoftwareName
-	brand := strings.TrimSpace(cfg.StatusBrandName)
-	if brand != "" {
-		tag = tag + "-" + brand
+	// Derive a concise coinbase tag like "/goPool/" or "/<prefix>-goPool/",
+	// truncated to at most 40 bytes and restricted to printable ASCII so it
+	// stays within standard coinbase scriptSig bounds.
+	brand := poolSoftwareName
+	if cfg.PoolTagPrefix != "" {
+		brand = cfg.PoolTagPrefix + "-" + brand
 	}
-	tag = tag + "/"
+	tag := "/" + brand + "/"
 	// Keep only printable ASCII bytes.
 	var buf []byte
 	for i := 0; i < len(tag); i++ {
@@ -162,7 +160,7 @@ func main() {
 		}
 	}
 	if len(buf) == 0 {
-		buf = []byte("/" + poolSoftwareName + "/")
+		buf = []byte("/" + brand + "/")
 	}
 	if len(buf) > 40 {
 		buf = buf[:40]

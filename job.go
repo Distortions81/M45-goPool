@@ -612,8 +612,8 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 
 	scriptTime := time.Now().Unix()
 	coinbaseMsg := jm.cfg.CoinbaseMsg
-	if jm.cfg.CoinbaseSuffixBytes > 0 {
-		msg, err := buildCoinbaseMsgWithSuffix(coinbaseMsg, jm.cfg.CoinbasePoolTag, jm.cfg.CoinbaseSuffixBytes)
+	if jm.cfg.JobEntropy > 0 {
+		msg, err := buildCoinbaseMsgWithSuffix(coinbaseMsg, jm.cfg.PoolEntropy, jm.cfg.JobEntropy)
 		if err != nil {
 			return nil, err
 		}
@@ -692,8 +692,8 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	return job, nil
 }
 
-func buildCoinbaseMsgWithSuffix(base, poolTag string, suffixChars int) (string, error) {
-	suffix, err := buildPoolSuffix(poolTag, suffixChars)
+func buildCoinbaseMsgWithSuffix(base, poolEntropy string, jobEntropy int) (string, error) {
+	suffix, err := buildPoolSuffix(poolEntropy, jobEntropy)
 	if err != nil {
 		return "", fmt.Errorf("coinbase suffix: %w", err)
 	}
@@ -706,25 +706,29 @@ func buildCoinbaseMsgWithSuffix(base, poolTag string, suffixChars int) (string, 
 	if strings.HasSuffix(base, "/") {
 		return base + suffix, nil
 	}
-	return fmt.Sprintf("%s/%s", base, suffix), nil
+	return base + "/" + suffix, nil
 }
 
-func buildPoolSuffix(poolTag string, suffixChars int) (string, error) {
-	if suffixChars < 0 {
-		suffixChars = 0
+func buildPoolSuffix(poolEntropy string, jobEntropy int) (string, error) {
+	if jobEntropy < 0 {
+		jobEntropy = 0
 	}
 	randomPart := ""
-	if suffixChars > 0 {
-		part, err := randomAlnumString(suffixChars)
+	if jobEntropy > 0 {
+		part, err := randomAlnumString(jobEntropy)
 		if err != nil {
 			return "", err
 		}
 		randomPart = part
 	}
-	if poolTag == "" {
+	if poolEntropy == "" {
 		return randomPart, nil
 	}
-	return poolTag + randomPart, nil
+	if randomPart == "" {
+		return poolEntropy, nil
+	}
+	// Format as "<pool entropy>-<job entropy>" when both parts are present.
+	return poolEntropy + "-" + randomPart, nil
 }
 
 func computePoolMask(tpl GetBlockTemplateResult, cfg Config) uint32 {

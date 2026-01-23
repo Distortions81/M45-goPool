@@ -46,12 +46,11 @@ const (
 	defaultAcceptSteadyStateReconnectPercent = 5.0
 	defaultAcceptSteadyStateReconnectWindow  = 60
 
-	defaultCoinbaseSuffixBytes       = 4
-	maxCoinbaseSuffixBytes           = 32
+	defaultJobEntropy                = 4
+	maxJobEntropy                    = 16
 	defaultCoinbaseScriptSigMaxBytes = 100
 
-	defaultReplayLimit = int64(16 << 20)
-	defaultMaxConns    = 50000
+	defaultMaxConns = 50000
 
 	defaultNTimeForwardSlackSeconds      = 7000
 	defaultBanInvalidSubmissionsAfter    = 60
@@ -82,8 +81,6 @@ const (
 
 	defaultZMQBlockAddr = "tcp://127.0.0.1:28332"
 
-	defaultShareLogBufferBytes  = 0
-	defaultFsyncShareLog        = false
 	defaultAutoAcceptRateLimits = true
 
 	defaultOperatorDonationPercent = 0.0
