@@ -46,18 +46,18 @@ func validateConfig(cfg Config) error {
 	if cfg.MaxRecentJobs <= 0 {
 		return fmt.Errorf("max_recent_jobs must be > 0, got %d", cfg.MaxRecentJobs)
 	}
-	if cfg.CoinbaseSuffixBytes < 0 {
-		return fmt.Errorf("coinbase_suffix_bytes cannot be negative")
+	if cfg.JobEntropy < 0 {
+		return fmt.Errorf("job_entropy cannot be negative")
 	}
-	if cfg.CoinbaseSuffixBytes > maxCoinbaseSuffixBytes {
-		return fmt.Errorf("coinbase_suffix_bytes cannot exceed %d", maxCoinbaseSuffixBytes)
+	if cfg.JobEntropy > maxJobEntropy {
+		return fmt.Errorf("job_entropy cannot exceed %d", maxJobEntropy)
 	}
-	if cfg.CoinbasePoolTag != "" {
-		if len(cfg.CoinbasePoolTag) != poolTagLength {
-			return fmt.Errorf("coinbase_pool_tag must be %d characters", poolTagLength)
+	if cfg.PoolEntropy != "" {
+		if len(cfg.PoolEntropy) != poolTagLength {
+			return fmt.Errorf("pool_entropy must be %d characters", poolTagLength)
 		}
-		if normalizePoolTag(cfg.CoinbasePoolTag) != cfg.CoinbasePoolTag {
-			return fmt.Errorf("coinbase_pool_tag must only contain alphanumeric characters")
+		if normalizePoolTag(cfg.PoolEntropy) != cfg.PoolEntropy {
+			return fmt.Errorf("pool_entropy must only contain alphanumeric characters")
 		}
 	}
 	if cfg.CoinbaseScriptSigMaxBytes < 0 {
