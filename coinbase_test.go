@@ -197,52 +197,52 @@ func TestNormalizeCoinbaseMessage(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: "/nodeStratum/",
+			expected: "/nodeStratum",
 		},
 		{
 			name:     "only spaces",
 			input:    "   ",
-			expected: "/nodeStratum/",
+			expected: "/nodeStratum",
 		},
 		{
 			name:     "simple message",
 			input:    "goPool",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with spaces",
 			input:    "  goPool  ",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with existing prefix",
 			input:    "/goPool",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with existing suffix",
 			input:    "goPool/",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with both prefix and suffix",
 			input:    "/goPool/",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with spaces and slashes",
 			input:    "  /goPool/  ",
-			expected: "/goPool/",
+			expected: "/goPool",
 		},
 		{
 			name:     "message with multiple slashes",
 			input:    "//goPool//",
-			expected: "//goPool//",
+			expected: "//goPool/",
 		},
 		{
 			name:     "complex message",
 			input:    "  /my-pool-v2/  ",
-			expected: "/my-pool-v2/",
+			expected: "/my-pool-v2",
 		},
 	}
 
