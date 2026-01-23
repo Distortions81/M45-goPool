@@ -41,7 +41,7 @@ func exampleConfigBytes() []byte {
 	cfg := defaultConfig()
 	cfg.PayoutAddress = "YOUR_POOL_WALLET_ADDRESS_HERE"
 	cfg.PoolDonationAddress = "OPTIONAL_POOL_DONATION_WALLET"
-	cfg.CoinbasePoolTag = "" // Don't set a default tag - users should set their own
+	cfg.PoolEntropy = "" // Don't set a default - auto-generated on first run
 	fc := buildBaseFileConfig(cfg)
 	data, err := toml.Marshal(fc)
 	if err != nil {
