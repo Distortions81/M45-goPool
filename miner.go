@@ -262,11 +262,11 @@ type MinerConn struct {
 	// restoredRecentDiff is set when we restore a worker's persisted
 	// difficulty after a short disconnect so we can skip bootstrap and
 	// suggested-difficulty overrides on reconnect.
-	restoredRecentDiff bool
-	minerType              string
-	minerClientName        string
-	minerClientVersion     string
-	extranonceSubscribed   bool
+	restoredRecentDiff   bool
+	minerType            string
+	minerClientName      string
+	minerClientVersion   string
+	extranonceSubscribed bool
 	// connectedAt is the time this miner connection was established,
 	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time
@@ -596,9 +596,13 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 		return nil
 	}
 	if mc.registeredWorkerHash != "" {
-		mc.workerRegistry.unregister(mc.registeredWorkerHash, mc)
+		prevWallet := workerBaseAddress(mc.registeredWorker)
+		prevWalletHash := workerNameHash(prevWallet)
+		mc.workerRegistry.unregister(mc.registeredWorkerHash, prevWalletHash, mc)
 	}
-	prev := mc.workerRegistry.register(hash, mc)
+	wallet := workerBaseAddress(worker)
+	walletHash := workerNameHash(wallet)
+	prev := mc.workerRegistry.register(hash, walletHash, mc)
 	mc.registeredWorker = worker
 	mc.registeredWorkerHash = hash
 	return prev
@@ -608,7 +612,9 @@ func (mc *MinerConn) unregisterRegisteredWorker() {
 	if mc.workerRegistry == nil || mc.registeredWorkerHash == "" {
 		return
 	}
-	mc.workerRegistry.unregister(mc.registeredWorkerHash, mc)
+	wallet := workerBaseAddress(mc.registeredWorker)
+	walletHash := workerNameHash(wallet)
+	mc.workerRegistry.unregister(mc.registeredWorkerHash, walletHash, mc)
 	mc.registeredWorker = ""
 	mc.registeredWorkerHash = ""
 }

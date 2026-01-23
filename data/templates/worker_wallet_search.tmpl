@@ -1,0 +1,116 @@
+{{/* Worker wallet search template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Wallet Search</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+			<div class="card worker-search-card">
+				<div class="lookup-card-header">
+					<h2>Wallet search</h2>
+					<p class="text-sm lookup-card-description">
+						Enter your payout wallet address to list any currently connected workers that are using it.
+					</p>
+				</div>
+				<form method="get" action="/worker/search" id="walletSearchForm">
+					<div class="label">Wallet address</div>
+					<div class="input-row">
+						<input class="input" type="text" id="walletInput" placeholder="bc1..." autocomplete="off">
+						<input type="hidden" name="hash" id="walletHash">
+						<button class="btn" type="submit">Search wallet</button>
+					</div>
+				</form>
+				{{if .Error}}
+					<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.Error}}</p>
+				{{else if .QueriedWalletHash}}
+					<p class="text-sm" style="margin-top:10px; color:#b3bbd4;">
+						Showing active workers for wallet hash <span class="mono sensitive-data">{{shortID .QueriedWalletHash}}</span>.
+					</p>
+				{{end}}
+			</div>
+
+		{{if gt (len .Results) 0}}
+			<div class="card" style="margin-top:16px;">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Worker</th>
+							<th>Hashrate</th>
+							<th>Last share</th>
+							<th>Accepted</th>
+							<th>Rejected</th>
+							<th>Balance</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						{{range .Results}}
+							<tr>
+								<td>
+									<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+										<a class="mono sensitive-worker worker-link" href="/worker/sha256?hash={{.WorkerSHA256}}">{{.DisplayName}}</a>
+										{{if .WorkerSHA256}}
+											<span class="text-sm" style="color:var(--text-secondary);">{{shortID .WorkerSHA256}}</span>
+										{{end}}
+									</div>
+								</td>
+								<td>{{if gt .RollingHashrate 0.0}}{{formatHashrate .RollingHashrate}}{{else}}—{{end}}</td>
+								<td>{{formatTime .LastShare}}</td>
+								<td>{{.Accepted}}</td>
+								<td>{{.Rejected}}</td>
+								<td>{{formatBTCShort .BalanceSats}}</td>
+								<td>
+									<a class="btn" href="/worker/sha256?hash={{.WorkerSHA256}}">View</a>
+								</td>
+							</tr>
+						{{end}}
+					</tbody>
+				</table>
+			</div>
+		{{end}}
+
+		<div class="card" style="margin-top:16px;">
+			<p class="text-sm" style="margin:0;">
+				<a href="/worker">← Back to worker login</a>
+			</p>
+		</div>
+	</div>
+		{{template "footer" .}}
+	<script>
+	// SHA256 implementation shared with login page
+	async function sha256Wallet(str) {
+		try {
+			const buffer = new TextEncoder().encode(str);
+			const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+			const hashArray = Array.from(new Uint8Array(hashBuffer));
+			return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+		} catch (error) {
+			console.error('SHA256 wallet error:', error);
+			alert('Error: Secure context (HTTPS) required for hashing. Please contact the pool administrator.');
+			throw error;
+		}
+	}
+
+	document.getElementById('walletSearchForm').addEventListener('submit', async function(e) {
+		e.preventDefault();
+		const walletInput = document.getElementById('walletInput').value.trim();
+		if (!walletInput) {
+			alert('Please enter a wallet address');
+			return;
+		}
+		try {
+			const hash = await sha256Wallet(walletInput);
+			document.getElementById('walletHash').value = hash;
+			this.submit();
+		} catch (error) {
+			console.error('Wallet search submission error:', error);
+		}
+	});
+	</script>
+</body>
+</html>

@@ -486,6 +486,13 @@ type WorkerStatusData struct {
 	HasShareHashDetails bool
 }
 
+type WorkerWalletSearchData struct {
+	StatusData
+	QueriedWalletHash string
+	Results       []WorkerView
+	Error         string
+}
+
 type SignInPageData struct {
 	StatusData
 	ClerkPublishableKey string

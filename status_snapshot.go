@@ -387,6 +387,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	signInPath := filepath.Join(dataDir, "templates", "sign_in.tmpl")
 	savedWorkersPath := filepath.Join(dataDir, "templates", "saved_workers.tmpl")
 	workerStatusPath := filepath.Join(dataDir, "templates", "worker_status.tmpl")
+	workerWalletSearchPath := filepath.Join(dataDir, "templates", "worker_wallet_search.tmpl")
 	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
 	poolInfoPath := filepath.Join(dataDir, "templates", "pool.tmpl")
 	aboutPath := filepath.Join(dataDir, "templates", "about.tmpl")
@@ -433,6 +434,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load worker status template: %w", err)
 	}
+	workerWalletSearchHTML, err := os.ReadFile(workerWalletSearchPath)
+	if err != nil {
+		return nil, fmt.Errorf("load worker wallet search template: %w", err)
+	}
 	nodeInfoHTML, err := os.ReadFile(nodeInfoPath)
 	if err != nil {
 		return nil, fmt.Errorf("load node info template: %w", err)
@@ -462,6 +467,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	template.Must(tmpl.New("sign_in").Parse(string(signInHTML)))
 	template.Must(tmpl.New("saved_workers").Parse(string(savedWorkersHTML)))
 	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
+	template.Must(tmpl.New("worker_wallet_search").Parse(string(workerWalletSearchHTML)))
 	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
 	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
 	template.Must(tmpl.New("about").Parse(string(aboutHTML)))

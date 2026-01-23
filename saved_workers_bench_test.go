@@ -50,11 +50,13 @@ func BenchmarkSavedWorkersJSON_15Saved(b *testing.B) {
 			WindowSubmissions: 10,
 		}
 		mc.connectionSeq = uint64(i + 1)
-		reg.register(mc.stats.WorkerSHA256, mc)
+		wallet := workerBaseAddress(name)
+		walletHash := workerNameHash(wallet)
+		reg.register(mc.stats.WorkerSHA256, walletHash, mc)
 	}
 
 	s := &StatusServer{
-		workerLists:  store,
+		workerLists:    store,
 		workerRegistry: reg,
 	}
 
