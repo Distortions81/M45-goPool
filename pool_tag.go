@@ -12,10 +12,10 @@ const (
 
 var poolTagCharsetBytes = []byte(poolTagCharset)
 
-// generatePoolTag returns a random alphanumeric tag of length poolTagLength.
+// generatePoolEntropy returns a random alphanumeric tag of length poolTagLength.
 // If randomness fails, it falls back to a deterministic string derived from the
 // pool software name so the tag is always valid.
-func generatePoolTag() string {
+func generatePoolEntropy() string {
 	tag, err := randomAlnumString(poolTagLength)
 	if err != nil || len(tag) != poolTagLength {
 		alt := poolSoftwareName
