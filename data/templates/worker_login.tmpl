@@ -24,20 +24,30 @@
 		{{end}}
 		<div class="card worker-lookup-card">
 			<div class="lookup-card-header">
-				<h2>Quick Worker Lookup</h2>
+				<h2>Quick Worker & Wallet Lookup</h2>
 				<p class="text-sm lookup-card-description">
-					Enter the full wallet.worker-name from your miner check hash rate, shares and online status without signing in.
+					Enter a wallet.worker-name to view worker stats or a wallet address to list every active worker mining to it.
+				</p>
 			</div>
 			<form method="get" action="/worker/sha256" id="workerLookupForm">
 				<div class="label">Worker ID</div>
 				<div class="input-row">
 					<input class="input" type="text" id="workerInput" placeholder="walletName.workerName">
 					<input type="hidden" name="hash" id="workerHash">
-					<button class="btn" type="submit">Search</button>
+					<button class="btn" type="submit">Search worker</button>
 				</div>
 				<p class="text-sm lookup-card-footnote">
 					Use the exact wallet.worker-name shown in your miner configuration.
 				</p>
+			</form>
+			<hr style="margin:24px 0;border-top:1px solid var(--card-border);">
+			<form method="get" action="/worker/search" id="walletLookupForm">
+				<div class="label">Wallet address</div>
+				<div class="input-row">
+					<input class="input" type="text" id="walletInput" placeholder="Wallet address (e.g. bc1...)" autocomplete="off">
+					<input type="hidden" name="hash" id="walletHash">
+					<button class="btn" type="submit">Search wallet</button>
+				</div>
 			</form>
 			{{if .Error}}
 				<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.Error}}</p>
@@ -77,8 +87,23 @@
 			this.submit();
 		} catch (error) {
 			console.error('Form submission error:', error);
-		}
-	});
+			}
+		});
+		document.getElementById('walletLookupForm').addEventListener('submit', async function(e) {
+			e.preventDefault();
+			const walletInput = document.getElementById('walletInput').value.trim();
+			if (!walletInput) {
+				alert('Please enter a wallet address');
+				return;
+			}
+			try {
+				const hash = await sha256(walletInput);
+				document.getElementById('walletHash').value = hash;
+				this.submit();
+			} catch (error) {
+				console.error('Wallet form submission error:', error);
+			}
+		});
 	</script>
 </body>
 </html>

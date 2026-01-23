@@ -360,6 +360,7 @@ func main() {
 	}
 	// HTML endpoints
 	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
+	mux.HandleFunc("/worker/search", statusServer.withClerkUser(statusServer.handleWorkerWalletSearch))
 	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
 	mux.HandleFunc("/worker/save", statusServer.withClerkUser(statusServer.handleWorkerSave))
 	mux.HandleFunc("/worker/remove", statusServer.withClerkUser(statusServer.handleWorkerRemove))

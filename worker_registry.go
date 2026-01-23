@@ -9,21 +9,23 @@ import (
 // The primary storage is a map indexed by connection number, with a secondary
 // map for looking up connections by worker name SHA256.
 type workerConnectionRegistry struct {
-	mu            sync.Mutex
-	conns         map[uint64]*MinerConn   // connection seq -> MinerConn
-	nameToConnIDs map[string][]uint64     // SHA256 -> list of connection IDs
+	mu                  sync.Mutex
+	conns               map[uint64]*MinerConn // connection seq -> MinerConn
+	nameToConnIDs       map[string][]uint64   // SHA256 -> list of connection IDs
+	walletHashToConnIDs map[string][]uint64   // wallet hash -> list of connection IDs
 }
 
 func newWorkerConnectionRegistry() *workerConnectionRegistry {
 	return &workerConnectionRegistry{
-		conns:         make(map[uint64]*MinerConn),
-		nameToConnIDs: make(map[string][]uint64),
+		conns:               make(map[uint64]*MinerConn),
+		nameToConnIDs:       make(map[string][]uint64),
+		walletHashToConnIDs: make(map[string][]uint64),
 	}
 }
 
-// register associates the hashed worker name with mc and returns any previous
+// register associates the hashed worker name and wallet with mc and returns any previous
 // connection that owned that hash.
-func (r *workerConnectionRegistry) register(hash string, mc *MinerConn) *MinerConn {
+func (r *workerConnectionRegistry) register(hash, walletHash string, mc *MinerConn) *MinerConn {
 	if hash == "" || mc == nil {
 		return nil
 	}
@@ -60,11 +62,19 @@ func (r *workerConnectionRegistry) register(hash string, mc *MinerConn) *MinerCo
 		r.nameToConnIDs[hash] = []uint64{connSeq}
 	}
 
+	if walletHash != "" {
+		if connIDs, exists := r.walletHashToConnIDs[walletHash]; exists {
+			r.walletHashToConnIDs[walletHash] = append(connIDs, connSeq)
+		} else {
+			r.walletHashToConnIDs[walletHash] = []uint64{connSeq}
+		}
+	}
+
 	return prev
 }
 
-// unregister removes mc from the registry for the given worker hash.
-func (r *workerConnectionRegistry) unregister(hash string, mc *MinerConn) {
+// unregister removes mc from the registry for the given worker hash and wallet.
+func (r *workerConnectionRegistry) unregister(hash string, walletHash string, mc *MinerConn) {
 	if hash == "" || mc == nil {
 		return
 	}
@@ -98,6 +108,23 @@ func (r *workerConnectionRegistry) unregister(hash string, mc *MinerConn) {
 			r.nameToConnIDs[hash] = filtered
 		}
 	}
+
+	if walletHash != "" {
+		if connIDs, exists := r.walletHashToConnIDs[walletHash]; exists {
+			filtered := make([]uint64, 0, len(connIDs))
+			for _, id := range connIDs {
+				if id != connSeq {
+					filtered = append(filtered, id)
+				}
+			}
+
+			if len(filtered) == 0 {
+				delete(r.walletHashToConnIDs, walletHash)
+			} else {
+				r.walletHashToConnIDs[walletHash] = filtered
+			}
+		}
+	}
 }
 
 // getConnectionsByHash returns all active connections for a given worker hash.
@@ -115,6 +142,30 @@ func (r *workerConnectionRegistry) getConnectionsByHash(hash string) []*MinerCon
 	}
 
 	// Collect all active connections
+	result := make([]*MinerConn, 0, len(connIDs))
+	for _, id := range connIDs {
+		if mc := r.conns[id]; mc != nil {
+			result = append(result, mc)
+		}
+	}
+
+	return result
+}
+
+// getConnectionsByWalletHash returns all active connections for a given wallet hash.
+func (r *workerConnectionRegistry) getConnectionsByWalletHash(walletHash string) []*MinerConn {
+	if walletHash == "" {
+		return nil
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	connIDs, exists := r.walletHashToConnIDs[walletHash]
+	if !exists || len(connIDs) == 0 {
+		return nil
+	}
+
 	result := make([]*MinerConn, 0, len(connIDs))
 	for _, id := range connIDs {
 		if mc := r.conns[id]; mc != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -146,6 +147,55 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 			"Worker login page error",
 			"We couldn't render the worker login page.",
 			"Template error while rendering worker login.")
+	}
+}
+
+func (s *StatusServer) handleWorkerWalletSearch(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	base := s.baseTemplateData(start)
+
+	data := WorkerWalletSearchData{
+		StatusData: base,
+	}
+	s.enrichStatusDataWithClerk(r, &data.StatusData)
+
+	hash := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("hash")))
+	data.QueriedWalletHash = hash
+
+	if hash == "" {
+		data.Error = "Please provide a wallet hash to search."
+	} else if len(hash) != 64 {
+		data.Error = "Invalid hash format; expected 64 hex characters."
+	} else if _, err := hex.DecodeString(hash); err != nil {
+		data.Error = "Invalid hash value."
+	} else if s.workerRegistry == nil {
+		data.Error = "Worker registry unavailable."
+	} else {
+		conns := s.workerRegistry.getConnectionsByWalletHash(hash)
+		if len(conns) == 0 {
+			data.Error = "No active workers were found for that wallet."
+		} else {
+			now := time.Now()
+			views := make([]WorkerView, 0, len(conns))
+			for _, mc := range conns {
+				views = append(views, workerViewFromConn(mc, now))
+			}
+			results := mergeWorkerViewsByHash(views)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].LastShare.After(results[j].LastShare)
+			})
+			data.Results = results
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "worker_wallet_search", data); err != nil {
+		logger.Error("worker wallet search template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Wallet search error",
+			"We couldn't render the wallet search page.",
+			"Template error while rendering wallet results.")
+		return
 	}
 }
 
