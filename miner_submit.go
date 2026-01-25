@@ -593,7 +593,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 			"submit_rate_per_min", subRate,
 		)
 	}
-	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
+	mc.writeTrueResponse(reqID)
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
@@ -758,7 +758,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 			"worker_difficulty", stats.TotalDifficulty,
 		)
 	}
-	mc.writeResponse(StratumResponse{ID: reqID, Result: true, Error: nil})
+	mc.writeTrueResponse(reqID)
 }
 
 // logFoundBlock appends a JSON line describing a found block to a log file in

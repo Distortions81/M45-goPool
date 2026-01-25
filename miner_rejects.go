@@ -827,12 +827,7 @@ func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
 
 func (mc *MinerConn) handleExtranonceSubscribe(req *StratumRequest) {
 	mc.extranonceSubscribed = true
-	result := StratumResponse{
-		ID:     req.ID,
-		Result: true,
-		Error:  nil,
-	}
-	mc.writeResponse(result)
+	mc.writeTrueResponse(req.ID)
 
 	ex1 := hex.EncodeToString(mc.extranonce1)
 	en2Size := mc.cfg.Extranonce2Size

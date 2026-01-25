@@ -183,12 +183,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 
 	mc.authorized = true
 
-	resp := StratumResponse{
-		ID:     req.ID,
-		Result: true,
-		Error:  nil,
-	}
-	mc.writeResponse(resp)
+	mc.writeTrueResponse(req.ID)
 
 	if !mc.listenerOn {
 		// Drain any buffered notifications that may have accumulated between
