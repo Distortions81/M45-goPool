@@ -139,7 +139,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if !ok {
 		return
 	}
-	if mc.cfg.LowLatencyMode {
+	if mc.cfg.DirectSubmitProcessing {
 		mc.processSubmissionTask(task)
 		return
 	}

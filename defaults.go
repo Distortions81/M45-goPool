@@ -83,7 +83,7 @@ func defaultConfig() Config {
 		HashrateEMAMinShares:          defaultHashrateEMAMinShares,
 		NTimeForwardSlackSeconds:      defaultNTimeForwardSlackSeconds,
 		SoloMode:                      true,
-		LowLatencyMode:                false,
+		DirectSubmitProcessing:        false,
 		BanInvalidSubmissionsAfter:    defaultBanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:   defaultBanInvalidSubmissionsWindow,
 		BanInvalidSubmissionsDuration: defaultBanInvalidSubmissionsDuration,
