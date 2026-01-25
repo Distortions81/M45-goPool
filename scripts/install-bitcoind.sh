@@ -7,14 +7,17 @@ set -euo pipefail
 # the chosen network. Intended for testing/development only on generic Linux.
 #
 # Usage:
-#   ./scripts/install-bitcoind.sh [mainnet|testnet|signet|regtest]
+#   ./scripts/install-bitcoind.sh [mainnet|testnet|signet|regtest|regnet]
 # Defaults to regtest when no network is provided.
 
 NETWORK="${1:-regtest}"
+if [ "${NETWORK}" = "regnet" ]; then
+  NETWORK="regtest"
+fi
 case "${NETWORK}" in
   mainnet|testnet|signet|regtest) ;;
   *)
-    echo "Usage: $0 [mainnet|testnet|signet|regtest]" >&2
+    echo "Usage: $0 [mainnet|testnet|signet|regtest|regnet]" >&2
     exit 1
     ;;
 esac
@@ -25,6 +28,24 @@ NODE_DATA="${NODE_ROOT}/data/${NETWORK}"
 CONF_DIR="${NODE_DATA}"
 CONF_FILE="${CONF_DIR}/bitcoin.conf"
 mkdir -p "${CONF_DIR}"
+
+# Bitcoin Core stores chain-specific state (and the RPC cookie) under a
+# network subdirectory (e.g. regtest/, signet/, testnet3/).
+case "${NETWORK}" in
+  mainnet)
+    CHAIN_DIR="${NODE_DATA}"
+    ;;
+  testnet)
+    CHAIN_DIR="${NODE_DATA}/testnet3"
+    ;;
+  signet)
+    CHAIN_DIR="${NODE_DATA}/signet"
+    ;;
+  regtest)
+    CHAIN_DIR="${NODE_DATA}/regtest"
+    ;;
+esac
+COOKIE_PATH="${CHAIN_DIR}/.cookie"
 
 # Download a portable Bitcoin Core tarball into ./bitcoin-node if it is not
 # already present, and expose bitcoind under ./bitcoin-node/bin.
@@ -80,11 +101,15 @@ if [ -f "${CONF_FILE}" ]; then
   cp "${CONF_FILE}" "${backup}"
 fi
 
-RPC_USER="poolrpc"
-if command -v openssl >/dev/null 2>&1; then
-  RPC_PASS="$(openssl rand -hex 16)"
-else
-  RPC_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+AUTH_MODE="${BITCOIND_AUTH:-cookie}" # cookie (recommended) | userpass
+RPC_USER="${BITCOIND_RPC_USER:-poolrpc}"
+RPC_PASS="${BITCOIND_RPC_PASS:-}"
+if [ "${AUTH_MODE}" = "userpass" ] && [ -z "${RPC_PASS}" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    RPC_PASS="$(openssl rand -hex 16)"
+  else
+    RPC_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+  fi
 fi
 
 echo "Writing ${CONF_FILE} for ${NETWORK}..."
@@ -92,15 +117,31 @@ cat >"${CONF_FILE}" <<EOF
 server=1
 daemon=1
 
-rpcuser=${RPC_USER}
-rpcpassword=${RPC_PASS}
 rpcallowip=127.0.0.1
+rpcbind=127.0.0.1
 
 # ZMQ (miner-safe when bound to localhost). goPool requires rawblock; rawtx is optional (status metrics).
 zmqpubrawblock=tcp://127.0.0.1:28332
 zmqpubrawtx=tcp://127.0.0.1:28333
 
 EOF
+
+case "${AUTH_MODE}" in
+  cookie)
+    # Default (recommended): cookie-based auth (writes ${COOKIE_PATH} after first start).
+    ;;
+  userpass)
+    cat >>"${CONF_FILE}" <<EOF
+rpcuser=${RPC_USER}
+rpcpassword=${RPC_PASS}
+
+EOF
+    ;;
+  *)
+    echo "ERROR: Unknown BITCOIND_AUTH='${AUTH_MODE}' (expected 'cookie' or 'userpass')." >&2
+    exit 1
+    ;;
+esac
 
 case "${NETWORK}" in
   mainnet)
@@ -109,21 +150,18 @@ case "${NETWORK}" in
   testnet)
     cat >>"${CONF_FILE}" <<EOF
 [test]
-rpcbind=127.0.0.1
 rpcport=18332
 EOF
     ;;
   signet)
     cat >>"${CONF_FILE}" <<EOF
 [signet]
-rpcbind=127.0.0.1
 rpcport=38332
 EOF
     ;;
   regtest)
     cat >>"${CONF_FILE}" <<EOF
 [regtest]
-rpcbind=127.0.0.1
 rpcport=18443
 wallet=testwallet
 fallbackfee=0.0002
@@ -136,8 +174,12 @@ echo "Bitcoin Core installed and configured."
 echo "Node root: ${NODE_ROOT}"
 echo "Data dir:  ${NODE_DATA}"
 echo "Config:    ${CONF_FILE}"
-echo "RPC_USER=${RPC_USER}"
-echo "RPC_PASS=${RPC_PASS}"
+echo "Auth:      ${AUTH_MODE}"
+echo "Cookie:    ${COOKIE_PATH}"
+if [ "${AUTH_MODE}" = "userpass" ]; then
+  echo "RPC_USER=${RPC_USER}"
+  echo "RPC_PASS=${RPC_PASS}"
+fi
 
 case "${NETWORK}" in
   mainnet)
@@ -147,8 +189,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:8332\""
-    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
-    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
+    echo "  node.rpc_cookie_path = \"${COOKIE_PATH}\""
+    echo "  # If you used BITCOIND_AUTH=userpass, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   testnet)
     echo
@@ -157,8 +199,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:18332\""
-    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
-    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
+    echo "  node.rpc_cookie_path = \"${COOKIE_PATH}\""
+    echo "  # If you used BITCOIND_AUTH=userpass, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   signet)
     echo
@@ -167,8 +209,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config:"
     echo "  rpc_url:  \"http://127.0.0.1:38332\""
-    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
-    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
+    echo "  node.rpc_cookie_path = \"${COOKIE_PATH}\""
+    echo "  # If you used BITCOIND_AUTH=userpass, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
   regtest)
     echo
@@ -177,8 +219,8 @@ case "${NETWORK}" in
     echo
     echo "Example pool config (matches config.toml.example in this repo):"
     echo "  rpc_url:  \"http://127.0.0.1:18443\""
-    echo "  node.rpc_cookie_path = \"${NODE_DATA}/.cookie\""
-    echo "  # To use rpc_user/rpc_pass instead, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
+    echo "  node.rpc_cookie_path = \"${COOKIE_PATH}\""
+    echo "  # If you used BITCOIND_AUTH=userpass, set data/config/secrets.toml and launch goPool with -allow-rpc-credentials."
     ;;
 esac
 
@@ -198,8 +240,8 @@ case "${NETWORK}" in
     echo "  go run main.go -regtest -verbose"
     ;;
 esac
-echo "  # Ensure node.rpc_cookie_path in data/config/config.toml points to ${NODE_DATA}/.cookie."
-echo "  # If you prefer rpc_user/rpc_pass, fill data/config/secrets.toml and launch with -allow-rpc-credentials."
+echo "  # Ensure node.rpc_cookie_path in data/config/config.toml points to ${COOKIE_PATH}."
+echo "  # If you used BITCOIND_AUTH=userpass, fill data/config/secrets.toml and launch with -allow-rpc-credentials."
 echo
 echo "Remember to generate a payout address from the chosen network's wallet"
 echo "and set it as PAYOUT_ADDRESS / payout_address in the pool config."
