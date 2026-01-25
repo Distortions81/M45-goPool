@@ -10,3 +10,4 @@ scripts/bitcoin-node
 gopool-test
 *.test
 *.out
+bitcoin-node/
