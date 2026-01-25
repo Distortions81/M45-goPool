@@ -674,6 +674,7 @@ func main() {
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
 			}
+			disableTCPNagle(conn)
 			remote := conn.RemoteAddr().String()
 			if reconnectLimiter != nil {
 				host, _, errSplit := net.SplitHostPort(remote)
@@ -709,7 +710,6 @@ func main() {
 			}(mc)
 		}
 	}
-
 	// Plain Stratum listener runs in the main goroutine so process
 	// lifetime is tied to the primary TCP listener. Optional TLS
 	// listener runs in a background goroutine.
@@ -766,6 +766,34 @@ func main() {
 			logger.Error("sync error log", "error", err)
 		}
 	}
+}
+
+func disableTCPNagle(conn net.Conn) {
+	if tcp := findTCPConn(conn); tcp != nil {
+		_ = tcp.SetNoDelay(true)
+	}
+}
+
+func findTCPConn(conn net.Conn) *net.TCPConn {
+	type netConnGetter interface {
+		NetConn() net.Conn
+	}
+
+	for i := 0; i < 4 && conn != nil; i++ {
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			return tcpConn
+		}
+		getter, ok := conn.(netConnGetter)
+		if !ok {
+			return nil
+		}
+		next := getter.NetConn()
+		if next == nil || next == conn {
+			return nil
+		}
+		conn = next
+	}
+	return nil
 }
 
 func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides) (Config, error) {
