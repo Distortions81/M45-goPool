@@ -283,19 +283,10 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID interface{}, params s
 		return submissionTask{}, false
 	}
 
-	authorizedWorker := strings.TrimSpace(mc.currentWorker())
-	submitWorker := strings.TrimSpace(worker)
-	if authorizedWorker != "" && submitWorker != authorizedWorker {
-		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
-		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("worker_mismatch")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
-		return submissionTask{}, false
-	}
-
-	workerName := authorizedWorker
+	// Solo mode: trust the authorized worker identity for this connection and
+	// avoid per-submit worker-mismatch checks. If the connection worker is not
+	// known (shouldn't happen after authorize), fall back to the submit param.
+	workerName := mc.currentWorker()
 	if workerName == "" {
 		workerName = worker
 	}

@@ -122,7 +122,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	worker := ""
 	if len(req.Params) > 0 {
 		if w, ok := req.Params[0].(string); ok {
-			worker = w
+			worker = strings.TrimSpace(w)
 		}
 	}
 
