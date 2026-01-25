@@ -221,6 +221,7 @@ nano data/config/config.toml
 - Configure `branding.status_brand_name` and `branding.status_tagline` for UI customization
 - Set `mining.pool_fee_percent` (default 2.0%)
 - Keep `mining.solo_mode = true` (the default) to skip strict share validation for solo miners; set it to `false` if you need the extra policy checks used in multi-worker pools
+- Set `mining.low_latency_mode = true` to process `mining.submit` directly on the connection goroutine (bypassing the shared worker queue) when you want the absolute lowest submit latency; keep it `false` if you need the shared worker pool to limit concurrency.
 
 See [operations.md](operations.md) for detailed configuration options.
 

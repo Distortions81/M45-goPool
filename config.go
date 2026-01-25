@@ -241,6 +241,11 @@ type Config struct {
 	// When false, the pool enforces stricter policy, duplicate, and difficulty checks.
 	SoloMode bool
 
+	// LowLatencyMode bypasses the shared submission worker pool and processes
+	// mining.submit requests directly on the connection goroutine (or a short-
+	// lived goroutine) to minimize queueing delay.
+	LowLatencyMode bool
+
 	// BanInvalidSubmissionsAfter controls how many clearly invalid share
 	// submissions (bad extranonce/ntime/nonce/coinbase, etc.) are allowed
 	// within BanInvalidSubmissionsWindow before a worker is automatically
@@ -336,6 +341,7 @@ type EffectiveConfig struct {
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
 	SoloMode                          bool    `json:"solo_mode"`
+	LowLatencyMode                    bool    `json:"low_latency_mode"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
 	HashrateEMAMinShares              int     `json:"hashrate_ema_min_shares,omitempty"`
 	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
@@ -417,6 +423,7 @@ type miningConfig struct {
 	PoolTagPrefix             string   `toml:"pooltag_prefix" comment:"Optional custom prefix (a-z, 0-9 only). Prepends '<prefix>-' to the goPool coinbase tag."`
 	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes" comment:"Clamp coinbase message length (bytes) inside the scriptSig; useful to stay below policy limits."`
 	SoloMode                  *bool    `toml:"solo_mode" comment:"Skip extra policy/duplicate/low-difficulty share checks when true (default true)."`
+	LowLatencyMode            *bool    `toml:"low_latency_mode" comment:"Process mining.submit directly on the connection goroutine instead of the shared worker pool (default false)."`
 }
 
 type baseFileConfig struct {
@@ -575,6 +582,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			PoolTagPrefix:             cfg.PoolTagPrefix,
 			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
 			SoloMode:                  boolPtr(cfg.SoloMode),
+			LowLatencyMode:            boolPtr(cfg.LowLatencyMode),
 		},
 		Auth: authConfig{
 			ClerkIssuerURL:         cfg.ClerkIssuerURL,
@@ -899,6 +907,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Mining.SoloMode != nil {
 		cfg.SoloMode = *fc.Mining.SoloMode
+	}
+	if fc.Mining.LowLatencyMode != nil {
+		cfg.LowLatencyMode = *fc.Mining.LowLatencyMode
 	}
 	cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
 	if fc.Backblaze.Bucket != "" {
@@ -1361,6 +1372,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
 		SoloMode:                      cfg.SoloMode,
+		LowLatencyMode:                cfg.LowLatencyMode,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
 		HashrateEMAMinShares:          cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,

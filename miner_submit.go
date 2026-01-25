@@ -139,6 +139,10 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if !ok {
 		return
 	}
+	if mc.cfg.LowLatencyMode {
+		mc.processSubmissionTask(task)
+		return
+	}
 	ensureSubmissionWorkerPool()
 	submissionWorkers.submit(task)
 }
