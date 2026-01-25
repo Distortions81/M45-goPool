@@ -70,7 +70,7 @@ func main() {
 	}
 	cleanBansOnStartup := !*noCleanBansFlag
 
-	level := logLevelInfo
+	level := logLevelWarn
 	if verboseEnabled() {
 		level = logLevelInfo
 	}

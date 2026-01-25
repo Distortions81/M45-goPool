@@ -93,7 +93,7 @@
   # Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'.
   job_entropy = 4
 
-  # Process mining.submit directly on the connection goroutine instead of the shared worker pool (default false).
+  # Process mining.submit directly on the connection goroutine (bypassing the shared worker pool) when true (default false).
   direct_submit_processing = false
 
   # Wallet address where operator donations are sent when operator_donation_percent > 0.
