@@ -822,6 +822,34 @@ func (mc *MinerConn) handle() {
 		}
 		mc.recordActivity(now)
 
+		if method, id, ok := sniffStratumMethodID(line); ok {
+			switch method {
+			case "mining.ping":
+				mc.writePongResponse(id)
+				continue
+			case "mining.get_transactions":
+				mc.writeEmptySliceResponse(id)
+				continue
+			case "mining.capabilities":
+				mc.writeTrueResponse(id)
+				continue
+			case "mining.extranonce.subscribe":
+				mc.handleExtranonceSubscribe(&StratumRequest{ID: id})
+				continue
+			case "mining.subscribe":
+				if params, ok := sniffStratumStringParams(line, 1); ok {
+					req := buildStringRequest(id, method, params)
+					mc.handleSubscribe(&req)
+					continue
+				}
+			case "mining.authorize":
+				if params, ok := sniffStratumStringParams(line, 2); ok {
+					req := buildStringRequest(id, method, params)
+					mc.handleAuthorize(&req)
+					continue
+				}
+			}
+		}
 		var req StratumRequest
 		if err := fastJSONUnmarshal(line, &req); err != nil {
 			logger.Warn("json error from miner", "remote", mc.id, "error", err)
@@ -998,6 +1026,18 @@ func appendJSONValue(buf []byte, value interface{}) ([]byte, error) {
 			return buf, err
 		}
 		return append(buf, b...), nil
+	}
+}
+
+func buildStringRequest(id interface{}, method string, params []string) StratumRequest {
+	iface := make([]interface{}, len(params))
+	for i, p := range params {
+		iface[i] = p
+	}
+	return StratumRequest{
+		ID:     id,
+		Method: method,
+		Params: iface,
 	}
 }
 
