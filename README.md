@@ -220,6 +220,7 @@ nano data/config/config.toml
 - Set `server.status_public_url` to your pool's public URL for proper redirects
 - Configure `branding.status_brand_name` and `branding.status_tagline` for UI customization
 - Set `mining.pool_fee_percent` (default 2.0%)
+- Keep `mining.solo_mode = true` (the default) to skip strict share validation for solo miners; set it to `false` if you need the extra policy checks used in multi-worker pools
 
 See [operations.md](operations.md) for detailed configuration options.
 
