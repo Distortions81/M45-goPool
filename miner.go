@@ -866,6 +866,15 @@ func (mc *MinerConn) handle() {
 					mc.handleAuthorize(&req)
 					continue
 				}
+			case "mining.submit":
+				// Fast-path: most mining.submit payloads are small and string-only.
+				// Avoid full JSON unmarshal on the connection goroutine to reduce
+				// allocations and tail latency under load.
+				if params, ok := sniffStratumStringParams(line, 6); ok && (len(params) == 5 || len(params) == 6) {
+					req := buildStringRequest(id, method, params)
+					mc.handleSubmit(&req)
+					continue
+				}
 			}
 		}
 		var req StratumRequest

@@ -903,6 +903,11 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+
+	// Respond first; any vardiff adjustment and follow-up notify can happen after
+	// the submit is acknowledged to minimize perceived submit latency.
+	mc.writeTrueResponse(reqID)
+
 	if mc.maybeAdjustDifficulty(now) {
 		mc.sendNotifyFor(job, true)
 	}
@@ -927,7 +932,6 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 			"submit_rate_per_min", subRate,
 		)
 	}
-	mc.writeTrueResponse(reqID)
 }
 
 func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
@@ -952,6 +956,10 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 	shareHash := ctx.hashHex
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, nil, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+
+	// Respond first; vardiff adjustments and notifies can follow.
+	mc.writeTrueResponse(reqID)
+
 	if mc.maybeAdjustDifficulty(now) {
 		mc.sendNotifyFor(job, true)
 	}
@@ -976,7 +984,6 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 			"submit_rate_per_min", subRate,
 		)
 	}
-	mc.writeTrueResponse(reqID)
 }
 
 // handleBlockShare processes a share that satisfies the network target. It
