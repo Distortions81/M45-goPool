@@ -151,7 +151,7 @@
   # Canonical public URL used for redirects/session cookies; include scheme (http/https).
   status_public_url = ""
 
-  # Optional HTTPS address that serves the status UI with TLS (default :443).
+  # Optional HTTPS address that serves the status UI with TLS (default :443). Set to empty string to disable.
   status_tls_listen = ":443"
 
 [stratum]

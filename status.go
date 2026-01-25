@@ -41,6 +41,7 @@ const hashPerShare = float64(1 << 32)
 
 const overviewRefreshInterval = defaultRefreshInterval
 const poolHashrateTTL = 5 * time.Second
+const blocksRefreshInterval = 3 * time.Second
 
 // apiVersion is a short, human-readable version identifier included in all
 // JSON API responses so power users can detect schema changes.
@@ -991,4 +992,8 @@ type FoundBlockView struct {
 	PoolFeeSats      int64     `json:"pool_fee_sats,omitempty"`
 	WorkerPayoutSats int64     `json:"worker_payout_sats,omitempty"`
 	Confirmations    int64     `json:"confirmations,omitempty"`
+	// Result is derived from confirmations and indicates whether the block is
+	// merely a candidate ("possible"), a confirmed winner ("winning"), or a
+	// stale/orphan block ("stale").
+	Result string `json:"result,omitempty"`
 }

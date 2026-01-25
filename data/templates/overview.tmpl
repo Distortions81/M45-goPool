@@ -139,6 +139,7 @@
 							<th>Height</th>
 							<th>Hash</th>
 							<th>Miner</th>
+							<th>Result</th>
 							<th>Confirmations</th>
 							<th>Pool (sats)</th>
 							<th>Worker (sats)</th>
@@ -148,7 +149,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="8" class="text-sm">Loading found blocks…</td>
+							<td colspan="9" class="text-sm">Loading found blocks…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -196,6 +197,7 @@
 	<script>
 	(function() {
 		const REFRESH_INTERVAL = 10000; // 10 seconds
+		const BLOCKS_REFRESH_INTERVAL = 3000; // 3 seconds
 		const FIAT_CURRENCY = '{{.FiatCurrency}}';
 
 		function normalizeFiatCurrency(cur) {
@@ -340,18 +342,29 @@
 			const tbody = document.querySelector('#status-found-blocks-table tbody');
 			if (!tbody) return;
 			if (!blocks || blocks.length === 0) {
-				tbody.innerHTML = '<tr><td colspan="7" class="text-sm">No blocks found yet.</td></tr>';
+				tbody.innerHTML = '<tr><td colspan="9" class="text-sm">No blocks found yet.</td></tr>';
 				return;
 			}
 				const rows = blocks.map(block => {
 					const confirmations = (typeof block.confirmations === 'number' && block.confirmations > 0)
 						? block.confirmations
 						: '—';
+					const result = String(block.result || '').toLowerCase();
+					let resultLabel = 'Possible';
+					let resultStyle = 'color:#888;';
+					if (result === 'winning') {
+						resultLabel = 'Winning';
+						resultStyle = 'color:#4ade80;font-weight:600;';
+					} else if (result === 'stale') {
+						resultLabel = 'Stale';
+						resultStyle = 'color:#fca5a5;';
+					}
 					return `
 					<tr>
 						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
 						<td class="mono">${block.display_hash || block.hash || '—'}</td>
 						<td class="mono">${block.display_worker || block.worker || '—'}</td>
+						<td style="${resultStyle}">${resultLabel}</td>
 						<td class="mono">${confirmations}</td>
 						<td>${block.pool_fee_sats || 0}</td>
 						<td>${block.worker_payout_sats || 0}</td>
@@ -527,7 +540,6 @@
 			updateBTCPrice(newData);
 			renderWorkersTable(newData.workers);
 			renderBestSharesTable(newData.best_shares);
-			renderFoundBlocksTable(newData.found_blocks);
 			renderMinerTypesList(newData.miner_types);
 			renderBannedWorkersTable(newData.banned_workers);
 			updateRenderTime(newData.render_duration);
@@ -562,8 +574,24 @@
 				});
 		}
 
+		function fetchBlocksUpdate() {
+			fetch('/api/blocks?limit=10')
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					renderFoundBlocksTable(data);
+				})
+				.catch(error => {
+					console.error('Error fetching blocks update:', error);
+				});
+		}
+
 		fetchUpdate();
+		fetchBlocksUpdate();
 	setInterval(fetchUpdate, REFRESH_INTERVAL);
+	setInterval(fetchBlocksUpdate, BLOCKS_REFRESH_INTERVAL);
 	})();
 	</script>
 	<script>
