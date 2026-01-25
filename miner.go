@@ -464,6 +464,24 @@ func (mc *MinerConn) Close(reason string) {
 	mc.cleanup()
 }
 
+// workerWalletDataRef returns a validated worker wallet entry without copying
+// the stored script. The returned script must be treated as read-only.
+//
+// This exists to avoid per-share allocations in hot paths (coinbase/header
+// rebuild). For external/state snapshot callers, prefer workerWalletData.
+func (mc *MinerConn) workerWalletDataRef(worker string) (string, []byte, bool) {
+	if worker == "" {
+		return "", nil, false
+	}
+	mc.walletMu.Lock()
+	defer mc.walletMu.Unlock()
+	info, ok := mc.workerWallets[worker]
+	if !ok || !info.validated {
+		return "", nil, false
+	}
+	return info.address, info.script, true
+}
+
 // workerPayoutScript returns the cached payout script for a worker, if any.
 // This is populated during wallet validation and will be used in a future
 // dual-payout coinbase layout.
@@ -471,7 +489,7 @@ func (mc *MinerConn) workerPayoutScript(worker string) []byte {
 	if worker == "" {
 		return nil
 	}
-	_, script, ok := mc.workerWalletData(worker)
+	_, script, ok := mc.workerWalletDataRef(worker)
 	if !ok {
 		return nil
 	}
@@ -1182,6 +1200,22 @@ func (mc *MinerConn) snapshotStats() MinerStats {
 	mc.statsMu.Lock()
 	defer mc.statsMu.Unlock()
 	return mc.stats
+}
+
+func (mc *MinerConn) snapshotStatsWithRates(now time.Time) (stats MinerStats, acceptRatePerMin float64, submitRatePerMin float64) {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	stats = mc.stats
+	if stats.WindowStart.IsZero() {
+		return stats, 0, 0
+	}
+	window := now.Sub(stats.WindowStart)
+	if window <= 0 {
+		return stats, 0, 0
+	}
+	acceptRatePerMin = float64(stats.WindowAccepted) / window.Minutes()
+	submitRatePerMin = float64(stats.WindowSubmissions) / window.Minutes()
+	return stats, acceptRatePerMin, submitRatePerMin
 }
 
 type minerShareSnapshot struct {

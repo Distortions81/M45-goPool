@@ -508,19 +508,148 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
-	ctx, ok := mc.prepareShareContext(task)
-	if !ok {
+	if mc.cfg.SoloMode {
+		ctx, ok := mc.prepareShareContextSolo(task)
+		if !ok {
+			return
+		}
+		mc.processSoloShare(task, ctx)
 		return
 	}
-
-	if mc.cfg.SoloMode {
-		mc.processSoloShare(task, ctx)
+	ctx, ok := mc.prepareShareContextStrict(task)
+	if !ok {
 		return
 	}
 	mc.processRegularShare(task, ctx)
 }
 
-func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, bool) {
+func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext, bool) {
+	// Solo mode keeps this hot path minimal: build header, compute hash/diff, and
+	// detect block candidates. We intentionally skip strict verification and
+	// avoid returning large buffers not needed for stats/accounting.
+	job := task.job
+	workerName := task.workerName
+	jobID := task.jobID
+	ntime := task.ntime
+	nonce := task.nonce
+	useVersion := task.useVersion
+	scriptTime := task.scriptTime
+	en2 := task.extranonce2Bytes
+	reqID := task.reqID
+	now := task.receivedAt
+
+	if scriptTime == 0 {
+		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)
+	}
+
+	var (
+		header []byte
+		cbTxid []byte
+		err    error
+	)
+
+	// Rebuild coinbase+header. Dual/Triple payout paths are kept because they
+	// affect the coinbase txid (and thus merkle root and header hash).
+	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
+		var merkleRoot []byte
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			_, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				job.DonationScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.OperatorDonationPercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				scriptTime,
+			)
+		} else {
+			_, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+				job.Template.Height,
+				mc.extranonce1,
+				en2,
+				job.TemplateExtraNonce2Size,
+				poolScript,
+				workerScript,
+				totalValue,
+				feePercent,
+				job.witnessCommitScript,
+				job.coinbaseFlagsBytes,
+				job.CoinbaseMsg,
+				scriptTime,
+			)
+		}
+		if err == nil && len(cbTxid) == 32 {
+			merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
+			header, err = job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
+		}
+	}
+
+	if header == nil || err != nil || len(cbTxid) != 32 {
+		_, cbTxid, err = serializeCoinbaseTxPredecoded(
+			job.Template.Height,
+			mc.extranonce1,
+			en2,
+			job.TemplateExtraNonce2Size,
+			job.PayoutScript,
+			job.CoinbaseValue,
+			job.witnessCommitScript,
+			job.coinbaseFlagsBytes,
+			job.CoinbaseMsg,
+			scriptTime,
+		)
+		if err != nil || len(cbTxid) != 32 {
+			logger.Warn("submit coinbase rebuild failed", "remote", mc.id, "error", err)
+			mc.recordShare(workerName, false, 0, 0, rejectInvalidCoinbase.String(), "", nil, now)
+			mc.writeResponse(StratumResponse{
+				ID:     reqID,
+				Result: false,
+				Error:  newStratumError(20, "invalid coinbase"),
+			})
+			return shareContext{}, false
+		}
+		merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
+		header, err = job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
+		if err != nil {
+			logger.Error("submit header build error", "remote", mc.id, "error", err)
+			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
+			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
+				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+			} else {
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
+			}
+			return shareContext{}, false
+		}
+	}
+
+	headerHashArray := doubleSHA256Array(header)
+
+	var headerHashLE [32]byte
+	copy(headerHashLE[:], headerHashArray[:])
+	reverseBytes32(&headerHashLE)
+
+	hashNum := bigIntPool.Get().(*big.Int)
+	hashNum.SetBytes(headerHashLE[:])
+	isBlock := hashNum.Cmp(job.Target) <= 0
+	bigIntPool.Put(hashNum)
+
+	hashHex := hex.EncodeToString(headerHashLE[:])
+
+	return shareContext{
+		hashHex:   hashHex,
+		shareDiff: difficultyFromHash(headerHashArray[:]),
+		isBlock:   isBlock,
+	}, true
+}
+
+func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContext, bool) {
 	job := task.job
 	workerName := task.workerName
 	jobID := task.jobID
@@ -635,7 +764,10 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 	expectedMerkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 	if merkleRoot == nil || expectedMerkle == nil || !bytes.Equal(merkleRoot, expectedMerkle) {
 		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
-		detail := mc.buildShareDetailFromCoinbase(job, workerName, header, nil, nil, expectedMerkle, cbTx)
+		var detail *ShareDetail
+		if debugLogging || verboseLogging {
+			detail = mc.buildShareDetailFromCoinbase(job, workerName, header, nil, nil, expectedMerkle, cbTx)
+		}
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
 			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
@@ -657,19 +789,23 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 	isBlock := hashNum.Cmp(job.Target) <= 0
 	bigIntPool.Put(hashNum)
 
-	hashLE := make([]byte, len(headerHashLE))
-	copy(hashLE, headerHashLE[:])
-	hashHex := hex.EncodeToString(hashLE)
+	hashHex := hex.EncodeToString(headerHashLE[:])
 
-	return shareContext{
-		header:     header,
-		cbTx:       cbTx,
-		merkleRoot: append([]byte(nil), merkleRoot...),
-		hashLE:     hashLE,
-		hashHex:    hashHex,
-		shareDiff:  difficultyFromHash(headerHashArray[:]),
-		isBlock:    isBlock,
-	}, true
+	ctx := shareContext{
+		hashHex:   hashHex,
+		shareDiff: difficultyFromHash(headerHashArray[:]),
+		isBlock:   isBlock,
+	}
+	// Only keep large buffers when detail logging is enabled.
+	if debugLogging || verboseLogging {
+		hashLE := make([]byte, len(headerHashLE))
+		copy(hashLE, headerHashLE[:])
+		ctx.header = header
+		ctx.cbTx = cbTx
+		ctx.merkleRoot = append([]byte(nil), merkleRoot...)
+		ctx.hashLE = hashLE
+	}
+	return ctx, true
 }
 
 func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) {
@@ -729,7 +865,10 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 				"hash", ctx.hashHex,
 			)
 		}
-		detail := mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, nil, ctx.merkleRoot, ctx.cbTx)
+		var detail *ShareDetail
+		if debugLogging || verboseLogging {
+			detail = mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, nil, ctx.merkleRoot, ctx.cbTx)
+		}
 		acceptedForStats := false
 		mc.recordShare(workerName, acceptedForStats, 0, ctx.shareDiff, "lowDiff", ctx.hashHex, detail, now)
 
@@ -747,7 +886,10 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	shareHash := ctx.hashHex
-	detail := mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, job.Target, ctx.merkleRoot, ctx.cbTx)
+	var detail *ShareDetail
+	if debugLogging || verboseLogging {
+		detail = mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, job.Target, ctx.merkleRoot, ctx.cbTx)
+	}
 
 	if ctx.isBlock {
 		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
@@ -762,10 +904,16 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	if logger.Enabled(logLevelInfo) {
-		accRate, subRate := mc.shareRates(now)
-		stats := mc.snapshotStats()
+		stats, accRate, subRate := mc.snapshotStatsWithRates(now)
+		miner := stats.Worker
+		if miner == "" {
+			miner = workerName
+			if miner == "" {
+				miner = mc.id
+			}
+		}
 		logger.Info("share accepted",
-			"miner", mc.minerName(workerName),
+			"miner", miner,
 			"difficulty", ctx.shareDiff,
 			"hash", ctx.hashHex,
 			"accepted_total", stats.Accepted,
@@ -798,19 +946,23 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 	}
 
 	shareHash := ctx.hashHex
-	detail := mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, job.Target, ctx.merkleRoot, ctx.cbTx)
-
-	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
+	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, nil, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 	if mc.maybeAdjustDifficulty(now) {
 		mc.sendNotifyFor(job, true)
 	}
 
 	if logger.Enabled(logLevelInfo) {
-		accRate, subRate := mc.shareRates(now)
-		stats := mc.snapshotStats()
+		stats, accRate, subRate := mc.snapshotStatsWithRates(now)
+		miner := stats.Worker
+		if miner == "" {
+			miner = workerName
+			if miner == "" {
+				miner = mc.id
+			}
+		}
 		logger.Info("share accepted",
-			"miner", mc.minerName(workerName),
+			"miner", miner,
 			"difficulty", ctx.shareDiff,
 			"hash", ctx.hashHex,
 			"accepted_total", stats.Accepted,
