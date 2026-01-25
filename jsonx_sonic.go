@@ -4,10 +4,12 @@ package main
 
 import "github.com/bytedance/sonic"
 
+var fastJSON = sonic.ConfigDefault
+
 func fastJSONMarshal(v interface{}) ([]byte, error) {
-	return sonic.Marshal(v)
+	return fastJSON.Marshal(v)
 }
 
 func fastJSONUnmarshal(data []byte, v interface{}) error {
-	return sonic.Unmarshal(data, v)
+	return fastJSON.Unmarshal(data, v)
 }
