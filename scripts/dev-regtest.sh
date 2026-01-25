@@ -258,6 +258,6 @@ echo "  ${BITCOIN_CLI} -regtest -datadir=${NODE_DATA} stop"
 echo
 
 if [ "${HTTP_ONLY}" = "1" ]; then
-  exec "${REPO_ROOT}/goPool" -regtest -stdoutlog -https-only=false
+  exec "${REPO_ROOT}/goPool" -regtest -stdoutlog -http-only
 fi
 exec "${REPO_ROOT}/goPool" -regtest -stdoutlog

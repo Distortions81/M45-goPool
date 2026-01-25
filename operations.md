@@ -85,6 +85,7 @@ Configure advanced tuning in `data/config/tuning.toml`. See [data/config/example
 ### HTTPS Flags
 
 - `-https-only` (default `true`) - Enable HTTPS-first mode where HTTP serves only safe routes and redirects to HTTPS
+- `-http-only` (default `false`) - Serve status UI over plain HTTP only (disables HTTPS listener and redirects). Useful for local/dev.
 
 ## RPC Cookie Authentication
 

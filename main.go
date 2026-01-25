@@ -51,6 +51,7 @@ func main() {
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config file with effective settings on startup")
 	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
 	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
+	httpOnlyFlag := flag.Bool("http-only", false, "serve status UI over HTTP only (disables HTTPS listener and redirects)")
 	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
 	stdoutLogFlag := flag.Bool("stdoutlog", false, "mirror logs to stdout in addition to writing to files")
 	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
@@ -409,6 +410,14 @@ func main() {
 	httpsAddr := strings.TrimSpace(cfg.StatusTLSAddr)
 
 	httpsOnly := *httpsOnlyFlag
+	if *httpOnlyFlag {
+		httpsOnly = false
+		httpsAddr = ""
+		cfg.StatusTLSAddr = ""
+	}
+	if *httpOnlyFlag && *httpsOnlyFlag {
+		logger.Warn("both -http-only and -https-only were set; honoring -http-only")
+	}
 	// If HTTPS is explicitly disabled in the config (status_tls_listen=""),
 	// HTTPS-only mode cannot work. Fall back to HTTP-only so local/dev
 	// deployments still serve JSON endpoints and pages correctly.
