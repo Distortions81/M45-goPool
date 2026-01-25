@@ -93,6 +93,9 @@
   # Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'.
   job_entropy = 4
 
+  # Process mining.submit directly on the connection goroutine instead of the shared worker pool (default false).
+  low_latency_mode = false
+
   # Wallet address where operator donations are sent when operator_donation_percent > 0.
   operator_donation_address = ""
 
@@ -110,6 +113,9 @@
 
   # Optional custom prefix (a-z, 0-9 only). Prepends '<prefix>-' to the goPool coinbase tag.
   pooltag_prefix = ""
+
+  # Skip extra policy/duplicate/low-difficulty share checks when true (default true).
+  solo_mode = true
 
   # Extra placeholder for extranonce2 inside the template. Must be >= extranonce2_size.
   template_extra_nonce2_size = 8
