@@ -975,7 +975,6 @@ var (
 	cannedPongSuffix       = []byte(`,"result":"pong","error":null}`)
 	cannedEmptySliceSuffix = []byte(`,"result":[],"error":null}`)
 	cannedTrueSuffix       = []byte(`,"result":true,"error":null}`)
-	cannedRespBufPool      = sync.Pool{New: func() interface{} { return make([]byte, 0, 64) }}
 )
 
 func (mc *MinerConn) writePongResponse(id interface{}) {
@@ -997,23 +996,16 @@ func (mc *MinerConn) sendCannedResponse(label string, id interface{}, suffix []b
 }
 
 func (mc *MinerConn) writeCannedResponse(id interface{}, suffix []byte) error {
-	buf := cannedRespBufPool.Get().([]byte)
-	buf = buf[:0]
+	buf := make([]byte, 0, 64)
 	buf = append(buf, `{"id":`...)
 	var err error
 	buf, err = appendJSONValue(buf, id)
 	if err != nil {
-		cannedRespBufPool.Put(buf[:0])
 		return err
 	}
 	buf = append(buf, suffix...)
 	buf = append(buf, '\n')
-	err = mc.writeBytes(buf)
-	if cap(buf) > 256 {
-		buf = make([]byte, 0, 64)
-	}
-	cannedRespBufPool.Put(buf[:0])
-	return err
+	return mc.writeBytes(buf)
 }
 
 func appendJSONValue(buf []byte, value interface{}) ([]byte, error) {
