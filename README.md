@@ -157,6 +157,7 @@ Run `./goPool -h` to see all available command-line flags:
 | `-disable-json-endpoint` | Disable JSON status endpoints for debugging |
 | `-flood` | Enable flood-test mode (force min/max difficulty to 0.01) |
 | `-https-only` | Serve status UI over HTTPS only (auto-generating a self-signed cert if none is present) (default: true) |
+| `-http-only` | Serve status UI over HTTP only (disables HTTPS listener and redirects) |
 | `-mainnet` | Force mainnet defaults for RPC/ZMQ ports |
 | `-no-clean-bans` | Skip rewriting the ban list on startup (keep expired bans) |
 | `-no-zmq` | Disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW) |
@@ -279,6 +280,9 @@ Default ports in `config.toml`:
 **HTTPS-First Mode:**
 By default (`-https-only=true`), HTTP serves only a safe subset and redirects to HTTPS. Set `server.status_public_url` to your final public URL for proper redirects and session cookies.
 
+**HTTP-Only Mode (local/dev):**
+If you want plain HTTP with no redirects and no HTTPS listener, run with `-http-only` (or set `server.status_tls_listen = ""` and run with `-https-only=false`).
+
 ## Operation
 
 ### Running the Pool
@@ -297,6 +301,7 @@ By default (`-https-only=true`), HTTP serves only a safe subset and redirects to
 - `-allow-rpc-credentials` - Enable `rpc_user`/`rpc_pass` from secrets.toml
 - `-no-zmq` - Disable ZMQ, use RPC/longpoll only
 - `-https-only=false` - Disable HTTPS-first mode
+- `-http-only` - Force HTTP-only status UI mode
 
 ### Monitoring
 
