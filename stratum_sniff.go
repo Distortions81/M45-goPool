@@ -95,8 +95,10 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 			continue
 		case '"':
 			j := i + 1
+			hasEscape := false
 			for j < len(data) {
 				if data[j] == '\\' {
+					hasEscape = true
 					j += 2
 					continue
 				}
@@ -108,9 +110,15 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 			if j >= len(data) {
 				return nil, false
 			}
-			val, err := strconv.Unquote(string(data[i : j+1]))
-			if err != nil {
-				return nil, false
+			var val string
+			if !hasEscape {
+				val = string(data[i+1 : j])
+			} else {
+				decoded, err := strconv.Unquote(string(data[i : j+1]))
+				if err != nil {
+					return nil, false
+				}
+				val = decoded
 			}
 			params = append(params, val)
 			if len(params) >= limit {

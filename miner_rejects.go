@@ -479,7 +479,7 @@ func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 	return mc.lastJob.Template.Previous != job.Template.Previous || mc.lastJob.Template.Height != job.Template.Height
 }
 
-func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionHex string) bool {
+func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce string, version uint32) bool {
 	// Skip duplicate checking if disabled (default for solo pools)
 	if !mc.cfg.CheckDuplicateShares {
 		return false
@@ -497,7 +497,7 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce, versionH
 	}
 
 	var dk duplicateShareKey
-	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, versionHex)
+	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, version)
 
 	// Check active job cache first
 	cache := mc.shareCache[jobID]

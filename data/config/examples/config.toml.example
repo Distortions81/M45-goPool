@@ -87,14 +87,14 @@
   # Clamp coinbase message length (bytes) inside the scriptSig; useful to stay below policy limits.
   coinbase_scriptsig_max_bytes = 100
 
+  # Process mining.submit directly on the connection goroutine (bypassing the shared worker pool) when true (default false).
+  direct_submit_processing = false
+
   # Number of extranonce2 bytes miners receive; larger values allow more workers per connection.
   extranonce2_size = 4
 
   # Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'.
   job_entropy = 4
-
-  # Process mining.submit directly on the connection goroutine (bypassing the shared worker pool) when true (default false).
-  direct_submit_processing = false
 
   # Wallet address where operator donations are sent when operator_donation_percent > 0.
   operator_donation_address = ""

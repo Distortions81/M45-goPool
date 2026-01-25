@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 )
@@ -185,6 +186,43 @@ func (job *Job) buildBlockHeader(merkleRootBE []byte, ntimeHex string, nonceHex 
 	}
 
 	// Build header using precomputed prevHashBytes and bitsBytes.
+	copy(hdr[0:4], nonceBytes[:])
+	copy(hdr[4:8], job.bitsBytes[:])
+	copy(hdr[8:12], ntimeBytes[:])
+	copy(hdr[12:44], merkleReversed[:])
+	copy(hdr[44:76], job.prevHashBytes[:])
+	uver := uint32(version)
+	hdr[76] = byte(uver >> 24)
+	hdr[77] = byte(uver >> 16)
+	hdr[78] = byte(uver >> 8)
+	hdr[79] = byte(uver)
+
+	for i := 0; i < 40; i++ {
+		hdr[i], hdr[79-i] = hdr[79-i], hdr[i]
+	}
+
+	return hdr[:], nil
+}
+
+// buildBlockHeaderU32 is a faster variant of buildBlockHeader that avoids hex
+// decoding by taking already-parsed big-endian ntime/nonce values.
+func (job *Job) buildBlockHeaderU32(merkleRootBE []byte, ntime uint32, nonce uint32, version int32) ([]byte, error) {
+	if len(merkleRootBE) != 32 {
+		return nil, fmt.Errorf("merkle root must be 32 bytes")
+	}
+
+	var ntimeBytes [4]byte
+	var nonceBytes [4]byte
+	var hdr [80]byte
+	var merkleReversed [32]byte
+
+	binary.BigEndian.PutUint32(ntimeBytes[:], ntime)
+	binary.BigEndian.PutUint32(nonceBytes[:], nonce)
+
+	for i := 0; i < 32; i++ {
+		merkleReversed[i] = merkleRootBE[31-i]
+	}
+
 	copy(hdr[0:4], nonceBytes[:])
 	copy(hdr[4:8], job.bitsBytes[:])
 	copy(hdr[8:12], ntimeBytes[:])

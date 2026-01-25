@@ -66,7 +66,9 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 		extranonce2:      "00000000",
 		extranonce2Bytes: []byte{0, 0, 0, 0},
 		ntime:            ntimeHex,
+		ntimeVal:         0x6553f100,
 		nonce:            "00000000",
+		nonceVal:         0x00000000,
 		versionHex:       "00000001",
 		useVersion:       1,
 		scriptTime:       job.ScriptTime,
@@ -75,7 +77,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 
 	// Seed the duplicate cache with the exact share key. If duplicate detection
 	// were applied to winning blocks, this would cause an incorrect rejection.
-	if dup := mc.isDuplicateShare(jobID, task.extranonce2, task.ntime, task.nonce, task.versionHex); dup {
+	if dup := mc.isDuplicateShare(jobID, task.extranonce2, task.ntime, task.nonce, task.useVersion); dup {
 		t.Fatalf("unexpected duplicate when seeding cache")
 	}
 
@@ -186,6 +188,10 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 	if chosenNonce == "" {
 		t.Fatalf("failed to find nonce for notified vs fallback scriptTime")
 	}
+	chosenNonceVal, err := parseUint32BEHex(chosenNonce)
+	if err != nil {
+		t.Fatalf("parse chosen nonce: %v", err)
+	}
 
 	task := submissionTask{
 		mc:               mc,
@@ -196,7 +202,9 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		extranonce2:      "00000000",
 		extranonce2Bytes: ex2,
 		ntime:            ntimeHex,
+		ntimeVal:         0x6553f100,
 		nonce:            chosenNonce,
+		nonceVal:         chosenNonceVal,
 		versionHex:       "00000001",
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
@@ -237,7 +245,9 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		extranonce2:      "00000000",
 		extranonce2Bytes: []byte{0, 0, 0, 0},
 		ntime:            "6553f100",
+		ntimeVal:         0x6553f100,
 		nonce:            "00000000",
+		nonceVal:         0x00000000,
 		versionHex:       "00000001",
 		useVersion:       1,
 		scriptTime:       job.ScriptTime + 1,

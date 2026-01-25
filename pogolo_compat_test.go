@@ -318,7 +318,7 @@ func TestShareValidationFlow(t *testing.T) {
 
 		// Create a share key
 		var key1 duplicateShareKey
-		makeDuplicateShareKey(&key1, "abcd1234", "5f5e100", "12345678", "20000000")
+		makeDuplicateShareKey(&key1, "abcd1234", "5f5e100", "12345678", 0x20000000)
 
 		// First submission should be new
 		if ring.seenOrAdd(key1) {
@@ -332,14 +332,14 @@ func TestShareValidationFlow(t *testing.T) {
 
 		// Different extranonce2 should be new
 		var key2 duplicateShareKey
-		makeDuplicateShareKey(&key2, "ffff1234", "5f5e100", "12345678", "20000000")
+		makeDuplicateShareKey(&key2, "ffff1234", "5f5e100", "12345678", 0x20000000)
 		if ring.seenOrAdd(key2) {
 			t.Error("share with different extranonce2 should not be marked as duplicate")
 		}
 
 		// Different nonce should be new
 		var key3 duplicateShareKey
-		makeDuplicateShareKey(&key3, "abcd1234", "5f5e100", "87654321", "20000000")
+		makeDuplicateShareKey(&key3, "abcd1234", "5f5e100", "87654321", 0x20000000)
 		if ring.seenOrAdd(key3) {
 			t.Error("share with different nonce should not be marked as duplicate")
 		}

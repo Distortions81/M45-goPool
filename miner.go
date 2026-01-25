@@ -19,14 +19,6 @@ import (
 	"time"
 )
 
-var (
-	bigIntPool = sync.Pool{
-		New: func() interface{} {
-			return new(big.Int)
-		},
-	}
-)
-
 // Helper functions for atomic float64 operations (stored as uint64 bits)
 func atomicLoadFloat64(addr *atomic.Uint64) float64 {
 	return math.Float64frombits(addr.Load())
@@ -131,11 +123,18 @@ type evictedCacheEntry struct {
 	evictedAt time.Time
 }
 
-func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, versionHex string) {
+func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce string, version uint32) {
 	*dst = duplicateShareKey{}
 	write := func(s string) {
 		for i := 0; i < len(s) && int(dst.n) < maxDuplicateShareKeyBytes; i++ {
 			dst.buf[dst.n] = s[i]
+			dst.n++
+		}
+	}
+	writeUint32Hex := func(v uint32) {
+		const hexChars = "0123456789abcdef"
+		for shift := 28; shift >= 0 && int(dst.n) < maxDuplicateShareKeyBytes; shift -= 4 {
+			dst.buf[dst.n] = hexChars[int((v>>uint(shift))&0xF)]
 			dst.n++
 		}
 	}
@@ -161,7 +160,7 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce, ve
 		dst.n++
 	}
 	if dst.n < maxDuplicateShareKeyBytes {
-		write(versionHex)
+		writeUint32Hex(version)
 	}
 }
 
@@ -871,8 +870,7 @@ func (mc *MinerConn) handle() {
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
 				// allocations and tail latency under load.
 				if params, ok := sniffStratumStringParams(line, 6); ok && (len(params) == 5 || len(params) == 6) {
-					req := buildStringRequest(id, method, params)
-					mc.handleSubmit(&req)
+					mc.handleSubmitStringParams(id, params)
 					continue
 				}
 			}
@@ -977,6 +975,7 @@ var (
 	cannedPongSuffix       = []byte(`,"result":"pong","error":null}`)
 	cannedEmptySliceSuffix = []byte(`,"result":[],"error":null}`)
 	cannedTrueSuffix       = []byte(`,"result":true,"error":null}`)
+	cannedRespBufPool      = sync.Pool{New: func() interface{} { return make([]byte, 0, 64) }}
 )
 
 func (mc *MinerConn) writePongResponse(id interface{}) {
@@ -998,16 +997,23 @@ func (mc *MinerConn) sendCannedResponse(label string, id interface{}, suffix []b
 }
 
 func (mc *MinerConn) writeCannedResponse(id interface{}, suffix []byte) error {
-	buf := make([]byte, 0, 64)
+	buf := cannedRespBufPool.Get().([]byte)
+	buf = buf[:0]
 	buf = append(buf, `{"id":`...)
 	var err error
 	buf, err = appendJSONValue(buf, id)
 	if err != nil {
+		cannedRespBufPool.Put(buf[:0])
 		return err
 	}
 	buf = append(buf, suffix...)
 	buf = append(buf, '\n')
-	return mc.writeBytes(buf)
+	err = mc.writeBytes(buf)
+	if cap(buf) > 256 {
+		buf = make([]byte, 0, 64)
+	}
+	cannedRespBufPool.Put(buf[:0])
+	return err
 }
 
 func appendJSONValue(buf []byte, value interface{}) ([]byte, error) {

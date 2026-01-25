@@ -51,6 +51,7 @@ type Job struct {
 	JobID                   string
 	Template                GetBlockTemplateResult
 	Target                  *big.Int
+	targetBE                [32]byte
 	CreatedAt               time.Time
 	Clean                   bool
 	Extranonce2Size         int
@@ -668,6 +669,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		JobID:                   fmt.Sprintf("%d", time.Now().UnixNano()),
 		Template:                tpl,
 		Target:                  target,
+		targetBE:                uint256BEFromBigInt(target),
 		CreatedAt:               time.Now(),
 		ScriptTime:              scriptTime,
 		Extranonce2Size:         jm.cfg.Extranonce2Size,

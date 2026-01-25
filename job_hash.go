@@ -60,6 +60,20 @@ func targetFromDifficulty(diff float64) *big.Int {
 	return tgt
 }
 
+func uint256BEFromBigInt(n *big.Int) [32]byte {
+	var out [32]byte
+	if n == nil {
+		return out
+	}
+	b := n.Bytes() // big-endian
+	if len(b) > 32 {
+		// Target values should always fit in 256 bits; clamp defensively.
+		b = b[len(b)-32:]
+	}
+	copy(out[32-len(b):], b)
+	return out
+}
+
 // difficultyFromHash converts the block hash to a difficulty value relative to diff=1.
 // The hash parameter should be big-endian bytes from SHA256.
 //
