@@ -86,13 +86,6 @@ const (
 
 var errStaleTemplate = errors.New("stale template")
 
-// blockBufferPool reuses buffers for raw block assembly.
-var blockBufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
-
 type JobFeedPayloadStatus struct {
 	LastRawBlockAt    time.Time
 	LastRawBlockBytes int

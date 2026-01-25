@@ -1071,10 +1071,8 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Render into a buffer so we can cache the HTML on success without
 	// risking partial writes on template errors.
-	buf := templateBufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer templateBufferPool.Put(buf)
-	if err := s.tmpl.ExecuteTemplate(buf, "worker_status", data); err != nil {
+	var buf bytes.Buffer
+	if err := s.tmpl.ExecuteTemplate(&buf, "worker_status", data); err != nil {
 		logger.Error("worker status template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Worker page error",

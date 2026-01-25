@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"html/template"
@@ -46,12 +45,6 @@ const poolHashrateTTL = 5 * time.Second
 // apiVersion is a short, human-readable version identifier included in all
 // JSON API responses so power users can detect schema changes.
 const apiVersion = "1"
-
-var templateBufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
 
 type workerLookupRateLimiter struct {
 	mu      sync.Mutex
@@ -489,8 +482,8 @@ type WorkerStatusData struct {
 type WorkerWalletSearchData struct {
 	StatusData
 	QueriedWalletHash string
-	Results       []WorkerView
-	Error         string
+	Results           []WorkerView
+	Error             string
 }
 
 type SignInPageData struct {

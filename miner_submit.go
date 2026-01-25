@@ -1165,12 +1165,10 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 			merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
 			header, err := job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
 			if err == nil {
-				buf := blockBufferPool.Get().(*bytes.Buffer)
-				buf.Reset()
-				defer blockBufferPool.Put(buf)
+				var buf bytes.Buffer
 
 				buf.Write(header)
-				writeVarInt(buf, uint64(1+len(job.Transactions)))
+				writeVarInt(&buf, uint64(1+len(job.Transactions)))
 				buf.Write(cbTx)
 				for _, tx := range job.Transactions {
 					raw, derr := hex.DecodeString(tx.Data)

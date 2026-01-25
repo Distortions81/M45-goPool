@@ -264,12 +264,10 @@ func buildBlockWithScriptTime(job *Job, extranonce1 []byte, extranonce2 []byte, 
 		return "", nil, nil, nil, err
 	}
 
-	buf := blockBufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer blockBufferPool.Put(buf)
+	var buf bytes.Buffer
 
 	buf.Write(header)
-	writeVarInt(buf, uint64(1+len(job.Transactions)))
+	writeVarInt(&buf, uint64(1+len(job.Transactions)))
 	buf.Write(coinbaseTx)
 
 	for _, tx := range job.Transactions {
