@@ -117,8 +117,12 @@ cat >"${CONF_FILE}" <<EOF
 server=1
 daemon=1
 
+# Development-friendly RPC tuning: goPool can burst RPC calls (template refresh,
+# longpoll, submitblock racing). Defaults are small; increase to avoid local 503s.
+rpcthreads=16
+rpcworkqueue=256
+
 rpcallowip=127.0.0.1
-rpcbind=127.0.0.1
 
 # ZMQ (miner-safe when bound to localhost). goPool requires rawblock; rawtx is optional (status metrics).
 zmqpubrawblock=tcp://127.0.0.1:28332
@@ -146,22 +150,28 @@ esac
 case "${NETWORK}" in
   mainnet)
     # Mainnet uses default ports: 8332 (RPC), 8333 (P2P).
+    cat >>"${CONF_FILE}" <<EOF
+rpcbind=127.0.0.1
+EOF
     ;;
   testnet)
     cat >>"${CONF_FILE}" <<EOF
 [test]
+rpcbind=127.0.0.1
 rpcport=18332
 EOF
     ;;
   signet)
     cat >>"${CONF_FILE}" <<EOF
 [signet]
+rpcbind=127.0.0.1
 rpcport=38332
 EOF
     ;;
   regtest)
     cat >>"${CONF_FILE}" <<EOF
 [regtest]
+rpcbind=127.0.0.1
 rpcport=18443
 wallet=testwallet
 fallbackfee=0.0002

@@ -405,9 +405,21 @@ func main() {
 	}
 	// Prepare shared TLS certificate paths for both HTTPS status UI and
 	// optional Stratum TLS. A self-signed cert is generated on demand.
+	httpAddr := strings.TrimSpace(cfg.StatusAddr)
+	httpsAddr := strings.TrimSpace(cfg.StatusTLSAddr)
+
+	httpsOnly := *httpsOnlyFlag
+	// If HTTPS is explicitly disabled in the config (status_tls_listen=""),
+	// HTTPS-only mode cannot work. Fall back to HTTP-only so local/dev
+	// deployments still serve JSON endpoints and pages correctly.
+	if httpsOnly && httpsAddr == "" {
+		httpsOnly = false
+		logger.Warn("https-only requested but status_tls_listen is empty; running HTTP-only status server", "hint", "set server.status_tls_listen or pass -https-only=false")
+	}
+
 	var certPath, keyPath string
 	var certReloader *certReloader
-	needStatusTLS := strings.TrimSpace(cfg.StatusTLSAddr) != "" || *httpsOnlyFlag
+	needStatusTLS := httpsAddr != ""
 	if needStatusTLS || strings.TrimSpace(cfg.StratumTLSListen) != "" {
 		certPath = filepath.Join(cfg.DataDir, "tls_cert.pem")
 		keyPath = filepath.Join(cfg.DataDir, "tls_key.pem")
@@ -425,13 +437,10 @@ func main() {
 		logger.Info("tls certificate auto-reload enabled", "check_interval", "1h")
 	}
 
-	httpAddr := strings.TrimSpace(cfg.StatusAddr)
-	httpsAddr := strings.TrimSpace(cfg.StatusTLSAddr)
-
 	var statusHTTPServer *http.Server
 	var statusHTTPSServer *http.Server
 
-	if *httpsOnlyFlag {
+	if httpsOnly {
 		// In HTTPS-only mode, ensure we have some TLS address. If
 		// none was configured, reuse the HTTP status address.
 		if httpsAddr == "" {
@@ -485,7 +494,9 @@ func main() {
 					targetHost = net.JoinHostPort(host, tlsPort)
 				}
 				target := "https://" + targetHost + r.URL.RequestURI()
-				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				// Use a temporary redirect so browsers don't cache it forever;
+				// local/dev setups often change ports/domains.
+				http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 			})
 			statusHTTPServer = &http.Server{
 				Addr:    httpAddr,

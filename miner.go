@@ -312,6 +312,9 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 		// rpcCallTimeout bounds each individual RPC call so a hung bitcoind
 		// doesn't block the retry loop indefinitely.
 		rpcCallTimeout = 5 * time.Second
+		// confirmTimeout bounds getblockheader checks used to detect cases where
+		// submitblock may have succeeded but the RPC response timed out.
+		confirmTimeout = 2 * time.Second
 		// maxRetryWindow is a final safety cap; in practice we expect to
 		// stop much sooner when a new block is seen. Using a full block
 		// interval keeps us racing hard for rare finds.
@@ -321,6 +324,24 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 	start := time.Now()
 	attempt := 0
 	var lastErr error
+
+	blockAccepted := func() bool {
+		if mc.rpc == nil || hashHex == "" {
+			return false
+		}
+		// If bitcoind is overloaded, it's possible for submitblock to
+		// succeed server-side while our client-side context times out.
+		// Confirm by checking whether the block hash is now known.
+		var header struct {
+			Confirmations int64 `json:"confirmations"`
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), confirmTimeout)
+		err := mc.rpc.callCtx(ctx, "getblockheader", []interface{}{hashHex, true}, &header)
+		cancel()
+		// Only treat as success when the block is in the best chain.
+		// (Orphaned blocks can still be "known" but will have confirmations=-1.)
+		return err == nil && header.Confirmations >= 1
+	}
 
 	for {
 		attempt++
@@ -342,6 +363,18 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 			return nil
 		}
 		lastErr = err
+
+		// If submitblock timed out client-side, check whether the block was
+		// accepted anyway. This commonly happens when bitcoind's RPC work
+		// queue is saturated.
+		if errors.Is(err, context.DeadlineExceeded) && blockAccepted() {
+			logger.Warn("submitblock timed out but block is in chain; treating as success",
+				"attempts", attempt,
+				"worker", mc.minerName(workerName),
+				"hash", hashHex,
+			)
+			return nil
+		}
 
 		// Log the first failure loudly; subsequent failures are summarized
 		// when we eventually give up.

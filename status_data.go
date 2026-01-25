@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"runtime"
 	"sort"
 	"strings"
@@ -292,16 +293,64 @@ func (s *StatusServer) buildStatusData() StatusData {
 		bestHash = info.bestHash
 	}
 	if len(foundBlocks) > 0 && nodeBlocks > 0 {
+		type blockHeader struct {
+			Confirmations int64 `json:"confirmations"`
+			Height        int64 `json:"height"`
+		}
+		const winningConfirmations = 6
 		for i := range foundBlocks {
 			height := foundBlocks[i].Height
+			hash := strings.TrimSpace(foundBlocks[i].Hash)
 			if height <= 0 {
 				continue
 			}
+
+			// Prefer confirmations from bitcoind so stale/orphaned blocks don't
+			// incorrectly show as confirmed simply because they share a height.
+			if s.rpc != nil && hash != "" {
+				var hdr blockHeader
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				err := s.rpc.callCtx(ctx, "getblockheader", []interface{}{hash, true}, &hdr)
+				cancel()
+				if err == nil {
+					// Normalize orphan/stale confirmations (-1) to 0 for display.
+					switch {
+					case hdr.Confirmations < 0:
+						foundBlocks[i].Confirmations = 0
+						foundBlocks[i].Result = "stale"
+					case hdr.Confirmations >= winningConfirmations:
+						foundBlocks[i].Confirmations = hdr.Confirmations
+						foundBlocks[i].Result = "winning"
+					case hdr.Confirmations >= 1:
+						foundBlocks[i].Confirmations = hdr.Confirmations
+						foundBlocks[i].Result = "possible"
+					default:
+						foundBlocks[i].Confirmations = 0
+						foundBlocks[i].Result = "possible"
+					}
+					// If the header reports a different height (reorg edge cases),
+					// trust the node.
+					if hdr.Height > 0 {
+						foundBlocks[i].Height = hdr.Height
+					}
+					continue
+				}
+			}
+
+			// Fallback (best-effort): infer confirmations from current tip height.
 			confirms := nodeBlocks - height + 1
 			if confirms < 1 {
 				confirms = 0
 			}
 			foundBlocks[i].Confirmations = confirms
+			switch {
+			case confirms >= winningConfirmations:
+				foundBlocks[i].Result = "winning"
+			case confirms >= 1:
+				foundBlocks[i].Result = "possible"
+			default:
+				foundBlocks[i].Result = "possible"
+			}
 		}
 	}
 	if s.accounting != nil {

@@ -359,7 +359,9 @@ type EffectiveConfig struct {
 type serverConfig struct {
 	PoolListen      string `toml:"pool_listen" comment:"TCP address for the plain stratum listener (default :3333)."`
 	StatusListen    string `toml:"status_listen" comment:"HTTP address for the status UI (default :80)."`
-	StatusTLSListen string `toml:"status_tls_listen" comment:"Optional HTTPS address that serves the status UI with TLS (default :443)."`
+	// Pointer so config can explicitly disable TLS by setting an empty string.
+	// When omitted, goPool retains the built-in default.
+	StatusTLSListen *string `toml:"status_tls_listen" comment:"Optional HTTPS address that serves the status UI with TLS (default :443). Set to empty string to disable."`
 	StatusPublicURL string `toml:"status_public_url" comment:"Canonical public URL used for redirects/session cookies; include scheme (http/https)."`
 }
 
@@ -541,7 +543,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		Server: serverConfig{
 			PoolListen:      cfg.ListenAddr,
 			StatusListen:    cfg.StatusAddr,
-			StatusTLSListen: cfg.StatusTLSAddr,
+			StatusTLSListen: &cfg.StatusTLSAddr,
 			StatusPublicURL: cfg.StatusPublicURL,
 		},
 		Branding: brandingConfig{
@@ -782,8 +784,8 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Server.StatusListen != "" {
 		cfg.StatusAddr = fc.Server.StatusListen
 	}
-	if fc.Server.StatusTLSListen != "" {
-		cfg.StatusTLSAddr = fc.Server.StatusTLSListen
+	if fc.Server.StatusTLSListen != nil {
+		cfg.StatusTLSAddr = *fc.Server.StatusTLSListen
 	}
 	if fc.Server.StatusPublicURL != "" {
 		cfg.StatusPublicURL = strings.TrimSpace(fc.Server.StatusPublicURL)

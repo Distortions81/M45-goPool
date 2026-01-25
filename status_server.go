@@ -311,7 +311,7 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 	}
 
 	key := fmt.Sprintf("blocks_%d", limit)
-	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
+	s.serveCachedJSON(w, key, blocksRefreshInterval, func() ([]byte, error) {
 		view := s.statusDataView()
 		blocks := view.FoundBlocks
 		if len(blocks) > limit {
