@@ -450,6 +450,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if bt == "" {
 		bt = "(dev build)"
 	}
+	bv := strings.TrimSpace(buildVersion)
+	if bv == "" {
+		bv = "(dev)"
+	}
 
 	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
@@ -532,6 +536,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		GenesisMatch:                   genesisMatch,
 		BestBlockHash:                  bestHash,
 		PoolSoftware:                   poolSoftwareName,
+		BuildVersion:                   bv,
 		BuildTime:                      bt,
 		ActiveMiners:                   activeMiners,
 		ActiveTLSMiners:                activeTLSMiners,
@@ -612,6 +617,10 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	if bt == "" {
 		bt = "(dev build)"
 	}
+	bv := strings.TrimSpace(buildVersion)
+	if bv == "" {
+		bv = "(dev)"
+	}
 
 	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
@@ -673,6 +682,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		DisplayOperatorDonationAddress: displayDonation,
 		DisplayCoinbaseMessage:         displayCoinbase,
 		PoolSoftware:                   poolSoftwareName,
+		BuildVersion:                   bv,
 		BuildTime:                      bt,
 		MaxConns:                       s.Config().MaxConns,
 		MaxAcceptsPerSecond:            s.Config().MaxAcceptsPerSecond,
