@@ -50,6 +50,7 @@ type PoolStatsData struct {
 	ListenAddr              string            `json:"listen_addr"`
 	StratumTLSListen        string            `json:"stratum_tls_listen,omitempty"`
 	PoolSoftware            string            `json:"pool_software"`
+	BuildVersion            string            `json:"build_version,omitempty"`
 	BuildTime               string            `json:"build_time"`
 	Uptime                  time.Duration     `json:"uptime"`
 	ActiveMiners            int               `json:"active_miners"`
@@ -173,6 +174,7 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			ListenAddr:              view.ListenAddr,
 			StratumTLSListen:        view.StratumTLSListen,
 			PoolSoftware:            view.PoolSoftware,
+			BuildVersion:            view.BuildVersion,
 			BuildTime:               view.BuildTime,
 			Uptime:                  view.Uptime,
 			ActiveMiners:            view.ActiveMiners,

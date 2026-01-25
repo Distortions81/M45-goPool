@@ -46,7 +46,9 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: |
-          go build -o goPool -trimpath -ldflags="-s -w" .
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BUILD_VERSION="${{ steps.version.outputs.version }}"
+          go build -o goPool -trimpath -ldflags="-s -w -X main.buildTime=${BUILD_TIME} -X main.buildVersion=${BUILD_VERSION}" .
           ls -lh goPool
 
       - name: Prepare release package

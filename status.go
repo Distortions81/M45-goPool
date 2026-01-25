@@ -149,6 +149,11 @@ func remoteHostFromRequest(r *http.Request) string {
 //	go build -ldflags="-X main.buildTime=2025-01-02T15:04:05Z"
 var buildTime = ""
 
+// buildVersion can be overridden at build time with:
+//
+//	go build -ldflags="-X main.buildVersion=v1.2.3"
+var buildVersion = ""
+
 var knownGenesis = map[string]string{
 	"mainnet": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
 	"regtest": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
@@ -644,6 +649,7 @@ type StatusData struct {
 	GenesisMatch                    bool                  `json:"genesis_match"`
 	BestBlockHash                   string                `json:"best_block_hash,omitempty"`
 	PoolSoftware                    string                `json:"pool_software"`
+	BuildVersion                    string                `json:"build_version,omitempty"`
 	BuildTime                       string                `json:"build_time"`
 	RenderDuration                  time.Duration         `json:"render_duration"`
 	PageCached                      bool                  `json:"page_cached"`
