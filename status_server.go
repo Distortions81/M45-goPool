@@ -747,7 +747,7 @@ func (s *StatusServer) allowAdminLoginAttempt() bool {
 	if !s.adminLoginNext.IsZero() && now.Before(s.adminLoginNext) {
 		return false
 	}
-	s.adminLoginNext = now.Add(time.Second)
+	s.adminLoginNext = now.Add(100 * time.Millisecond)
 	return true
 }
 
