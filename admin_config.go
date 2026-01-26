@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,18 +16,19 @@ import (
 
 const (
 	defaultAdminSessionExpirationSeconds = 900
+	minAdminPasswordLen                  = 16
 )
 
 var adminConfigTemplate = `# Administrative control panel (hidden by default).
 # This file is auto-generated when goPool starts if it is missing.
 # - Set enabled = true and change the credentials before opening /admin.
-# - The admin UI can edit config.toml, rewrite the active config, and request a reboot.
+# - The admin UI edits live (in-memory) settings and can request a reboot.
 # - Major actions such as rebooting require re-entering the password and typing REBOOT.
 # Keep this file off version control and serve the UI only on trusted networks.
-enabled = false
-username = "admin"
-password = "%s"
-session_expiration_seconds = 900
+enabled = %t
+username = %s
+password = %s
+session_expiration_seconds = %d
 `
 
 type adminFileConfig struct {
@@ -41,6 +43,21 @@ func (cfg adminFileConfig) sessionDuration() time.Duration {
 		return time.Duration(defaultAdminSessionExpirationSeconds) * time.Second
 	}
 	return time.Duration(cfg.SessionExpirationSeconds) * time.Second
+}
+
+func renderAdminConfig(cfg adminFileConfig) string {
+	username := strings.TrimSpace(cfg.Username)
+	if username == "" {
+		username = "admin"
+	}
+	password := strings.TrimSpace(cfg.Password)
+	return fmt.Sprintf(
+		adminConfigTemplate,
+		cfg.Enabled,
+		strconv.Quote(username),
+		strconv.Quote(password),
+		cfg.SessionExpirationSeconds,
+	)
 }
 
 func ensureAdminConfigFile(dataDir string) (string, error) {
@@ -58,12 +75,34 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("generate admin password: %w", err)
 		}
-		if err := os.WriteFile(adminPath, []byte(fmt.Sprintf(adminConfigTemplate, password)), 0o644); err != nil {
+		cfg := adminFileConfig{
+			Enabled:                  false,
+			Username:                 "admin",
+			Password:                 password,
+			SessionExpirationSeconds: defaultAdminSessionExpirationSeconds,
+		}
+		if err := os.WriteFile(adminPath, []byte(renderAdminConfig(cfg)), 0o644); err != nil {
 			return "", fmt.Errorf("write %s: %w", adminPath, err)
 		}
 		logger.Info("generated admin config template (disabled)", "path", adminPath)
 	} else if err != nil {
 		return "", fmt.Errorf("stat %s: %w", adminPath, err)
+	} else {
+		cfg, err := loadAdminConfigFile(adminPath)
+		if err != nil {
+			return "", err
+		}
+		if len(cfg.Password) < minAdminPasswordLen {
+			password, err := generateAdminPassword()
+			if err != nil {
+				return "", fmt.Errorf("generate admin password: %w", err)
+			}
+			cfg.Password = password
+			if err := atomicWriteFile(adminPath, []byte(renderAdminConfig(cfg))); err != nil {
+				return "", fmt.Errorf("rewrite %s: %w", adminPath, err)
+			}
+			logger.Warn("admin password was missing/weak; generated a new one", "path", adminPath)
+		}
 	}
 
 	return adminPath, nil
