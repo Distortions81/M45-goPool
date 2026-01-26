@@ -31,108 +31,63 @@ rpc_pass = "password"
 `)
 
 type Config struct {
-	ListenAddr        string // e.g. ":3333"
-	StatusAddr        string // HTTP status listen address, e.g. ":80"
-	StatusTLSAddr     string // HTTPS status listen address, e.g. ":443"
-	StatusBrandName   string
-	StatusBrandDomain string
-	// StatusPublicURL is the canonical HTTP(S) URL used for redirects and session cookies.
-	StatusPublicURL string
-	StatusTagline   string
-	// StatusConnectMinerTitleExtra is optional extra text appended to the
-	// "Connect your miner" header on the overview page.
-	StatusConnectMinerTitleExtra string
-	// StatusConnectMinerTitleExtraURL optionally turns the extra text into
-	// a hyperlink when set.
+	// Server addresses.
+	ListenAddr    string
+	StatusAddr    string
+	StatusTLSAddr string
+
+	// Branding.
+	StatusBrandName                 string
+	StatusBrandDomain               string
+	StatusPublicURL                 string // canonical URL for redirects/cookies
+	StatusTagline                   string
+	StatusConnectMinerTitleExtra    string
 	StatusConnectMinerTitleExtraURL string
-	// FiatCurrency controls which fiat currency (e.g. "usd") is used
-	// when displaying approximate BTC prices on the status UI. It is
-	// only used for display and never affects payouts or accounting.
-	FiatCurrency string
-	// PoolDonationAddress is an optional wallet where users can donate TO
-	// the pool operator. It is shown in the UI footer and never used for payouts.
-	PoolDonationAddress string
-	// DiscordURL is an optional Discord invite link shown in the header.
-	DiscordURL string
-	// DiscordServerID is the Discord server/guild ID used for optional
-	// Discord notifications features.
-	DiscordServerID string
-	// DiscordNotifyChannelID is the Discord channel where offline alerts are posted.
-	DiscordNotifyChannelID string
-	// DiscordBotToken is the Discord bot token used for optional Discord
-	// notifications features. This should be stored in secrets.toml.
-	DiscordBotToken string
-	// DiscordWorkerNotifyThresholdSeconds controls the sustained threshold (in seconds)
-	// for worker offline/online notifications:
-	// - A worker must be online for at least this long before it can trigger an
-	//   "offline" notification.
-	// - A worker must be offline for at least this long before it can trigger a
-	//   "back online" notification (and it must then remain online for at least
-	//   this long before we notify).
-	//
-	// This is intentionally kept in tuning.toml (advanced knobs) and defaults to 5 minutes.
-	DiscordWorkerNotifyThresholdSeconds int
-	// GitHubURL is an optional GitHub link shown in the header and About page.
-	GitHubURL string
-	// ServerLocation is an optional server location string shown in the header.
-	ServerLocation string
-	// StratumTLSListen is an optional TCP address for a TLS-enabled
-	// Stratum listener (e.g. ":3443"). When empty, TLS for Stratum is
-	// disabled and only the plain TCP listener is used.
+	FiatCurrency                    string // display currency for BTC prices
+	PoolDonationAddress             string // shown in footer for tips to operator
+	GitHubURL                       string
+	ServerLocation                  string
+
+	// Discord integration.
+	DiscordURL                          string
+	DiscordServerID                     string
+	DiscordNotifyChannelID              string
+	DiscordBotToken                     string // store in secrets.toml
+	DiscordWorkerNotifyThresholdSeconds int    // min seconds online/offline before notify
+
+	// Stratum TLS (empty to disable).
 	StratumTLSListen string
-	// ClerkIssuerURL is the host that issues Clerk session tokens for this pool.
-	ClerkIssuerURL string
-	// ClerkJWKSURL is the URL where Clerk publishes RSA keys for verifying JWTs.
-	ClerkJWKSURL string
-	// ClerkSignInURL is the hosted Clerk sign-in page (typically auth.clerk.dev/sign-in).
-	ClerkSignInURL string
-	// ClerkCallbackPath determines where Clerk redirects after sign-in.
-	ClerkCallbackPath string
-	// ClerkFrontendAPIURL is optionally passed to Clerk so it can identify your front-end instance.
-	ClerkFrontendAPIURL string
-	// ClerkSessionCookieName is the cookie that Clerk sets for authenticated sessions.
+
+	// Clerk authentication.
+	ClerkIssuerURL         string
+	ClerkJWKSURL           string
+	ClerkSignInURL         string
+	ClerkCallbackPath      string
+	ClerkFrontendAPIURL    string
 	ClerkSessionCookieName string
-	// ClerkSessionAudience, if set, is the expected audience claim for session JWTs.
-	ClerkSessionAudience string
-	// ClerkSecretKey is the Clerk backend secret key (sk_test_... / sk_live_...).
-	// This should be stored in secrets.toml, not config.toml.
-	ClerkSecretKey string
-	// ClerkPublishableKey is the Clerk publishable key (pk_test_... / pk_live_...)
-	// used for rendering the embedded Clerk sign-in UI. Stored in secrets.toml
-	// to keep deployments consistent (even though it's not a secret).
-	ClerkPublishableKey string
-	RPCURL              string // e.g. "http://127.0.0.1:8332"
-	RPCUser             string
-	RPCPass             string
-	// RPCCookiePath optionally points at bitcoind's auth cookie file when RPC
-	// credentials are not set in secrets.toml.
-	RPCCookiePath           string
+	ClerkSessionAudience   string
+	ClerkSecretKey         string // store in secrets.toml
+	ClerkPublishableKey    string // store in secrets.toml
+
+	// Bitcoin node RPC.
+	RPCURL                  string
+	RPCUser                 string
+	RPCPass                 string
+	RPCCookiePath           string // alternative to user/pass
 	rpCCookiePathFromConfig string
 	rpcCookieWatch          bool
-	// AllowPublicRPC lets goPool connect to nodes that intentionally expose RPC
-	// without any authentication (useful for public/testing nodes). Defaults to
-	// false for security.
-	AllowPublicRPC bool
+	AllowPublicRPC          bool // allow unauthenticated RPC (testing only)
+
+	// Payouts.
 	PayoutAddress  string
-	// PayoutScript is reserved for future internal overrides and is not
-	// populated from or written to config.toml.
-	PayoutScript   string
 	PoolFeePercent float64
-	// OperatorDonationPercent is the percentage of the pool operator's fee
-	// to donate to another wallet. This is a percentage of the pool fee, not
-	// the total block reward. For example, if pool_fee_percent is 2% and
-	// operator_donation_percent is 10%, then 10% of the 2% pool fee (0.2% of
-	// the total reward) goes to the operator's chosen donation address.
+
 	OperatorDonationPercent float64
-	// OperatorDonationAddress is the wallet address where the pool operator
-	// donates a portion of their fee. This must be set if operator_donation_percent > 0.
 	OperatorDonationAddress string
-	// OperatorDonationName is an optional display name for the operator's
-	// donation recipient shown in the UI when viewing coinbase outputs.
-	OperatorDonationName string
-	// OperatorDonationURL is an optional hyperlink for the donation recipient.
-	// When set, the OperatorDonationName becomes a clickable link in the UI.
-	OperatorDonationURL       string
+	OperatorDonationName    string
+	OperatorDonationURL     string
+
+	// Mining parameters.
 	Extranonce2Size           int
 	TemplateExtraNonce2Size   int
 	JobEntropy                int
@@ -141,141 +96,63 @@ type Config struct {
 	PoolTagPrefix             string
 	CoinbaseScriptSigMaxBytes int
 	ZMQBlockAddr              string
-	// BackblazeBackupEnabled toggles periodic uploads of the worker list
-	// database snapshot to Backblaze B2.
-	BackblazeBackupEnabled bool
-	// BackblazeBucket is the B2 bucket where backups are stored.
-	BackblazeBucket string
-	// BackblazeAccountID is set from secrets and used for authentication.
-	BackblazeAccountID string
-	// BackblazeApplicationKey is set from secrets and used for authentication.
-	BackblazeApplicationKey string
-	// BackblazePrefix is an optional namespace prefix applied to uploaded objects.
-	BackblazePrefix string
-	// BackblazeBackupIntervalSeconds controls how often backups run (seconds).
+
+	// Backblaze B2 backup.
+	BackblazeBackupEnabled         bool
+	BackblazeBucket                string
+	BackblazeAccountID             string // from secrets.toml
+	BackblazeApplicationKey        string // from secrets.toml
+	BackblazePrefix                string
 	BackblazeBackupIntervalSeconds int
-	// BackblazeKeepLocalCopy controls whether a local copy of the last
-	// successfully uploaded backup is stored in the state dir.
-	BackblazeKeepLocalCopy bool
-	// BackupSnapshotPath optionally overrides where the local worker database
-	// snapshot is written.
-	//
-	// When empty, the snapshot defaults to `data/state/workers.db.bak` when
-	// BackblazeKeepLocalCopy is enabled.
-	//
-	// (Legacy default suffix was `.b2last`; it is now `.bak`.)
-	//
-	// When set to a relative path, it is resolved relative to DataDir.
-	BackupSnapshotPath string
-	DataDir            string
-	MaxConns           int
-	// MaxAcceptsPerSecond limits how many new TCP connections the pool
-	// will accept per second. Zero disables rate limiting.
-	MaxAcceptsPerSecond int
-	// MaxAcceptBurst controls how many new accepts can be allowed in a
-	// short burst before the average per-second rate is enforced. Zero
-	// means "same as MaxAcceptsPerSecond".
-	MaxAcceptBurst int
-	// AutoAcceptRateLimits when true, automatically calculates and overrides
-	// max_accepts_per_second and max_accept_burst based on max_conns to
-	// ensure smooth reconnections during pool restarts. When false (default),
-	// auto-configuration only applies if these values aren't explicitly set.
-	AutoAcceptRateLimits bool
-	// AcceptReconnectWindow specifies the target time window (in seconds) for
-	// all miners to reconnect after a pool restart. The auto-configuration
-	// logic uses this to calculate appropriate rate limits. Default: 15 seconds.
-	AcceptReconnectWindow int
-	// AcceptBurstWindow specifies how long (in seconds) the initial burst
-	// capacity should last before switching to the sustained rate. This handles
-	// the immediate reconnection storm. Default: 5 seconds.
-	AcceptBurstWindow int
-	// AcceptSteadyStateWindow specifies when (in seconds after pool start) to
-	// switch from reconnection mode to steady-state mode. After this time,
-	// the pool uses AcceptSteadyStateRate for much lower sustained throttling
-	// to protect against attacks and misbehaving clients. Default: 80 seconds.
-	AcceptSteadyStateWindow int
-	// AcceptSteadyStateRate specifies the maximum accepts per second during
-	// normal steady-state operation (after AcceptSteadyStateWindow). This is
-	// typically much lower than reconnection rates. Zero means no steady-state
-	// throttle (use reconnection rate indefinitely). If not explicitly set and
-	// auto-configuration is enabled, this is calculated based on max_conns and
-	// AcceptSteadyStateReconnectPercent. Default: 50/sec.
-	AcceptSteadyStateRate int
-	// AcceptSteadyStateReconnectPercent specifies what percentage of miners we
-	// expect might reconnect simultaneously during normal steady-state operation
-	// (not during pool restart). Used with AcceptSteadyStateReconnectWindow to
-	// auto-calculate AcceptSteadyStateRate. For example, 5.0 means we expect at
-	// most 5% of max_conns to reconnect at once. Default: 5.0%
-	AcceptSteadyStateReconnectPercent float64
-	// AcceptSteadyStateReconnectWindow specifies the time window (in seconds)
-	// over which to spread expected steady-state reconnections. Combined with
-	// AcceptSteadyStateReconnectPercent, this calculates the steady-state rate.
-	// For example: 10000 miners × 5% = 500 miners over 60s = ~8/sec.
-	// Default: 60 seconds.
-	AcceptSteadyStateReconnectWindow int
-	MaxRecentJobs                    int
-	ConnectionTimeout                time.Duration
-	VersionMask                      uint32
-	MinVersionBits                   int
-	IgnoreMinVersionBits             bool
-	VersionMaskConfigured            bool
-	MaxDifficulty                    float64
-	MinDifficulty                    float64
-	// If true, workers that call mining.suggest_difficulty will be kept at
-	// that difficulty (clamped to min/max) and VarDiff will not adjust them.
-	LockSuggestedDifficulty bool
-	// HashrateEMATauSeconds controls the time constant (in seconds) for the
-	// per-connection hashrate exponential moving average.
-	HashrateEMATauSeconds float64
-	// HashrateEMAMinShares defines how many shares must be accepted between
-	// EMA samples to ensure the starting window spans enough work.
-	HashrateEMAMinShares int
-	// NTimeForwardSlackSeconds bounds how far ntime may roll forward from
-	// the template's curtime/mintime before being rejected.
-	NTimeForwardSlackSeconds int
-	// CheckDuplicateShares enables duplicate share detection. Disabled by
-	// default for solo pools where duplicate checking is unnecessary overhead.
-	// Enable with -check-duplicates flag for testing.
-	CheckDuplicateShares bool
-	// SoloMode keeps validation light/fast for true solo pools (default true).
-	// When false, the pool enforces stricter policy, duplicate, and difficulty checks.
-	SoloMode bool
+	BackblazeKeepLocalCopy         bool
+	BackupSnapshotPath             string // defaults to data/state/workers.db.bak
 
-	// DirectSubmitProcessing bypasses the shared submission worker pool and
-	// processes mining.submit requests directly on the connection goroutine
-	// (or a short-lived goroutine) to minimize queueing delay.
-	DirectSubmitProcessing bool
+	DataDir  string
+	MaxConns int
 
-	// BanInvalidSubmissionsAfter controls how many clearly invalid share
-	// submissions (bad extranonce/ntime/nonce/coinbase, etc.) are allowed
-	// within BanInvalidSubmissionsWindow before a worker is automatically
-	// banned. Zero disables auto-bans for invalid submissions.
-	BanInvalidSubmissionsAfter int
-	// BanInvalidSubmissionsWindow bounds the time window used for counting
-	// invalid submissions when deciding whether to ban a worker.
-	BanInvalidSubmissionsWindow time.Duration
-	// BanInvalidSubmissionsDuration controls how long a worker is banned
-	// after exceeding the invalid-submission threshold.
+	// Accept rate limiting (auto-configured from MaxConns when AutoAcceptRateLimits=true).
+	MaxAcceptsPerSecond               int
+	MaxAcceptBurst                    int
+	AutoAcceptRateLimits              bool
+	AcceptReconnectWindow             int     // seconds for all miners to reconnect after restart
+	AcceptBurstWindow                 int     // seconds of burst before sustained rate kicks in
+	AcceptSteadyStateWindow           int     // seconds after start to switch to steady-state mode
+	AcceptSteadyStateRate             int     // max accepts/sec in steady state
+	AcceptSteadyStateReconnectPercent float64 // expected % of miners reconnecting at once
+	AcceptSteadyStateReconnectWindow  int     // seconds to spread steady-state reconnects
+
+	MaxRecentJobs         int
+	ConnectionTimeout     time.Duration
+	VersionMask           uint32
+	MinVersionBits        int
+	IgnoreMinVersionBits  bool
+	VersionMaskConfigured bool
+	MaxDifficulty         float64
+	MinDifficulty         float64
+
+	LockSuggestedDifficulty  bool    // keep suggested difficulty instead of vardiff
+	HashrateEMATauSeconds    float64 // EMA time constant for hashrate
+	HashrateEMAMinShares     int     // min shares before EMA kicks in
+	NTimeForwardSlackSeconds int     // max seconds ntime can roll forward
+	CheckDuplicateShares     bool    // enable duplicate detection (off by default for solo)
+
+	SoloMode               bool // light validation for solo pools (default true)
+	DirectSubmitProcessing bool // process submits on connection goroutine (bypass worker pool)
+
+	// Auto-ban for invalid submissions (0 disables).
+	BanInvalidSubmissionsAfter    int
+	BanInvalidSubmissionsWindow   time.Duration
 	BanInvalidSubmissionsDuration time.Duration
 
-	// ReconnectBanThreshold controls how many connection attempts from the
-	// same remote IP are allowed within ReconnectBanWindowSeconds before the
-	// address is temporarily banned at the TCP accept layer. Zero disables
-	// reconnect churn bans.
-	ReconnectBanThreshold int
-	// ReconnectBanWindowSeconds bounds the time window (in seconds) used to
-	// count reconnect attempts per IP when deciding whether to ban.
-	ReconnectBanWindowSeconds int
-	// ReconnectBanDurationSeconds controls how long (in seconds) a remote IP
-	// is banned from connecting once it exceeds the reconnect threshold.
+	// Reconnect flood protection (0 disables).
+	ReconnectBanThreshold       int
+	ReconnectBanWindowSeconds   int
 	ReconnectBanDurationSeconds int
 
-	// PeerCleanupEnabled toggles automatic removal of high-latency node peers.
-	PeerCleanupEnabled bool
-	// PeerCleanupMaxPingMs sets the latency threshold (ms) above which peers are candidates for cleanup.
+	// High-latency peer cleanup.
+	PeerCleanupEnabled   bool
 	PeerCleanupMaxPingMs float64
-	// PeerCleanupMinPeers sets the minimum number of peers to keep after cleanup.
-	PeerCleanupMinPeers int
+	PeerCleanupMinPeers  int
 }
 
 type EffectiveConfig struct {
@@ -357,75 +234,73 @@ type EffectiveConfig struct {
 }
 
 type serverConfig struct {
-	PoolListen      string `toml:"pool_listen" comment:"TCP address for the plain stratum listener (default :3333)."`
-	StatusListen    string `toml:"status_listen" comment:"HTTP address for the status UI (default :80)."`
-	// Pointer so config can explicitly disable TLS by setting an empty string.
-	// When omitted, goPool retains the built-in default.
-	StatusTLSListen *string `toml:"status_tls_listen" comment:"Optional HTTPS address that serves the status UI with TLS (default :443). Set to empty string to disable."`
-	StatusPublicURL string `toml:"status_public_url" comment:"Canonical public URL used for redirects/session cookies; include scheme (http/https)."`
+	PoolListen      string  `toml:"pool_listen"`
+	StatusListen    string  `toml:"status_listen"`
+	StatusTLSListen *string `toml:"status_tls_listen"` // nil = default, "" = disabled
+	StatusPublicURL string  `toml:"status_public_url"`
 }
 
 type brandingConfig struct {
-	StatusBrandName                 string `toml:"status_brand_name" comment:"Optional headline name shown at the top of the status page."`
-	StatusBrandDomain               string `toml:"status_brand_domain" comment:"Optional domain used to qualify the brand name in the status UI."`
-	StatusTagline                   string `toml:"status_tagline" comment:"Subtitle describing the pool on the status page (default 'Solo Mining Pool')."`
-	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra" comment:"Extra text appended to the 'Connect your miner' heading."`
-	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url" comment:"Optional URL to hyperlink the extra text added to the connect header."`
-	FiatCurrency                    string `toml:"fiat_currency" comment:"Fiat currency symbol (e.g. usd) used by the status UI price display."`
-	PoolDonationAddress             string `toml:"pool_donation_address" comment:"Optional wallet where miners can donate to the pool operator."`
-	DiscordURL                      string `toml:"discord_url" comment:"Discord server invite link shown in the status header."`
-	DiscordServerID                 string `toml:"discord_server_id" comment:"Discord server ID used for notification features."`
-	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id" comment:"Discord channel ID where notifications are posted when enabled."`
-	GitHubURL                       string `toml:"github_url" comment:"Optional GitHub repository link shown in the header/about pages."`
-	ServerLocation                  string `toml:"server_location" comment:"Optional textual location shown in the footer (e.g. city, datacenter)."`
+	StatusBrandName                 string `toml:"status_brand_name"`
+	StatusBrandDomain               string `toml:"status_brand_domain"`
+	StatusTagline                   string `toml:"status_tagline"`
+	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra"`
+	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url"`
+	FiatCurrency                    string `toml:"fiat_currency"`
+	PoolDonationAddress             string `toml:"pool_donation_address"`
+	DiscordURL                      string `toml:"discord_url"`
+	DiscordServerID                 string `toml:"discord_server_id"`
+	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id"`
+	GitHubURL                       string `toml:"github_url"`
+	ServerLocation                  string `toml:"server_location"`
 }
 
 type stratumConfig struct {
-	StratumTLSListen string `toml:"stratum_tls_listen" comment:"TLS address for the secure Stratum listener (leave blank to disable)."`
+	StratumTLSListen string `toml:"stratum_tls_listen"`
 }
 
 type authConfig struct {
-	ClerkIssuerURL         string `toml:"clerk_issuer_url" comment:"Issuer URL used by Clerk for session tokens (typically https://clerk.clerk.dev)."`
-	ClerkJWKSURL           string `toml:"clerk_jwks_url" comment:"JWKS endpoint Clerk publishes for verifying tokens."`
-	ClerkSignInURL         string `toml:"clerk_signin_url" comment:"Hosted Clerk sign-in page that operators link to for authentication."`
-	ClerkCallbackPath      string `toml:"clerk_callback_path" comment:"Local path Clerk redirects to after sign-in (prefixed with '/')."`
-	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url" comment:"Frontend API URL passed to Clerk during session handling."`
-	ClerkSessionCookieName string `toml:"clerk_session_cookie_name" comment:"Cookie name Clerk uses for authenticated sessions (default __session)."`
-	ClerkSessionAudience   string `toml:"clerk_session_audience" comment:"Optional audience claim required for Clerk-issued JWTs."`
+	ClerkIssuerURL         string `toml:"clerk_issuer_url"`
+	ClerkJWKSURL           string `toml:"clerk_jwks_url"`
+	ClerkSignInURL         string `toml:"clerk_signin_url"`
+	ClerkCallbackPath      string `toml:"clerk_callback_path"`
+	ClerkFrontendAPIURL    string `toml:"clerk_frontend_api_url"`
+	ClerkSessionCookieName string `toml:"clerk_session_cookie_name"`
+	ClerkSessionAudience   string `toml:"clerk_session_audience"`
 }
 
 type nodeConfig struct {
-	RPCURL         string `toml:"rpc_url" comment:"RPC URL of the Bitcoin node used for getblocktemplate and submitblock."`
-	PayoutAddress  string `toml:"payout_address" comment:"Wallet where block payouts are sent to miners."`
-	DataDir        string `toml:"data_dir" comment:"Directory where goPool stores state, logs, and configs."`
-	ZMQBlockAddr   string `toml:"zmq_block_addr" comment:"ZMQ endpoint exposed by the node for block notifications."`
-	RPCCookiePath  string `toml:"rpc_cookie_path" comment:"Path to bitcoind's auth cookie (auto-detected if blank)."`
-	AllowPublicRPC bool   `toml:"allow_public_rpc" comment:"Allow connecting to RPC endpoints without authentication (useful for trusted/testing nodes)."`
+	RPCURL         string `toml:"rpc_url"`
+	PayoutAddress  string `toml:"payout_address"`
+	DataDir        string `toml:"data_dir"`
+	ZMQBlockAddr   string `toml:"zmq_block_addr"`
+	RPCCookiePath  string `toml:"rpc_cookie_path"`
+	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
 type backblazeBackupConfig struct {
-	Enabled         bool   `toml:"enabled" comment:"Toggle periodic uploads of the saved workers snapshot to Backblaze B2."`
-	Bucket          string `toml:"bucket" comment:"Backblaze B2 bucket where backups are stored."`
-	Prefix          string `toml:"prefix" comment:"Optional namespace prefix for Backblaze object keys."`
-	IntervalSeconds *int   `toml:"interval_seconds" comment:"Seconds between scheduled uploads (default 43200)."`
-	KeepLocalCopy   *bool  `toml:"keep_local_copy" comment:"Keep a local copy of the last successful snapshot even when backups run."`
-	SnapshotPath    string `toml:"snapshot_path" comment:"File path where the worker DB snapshot is stored locally."`
+	Enabled         bool   `toml:"enabled"`
+	Bucket          string `toml:"bucket"`
+	Prefix          string `toml:"prefix"`
+	IntervalSeconds *int   `toml:"interval_seconds"`
+	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
+	SnapshotPath    string `toml:"snapshot_path"`
 }
 
 type miningConfig struct {
-	PoolFeePercent            *float64 `toml:"pool_fee_percent" comment:"Pool fee percentage applied to each block reward (default 2.0). Operator donation percent applies on top of this value."`
-	OperatorDonationPercent   *float64 `toml:"operator_donation_percent" comment:"Percentage of the pool fee (not total reward) to donate to another wallet. Requires operator_donation_address when >0."`
-	OperatorDonationAddress   string   `toml:"operator_donation_address" comment:"Wallet address where operator donations are sent when operator_donation_percent > 0."`
-	OperatorDonationName      string   `toml:"operator_donation_name" comment:"Optional display name for the donation recipient shown in the status UI."`
-	OperatorDonationURL       string   `toml:"operator_donation_url" comment:"Optional hyperlink for the operator donation recipient."`
-	Extranonce2Size           *int     `toml:"extranonce2_size" comment:"Number of extranonce2 bytes miners receive; larger values allow more workers per connection."`
-	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size" comment:"Extra placeholder for extranonce2 inside the template. Must be >= extranonce2_size."`
-	JobEntropy                *int     `toml:"job_entropy" comment:"Random alphanumeric chars added per job for uniqueness (0-16). When >0, coinbase adds a suffix '<pool_entropy>-<job_entropy>'."`
-	PoolEntropy               *string  `toml:"pool_entropy" comment:"4-char alphanumeric pool identifier used in the coinbase suffix '<pool_entropy>-<job_entropy>'."`
-	PoolTagPrefix             string   `toml:"pooltag_prefix" comment:"Optional custom prefix (a-z, 0-9 only). Prepends '<prefix>-' to the goPool coinbase tag."`
-	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes" comment:"Clamp coinbase message length (bytes) inside the scriptSig; useful to stay below policy limits."`
-	SoloMode                  *bool    `toml:"solo_mode" comment:"Skip extra policy/duplicate/low-difficulty share checks when true (default true)."`
-	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing" comment:"Process mining.submit directly on the connection goroutine (bypassing the shared worker pool) when true (default false)."`
+	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
+	OperatorDonationPercent   *float64 `toml:"operator_donation_percent"`
+	OperatorDonationAddress   string   `toml:"operator_donation_address"`
+	OperatorDonationName      string   `toml:"operator_donation_name"`
+	OperatorDonationURL       string   `toml:"operator_donation_url"`
+	Extranonce2Size           *int     `toml:"extranonce2_size"`
+	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
+	JobEntropy                *int     `toml:"job_entropy"`
+	PoolEntropy               *string  `toml:"pool_entropy"`
+	PoolTagPrefix             string   `toml:"pooltag_prefix"`
+	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
+	SoloMode                  *bool    `toml:"solo_mode"`
+	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
 }
 
 type baseFileConfig struct {
@@ -450,7 +325,6 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-// filterAlphanumeric returns only lowercase a-z and 0-9 characters from s.
 func filterAlphanumeric(s string) string {
 	var buf []byte
 	for i := 0; i < len(s); i++ {
@@ -465,67 +339,63 @@ func filterAlphanumeric(s string) string {
 }
 
 type rateLimitTuning struct {
-	MaxConns                          *int     `toml:"max_conns" comment:"Maximum simultaneous connections tracked by the pool."`
-	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second" comment:"Rate limit for new TCP accepts per second."`
-	MaxAcceptBurst                    *int     `toml:"max_accept_burst" comment:"Short-term burst capacity before rate limits kick in."`
-	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits" comment:"Automatically compute accept limits based on max_conns."`
-	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window" comment:"Seconds during which reconnecting miners can reconnect smoothly after a restart."`
-	AcceptBurstWindow                 *int     `toml:"accept_burst_window" comment:"Duration of the initial burst phase before steady-state throttling."`
-	AcceptSteadyStateWindow           *int     `toml:"accept_steady_state_window" comment:"Time until pool switches from reconnect to steady-state rate limiting."`
-	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate" comment:"Maximum accepts per second during steady-state operation."`
-	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent" comment:"Expected percent of miners reconnecting during steady-state to size steady-state rate."`
-	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window" comment:"Time window (sec) to observe reconnects for steady-state calculations."`
+	MaxConns                          *int     `toml:"max_conns"`
+	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
+	MaxAcceptBurst                    *int     `toml:"max_accept_burst"`
+	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits"`
+	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window"`
+	AcceptBurstWindow                 *int     `toml:"accept_burst_window"`
+	AcceptSteadyStateWindow           *int     `toml:"accept_steady_state_window"`
+	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate"`
+	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent"`
+	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window"`
 }
 
 type timeoutTuning struct {
-	ConnectionTimeoutSec *int `toml:"connection_timeout_seconds" comment:"Timeout (seconds) for miner connections before they are closed."`
+	ConnectionTimeoutSec *int `toml:"connection_timeout_seconds"`
 }
 
 type difficultyTuning struct {
-	MaxDifficulty           *float64 `toml:"max_difficulty" comment:"Maximum difficulty advertised to miners."`
-	MinDifficulty           *float64 `toml:"min_difficulty" comment:"Minimum difficulty advertised to miners."`
-	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty" comment:"Lock difficulties suggested by miners to prevent VarDiff adjustments."`
+	MaxDifficulty           *float64 `toml:"max_difficulty"`
+	MinDifficulty           *float64 `toml:"min_difficulty"`
+	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty"`
 }
 
 type miningTuning struct {
-	// DisablePoolJobEntropy, when true, disables adding the per-job
-	// "<pool entropy>-<job entropy>" suffix to the coinbase message.
-	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy" comment:"Disable the '<pool_entropy>-<job_entropy>' coinbase suffix"`
+	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy"`
 }
 
 type hashrateTuning struct {
-	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds" comment:"Time constant (seconds) for per-worker hashrate EMAs."`
-	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares" comment:"Minimum accepted shares before the EMA is considered valid."`
-	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds" comment:"Allowed future timestamps miners may submit to guard against time drift."`
+	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares"`
+	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
 }
 
 type discordTuning struct {
-	WorkerNotifyThresholdSeconds *int `toml:"worker_notify_threshold_seconds" comment:"Sustained threshold (seconds) for Discord worker offline/recovery notifications. Default: 300 (5 minutes)."`
+	WorkerNotifyThresholdSeconds *int `toml:"worker_notify_threshold_seconds"`
 }
 
 type peerCleaningTuning struct {
-	Enabled   *bool    `toml:"enabled" comment:"Enable periodic cleaning of peers that appear dead."`
-	MaxPingMs *float64 `toml:"max_ping_ms" comment:"Max ping time (ms) before a peer is cleaned."`
-	MinPeers  *int     `toml:"min_peers" comment:"Minimum peers the pool should keep during cleaning."`
+	Enabled   *bool    `toml:"enabled"`
+	MaxPingMs *float64 `toml:"max_ping_ms"`
+	MinPeers  *int     `toml:"min_peers"`
 }
 
 type banTuning struct {
-	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after" comment:"Seconds before banning miners that submit invalid shares."`
-	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds" comment:"Observation window (seconds) for tracking invalid shares."`
-	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds" comment:"Duration (seconds) of bans triggered by invalid share thresholds."`
-	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold" comment:"Number of reconnects that trigger a ban."`
-	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds" comment:"Seconds over which reconnections are counted for bans."`
-	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds" comment:"Ban duration (seconds) applied when reconnect ban threshold is reached."`
+	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
+	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
+	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds"`
+	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold"`
+	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds"`
+	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds"`
 }
 
 type versionTuning struct {
-	MinVersionBits       *int  `toml:"min_version_bits" comment:"Minimum number of version bits a miner must advertise."`
-	IgnoreMinVersionBits *bool `toml:"ignore_min_version_bits" comment:"Ignore the min version bits requirement when set."`
+	MinVersionBits       *int  `toml:"min_version_bits"`
+	IgnoreMinVersionBits *bool `toml:"ignore_min_version_bits"`
 }
 
-// tuningFileConfig captures the optional overrides that can be set via the
-// generated tuning.toml file. goPool merges this on top of the base config so
-// operators can tweak advanced knobs without modifying config.toml directly.
+// tuningFileConfig holds optional overrides from tuning.toml.
 type tuningFileConfig struct {
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
 	Timeouts     timeoutTuning      `toml:"timeouts"`
@@ -663,13 +533,13 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 // RPC user/password for fallback authentication. This file is gitignored so only
 // store sensitive credentials here.
 type secretsConfig struct {
-	RPCUser                 string `toml:"rpc_user" comment:"Optional RPC username when cookie auth is unavailable (requires -allow-rpc-credentials)."`
-	RPCPass                 string `toml:"rpc_pass" comment:"RPC password paired with rpc_user for fallback authentication."`
-	DiscordBotToken         string `toml:"discord_token" comment:"Token for the Discord bot used in outgoing notifications."`
-	ClerkSecretKey          string `toml:"clerk_secret_key" comment:"Secret key for Clerk development integrations (used when exchanging JWTs)."`
-	ClerkPublishableKey     string `toml:"clerk_publishable_key" comment:"Publishable key used by the Clerk frontend UI."`
-	BackblazeAccountID      string `toml:"backblaze_account_id" comment:"Backblaze B2 account ID for uploading backups."`
-	BackblazeApplicationKey string `toml:"backblaze_application_key" comment:"Application key used with Backblaze B2 uploads."`
+	RPCUser                 string `toml:"rpc_user"`
+	RPCPass                 string `toml:"rpc_pass"`
+	DiscordBotToken         string `toml:"discord_token"`
+	ClerkSecretKey          string `toml:"clerk_secret_key"`
+	ClerkPublishableKey     string `toml:"clerk_publishable_key"`
+	BackblazeAccountID      string `toml:"backblaze_account_id"`
+	BackblazeApplicationKey string `toml:"backblaze_application_key"`
 }
 
 func loadConfig(configPath, secretsPath string) (Config, string) {
