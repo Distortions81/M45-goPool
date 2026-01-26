@@ -12,7 +12,7 @@
 	<div class="page admin-page">
 		<h1>Admin Control Panel</h1>
 		<p class="text-sm" style="margin-top:4px;">
-			View Clerk login IDs and their saved worker slots. Delete entries or ban their active connections directly from here.
+			View Clerk login IDs and their saved worker slots. Select the logins you want to delete or ban, enter the admin password once, and apply the action below.
 		</p>
 		{{if .AdminNotice}}
 		<div class="card">
@@ -36,9 +36,24 @@
 		<div class="card">
 			<div class="label">Saved logins</div>
 			<p class="text-sm" style="margin:4px 0 10px 0;">
-				These worker names were saved by logged-in users. Deleting them simply removes the entry. Banning disconnects any current sessions with that worker.
+				Deleting a login removes all saved workers for that Clerk account. Banning disconnects any active connections matching the saved workers.
 			</p>
 			{{if .AdminSavedWorkerRows}}
+			<div class="admin-toolbar">
+				<div class="toolbar-left">
+					<label class="label" for="logins-toolbar-password">Admin password</label>
+					<input id="logins-toolbar-password" class="textfield toolbar-password" type="password" placeholder="Admin password">
+				</div>
+				<div class="toolbar-actions">
+					<button class="btn btn-secondary" type="button" id="logins-toolbar-delete" disabled>Delete selected</button>
+					<button class="btn btn-danger" type="button" id="logins-toolbar-ban" disabled>Ban selected</button>
+				</div>
+			</div>
+			<form id="loginsActionsForm" style="display:none;">
+				<input type="hidden" name="password" id="loginsToolbarPasswordField">
+				<div id="loginsToolbarUsers"></div>
+				<div id="loginsToolbarHashes"></div>
+			</form>
 			<div class="table-responsive">
 				<table class="table">
 					<thead>
@@ -47,7 +62,7 @@
 							<th>Workers</th>
 							<th>Saved</th>
 							<th>Online</th>
-							<th>Actions</th>
+							<th>Select</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -65,25 +80,16 @@
 							<td>
 								{{if .OnlineConnections}}
 									{{range .OnlineConnections}}
-										<div class="badge">{{shortID .ConnectionLabel}} ({{.Listener}})</div>
+									<div class="badge">{{shortID .ConnectionLabel}} ({{.Listener}})</div>
 									{{end}}
 								{{else}}
 									<span class="text-sm">offline</span>
 								{{end}}
 							</td>
 							<td>
-								<div class="button-row">
-									<form method="post" action="/admin/logins/delete" class="admin-action-form">
-										<input type="hidden" name="user_id" value="{{.UserID}}">
-										<input class="textfield admin-action-password" type="password" name="password" autocomplete="current-password" placeholder="Admin password" required>
-										<button class="btn btn-secondary" type="submit">Delete login</button>
-									</form>
-									<form method="post" action="/admin/logins/ban" class="admin-action-form">
-										<input type="hidden" name="user_id" value="{{.UserID}}">
-										{{range .WorkerHashes}}<input type="hidden" name="worker_hash" value="{{.}}">{{end}}
-										<input class="textfield admin-action-password" type="password" name="password" autocomplete="current-password" placeholder="Admin password" required>
-										<button class="btn btn-danger" type="submit">Ban login</button>
-									</form>
+								<input type="checkbox" class="admin-login-checkbox" data-user="{{.UserID}}">
+								<div class="admin-row-hashes" style="display:none;">
+									{{range .WorkerHashes}}<span data-hash="{{.}}"></span>{{end}}
 								</div>
 							</td>
 						</tr>
@@ -93,12 +99,75 @@
 			</div>
 			{{else}}
 			<p class="text-sm">
-				No saved login entries are available. This might mean the saved workers store is empty or not configured.
+				No saved login entries are available. This may mean the saved worker store is empty or not yet configured.
 			</p>
 			{{end}}
 		</div>
 		{{end}}
 	</div>
 	{{template "footer" .}}
+	<script>
+	(function() {
+		const form = document.getElementById('loginsActionsForm');
+		const passwordInput = document.getElementById('logins-toolbar-password');
+		const passwordField = document.getElementById('loginsToolbarPasswordField');
+		const userContainer = document.getElementById('loginsToolbarUsers');
+		const hashContainer = document.getElementById('loginsToolbarHashes');
+		const checkboxes = Array.from(document.querySelectorAll('.admin-login-checkbox'));
+		const deleteBtn = document.getElementById('logins-toolbar-delete');
+		const banBtn = document.getElementById('logins-toolbar-ban');
+
+		function updateButtons() {
+			const selected = checkboxes.filter(cb => cb.checked);
+			const enabled = selected.length > 0;
+			deleteBtn.disabled = !enabled;
+			banBtn.disabled = !enabled;
+			return selected;
+		}
+
+		function submitAction(action, includeHashes) {
+			const selected = updateButtons();
+			if (!selected.length) {
+				return;
+			}
+			userContainer.innerHTML = '';
+			hashContainer.innerHTML = '';
+			const users = new Set();
+			selected.forEach(cb => {
+				const user = cb.dataset.user || '';
+				if (!user || users.has(user)) {
+					return;
+				}
+				users.add(user);
+				const input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'user_id';
+				input.value = user;
+				userContainer.appendChild(input);
+				if (includeHashes) {
+					const hashNodes = cb.closest('tr').querySelectorAll('.admin-row-hashes span');
+					hashNodes.forEach(node => {
+						const hash = node.dataset.hash || '';
+						if (!hash) {
+							return;
+						}
+						const hInput = document.createElement('input');
+						hInput.type = 'hidden';
+						hInput.name = 'worker_hash';
+						hInput.value = hash;
+						hashContainer.appendChild(hInput);
+					});
+				}
+			});
+			passwordField.value = passwordInput.value;
+			form.action = action;
+			form.submit();
+		}
+
+		checkboxes.forEach(cb => cb.addEventListener('change', updateButtons));
+		deleteBtn.addEventListener('click', () => submitAction('/admin/logins/delete', false));
+		banBtn.addEventListener('click', () => submitAction('/admin/logins/ban', true));
+	})();
+	</script>
 </body>
 </html>
