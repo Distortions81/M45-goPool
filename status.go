@@ -372,6 +372,12 @@ type StatusServer struct {
 
 	workerPageMu    sync.RWMutex
 	workerPageCache map[string]cachedWorkerPage
+
+	configPath      string
+	adminConfigPath string
+	adminSessions   map[string]time.Time
+	adminSessionsMu sync.Mutex
+	requestShutdown func()
 }
 
 type cachedJSONResponse struct {

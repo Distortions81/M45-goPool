@@ -1,0 +1,84 @@
+{{/* Admin control panel template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Admin Control Panel</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			This panel is not linked anywhere else and is hidden until you configure <span class="mono">data/config/admin.toml</span>.
+			Keep the file private and only enable the panel on trusted networks.
+		</p>
+
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin UI is disabled. Enable it by editing
+				<span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+				Change the default credentials before reloading the page.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<div class="label">Sign in</div>
+			{{if .AdminLoginError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminLoginError}}</p>
+			{{end}}
+			<form method="post" action="/admin/login">
+				<label class="label" for="admin-username">Username</label>
+				<input id="admin-username" name="username" type="text" class="textfield" autocomplete="username" required>
+				<label class="label" for="admin-password">Password</label>
+				<input id="admin-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
+				<button class="btn" type="submit" style="margin-top:12px;">Unlock admin panel</button>
+			</form>
+		</div>
+		{{else}}
+		<div class="card">
+			<div class="label">Edit <span class="mono">config.toml</span></div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">Changes are saved immediately; restart or reboot to apply them.</p>
+			{{if .AdminConfigError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminConfigError}}</p>
+			{{end}}
+			<form method="post" action="/admin/save-config">
+				<textarea name="config_text" rows="20" class="textfield" style="font-family:Menlo, Consolas, monospace; width:100%; min-height:320px; white-space:pre; resize:vertical;" required>{{.ConfigContent}}</textarea>
+				<label class="label" for="config-password">Password</label>
+				<input id="config-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
+				<button class="btn" type="submit" style="margin-top:12px;">Save configuration</button>
+			</form>
+		</div>
+		<div class="card">
+			<div class="label">Reboot the pool</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">This sends SIGTERM to goPool. Make sure your supervisor restarts it or hit the reboot button.</p>
+			{{if .AdminRebootError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminRebootError}}</p>
+			{{end}}
+			<form method="post" action="/admin/reboot">
+				<label class="label" for="reboot-password">Password</label>
+				<input id="reboot-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
+				<label class="label" for="reboot-confirm">Confirmation</label>
+				<input id="reboot-confirm" name="confirm" type="text" class="textfield" placeholder="Type REBOOT" required>
+				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Reboot now</button>
+			</form>
+		</div>
+		<div class="card">
+			<form method="post" action="/admin/logout">
+				<button class="btn btn-secondary" type="submit">Sign out</button>
+			</form>
+		</div>
+		{{end}}
+	</div>
+	{{template "footer" .}}
+</body>
+</html>

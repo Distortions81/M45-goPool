@@ -1,15 +1,20 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/hako/durafmt"
+	"github.com/pelletier/go-toml"
 )
 
 func (s *StatusServer) SetJobManager(jm *JobManager) {
@@ -21,7 +26,7 @@ func (s *StatusServer) SetJobManager(jm *JobManager) {
 func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/favicon.png":
-			http.ServeFile(w, r, "logo.png")
+		http.ServeFile(w, r, "logo.png")
 
 	case r.URL.Path == "/" || r.URL.Path == "":
 		start := time.Now()
@@ -594,6 +599,328 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 	})
 }
 
+const adminSessionCookieName = "admin_session"
+
+type AdminPageData struct {
+	StatusData
+	AdminEnabled     bool
+	AdminConfigPath  string
+	LoggedIn         bool
+	ConfigContent    string
+	AdminLoginError  string
+	AdminConfigError string
+	AdminRebootError string
+	AdminNotice      string
+}
+
+func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	s.renderAdminPage(w, r, data)
+}
+
+func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin login form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	adminCfg, err := loadAdminConfigFile(s.adminConfigPath)
+	data, _, _ := s.buildAdminPageData(r, "")
+	if err != nil {
+		data.AdminConfigError = fmt.Sprintf("Failed to read admin config: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !adminCfg.Enabled {
+		data.AdminConfigError = "Admin control panel is disabled (set enabled = true in admin.toml)."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	if username == "" || password == "" || !s.adminCredentialsMatch(adminCfg, username, password) {
+		data.AdminLoginError = "Invalid username or password."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	token, expiry, err := s.createAdminSession(adminCfg.sessionDuration())
+	if err != nil {
+		logger.Error("create admin session failed", "error", err)
+		data.AdminLoginError = "Unable to start admin session."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     adminSessionCookieName,
+		Value:    token,
+		Path:     "/admin",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  expiry,
+	})
+	http.Redirect(w, r, "/admin?notice=logged_in", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if token, ok := s.adminSessionToken(r); ok {
+		s.invalidateAdminSession(token)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     adminSessionCookieName,
+		Path:     "/admin",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  time.Unix(0, 0),
+	})
+	http.Redirect(w, r, "/admin?notice=logged_out", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminConfigSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin config form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, err := s.buildAdminPageData(r, "")
+	if err != nil {
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !adminCfg.Enabled {
+		data.AdminConfigError = "Admin control panel is disabled."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	password := r.FormValue("password")
+	if password == "" || !s.adminPasswordMatches(adminCfg, password) {
+		data.AdminConfigError = "Password is required to save the configuration."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	configText := r.FormValue("config_text")
+	if strings.TrimSpace(configText) == "" {
+		data.AdminConfigError = "Configuration content cannot be empty."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	var tmp baseFileConfig
+	if err := toml.Unmarshal([]byte(configText), &tmp); err != nil {
+		data.AdminConfigError = fmt.Sprintf("Configuration parse error: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := atomicWriteFile(s.configPath, []byte(configText)); err != nil {
+		logger.Error("admin config write failed", "error", err)
+		data.AdminConfigError = fmt.Sprintf("Failed to save config: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	logger.Info("admin updated config", "path", s.configPath)
+	http.Redirect(w, r, "/admin?notice=config_saved", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminReboot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin reboot form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, err := s.buildAdminPageData(r, "reboot_requested")
+	if err != nil {
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !adminCfg.Enabled {
+		data.AdminRebootError = "Admin control panel is disabled."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminRebootError = "Password is required to reboot."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm")), "REBOOT") {
+		data.AdminRebootError = "Please type REBOOT to confirm."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	logger.Warn("admin requested reboot")
+	s.renderAdminPage(w, r, data)
+	if s.requestShutdown != nil {
+		s.requestShutdown()
+	}
+}
+
+func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (AdminPageData, adminFileConfig, error) {
+	start := time.Now()
+	data := AdminPageData{
+		StatusData:      s.baseTemplateData(start),
+		AdminConfigPath: s.adminConfigPath,
+		AdminNotice:     adminNoticeMessage(noticeKey),
+	}
+	cfg, err := loadAdminConfigFile(s.adminConfigPath)
+	if err != nil {
+		logger.Warn("load admin config failed", "error", err, "path", s.adminConfigPath)
+		data.AdminEnabled = false
+		data.AdminConfigError = fmt.Sprintf("Failed to read admin config: %v", err)
+		return data, cfg, err
+	}
+	data.AdminEnabled = cfg.Enabled
+	data.LoggedIn = s.isAdminAuthenticated(r)
+	if data.LoggedIn && data.AdminEnabled {
+		if content, readErr := os.ReadFile(s.configPath); readErr == nil {
+			data.ConfigContent = string(content)
+		} else {
+			logger.Warn("read config for admin page failed", "error", readErr)
+			data.AdminConfigError = fmt.Sprintf("Failed to load config: %v", readErr)
+		}
+	}
+	return data, cfg, nil
+}
+
+func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, data AdminPageData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "admin", data); err != nil {
+		logger.Error("admin template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Admin panel error",
+			"We couldn't render the admin control panel.",
+			"Template error while rendering the admin interface.")
+	}
+}
+
+func adminNoticeMessage(key string) string {
+	switch key {
+	case "config_saved":
+		return "Configuration saved; restart or reboot to apply the changes."
+	case "reboot_requested":
+		return "Reboot requested. goPool is shutting down now."
+	case "logged_in":
+		return "Admin session unlocked."
+	case "logged_out":
+		return "Admin session cleared."
+	default:
+		return ""
+	}
+}
+
+func (s *StatusServer) isAdminAuthenticated(r *http.Request) bool {
+	token, ok := s.adminSessionToken(r)
+	if !ok {
+		return false
+	}
+	s.adminSessionsMu.Lock()
+	defer s.adminSessionsMu.Unlock()
+	expiry, exists := s.adminSessions[token]
+	if !exists {
+		return false
+	}
+	if time.Now().After(expiry) {
+		delete(s.adminSessions, token)
+		return false
+	}
+	return true
+}
+
+func (s *StatusServer) adminSessionToken(r *http.Request) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	cookie, err := r.Cookie(adminSessionCookieName)
+	if err != nil {
+		return "", false
+	}
+	if cookie.Value == "" {
+		return "", false
+	}
+	return cookie.Value, true
+}
+
+func (s *StatusServer) createAdminSession(duration time.Duration) (string, time.Time, error) {
+	if duration <= 0 {
+		duration = time.Duration(defaultAdminSessionExpirationSeconds) * time.Second
+	}
+	token, err := generateAdminToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiry := time.Now().Add(duration)
+	s.adminSessionsMu.Lock()
+	s.adminSessions[token] = expiry
+	s.adminSessionsMu.Unlock()
+	return token, expiry, nil
+}
+
+func generateAdminToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func (s *StatusServer) adminCredentialsMatch(cfg adminFileConfig, username, password string) bool {
+	if cfg.Username == "" && cfg.Password == "" {
+		return false
+	}
+	if !compareStringsConstantTime(cfg.Username, strings.TrimSpace(username)) {
+		return false
+	}
+	return s.adminPasswordMatches(cfg, password)
+}
+
+func (s *StatusServer) adminPasswordMatches(cfg adminFileConfig, password string) bool {
+	return compareStringsConstantTime(cfg.Password, password)
+}
+
+func compareStringsConstantTime(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+func (s *StatusServer) invalidateAdminSession(token string) {
+	if token == "" {
+		return
+	}
+	s.adminSessionsMu.Lock()
+	delete(s.adminSessions, token)
+	s.adminSessionsMu.Unlock()
+}
+
 func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
 	if s == nil || s.clerk == nil {
 		return h
@@ -679,6 +1006,49 @@ func (s *StatusServer) canonicalStatusHost(r *http.Request) string {
 		host = "localhost"
 	}
 	return host
+}
+
+func (s *StatusServer) httpsRedirectURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host := s.canonicalStatusHost(r)
+	base := s.baseURLForRequest(r)
+	redirectBase := &url.URL{
+		Scheme: "https",
+		Host:   host,
+	}
+	if base != nil && strings.TrimSpace(base.Host) != "" {
+		redirectBase.Host = base.Host
+	}
+
+	path := r.URL.Path
+	if path == "" {
+		path = "/"
+	}
+	ref := &url.URL{
+		Path:     path,
+		RawQuery: r.URL.RawQuery,
+		Fragment: r.URL.Fragment,
+	}
+
+	target := redirectBase.ResolveReference(ref)
+	if target.Scheme == "" {
+		target.Scheme = "https"
+	}
+	if target.Host == "" {
+		target.Host = host
+	}
+	return target.String()
+}
+
+func (s *StatusServer) redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
+	target := s.httpsRedirectURL(r)
+	if target == "" {
+		http.Error(w, "Redirect target unavailable", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
 
 func (s *StatusServer) clerkCookieSecure(r *http.Request) bool {

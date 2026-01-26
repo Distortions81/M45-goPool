@@ -217,6 +217,17 @@ func (s *StatusServer) findAllWorkerViewsByHash(hash string, now time.Time) []Wo
 	return views
 }
 
+func formatHashrateValue(h float64) string {
+	units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s"}
+	unit := units[0]
+	val := h
+	for i := 0; i < len(units)-1 && val >= 1000; i++ {
+		val /= 1000
+		unit = units[i+1]
+	}
+	return fmt.Sprintf("%.3f %s", val, unit)
+}
+
 // buildTemplateFuncs returns the template.FuncMap used for all HTML templates.
 func buildTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
@@ -230,16 +241,7 @@ func buildTemplateFuncs() template.FuncMap {
 			// Shorten IDs / hashes to a stable, display-safe form.
 			return shortDisplayID(s, hashPrefix, hashSuffix)
 		},
-		"formatHashrate": func(h float64) string {
-			units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s"}
-			unit := units[0]
-			val := h
-			for i := 0; i < len(units)-1 && val >= 1000; i++ {
-				val /= 1000
-				unit = units[i+1]
-			}
-			return fmt.Sprintf("%.3f %s", val, unit)
-		},
+		"formatHashrate": formatHashrateValue,
 		"formatDiff": func(d float64) string {
 			if d <= 0 {
 				return "0"
@@ -391,6 +393,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
 	poolInfoPath := filepath.Join(dataDir, "templates", "pool.tmpl")
 	aboutPath := filepath.Join(dataDir, "templates", "about.tmpl")
+	adminPath := filepath.Join(dataDir, "templates", "admin.tmpl")
 	errorPath := filepath.Join(dataDir, "templates", "error.tmpl")
 
 	// Load template files
@@ -450,13 +453,17 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load about template: %w", err)
 	}
+	adminHTML, err := os.ReadFile(adminPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin template: %w", err)
+	}
 	errorHTML, err := os.ReadFile(errorPath)
 	if err != nil {
 		return nil, fmt.Errorf("load error template: %w", err)
 	}
 
 	// Parse templates
-	tmpl := template.New("overview").Funcs(funcs)
+	tmpl := template.New("layout").Funcs(funcs)
 	if _, err := tmpl.Parse(string(layoutHTML)); err != nil {
 		return nil, fmt.Errorf("parse layout template: %w", err)
 	}
@@ -499,6 +506,9 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if _, err := tmpl.New("about").Parse(string(aboutHTML)); err != nil {
 		return nil, fmt.Errorf("parse about template: %w", err)
 	}
+	if _, err := tmpl.New("admin").Parse(string(adminHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin template: %w", err)
+	}
 	if _, err := tmpl.New("error").Parse(string(errorHTML)); err != nil {
 		return nil, fmt.Errorf("parse error template: %w", err)
 	}
@@ -506,7 +516,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath string, shutdown func()) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -533,6 +543,10 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		workerLists:         workerLists,
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
+		configPath:          configPath,
+		adminConfigPath:     adminConfigPath,
+		adminSessions:       make(map[string]time.Time),
+		requestShutdown:     shutdown,
 	}
 	server.UpdateConfig(cfg)
 	server.scheduleNodeInfoRefresh()

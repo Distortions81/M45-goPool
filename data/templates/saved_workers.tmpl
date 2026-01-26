@@ -117,7 +117,7 @@
 								{{range .OnlineWorkerEntries}}
 								<tr>
 									<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
-									<td>{{if gt .Hashrate 0.0}}{{formatHashrate .Hashrate}}{{else}}—{{end}}</td>
+										<td data-hashrate="{{printf "%.0f" .Hashrate}}" class="hashrate-value">—</td>
 									<td>{{formatDiff .Difficulty}}</td>
 									<td>{{formatShareRate .ShareRate}}</td>
 									<td>{{.Accepted}}</td>
@@ -494,6 +494,18 @@
 			if (days > 0) return `${days}d ${hours}h ago`;
 			if (hours > 0) return `${hours}h ${minutes}m ago`;
 			return `${Math.max(0, minutes)}m ago`;
+		}
+
+		function renderStoredHashrates() {
+			const cells = document.querySelectorAll('[data-hashrate]');
+			cells.forEach((el) => {
+				const value = Number(el.getAttribute('data-hashrate'));
+				if (!value) {
+					el.textContent = '—';
+					return;
+				}
+				el.textContent = formatHashrate(value);
+			});
 		}
 
 		function updateSortOrderButtonText() {
@@ -1559,6 +1571,8 @@
 
 		fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
 		fetchOverview();
+		renderStoredHashrates();
+		renderStoredHashrates();
 		fetchHashrate();
 		setInterval(fetchOverview, REFRESH_INTERVAL);
 		setInterval(fetchHashrate, REFRESH_INTERVAL);

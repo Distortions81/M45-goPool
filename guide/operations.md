@@ -97,7 +97,7 @@ Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` only affect 
 
 The required `data/config/config.toml` is the primary interface for pool behavior. Key sections include:
 
-- `[server]`: `pool_listen`, `status_listen`, `status_tls_listen`, and `status_public_url`. Set `status_tls_listen = ""` to disable HTTPS and rely on `status_listen` only. Leaving `status_listen` empty disables HTTP entirely (e.g., TLS-only deployments). `status_public_url` feeds redirects and Clerk cookie domains.
+- `[server]`: `pool_listen`, `status_listen`, `status_tls_listen`, and `status_public_url`. Set `status_tls_listen = ""` to disable HTTPS and rely on `status_listen` only. Leaving `status_listen` empty disables HTTP entirely (e.g., TLS-only deployments). `status_public_url` feeds redirects and Clerk cookie domains. When both HTTP and HTTPS are enabled, the HTTP listener now issues a temporary (307) redirect to the HTTPS endpoint so the public UI and JSON APIs stay behind TLS.
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, GitHub link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum).
 - `[auth]`: Clerk URLs and session cookies used for the status UI.
@@ -163,6 +163,17 @@ The status UI uses two listeners:
 Set `status_tls_listen = ""` to disable HTTPS and keep only the HTTP listener. Set `status_listen = ""` to disable HTTP entirely and rely solely on TLS. The CLI no longer provides an `-http-only` toggle.
 
 goPool also auto-creates `/app/`, `/stats/`, and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails) and `SIGUSR2` to reload the configuration files without stopping the daemon.
+
+## Admin Control Panel
+
+`data/config/admin.toml` is created automatically the first time goPool runs. The generated file documents the panel, defaults to `enabled = false`, and ships with `username = "admin"` plus a random password (check the file to copy the generated secret). Update the file to enable the UI, pick a unique username/password, and keep it out of version control. The `session_expiration_seconds` value controls how long the admin session remains valid (default 900 seconds).
+
+When enabled, visit `/admin` (deliberately absent from the main navigation) and log in with the credentials stored in `admin.toml`. The panel exposes:
+
+* **Configuration editing** – a textarea showing the current `config.toml`. Save rewrites the file directly; restart or use the reboot control to load the new configuration.
+* **Reboot** – a button that sends SIGTERM to goPool. It requires re-entering the admin password and typing `REBOOT` to confirm the action so your pool does not restart accidentally.
+
+Because the admin login is intentionally simple, bind this UI to trusted networks only (e.g., keep `server.status_listen` local-domain, use firewall rules, or run behind an authenticated proxy) and rotate credentials whenever you rotate administrators.
 
 ## Mining specifics
 

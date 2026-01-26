@@ -107,6 +107,10 @@ func main() {
 	if err := validateConfig(cfg); err != nil {
 		fatal("config", err)
 	}
+	adminConfigPath, err := ensureAdminConfigFile(cfg.DataDir)
+	if err != nil {
+		fatal("admin config", err)
+	}
 
 	logLevelName := cfg.LogLevel
 	if *logLevelFlag != "" {
@@ -283,7 +287,7 @@ func main() {
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
-	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists)
+	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, stop)
 	statusServer.startOneTimeCodeJanitor(ctx)
 	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)
 	statusServer.startOneTimeCodePersistence(ctx)
@@ -354,6 +358,11 @@ func main() {
 		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
 	}
 	// HTML endpoints
+	mux.HandleFunc("/admin", statusServer.handleAdminPage)
+	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
+	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
+	mux.HandleFunc("/admin/save-config", statusServer.handleAdminConfigSave)
+	mux.HandleFunc("/admin/reboot", statusServer.handleAdminReboot)
 	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
 	mux.HandleFunc("/worker/search", statusServer.withClerkUser(statusServer.handleWorkerWalletSearch))
 	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
@@ -429,12 +438,21 @@ func main() {
 
 	// Start HTTP server.
 	if httpAddr != "" {
+		httpHandler := http.Handler(mux)
+		httpLogMsg := "status page listening (http)"
+		httpLogFields := []interface{}{"addr", httpAddr}
+		if needStatusTLS {
+			httpHandler = http.HandlerFunc(statusServer.redirectToHTTPS)
+			httpLogMsg = "status http listener redirecting to https"
+			httpLogFields = append(httpLogFields, "https_addr", httpsAddr)
+		}
+
 		statusHTTPServer = &http.Server{
 			Addr:    httpAddr,
-			Handler: mux,
+			Handler: httpHandler,
 		}
 		go func() {
-			logger.Info("status page listening (http)", "addr", httpAddr)
+			logger.Info(httpLogMsg, httpLogFields...)
 			if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				fatal("status server error", err)
 			}
