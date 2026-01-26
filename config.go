@@ -138,6 +138,10 @@ type Config struct {
 
 	SoloMode               bool // light validation for solo pools (default true)
 	DirectSubmitProcessing bool // process submits on connection goroutine (bypass worker pool)
+	LogLevel              string // log level: debug, info, warn, error
+
+	// Maintenance behavior.
+	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
 
 	// Auto-ban for invalid submissions (0 disables).
 	BanInvalidSubmissionsAfter    int
@@ -222,6 +226,9 @@ type EffectiveConfig struct {
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
 	HashrateEMAMinShares              int     `json:"hashrate_ema_min_shares,omitempty"`
 	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
+	CheckDuplicateShares              bool    `json:"check_duplicate_shares,omitempty"`
+	LogLevel                          string  `json:"log_level,omitempty"`
+	CleanExpiredBansOnStartup         bool    `json:"clean_expired_bans_on_startup,omitempty"`
 	BanInvalidSubmissionsAfter        int     `json:"ban_invalid_submissions_after,omitempty"`
 	BanInvalidSubmissionsWindow       string  `json:"ban_invalid_submissions_window,omitempty"`
 	BanInvalidSubmissionsDuration     string  `json:"ban_invalid_submissions_duration,omitempty"`
@@ -278,6 +285,10 @@ type nodeConfig struct {
 	AllowPublicRPC bool   `toml:"allow_public_rpc"`
 }
 
+type loggingConfig struct {
+	Level string `toml:"level"`
+}
+
 type backblazeBackupConfig struct {
 	Enabled         bool   `toml:"enabled"`
 	Bucket          string `toml:"bucket"`
@@ -301,6 +312,7 @@ type miningConfig struct {
 	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
 	SoloMode                  *bool    `toml:"solo_mode"`
 	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
+	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
 }
 
 type baseFileConfig struct {
@@ -311,6 +323,7 @@ type baseFileConfig struct {
 	Node      nodeConfig            `toml:"node"`
 	Mining    miningConfig          `toml:"mining"`
 	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
+	Logging   loggingConfig         `toml:"logging"`
 }
 
 func float64Ptr(v float64) *float64 { return &v }
@@ -382,6 +395,7 @@ type peerCleaningTuning struct {
 }
 
 type banTuning struct {
+	CleanExpiredOnStartup            *bool `toml:"clean_expired_on_startup"`
 	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
 	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
 	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds"`
@@ -455,6 +469,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
 			SoloMode:                  boolPtr(cfg.SoloMode),
 			DirectSubmitProcessing:    boolPtr(cfg.DirectSubmitProcessing),
+			CheckDuplicateShares:      boolPtr(cfg.CheckDuplicateShares),
 		},
 		Auth: authConfig{
 			ClerkIssuerURL:         cfg.ClerkIssuerURL,
@@ -472,6 +487,9 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
 			KeepLocalCopy:   boolPtr(cfg.BackblazeKeepLocalCopy),
 			SnapshotPath:    cfg.BackupSnapshotPath,
+		},
+		Logging: loggingConfig{
+			Level: cfg.LogLevel,
 		},
 	}
 }
@@ -515,6 +533,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			MinPeers:  intPtr(cfg.PeerCleanupMinPeers),
 		},
 		Bans: banTuning{
+			CleanExpiredOnStartup:            boolPtr(cfg.CleanExpiredBansOnStartup),
 			BanInvalidSubmissionsAfter:       intPtr(cfg.BanInvalidSubmissionsAfter),
 			BanInvalidSubmissionsWindowSec:   intPtr(int(cfg.BanInvalidSubmissionsWindow / time.Second)),
 			BanInvalidSubmissionsDurationSec: intPtr(int(cfg.BanInvalidSubmissionsDuration / time.Second)),
@@ -783,6 +802,12 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Mining.DirectSubmitProcessing != nil {
 		cfg.DirectSubmitProcessing = *fc.Mining.DirectSubmitProcessing
 	}
+	if fc.Mining.CheckDuplicateShares != nil {
+		cfg.CheckDuplicateShares = *fc.Mining.CheckDuplicateShares
+	}
+	if fc.Logging.Level != "" {
+		cfg.LogLevel = strings.ToLower(strings.TrimSpace(fc.Logging.Level))
+	}
 	cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
 	if fc.Backblaze.Bucket != "" {
 		cfg.BackblazeBucket = strings.TrimSpace(fc.Backblaze.Bucket)
@@ -869,6 +894,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.PeerCleaning.MinPeers != nil && *fc.PeerCleaning.MinPeers >= 0 {
 		cfg.PeerCleanupMinPeers = *fc.PeerCleaning.MinPeers
+	}
+	if fc.Bans.CleanExpiredOnStartup != nil {
+		cfg.CleanExpiredBansOnStartup = *fc.Bans.CleanExpiredOnStartup
 	}
 	if fc.Bans.BanInvalidSubmissionsAfter != nil && *fc.Bans.BanInvalidSubmissionsAfter >= 0 {
 		cfg.BanInvalidSubmissionsAfter = *fc.Bans.BanInvalidSubmissionsAfter
@@ -1248,6 +1276,9 @@ func (cfg Config) Effective() EffectiveConfig {
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
 		HashrateEMAMinShares:          cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,
+		CheckDuplicateShares:          cfg.CheckDuplicateShares,
+		LogLevel:                      cfg.LogLevel,
+		CleanExpiredBansOnStartup:     cfg.CleanExpiredBansOnStartup,
 		BanInvalidSubmissionsAfter:    cfg.BanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:   cfg.BanInvalidSubmissionsWindow.String(),
 		BanInvalidSubmissionsDuration: cfg.BanInvalidSubmissionsDuration.String(),

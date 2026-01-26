@@ -9,7 +9,7 @@ Each release includes pre-built binaries for multiple platforms, packaged with a
 ### Included in Each Package
 
 - **Binary** - Pre-compiled goPool executable
-- **Documentation** - README.md, operations.md, performance.md, TESTING.md, LICENSE
+- **Documentation** - `../README.md`, `operations.md`, `performance.md`, `TESTING.md`, `LICENSE`
 - **Templates** - All HTML templates in `data/templates/`
 - **Web Assets** - CSS, images, and static files in `data/www/`
 - **Config Examples** - Example configuration files in `data/config/examples/`
@@ -104,14 +104,11 @@ All release builds include:
 - **SHA256-SIMD** - Automatic AVX/AVX2/AVX512 (x86) or ARM crypto extensions
 - **Sonic JSON** - JIT-accelerated JSON on supported platforms
 
-To disable at runtime:
+To disable hardware acceleration, rebuild from source with the appropriate tags:
 ```bash
-# Disable SHA256 SIMD
-./goPool -sha256-no-avx
-
-# Or rebuild from source with build tags
 go build -tags "noavx nojsonsimd" -o goPool
 ```
+There is no runtime flag to disable the SIMD libraries, so rebuilding is required when you need the pure-Go implementations.
 
 ## Requirements
 
@@ -159,9 +156,9 @@ To upgrade to a new version:
 
 ## Building from Source
 
-If pre-built releases don't work for your platform, see [README.md](README.md) for build instructions.
+If pre-built releases don't work for your platform, see [README.md](../README.md) for build instructions.
 
 ## Support
 
 - **Issues:** https://github.com/Distortions81/M45-Core-goPool/issues
-- **Documentation:** See included markdown files (README.md, operations.md, performance.md)
+- **Documentation:** See included markdown files (`../README.md`, `operations.md`, `performance.md`, `TESTING.md`)

@@ -457,21 +457,51 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 
 	// Parse templates
 	tmpl := template.New("overview").Funcs(funcs)
-	template.Must(tmpl.Parse(string(layoutHTML)))
-	tmpl = template.Must(tmpl.New("overview").Parse(string(statusHTML)))
-	template.Must(tmpl.New("status_boxes").Parse(string(statusBoxesHTML)))
-	template.Must(tmpl.New("hashrate_graph").Parse(string(hashrateGraphHTML)))
-	template.Must(tmpl.New("hashrate_graph_script").Parse(string(hashrateGraphScriptHTML)))
-	template.Must(tmpl.New("server").Parse(string(serverInfoHTML)))
-	template.Must(tmpl.New("worker_login").Parse(string(workerLoginHTML)))
-	template.Must(tmpl.New("sign_in").Parse(string(signInHTML)))
-	template.Must(tmpl.New("saved_workers").Parse(string(savedWorkersHTML)))
-	template.Must(tmpl.New("worker_status").Parse(string(workerStatusHTML)))
-	template.Must(tmpl.New("worker_wallet_search").Parse(string(workerWalletSearchHTML)))
-	template.Must(tmpl.New("node").Parse(string(nodeInfoHTML)))
-	template.Must(tmpl.New("pool").Parse(string(poolInfoHTML)))
-	template.Must(tmpl.New("about").Parse(string(aboutHTML)))
-	template.Must(tmpl.New("error").Parse(string(errorHTML)))
+	if _, err := tmpl.Parse(string(layoutHTML)); err != nil {
+		return nil, fmt.Errorf("parse layout template: %w", err)
+	}
+	if _, err := tmpl.New("overview").Parse(string(statusHTML)); err != nil {
+		return nil, fmt.Errorf("parse status template: %w", err)
+	}
+	if _, err := tmpl.New("status_boxes").Parse(string(statusBoxesHTML)); err != nil {
+		return nil, fmt.Errorf("parse status boxes template: %w", err)
+	}
+	if _, err := tmpl.New("hashrate_graph").Parse(string(hashrateGraphHTML)); err != nil {
+		return nil, fmt.Errorf("parse hashrate graph template: %w", err)
+	}
+	if _, err := tmpl.New("hashrate_graph_script").Parse(string(hashrateGraphScriptHTML)); err != nil {
+		return nil, fmt.Errorf("parse hashrate graph script template: %w", err)
+	}
+	if _, err := tmpl.New("server").Parse(string(serverInfoHTML)); err != nil {
+		return nil, fmt.Errorf("parse server info template: %w", err)
+	}
+	if _, err := tmpl.New("worker_login").Parse(string(workerLoginHTML)); err != nil {
+		return nil, fmt.Errorf("parse worker login template: %w", err)
+	}
+	if _, err := tmpl.New("sign_in").Parse(string(signInHTML)); err != nil {
+		return nil, fmt.Errorf("parse sign in template: %w", err)
+	}
+	if _, err := tmpl.New("saved_workers").Parse(string(savedWorkersHTML)); err != nil {
+		return nil, fmt.Errorf("parse saved workers template: %w", err)
+	}
+	if _, err := tmpl.New("worker_status").Parse(string(workerStatusHTML)); err != nil {
+		return nil, fmt.Errorf("parse worker status template: %w", err)
+	}
+	if _, err := tmpl.New("worker_wallet_search").Parse(string(workerWalletSearchHTML)); err != nil {
+		return nil, fmt.Errorf("parse worker wallet search template: %w", err)
+	}
+	if _, err := tmpl.New("node").Parse(string(nodeInfoHTML)); err != nil {
+		return nil, fmt.Errorf("parse node info template: %w", err)
+	}
+	if _, err := tmpl.New("pool").Parse(string(poolInfoHTML)); err != nil {
+		return nil, fmt.Errorf("parse pool template: %w", err)
+	}
+	if _, err := tmpl.New("about").Parse(string(aboutHTML)); err != nil {
+		return nil, fmt.Errorf("parse about template: %w", err)
+	}
+	if _, err := tmpl.New("error").Parse(string(errorHTML)); err != nil {
+		return nil, fmt.Errorf("parse error template: %w", err)
+	}
 
 	return tmpl, nil
 }

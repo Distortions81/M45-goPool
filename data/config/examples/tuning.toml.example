@@ -2,109 +2,50 @@
 
 
 [bans]
-
-  # Seconds before banning miners that submit invalid shares.
   ban_invalid_submissions_after = 60
-
-  # Duration (seconds) of bans triggered by invalid share thresholds.
   ban_invalid_submissions_duration_seconds = 900
-
-  # Observation window (seconds) for tracking invalid shares.
   ban_invalid_submissions_window_seconds = 60
-
-  # Ban duration (seconds) applied when reconnect ban threshold is reached.
+  clean_expired_on_startup = true
   reconnect_ban_duration_seconds = 300
-
-  # Number of reconnects that trigger a ban.
   reconnect_ban_threshold = 0
-
-  # Seconds over which reconnections are counted for bans.
   reconnect_ban_window_seconds = 60
 
 [difficulty]
-
-  # Lock difficulties suggested by miners to prevent VarDiff adjustments.
   lock_suggested_difficulty = false
-
-  # Maximum difficulty advertised to miners.
   max_difficulty = 65536.0
-
-  # Minimum difficulty advertised to miners.
   min_difficulty = 256.0
 
 [discord]
-
-  # Sustained threshold (seconds) for Discord worker offline/recovery notifications. Default: 300 (5 minutes).
   worker_notify_threshold_seconds = 300
 
 [hashrate]
-
-  # Minimum accepted shares before the EMA is considered valid.
   hashrate_ema_min_shares = 10
-
-  # Time constant (seconds) for per-worker hashrate EMAs.
   hashrate_ema_tau_seconds = 600.0
-
-  # Allowed future timestamps miners may submit to guard against time drift.
   ntime_forward_slack_seconds = 7000
 
 [mining]
-
-  # Disable the '<pool_entropy>-<job_entropy>' coinbase suffix
   disable_pool_job_entropy = false
 
 [peer_cleaning]
-
-  # Enable periodic cleaning of peers that appear dead.
   enabled = true
-
-  # Max ping time (ms) before a peer is cleaned.
   max_ping_ms = 150.0
-
-  # Minimum peers the pool should keep during cleaning.
   min_peers = 20
 
 [rate_limits]
-
-  # Duration of the initial burst phase before steady-state throttling.
   accept_burst_window = 5
-
-  # Seconds during which reconnecting miners can reconnect smoothly after a restart.
   accept_reconnect_window = 15
-
-  # Maximum accepts per second during steady-state operation.
   accept_steady_state_rate = 50
-
-  # Expected percent of miners reconnecting during steady-state to size steady-state rate.
   accept_steady_state_reconnect_percent = 5.0
-
-  # Time window (sec) to observe reconnects for steady-state calculations.
   accept_steady_state_reconnect_window = 60
-
-  # Time until pool switches from reconnect to steady-state rate limiting.
   accept_steady_state_window = 100
-
-  # Automatically compute accept limits based on max_conns.
   auto_accept_rate_limits = true
-
-  # Short-term burst capacity before rate limits kick in.
   max_accept_burst = 1000
-
-  # Rate limit for new TCP accepts per second.
   max_accepts_per_second = 500
-
-  # Maximum simultaneous connections tracked by the pool.
   max_conns = 50000
 
 [timeouts]
-
-  # Timeout (seconds) for miner connections before they are closed.
   connection_timeout_seconds = 300
 
 [version]
-
-  # Ignore the min version bits requirement when set.
   ignore_min_version_bits = true
-
-  # Minimum number of version bits a miner must advertise.
   min_version_bits = 1

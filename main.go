@@ -42,16 +42,13 @@ func main() {
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL")
 	rpcCookieFlag := flag.String("rpc-cookie", "", "override RPC cookie path")
 	secretsFlag := flag.String("secrets", "", "path to secrets.toml")
-	httpOnlyFlag := flag.Bool("http-only", false, "disable HTTPS (for local/dev)")
-	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ (use longpoll)")
 	stdoutLogFlag := flag.Bool("stdout", false, "mirror logs to stdout")
 	profileFlag := flag.Bool("profile", false, "60s CPU profile")
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config on startup")
 	floodFlag := flag.Bool("flood", false, "flood-test mode")
-	checkDuplicatesFlag := flag.Bool("check-duplicates", false, "enable duplicate share detection")
-	noCleanBansFlag := flag.Bool("no-clean-bans", false, "keep expired bans")
 	disableJSONFlag := flag.Bool("no-json", false, "disable JSON API")
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
+	logLevelFlag := flag.String("log-level", "", "override log level (debug/info/warn/error)")
 	flag.Parse()
 
 	network := strings.ToLower(*networkFlag)
@@ -62,26 +59,11 @@ func main() {
 		rpcCookiePath:       *rpcCookieFlag,
 		allowRPCCredentials: *allowRPCCredsFlag,
 		flood:               *floodFlag,
-		noZMQ:               *noZMQFlag,
 		mainnet:             network == "mainnet",
 		testnet:             network == "testnet",
 		signet:              network == "signet",
 		regtest:             network == "regtest",
 	}
-	cleanBansOnStartup := !*noCleanBansFlag
-
-	level := logLevelWarn
-	if verboseEnabled() {
-		level = logLevelInfo
-	}
-	if debugEnabled() {
-		level = logLevelDebug
-	}
-	setLogLevel(level)
-
-	// Mirror build-time debug/verbose settings into globals used by hot paths.
-	debugLogging = debugEnabled()
-	verboseLogging = verboseEnabled()
 
 	// Optional one-shot CPU profiling: when -profile is set, capture a
 	// 60-second CPU profile to default.pgo using runtime/pprof. The file
@@ -126,18 +108,35 @@ func main() {
 		fatal("config", err)
 	}
 
-	// Apply command-line flag for duplicate share checking (disabled by default for solo pools)
-	cfg.CheckDuplicateShares = *checkDuplicatesFlag
+	logLevelName := cfg.LogLevel
+	if *logLevelFlag != "" {
+		logLevelName = *logLevelFlag
+	}
+	level, err := parseLogLevel(logLevelName)
+	if err != nil {
+		fatal("log level", err)
+	}
+	setLogLevel(level)
 
+	// Mirror current log-level into globals used by hot paths.
+	debugLogging = debugEnabled()
+	verboseLogging = verboseEnabled()
+
+	cleanBansOnStartup := cfg.CleanExpiredBansOnStartup
+	if !cleanBansOnStartup {
+		logger.Warn("ban cleanup on startup disabled", "tuning", "[bans].clean_expired_on_startup=false")
+	}
+
+	// Apply command-line flag for duplicate share checking (disabled by default for solo pools)
 	// Select btcd network params for local address validation based on the
 	// configured/selected network. Defaults to mainnet when no explicit
 	// network flag is provided.
 	switch {
-	case *regtestFlag:
+	case overrides.regtest:
 		SetChainParams("regtest")
-	case *testnetFlag:
+	case overrides.testnet:
 		SetChainParams("testnet3")
-	case *signetFlag:
+	case overrides.signet:
 		SetChainParams("signet")
 	default:
 		SetChainParams("mainnet")
@@ -196,10 +195,6 @@ func main() {
 	configureFileLogging(logPath, errorLogPath, debugLogPath, *stdoutLogFlag)
 	ensureSubmissionWorkerPool()
 	defer logger.Stop()
-
-	if !cleanBansOnStartup {
-		logger.Warn("ban cleanup on startup disabled", "flag", "no-clean-bans")
-	}
 
 	var netLogPath string
 	if debugEnabled() {
@@ -408,12 +403,7 @@ func main() {
 	httpAddr := strings.TrimSpace(cfg.StatusAddr)
 	httpsAddr := strings.TrimSpace(cfg.StatusTLSAddr)
 
-	// HTTP-only mode disables HTTPS for local/dev setups.
-	if *httpOnlyFlag {
-		httpsAddr = ""
-		cfg.StatusTLSAddr = ""
-	}
-
+	// TLS is optional; leaving cfg.StatusTLSAddr empty disables HTTPS for local/dev setups.
 	var certPath, keyPath string
 	var certReloader *certReloader
 	needStatusTLS := httpsAddr != ""

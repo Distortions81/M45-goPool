@@ -2,330 +2,52 @@
 
 [![Go CI](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml)
 [![Go Vulncheck](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-Core-goPool)](https://goreportcard.com/report/github.com/Distortions81/M45-Core-goPool)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-Core-goPool)](https://go.dev)
 [![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Distortions81/M45-Core-goPool)](https://go.dev)
 
-> **⬇️ [Download Pre-Built Releases](https://github.com/Distortions81/M45-Core-goPool/releases)** - Ready-to-run binaries for Linux (AMD64) and macOS (AMD64/ARM64). See [RELEASES.md](RELEASES.md) for details.
+goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and ships with a status UI + JSON APIs for monitoring.
 
-## About
+> **Downloads:** Pre-built binaries are available on GitHub Releases (see [guide/RELEASES.md](guide/RELEASES.md)).
 
-goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core (`bitcoind`) over JSON-RPC and ZMQ. It serves miners via Stratum v1 (with optional TLS) and provides a web-based status UI with JSON APIs for monitoring.
+## Quick start
 
-**Key Features:**
-- Stratum v1 mining protocol with optional TLS support
-- Direct Bitcoin Core integration via JSON-RPC and ZMQ
-- Configurable coinbase splits (pool fee, operator donation, miner payout)
-- Web status UI with HTTPS-first design and auto-generated certificates
-- Automated backups with optional Backblaze B2 cloud storage
-- Rate limiting, invalid-submission bans, and reconnect churn protection
-- Comprehensive test suite with compatibility checks
+1. Install Go 1.24 or later and ZeroMQ (`libzmq3-dev` or equivalent depending on your platform).
+2. Clone the repo and build the pool.
+    ```bash
+    git clone https://github.com/Distortions81/M45-Core-goPool.git
+    cd M45-Core-goPool
+    go build -o goPool
+    ```
+3. Run `./goPool` once to generate example config files under `data/config/examples/`, then copy the base example into `data/config/config.toml` and edit it.
+4. Set the required `node.payout_address`, `node.rpc_url`, and `node.zmq_block_addr` (leave it empty to run RPC/longpoll-only) before restarting the pool.
 
-## Build
+## Configuration overview
 
-**Requirements:**
-- Bitcoin Core with RPC enabled and ZMQ support recommended
-- Go toolchain (see [go.mod](go.mod) for version)
-- ZeroMQ library and headers (for `github.com/pebbe/zmq4`)
+- `data/config/config.toml` controls listener ports, branding, RPC credentials, fee percentages, and most runtime behavior.
+- TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
+- `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and `node.zmq_block_addr` (leave it empty to disable ZMQ and rely on RPC/longpoll). The first run writes helper examples to `data/config/examples/`.
+- `data/config/tuning.toml` lets you override advanced limits (rate limits, bans, EMA windows, etc.) while `data/config/secrets.toml` holds sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
+- `[logging].level` controls runtime verbosity (`debug`, `info`, `warn`, `error`) and gates features like `net-debug.log`; override it temporarily with `-log-level <level>`.
+- Enable `[mining].check_duplicate_shares = true` to pull shared duplication checks into solo-mode (this setting lives only in the config).
 
-### Installing Dependencies
+Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the corresponding config file values for a single run—they are not written back to `config.toml`.
 
-**Install Go (all distributions):**
+## Building & releases
 
-goPool requires Go 1.24.11 or later. Always use the official golang.org release rather than distribution packages.
+- Build directly with `go build -o goPool`. Use hardware-acceleration tags such as `noavx` or `nojsonsimd` only when necessary; see [guide/operations.md](guide/operations.md) for guidance.
+- Release builds already embed `build_time`/`build_version` via `-ldflags`. For a local build, pass the same metadata manually:
 
-Visit [https://go.dev/dl/](https://go.dev/dl/) to download and install the latest Go version for your platform.
+  ```bash
+  go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=v0.0.0-dev" -o goPool
+  ```
+- Downloaded releases bundle everything under `data/` plus `guide/` documentation—see [guide/RELEASES.md](guide/RELEASES.md) for upgrade guidance, checksums, and release mechanics.
 
-**Install ZeroMQ:**
+## Documentation & resources
 
-**Ubuntu / Debian:**
-```bash
-sudo apt update
-sudo apt install -y libzmq3-dev
-```
+- **`guide/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
+- **`guide/performance.md`** – Capacity planning, benchmark data, and CPU/network ballparks.
+- **`guide/TESTING.md`** – Test suite instructions and how to add or run existing tests.
+- **`guide/RELEASES.md`** – Release package contents, verification, and upgrade steps.
+- **`LICENSE`** – Legal terms for using goPool.
 
-**Fedora / RHEL / CentOS:**
-```bash
-sudo dnf install -y zeromq-devel
-```
-
-**Arch Linux:**
-```bash
-sudo pacman -S zeromq
-```
-
-**Alpine Linux:**
-```bash
-apk add --no-cache zeromq-dev build-base
-```
-
-### Build & Run
-
-```bash
-# Clone the repository (if not already cloned)
-git clone https://github.com/Distortions81/M45-Core-goPool.git
-cd M45-Core-goPool
-
-# Run directly
-go run .
-
-# Or build binary
-go build -o goPool
-./goPool
-```
-
-On first run, goPool will generate example configuration files in `data/config/examples/` and exit with setup instructions.
-
-### Build Tags
-
-goPool supports several build tags for different configurations:
-
-| Build Tag | Purpose | Default | Fallback |
-|-----------|---------|---------|----------|
-| `debug` | Enable debug logging + network traffic logs | Off | N/A |
-| `verbose` | Enable verbose logging (no network logs) | Off | N/A |
-| `noavx` | Disable hardware-accelerated SHA256 | Uses [`sha256-simd`](https://github.com/minio/sha256-simd) | [`crypto/sha256`](https://pkg.go.dev/crypto/sha256) |
-| `nojsonsimd` | Disable hardware-accelerated JSON | Uses [`sonic`](https://github.com/bytedance/sonic) | [`encoding/json`](https://pkg.go.dev/encoding/json) |
-
-**Logging Levels:**
-```bash
-# Debug build with network traffic logging
-go build -tags debug -o goPool
-
-# Verbose build without network traffic logging
-go build -tags verbose -o goPool
-```
-
-**Disable Hardware-Accelerated SHA256:**
-
-By default, goPool uses [`github.com/minio/sha256-simd`](https://github.com/minio/sha256-simd) which provides hardware-accelerated SHA256 hashing:
-- **x86/x64:** AVX512, SHA Extensions, AVX2
-- **ARM64:** Cryptography Extensions (ARMv8)
-- **Fallback:** Pure Go implementation on unsupported platforms
-
-The library automatically selects the best implementation at runtime. However, you can force the use of standard [`crypto/sha256`](https://pkg.go.dev/crypto/sha256):
-
-1. **Build without sha256-simd:**
-```bash
-# Disable sha256-simd at build time
-go build -tags noavx -o goPool
-```
-
-2. **Use runtime flag:**
-```bash
-# Disable sha256-simd at runtime
-./goPool -sha256-no-avx
-```
-
-**When to disable:** Only needed for debugging, benchmarking the standard library, or if sha256-simd causes issues. The library handles unsupported platforms automatically.
-
-**Disable Hardware-Accelerated JSON:**
-
-By default, goPool uses [`github.com/bytedance/sonic`](https://github.com/bytedance/sonic) for faster JSON encoding/decoding with JIT compilation and SIMD:
-- **Supported:** Linux, MacOS, Windows on AMD64 or ARM64
-- **Fallback:** Standard [`encoding/json`](https://pkg.go.dev/encoding/json) on unsupported platforms
-
-```bash
-# Disable sonic (forces encoding/json)
-go build -tags nojsonsimd -o goPool
-```
-
-**Combining Build Tags:**
-```bash
-# Debug build without SIMD acceleration
-go build -tags "debug noavx nojsonsimd" -o goPool
-
-# Verbose build without SIMD acceleration
-go build -tags "verbose noavx nojsonsimd" -o goPool
-
-# Disable only JSON SIMD, keep SHA256 SIMD
-go build -tags nojsonsimd -o goPool
-
-# Disable only SHA256 SIMD, keep JSON SIMD
-go build -tags noavx -o goPool
-```
-
-## Command-Line Parameters
-
-Run `./goPool -h` to see all available command-line flags:
-
-| Flag | Description |
-|------|-------------|
-| `-allow-rpc-credentials` | Allow loading rpc_user/rpc_pass from secrets.toml when node.rpc_cookie_path is not set |
-| `-bind <ip>` | Bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100) |
-| `-check-duplicates` | Enable duplicate share checking (disabled by default for solo pools) |
-| `-disable-json-endpoint` | Disable JSON status endpoints for debugging |
-| `-flood` | Enable flood-test mode (force min/max difficulty to 0.01) |
-| `-https-only` | Serve status UI over HTTPS only (auto-generating a self-signed cert if none is present) (default: true) |
-| `-http-only` | Serve status UI over HTTP only (disables HTTPS listener and redirects) |
-| `-mainnet` | Force mainnet defaults for RPC/ZMQ ports |
-| `-no-clean-bans` | Skip rewriting the ban list on startup (keep expired bans) |
-| `-no-zmq` | Disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW) |
-| `-profile` | Collect a 60s CPU profile to default.pgo on startup |
-| `-regtest` | Force regtest defaults for RPC/ZMQ ports |
-| `-rewrite-config` | Rewrite config file with effective settings on startup |
-| `-rpc-cookie-path <path>` | Override node RPC cookie path (skips autodetection when set) |
-| `-rpc-url <url>` | Override RPC URL (e.g. http://127.0.0.1:8332) |
-| `-secrets <path>` | Path to secrets.toml (overrides default under data_dir/config) |
-| `-signet` | Force signet defaults for RPC/ZMQ ports |
-| `-stdoutlog` | Mirror logs to stdout in addition to writing to files |
-| `-testnet` | Force testnet defaults for RPC/ZMQ ports |
-
-**Common Usage Examples:**
-
-```bash
-# Run on testnet
-./goPool -testnet
-
-# Run on regtest for local development
-./goPool -regtest
-
-# Mirror logs to stdout for debugging
-./goPool -stdoutlog
-
-# Bind to specific IP address
-./goPool -bind 192.168.1.100
-
-# Override RPC URL
-./goPool -rpc-url http://127.0.0.1:8332
-```
-
-## Configuration
-
-### Quick Start Configuration
-
-After your first run, goPool generates example configs in `data/config/examples/`. Copy and edit them:
-
-```bash
-cp data/config/examples/config.toml.example data/config/config.toml
-nano data/config/config.toml
-```
-
-**Minimum Required Settings:**
-
-1. **Payout Address** - Where your mining rewards go:
-   ```toml
-   [node]
-   payout_address = "YOUR_BITCOIN_ADDRESS"
-   ```
-
-2. **Bitcoin Core Connection** - Update if not using defaults:
-   ```toml
-   [node]
-   rpc_url = "http://127.0.0.1:8332"
-   zmq_block_addr = "tcp://127.0.0.1:28332"
-   ```
-
-**Optional but Recommended:**
-
-- Set `server.status_public_url` to your pool's public URL for proper redirects
-- Configure `branding.status_brand_name` and `branding.status_tagline` for UI customization
-- Set `mining.pool_fee_percent` (default 2.0%)
-- Keep `mining.solo_mode = true` (the default) to skip strict share validation for solo miners; set it to `false` if you need the extra policy checks used in multi-worker pools
-- Set `mining.direct_submit_processing = true` to process `mining.submit` directly on the connection goroutine (bypassing the shared worker queue) when you want the absolute lowest submit latency; keep it `false` if you need the shared worker pool to limit concurrency.
-
-See [operations.md](operations.md) for detailed configuration options.
-
-### Config Files
-
-goPool uses three TOML configuration files in `data/config/`:
-
-- **`config.toml`** (required) - Primary pool configuration
-- **`secrets.toml`** (optional) - Sensitive credentials (Discord tokens, Clerk keys, RPC auth)
-- **`tuning.toml`** (optional) - Performance tuning overrides
-
-If `config.toml` is missing, goPool generates examples and exits. Copy and customize `data/config/examples/config.toml` to get started.
-
-### Bitcoin Core Connection
-
-**RPC Authentication:**
-- Preferred: Cookie file via `node.rpc_cookie_path`
-- Autodetection: goPool searches `$BITCOIN_DATADIR` and common locations
-- Override: Use `-rpc-cookie-path` flag for single-run override
-- Alternative: Use `-allow-rpc-credentials` with `rpc_user`/`rpc_pass` in `secrets.toml` (insecure, not recommended)
-- Public RPC: Set `node.allow_public_rpc = true` for unauthenticated endpoints (understand security implications)
-
-**ZMQ Configuration:**
-Add to your `bitcoin.conf`:
-```conf
-zmqpubrawblock=tcp://127.0.0.1:28332
-zmqpubhashblock=tcp://127.0.0.1:28332
-zmqpubrawtx=tcp://127.0.0.1:28332
-zmqpubhashtx=tcp://127.0.0.1:28332
-```
-
-Then set in `config.toml`:
-```toml
-[node]
-zmq_block_addr = "tcp://127.0.0.1:28332"
-rpc_url = "http://127.0.0.1:8332"
-```
-
-To disable ZMQ and use RPC-only mode, use the `-no-zmq` flag.
-
-### Network Listeners
-
-Default ports in `config.toml`:
-- Stratum (plain): `:3333`
-- Stratum (TLS): `:4333`
-- Status UI (HTTP): `:8080`
-- Status UI (HTTPS): `:4443`
-
-**TLS Certificates:**
-- Auto-generated: goPool creates self-signed certs on first run (`data/tls_cert.pem`, `data/tls_key.pem`)
-- Custom certs: Replace these files with your own (e.g., from Let's Encrypt)
-- Auto-reload: Certificates reload hourly automatically
-- Helper script: [scripts/certbot-gopool.sh](scripts/certbot-gopool.sh) automates certbot integration
-
-**HTTPS-First Mode:**
-By default (`-https-only=true`), HTTP serves only a safe subset and redirects to HTTPS. Set `server.status_public_url` to your final public URL for proper redirects and session cookies.
-
-**HTTP-Only Mode (local/dev):**
-If you want plain HTTP with no redirects and no HTTPS listener, run with `-http-only` (or set `server.status_tls_listen = ""` and run with `-https-only=false`).
-
-## Operation
-
-### Running the Pool
-
-**Point miners at Stratum:**
-- Plain: `stratum+tcp://<pool-host>:3333`
-- TLS: `stratum+ssl://<pool-host>:4333`
-
-**Runtime Configuration Reload:**
-- `SIGUSR1` - Reload HTML templates
-- `SIGUSR2` - Reload config/secrets/tuning (status pages only; restart required for listener/auth changes)
-
-**Command-Line Flags:**
-- `-rpc-cookie-path <path>` - Override RPC cookie location
-- `-rpc-url <url>` - Override RPC URL
-- `-allow-rpc-credentials` - Enable `rpc_user`/`rpc_pass` from secrets.toml
-- `-no-zmq` - Disable ZMQ, use RPC/longpoll only
-- `-https-only=false` - Disable HTTPS-first mode
-- `-http-only` - Force HTTP-only status UI mode
-
-### Monitoring
-
-**Status UI:**
-- Access at `https://<pool-host>:4443` (default)
-- Templates in `data/templates/`
-- JSON API endpoints under `/api/*`
-
-**Data Storage:**
-- Worker database: `data/state/workers.db`
-- Automatic local snapshots for safe backups
-- Optional Backblaze B2 uploads (configure `[backblaze_backup]` section)
-
-### Additional Documentation
-
-- [RELEASES.md](RELEASES.md) - Pre-built release packages and upgrade guide
-- [operations.md](operations.md) - Detailed configuration, flags, API reference, logging
-- [performance.md](performance.md) - Capacity planning and benchmark data
-- [TESTING.md](TESTING.md) - Test suite overview and instructions
-- [data/config/examples/autogen.md](data/config/examples/autogen.md) - Config generation details
-
-### Useful Scripts
-
-- [scripts/install-bitcoind.sh](scripts/install-bitcoind.sh) - Bootstrap local bitcoind with ZMQ
-- [scripts/run-tests.sh](scripts/run-tests.sh) - Run complete Go test suite
-- [scripts/profile-graph.sh](scripts/profile-graph.sh) - Generate CPU profile visualization
-- [scripts/certbot-gopool.sh](scripts/certbot-gopool.sh) - Automate Let's Encrypt certificate setup
+Need help? Open an issue on GitHub or refer to the documentation in `guide/` before asking for assistance.

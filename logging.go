@@ -17,6 +17,8 @@ var (
 	verboseLogging bool
 )
 
+var runtimeLogLevel = logLevelWarn
+
 const (
 	logLevelDebug logLevel = iota
 	logLevelInfo
@@ -347,7 +349,31 @@ func (w *dailyRollingFileWriter) Close() error {
 }
 
 func setLogLevel(level logLevel) {
+	runtimeLogLevel = level
 	logger.setLevel(level)
+}
+
+func parseLogLevel(name string) (logLevel, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "", "warn":
+		return logLevelWarn, nil
+	case "info":
+		return logLevelInfo, nil
+	case "debug":
+		return logLevelDebug, nil
+	case "error":
+		return logLevelError, nil
+	default:
+		return logLevelWarn, fmt.Errorf("unknown log level %q", name)
+	}
+}
+
+func debugEnabled() bool {
+	return runtimeLogLevel <= logLevelDebug
+}
+
+func verboseEnabled() bool {
+	return runtimeLogLevel <= logLevelInfo
 }
 
 func configureFileLogging(poolPath, errorPath, debugPath string, stdout bool) {

@@ -12,7 +12,6 @@ type runtimeOverrides struct {
 	rpcCookiePath       string
 	allowRPCCredentials bool
 	flood               bool
-	noZMQ               bool
 	mainnet             bool
 	testnet             bool
 	signet              bool
@@ -101,10 +100,8 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 		}
 	}
 
-	if overrides.noZMQ {
-		cfg.ZMQBlockAddr = ""
-	} else if cfg.ZMQBlockAddr == "" {
-		return fmt.Errorf("missing zmq_block_addr; set it in config.toml or use -no-zmq to disable ZMQ")
+	if cfg.ZMQBlockAddr == "" {
+		logger.Warn("zmq_block_addr is empty; using RPC/longpoll-only mode", "hint", "set node.zmq_block_addr in config.toml to re-enable ZMQ")
 	}
 
 	return nil

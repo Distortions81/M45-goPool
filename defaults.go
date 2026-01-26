@@ -52,6 +52,8 @@ func defaultConfig() Config {
 		HashrateEMATauSeconds:               defaultHashrateEMATauSeconds,
 		HashrateEMAMinShares:                defaultHashrateEMAMinShares,
 		NTimeForwardSlackSeconds:            defaultNTimeForwardSlackSeconds,
+		CleanExpiredBansOnStartup:           true,
+		LogLevel:                            "warn",
 		SoloMode:                            true,
 		BanInvalidSubmissionsAfter:          defaultBanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:         defaultBanInvalidSubmissionsWindow,

@@ -1,6 +1,6 @@
 # Performance & Capacity Planning
 
-> **Quick Start:** See the [main README](README.md) for setup instructions.
+> **Quick Start:** See the [main README](../README.md) for setup instructions.
 
 This document provides practical capacity planning guidance for goPool operators. The benchmarks focus primarily on **CPU** with additional **network bandwidth** estimates for gigabit and 10 gigabit deployments.
 

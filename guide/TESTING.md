@@ -1,6 +1,6 @@
 # Testing goPool
 
-> **See also:** [Main README](README.md) for setup and configuration.
+> **See also:** [Main README](../README.md) for setup and configuration.
 
 goPool includes comprehensive test coverage:
 - **Unit tests** for core pool logic
