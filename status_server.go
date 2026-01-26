@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -603,14 +604,73 @@ const adminSessionCookieName = "admin_session"
 
 type AdminPageData struct {
 	StatusData
-	AdminEnabled     bool
-	AdminConfigPath  string
-	LoggedIn         bool
-	ConfigContent    string
-	AdminLoginError  string
-	AdminConfigError string
-	AdminRebootError string
-	AdminNotice      string
+	AdminEnabled      bool
+	AdminConfigPath   string
+	LoggedIn          bool
+	AdminLoginError   string
+	AdminApplyError   string
+	AdminPersistError string
+	AdminRebootError  string
+	AdminNotice       string
+	Settings          AdminSettingsData
+}
+
+type AdminSettingsData struct {
+	// Branding/UI
+	StatusBrandName   string
+	StatusBrandDomain string
+	StatusPublicURL   string
+	StatusTagline     string
+	FiatCurrency      string
+	GitHubURL         string
+	DiscordURL        string
+	ServerLocation    string
+
+	// Listeners
+	ListenAddr       string
+	StatusAddr       string
+	StatusTLSAddr    string
+	StratumTLSListen string
+
+	// Rate limits
+	MaxConns                          int
+	MaxAcceptsPerSecond               int
+	MaxAcceptBurst                    int
+	AutoAcceptRateLimits              bool
+	AcceptReconnectWindow             int
+	AcceptBurstWindow                 int
+	AcceptSteadyStateWindow           int
+	AcceptSteadyStateRate             int
+	AcceptSteadyStateReconnectPercent float64
+	AcceptSteadyStateReconnectWindow  int
+
+	// Timeouts
+	ConnectionTimeoutSeconds int
+
+	// Difficulty / mining toggles
+	MinDifficulty           float64
+	MaxDifficulty           float64
+	LockSuggestedDifficulty bool
+	SoloMode                bool
+	DirectSubmitProcessing  bool
+	CheckDuplicateShares    bool
+
+	// Peer cleanup
+	PeerCleanupEnabled   bool
+	PeerCleanupMaxPingMs float64
+	PeerCleanupMinPeers  int
+
+	// Bans
+	CleanExpiredBansOnStartup            bool
+	BanInvalidSubmissionsAfter           int
+	BanInvalidSubmissionsWindowSeconds   int
+	BanInvalidSubmissionsDurationSeconds int
+	ReconnectBanThreshold                int
+	ReconnectBanWindowSeconds            int
+	ReconnectBanDurationSeconds          int
+
+	// Logging
+	LogLevel string
 }
 
 func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
@@ -627,6 +687,13 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		return
 	}
+	if !s.allowAdminLoginAttempt() {
+		data, _, _ := s.buildAdminPageData(r, "")
+		data.AdminLoginError = "Too many login attempts. Please wait a moment and try again."
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.renderAdminPage(w, r, data)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		logger.Warn("parse admin login form", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -635,12 +702,12 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 	adminCfg, err := loadAdminConfigFile(s.adminConfigPath)
 	data, _, _ := s.buildAdminPageData(r, "")
 	if err != nil {
-		data.AdminConfigError = fmt.Sprintf("Failed to read admin config: %v", err)
+		data.AdminApplyError = fmt.Sprintf("Failed to read admin config: %v", err)
 		s.renderAdminPage(w, r, data)
 		return
 	}
 	if !adminCfg.Enabled {
-		data.AdminConfigError = "Admin control panel is disabled (set enabled = true in admin.toml)."
+		data.AdminApplyError = "Admin control panel is disabled (set enabled = true in admin.toml)."
 		s.renderAdminPage(w, r, data)
 		return
 	}
@@ -670,6 +737,20 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/admin?notice=logged_in", http.StatusSeeOther)
 }
 
+func (s *StatusServer) allowAdminLoginAttempt() bool {
+	if s == nil {
+		return false
+	}
+	now := time.Now()
+	s.adminLoginMu.Lock()
+	defer s.adminLoginMu.Unlock()
+	if !s.adminLoginNext.IsZero() && now.Before(s.adminLoginNext) {
+		return false
+	}
+	s.adminLoginNext = now.Add(100 * time.Millisecond)
+	return true
+}
+
 func (s *StatusServer) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -690,13 +771,13 @@ func (s *StatusServer) handleAdminLogout(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin?notice=logged_out", http.StatusSeeOther)
 }
 
-func (s *StatusServer) handleAdminConfigSave(w http.ResponseWriter, r *http.Request) {
+func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		logger.Warn("parse admin config form", "error", err)
+		logger.Warn("parse admin settings form", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -706,7 +787,7 @@ func (s *StatusServer) handleAdminConfigSave(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if !adminCfg.Enabled {
-		data.AdminConfigError = "Admin control panel is disabled."
+		data.AdminApplyError = "Admin control panel is disabled."
 		s.renderAdminPage(w, r, data)
 		return
 	}
@@ -716,30 +797,83 @@ func (s *StatusServer) handleAdminConfigSave(w http.ResponseWriter, r *http.Requ
 	}
 	password := r.FormValue("password")
 	if password == "" || !s.adminPasswordMatches(adminCfg, password) {
-		data.AdminConfigError = "Password is required to save the configuration."
+		data.AdminApplyError = "Password is required to apply live settings."
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	configText := r.FormValue("config_text")
-	if strings.TrimSpace(configText) == "" {
-		data.AdminConfigError = "Configuration content cannot be empty."
+
+	cfg := s.Config()
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		data.AdminApplyError = err.Error()
+		data.Settings = buildAdminSettingsData(cfg)
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	var tmp baseFileConfig
-	if err := toml.Unmarshal([]byte(configText), &tmp); err != nil {
-		data.AdminConfigError = fmt.Sprintf("Configuration parse error: %v", err)
+
+	// Best-effort helper: keep accept limits consistent when auto mode is enabled.
+	autoConfigureAcceptRateLimits(&cfg, tuningFileConfig{}, false)
+
+	if err := validateConfig(cfg); err != nil {
+		data.AdminApplyError = fmt.Sprintf("Validation error: %v", err)
+		data.Settings = buildAdminSettingsData(cfg)
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	if err := atomicWriteFile(s.configPath, []byte(configText)); err != nil {
-		logger.Error("admin config write failed", "error", err)
-		data.AdminConfigError = fmt.Sprintf("Failed to save config: %v", err)
+
+	s.UpdateConfig(cfg)
+	logger.Info("admin applied live settings (in memory)")
+	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin persist form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, err := s.buildAdminPageData(r, "")
+	if err != nil {
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	logger.Info("admin updated config", "path", s.configPath)
-	http.Redirect(w, r, "/admin?notice=config_saved", http.StatusSeeOther)
+	if !adminCfg.Enabled {
+		data.AdminPersistError = "Admin control panel is disabled."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminPersistError = "Password is required to save to disk."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm")), "SAVE") {
+		data.AdminPersistError = "Please type SAVE to confirm."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+
+	cfg := s.Config()
+	if err := rewriteConfigFile(s.configPath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write config.toml: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := rewriteTuningFile(s.tuningPath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write tuning.toml: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+
+	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "tuning_path", s.tuningPath)
+	http.Redirect(w, r, "/admin?notice=saved_to_disk", http.StatusSeeOther)
 }
 
 func (s *StatusServer) handleAdminReboot(w http.ResponseWriter, r *http.Request) {
@@ -794,19 +928,12 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	if err != nil {
 		logger.Warn("load admin config failed", "error", err, "path", s.adminConfigPath)
 		data.AdminEnabled = false
-		data.AdminConfigError = fmt.Sprintf("Failed to read admin config: %v", err)
+		data.AdminApplyError = fmt.Sprintf("Failed to read admin config: %v", err)
 		return data, cfg, err
 	}
 	data.AdminEnabled = cfg.Enabled
 	data.LoggedIn = s.isAdminAuthenticated(r)
-	if data.LoggedIn && data.AdminEnabled {
-		if content, readErr := os.ReadFile(s.configPath); readErr == nil {
-			data.ConfigContent = string(content)
-		} else {
-			logger.Warn("read config for admin page failed", "error", readErr)
-			data.AdminConfigError = fmt.Sprintf("Failed to load config: %v", readErr)
-		}
-	}
+	data.Settings = buildAdminSettingsData(s.Config())
 	return data, cfg, nil
 }
 
@@ -823,8 +950,10 @@ func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, d
 
 func adminNoticeMessage(key string) string {
 	switch key {
-	case "config_saved":
-		return "Configuration saved; restart or reboot to apply the changes."
+	case "settings_applied":
+		return "Live settings applied in memory."
+	case "saved_to_disk":
+		return "Saved current in-memory settings to config.toml and tuning.toml."
 	case "reboot_requested":
 		return "Reboot requested. goPool is shutting down now."
 	case "logged_in":
@@ -834,6 +963,216 @@ func adminNoticeMessage(key string) string {
 	default:
 		return ""
 	}
+}
+
+func buildAdminSettingsData(cfg Config) AdminSettingsData {
+	timeoutSec := int(cfg.ConnectionTimeout / time.Second)
+	if timeoutSec < 0 {
+		timeoutSec = 0
+	}
+	return AdminSettingsData{
+		StatusBrandName:                      cfg.StatusBrandName,
+		StatusBrandDomain:                    cfg.StatusBrandDomain,
+		StatusPublicURL:                      cfg.StatusPublicURL,
+		StatusTagline:                        cfg.StatusTagline,
+		FiatCurrency:                         cfg.FiatCurrency,
+		GitHubURL:                            cfg.GitHubURL,
+		DiscordURL:                           cfg.DiscordURL,
+		ServerLocation:                       cfg.ServerLocation,
+		ListenAddr:                           cfg.ListenAddr,
+		StatusAddr:                           cfg.StatusAddr,
+		StatusTLSAddr:                        cfg.StatusTLSAddr,
+		StratumTLSListen:                     cfg.StratumTLSListen,
+		MaxConns:                             cfg.MaxConns,
+		MaxAcceptsPerSecond:                  cfg.MaxAcceptsPerSecond,
+		MaxAcceptBurst:                       cfg.MaxAcceptBurst,
+		AutoAcceptRateLimits:                 cfg.AutoAcceptRateLimits,
+		AcceptReconnectWindow:                cfg.AcceptReconnectWindow,
+		AcceptBurstWindow:                    cfg.AcceptBurstWindow,
+		AcceptSteadyStateWindow:              cfg.AcceptSteadyStateWindow,
+		AcceptSteadyStateRate:                cfg.AcceptSteadyStateRate,
+		AcceptSteadyStateReconnectPercent:    cfg.AcceptSteadyStateReconnectPercent,
+		AcceptSteadyStateReconnectWindow:     cfg.AcceptSteadyStateReconnectWindow,
+		ConnectionTimeoutSeconds:             timeoutSec,
+		MinDifficulty:                        cfg.MinDifficulty,
+		MaxDifficulty:                        cfg.MaxDifficulty,
+		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
+		SoloMode:                             cfg.SoloMode,
+		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
+		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
+		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
+		PeerCleanupMaxPingMs:                 cfg.PeerCleanupMaxPingMs,
+		PeerCleanupMinPeers:                  cfg.PeerCleanupMinPeers,
+		CleanExpiredBansOnStartup:            cfg.CleanExpiredBansOnStartup,
+		BanInvalidSubmissionsAfter:           cfg.BanInvalidSubmissionsAfter,
+		BanInvalidSubmissionsWindowSeconds:   int(cfg.BanInvalidSubmissionsWindow / time.Second),
+		BanInvalidSubmissionsDurationSeconds: int(cfg.BanInvalidSubmissionsDuration / time.Second),
+		ReconnectBanThreshold:                cfg.ReconnectBanThreshold,
+		ReconnectBanWindowSeconds:            cfg.ReconnectBanWindowSeconds,
+		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
+		LogLevel:                             cfg.LogLevel,
+	}
+}
+
+func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
+	if cfg == nil || r == nil {
+		return fmt.Errorf("missing request/config")
+	}
+
+	getTrim := func(key string) string { return strings.TrimSpace(r.FormValue(key)) }
+	getBool := func(key string) bool { return strings.TrimSpace(r.FormValue(key)) != "" }
+
+	parseInt := func(key string, current int) (int, error) {
+		raw := getTrim(key)
+		if raw == "" {
+			return current, nil
+		}
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return current, fmt.Errorf("%s must be an integer", key)
+		}
+		return v, nil
+	}
+
+	parseFloat := func(key string, current float64) (float64, error) {
+		raw := getTrim(key)
+		if raw == "" {
+			return current, nil
+		}
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return current, fmt.Errorf("%s must be a number", key)
+		}
+		return v, nil
+	}
+
+	normalizeListen := func(s string) string {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return s
+		}
+		if !strings.Contains(s, ":") {
+			return ":" + s
+		}
+		return s
+	}
+
+	cfg.StatusBrandName = getTrim("status_brand_name")
+	cfg.StatusBrandDomain = getTrim("status_brand_domain")
+	cfg.StatusTagline = getTrim("status_tagline")
+	cfg.FiatCurrency = strings.ToLower(getTrim("fiat_currency"))
+	cfg.GitHubURL = getTrim("github_url")
+	cfg.DiscordURL = getTrim("discord_url")
+	cfg.ServerLocation = getTrim("server_location")
+	cfg.StatusPublicURL = getTrim("status_public_url")
+
+	cfg.ListenAddr = normalizeListen(getTrim("pool_listen"))
+	cfg.StatusAddr = normalizeListen(getTrim("status_listen"))
+	cfg.StatusTLSAddr = normalizeListen(getTrim("status_tls_listen"))
+	cfg.StratumTLSListen = normalizeListen(getTrim("stratum_tls_listen"))
+
+	var err error
+	if cfg.MaxConns, err = parseInt("max_conns", cfg.MaxConns); err != nil {
+		return err
+	}
+	cfg.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
+	if cfg.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", cfg.MaxAcceptsPerSecond); err != nil {
+		return err
+	}
+	if cfg.MaxAcceptBurst, err = parseInt("max_accept_burst", cfg.MaxAcceptBurst); err != nil {
+		return err
+	}
+	if cfg.AcceptReconnectWindow, err = parseInt("accept_reconnect_window", cfg.AcceptReconnectWindow); err != nil {
+		return err
+	}
+	if cfg.AcceptBurstWindow, err = parseInt("accept_burst_window", cfg.AcceptBurstWindow); err != nil {
+		return err
+	}
+	if cfg.AcceptSteadyStateWindow, err = parseInt("accept_steady_state_window", cfg.AcceptSteadyStateWindow); err != nil {
+		return err
+	}
+	if cfg.AcceptSteadyStateRate, err = parseInt("accept_steady_state_rate", cfg.AcceptSteadyStateRate); err != nil {
+		return err
+	}
+	if cfg.AcceptSteadyStateReconnectPercent, err = parseFloat("accept_steady_state_reconnect_percent", cfg.AcceptSteadyStateReconnectPercent); err != nil {
+		return err
+	}
+	if cfg.AcceptSteadyStateReconnectWindow, err = parseInt("accept_steady_state_reconnect_window", cfg.AcceptSteadyStateReconnectWindow); err != nil {
+		return err
+	}
+
+	timeoutSec, err := parseInt("connection_timeout_seconds", int(cfg.ConnectionTimeout/time.Second))
+	if err != nil {
+		return err
+	}
+	cfg.ConnectionTimeout = time.Duration(timeoutSec) * time.Second
+
+	if cfg.MinDifficulty, err = parseFloat("min_difficulty", cfg.MinDifficulty); err != nil {
+		return err
+	}
+	if cfg.MaxDifficulty, err = parseFloat("max_difficulty", cfg.MaxDifficulty); err != nil {
+		return err
+	}
+	cfg.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
+
+	cfg.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
+	if cfg.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", cfg.BanInvalidSubmissionsAfter); err != nil {
+		return err
+	}
+	windowSec, err := parseInt("ban_invalid_submissions_window_seconds", int(cfg.BanInvalidSubmissionsWindow/time.Second))
+	if err != nil {
+		return err
+	}
+	cfg.BanInvalidSubmissionsWindow = time.Duration(windowSec) * time.Second
+	durSec, err := parseInt("ban_invalid_submissions_duration_seconds", int(cfg.BanInvalidSubmissionsDuration/time.Second))
+	if err != nil {
+		return err
+	}
+	cfg.BanInvalidSubmissionsDuration = time.Duration(durSec) * time.Second
+	if cfg.ReconnectBanThreshold, err = parseInt("reconnect_ban_threshold", cfg.ReconnectBanThreshold); err != nil {
+		return err
+	}
+	if cfg.ReconnectBanWindowSeconds, err = parseInt("reconnect_ban_window_seconds", cfg.ReconnectBanWindowSeconds); err != nil {
+		return err
+	}
+	if cfg.ReconnectBanDurationSeconds, err = parseInt("reconnect_ban_duration_seconds", cfg.ReconnectBanDurationSeconds); err != nil {
+		return err
+	}
+
+	cfg.PeerCleanupEnabled = getBool("peer_cleanup_enabled")
+	if cfg.PeerCleanupMaxPingMs, err = parseFloat("peer_cleanup_max_ping_ms", cfg.PeerCleanupMaxPingMs); err != nil {
+		return err
+	}
+	if cfg.PeerCleanupMinPeers, err = parseInt("peer_cleanup_min_peers", cfg.PeerCleanupMinPeers); err != nil {
+		return err
+	}
+
+	cfg.SoloMode = getBool("solo_mode")
+	cfg.DirectSubmitProcessing = getBool("direct_submit_processing")
+	cfg.CheckDuplicateShares = getBool("check_duplicate_shares")
+
+	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
+		cfg.LogLevel = lvl
+	}
+
+	return nil
+}
+
+func rewriteTuningFile(path string, cfg Config) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	tf := buildTuningFileConfig(cfg)
+	data, err := toml.Marshal(tf)
+	if err != nil {
+		return fmt.Errorf("encode tuning: %w", err)
+	}
+	if err := atomicWriteFile(path, data); err != nil {
+		return err
+	}
+	_ = os.Chmod(path, 0o644)
+	return nil
 }
 
 func (s *StatusServer) isAdminAuthenticated(r *http.Request) bool {

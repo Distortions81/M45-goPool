@@ -516,7 +516,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath string, shutdown func()) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath, tuningPath string, shutdown func()) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -545,6 +545,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		jsonCache:           make(map[string]cachedJSONResponse),
 		configPath:          configPath,
 		adminConfigPath:     adminConfigPath,
+		tuningPath:          tuningPath,
 		adminSessions:       make(map[string]time.Time),
 		requestShutdown:     shutdown,
 	}

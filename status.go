@@ -375,8 +375,11 @@ type StatusServer struct {
 
 	configPath      string
 	adminConfigPath string
+	tuningPath      string
 	adminSessions   map[string]time.Time
 	adminSessionsMu sync.Mutex
+	adminLoginMu    sync.Mutex
+	adminLoginNext  time.Time
 	requestShutdown func()
 }
 
