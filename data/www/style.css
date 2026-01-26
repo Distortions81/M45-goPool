@@ -1280,6 +1280,16 @@ h2 {
 	font-size: 13px;
 }
 
+.page.admin-page .restart-required {
+	display: inline-block;
+	margin-left: 6px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--accent);
+	opacity: 0.9;
+	vertical-align: baseline;
+}
+
 .grid.status-grid {
 	gap: 8px;
 	margin-top: 0;
