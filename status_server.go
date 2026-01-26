@@ -687,6 +687,13 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		return
 	}
+	if !s.allowAdminLoginAttempt() {
+		data, _, _ := s.buildAdminPageData(r, "")
+		data.AdminLoginError = "Too many login attempts. Please wait a moment and try again."
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.renderAdminPage(w, r, data)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		logger.Warn("parse admin login form", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -728,6 +735,20 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 		Expires:  expiry,
 	})
 	http.Redirect(w, r, "/admin?notice=logged_in", http.StatusSeeOther)
+}
+
+func (s *StatusServer) allowAdminLoginAttempt() bool {
+	if s == nil {
+		return false
+	}
+	now := time.Now()
+	s.adminLoginMu.Lock()
+	defer s.adminLoginMu.Unlock()
+	if !s.adminLoginNext.IsZero() && now.Before(s.adminLoginNext) {
+		return false
+	}
+	s.adminLoginNext = now.Add(time.Second)
+	return true
 }
 
 func (s *StatusServer) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
