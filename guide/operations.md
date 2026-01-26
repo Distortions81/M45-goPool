@@ -170,7 +170,8 @@ goPool also auto-creates `/app/`, `/stats/`, and `/api/*` handlers plus optional
 
 When enabled, visit `/admin` (deliberately absent from the main navigation) and log in with the credentials stored in `admin.toml`. The panel exposes:
 
-* **Configuration editing** – a textarea showing the current `config.toml`. Save rewrites the file directly; restart or use the reboot control to load the new configuration.
+* **Live settings** – a field-based UI that updates goPool's in-memory configuration immediately. Some settings still require a reboot to fully apply across all subsystems.
+* **Save to disk** – optionally force-write the current in-memory settings to `config.toml` and `tuning.toml`.
 * **Reboot** – a button that sends SIGTERM to goPool. It requires re-entering the admin password and typing `REBOOT` to confirm the action so your pool does not restart accidentally.
 
 Because the admin login is intentionally simple, bind this UI to trusted networks only (e.g., keep `server.status_listen` local-domain, use firewall rules, or run behind an authenticated proxy) and rotate credentials whenever you rotate administrators.
