@@ -69,6 +69,14 @@ body {
 	padding: 32px 24px 32px;
 }
 
+.page.admin-page {
+	max-width: 1600px;
+}
+
+.page.admin-page {
+	max-width: 1600px;
+}
+
 .textfield {
 	width: 100%;
 	padding: 10px 14px;
@@ -1240,6 +1248,36 @@ h2 {
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 	gap: 12px;
 	margin-top: 2px;
+}
+
+.grid.admin-grid {
+	grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+	gap: 16px;
+}
+
+.page.admin-page .label {
+	/* Admin uses long, underscore-heavy identifiers; allow wrapping instead of overlap. */
+	display: block;
+	line-height: 1.2;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	letter-spacing: 0.08em;
+	font-size: 13px;
+}
+
+.grid.admin-grid {
+	grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+	gap: 16px;
+}
+
+.page.admin-page .label {
+	/* Admin uses long, underscore-heavy identifiers; allow wrapping instead of overlap. */
+	display: block;
+	line-height: 1.2;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	letter-spacing: 0.08em;
+	font-size: 13px;
 }
 
 .grid.status-grid {
