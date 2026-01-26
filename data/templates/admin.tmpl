@@ -46,13 +46,14 @@
 		</div>
 		{{else}}
 		<div class="card">
-			<div class="label">Live settings</div>
-			<p class="text-sm" style="margin:4px 0 10px 0;">
-				This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
-			</p>
-			{{if .AdminApplyError}}
-			<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
-			{{end}}
+				<div class="label">Live settings</div>
+				<p class="text-sm" style="margin:4px 0 10px 0;">
+					This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
+					Hover over field labels to see tooltips with extra detail.
+				</p>
+				{{if .AdminApplyError}}
+				<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
+				{{end}}
 			<form method="post" action="/admin/apply">
 				<h3 style="margin:0 0 8px 0;">Branding</h3>
 				<div class="grid admin-grid">
@@ -149,7 +150,7 @@
 					</div>
 					<div>
 						<div class="label" title="Expected % of miners reconnecting at once during normal operation (not a restart).">steady_state_reconnect_percent</div>
-						<input name="accept_steady_state_reconnect_percent" type="text" class="textfield" value="{{printf \"%.4f\" .Settings.AcceptSteadyStateReconnectPercent}}">
+						<input name="accept_steady_state_reconnect_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.AcceptSteadyStateReconnectPercent}}">
 					</div>
 					<div>
 						<div class="label" title="Seconds to spread steady-state reconnects across.">steady_state_reconnect_window</div>
@@ -161,11 +162,11 @@
 				<div class="grid admin-grid">
 					<div>
 						<div class="label" title="Minimum vardiff target (0 uses defaults/auto).">min_difficulty</div>
-						<input name="min_difficulty" type="text" class="textfield" value="{{printf \"%.8f\" .Settings.MinDifficulty}}">
+						<input name="min_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MinDifficulty}}">
 					</div>
 					<div>
 						<div class="label" title="Maximum vardiff target (0 uses defaults/auto).">max_difficulty</div>
-						<input name="max_difficulty" type="text" class="textfield" value="{{printf \"%.8f\" .Settings.MaxDifficulty}}">
+						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>
 						<div class="label" title="When enabled, miners cannot change difficulty suggestions.">lock_suggested_difficulty</div>
@@ -222,7 +223,7 @@
 					</div>
 					<div>
 						<div class="label" title="Max peer ping (ms) above which peers are considered unhealthy.">peer_cleanup_max_ping_ms</div>
-						<input name="peer_cleanup_max_ping_ms" type="text" class="textfield" value="{{printf \"%.2f\" .Settings.PeerCleanupMaxPingMs}}">
+						<input name="peer_cleanup_max_ping_ms" type="text" class="textfield" value="{{printf "%.2f" .Settings.PeerCleanupMaxPingMs}}">
 					</div>
 					<div>
 						<div class="label" title="Minimum number of peers to keep connected before pruning.">peer_cleanup_min_peers</div>
@@ -312,4 +313,3 @@
 	{{template "footer" .}}
 </body>
 </html>
-
