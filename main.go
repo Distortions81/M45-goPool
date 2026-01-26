@@ -37,37 +37,36 @@ func main() {
 
 	debugpkg.SetGCPercent(200)
 
-	bindFlag := flag.String("bind", "", "bind to specific IP address for stratum listener (e.g. 0.0.0.0 or 192.168.1.100)")
-	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL (e.g. http://127.0.0.1:8332)")
-	rpcCookiePathFlag := flag.String("rpc-cookie-path", "", "override node RPC cookie path (skips autodetection when set)")
-	secretsPathFlag := flag.String("secrets", "", "path to secrets.toml (overrides default under data_dir/config)")
-	allowRPCCredentialsFlag := flag.Bool("allow-rpc-credentials", false, "allow loading rpc_user/rpc_pass from secrets.toml when node.rpc_cookie_path is not set")
-	floodFlag := flag.Bool("flood", false, "enable flood-test mode (force min/max difficulty to 0.01)")
-	mainnetFlag := flag.Bool("mainnet", false, "force mainnet defaults for RPC/ZMQ ports")
-	testnetFlag := flag.Bool("testnet", false, "force testnet defaults for RPC/ZMQ ports")
-	signetFlag := flag.Bool("signet", false, "force signet defaults for RPC/ZMQ ports")
-	regtestFlag := flag.Bool("regtest", false, "force regtest defaults for RPC/ZMQ ports")
-	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ subscriptions and rely on RPC/longpoll only (SLOW)")
-	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config file with effective settings on startup")
-	profileFlag := flag.Bool("profile", false, "collect a 60s CPU profile to default.pgo on startup")
-	httpsOnlyFlag := flag.Bool("https-only", true, "serve status UI over HTTPS only (auto-generating a self-signed cert if none is present)")
-	httpOnlyFlag := flag.Bool("http-only", false, "serve status UI over HTTP only (disables HTTPS listener and redirects)")
-	disableJSONFlag := flag.Bool("disable-json-endpoint", false, "disable JSON status endpoints for debugging")
-	stdoutLogFlag := flag.Bool("stdoutlog", false, "mirror logs to stdout in addition to writing to files")
-	noCleanBansFlag := flag.Bool("no-clean-bans", false, "skip rewriting the ban list on startup (keep expired bans)")
-	checkDuplicatesFlag := flag.Bool("check-duplicates", false, "enable duplicate share checking (disabled by default for solo pools)")
+	networkFlag := flag.String("network", "", "bitcoin network: mainnet, testnet, signet, regtest")
+	bindFlag := flag.String("bind", "", "bind IP for all listeners")
+	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL")
+	rpcCookieFlag := flag.String("rpc-cookie", "", "override RPC cookie path")
+	secretsFlag := flag.String("secrets", "", "path to secrets.toml")
+	httpOnlyFlag := flag.Bool("http-only", false, "disable HTTPS (for local/dev)")
+	noZMQFlag := flag.Bool("no-zmq", false, "disable ZMQ (use longpoll)")
+	stdoutLogFlag := flag.Bool("stdout", false, "mirror logs to stdout")
+	profileFlag := flag.Bool("profile", false, "60s CPU profile")
+	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config on startup")
+	floodFlag := flag.Bool("flood", false, "flood-test mode")
+	checkDuplicatesFlag := flag.Bool("check-duplicates", false, "enable duplicate share detection")
+	noCleanBansFlag := flag.Bool("no-clean-bans", false, "keep expired bans")
+	disableJSONFlag := flag.Bool("no-json", false, "disable JSON API")
+	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
 	flag.Parse()
+
+	network := strings.ToLower(*networkFlag)
+
 	overrides := runtimeOverrides{
 		bind:                *bindFlag,
 		rpcURL:              *rpcURLFlag,
-		rpcCookiePath:       *rpcCookiePathFlag,
-		allowRPCCredentials: *allowRPCCredentialsFlag,
+		rpcCookiePath:       *rpcCookieFlag,
+		allowRPCCredentials: *allowRPCCredsFlag,
 		flood:               *floodFlag,
 		noZMQ:               *noZMQFlag,
-		mainnet:             *mainnetFlag,
-		testnet:             *testnetFlag,
-		signet:              *signetFlag,
-		regtest:             *regtestFlag,
+		mainnet:             network == "mainnet",
+		testnet:             network == "testnet",
+		signet:              network == "signet",
+		regtest:             network == "regtest",
 	}
 	cleanBansOnStartup := !*noCleanBansFlag
 
@@ -113,7 +112,7 @@ func main() {
 	signal.Notify(reloadChan, syscall.SIGUSR1, syscall.SIGUSR2)
 
 	cfgPath := defaultConfigPath()
-	cfg, secretsPath := loadConfig(cfgPath, *secretsPathFlag)
+	cfg, secretsPath := loadConfig(cfgPath, *secretsFlag)
 	if err := applyRuntimeOverrides(&cfg, overrides); err != nil {
 		fatal("config", err)
 	}
@@ -316,7 +315,7 @@ func main() {
 					}
 				case syscall.SIGUSR2:
 					logger.Info("SIGUSR2 received, reloading config")
-					reloadedCfg, err := reloadStatusConfig(cfgPath, *secretsPathFlag, overrides)
+					reloadedCfg, err := reloadStatusConfig(cfgPath, *secretsFlag, overrides)
 					if err != nil {
 						logger.Error("config reload failed", "error", err)
 						continue
@@ -409,21 +408,10 @@ func main() {
 	httpAddr := strings.TrimSpace(cfg.StatusAddr)
 	httpsAddr := strings.TrimSpace(cfg.StatusTLSAddr)
 
-	httpsOnly := *httpsOnlyFlag
+	// HTTP-only mode disables HTTPS for local/dev setups.
 	if *httpOnlyFlag {
-		httpsOnly = false
 		httpsAddr = ""
 		cfg.StatusTLSAddr = ""
-	}
-	if *httpOnlyFlag && *httpsOnlyFlag {
-		logger.Warn("both -http-only and -https-only were set; honoring -http-only")
-	}
-	// If HTTPS is explicitly disabled in the config (status_tls_listen=""),
-	// HTTPS-only mode cannot work. Fall back to HTTP-only so local/dev
-	// deployments still serve JSON endpoints and pages correctly.
-	if httpsOnly && httpsAddr == "" {
-		httpsOnly = false
-		logger.Warn("https-only requested but status_tls_listen is empty; running HTTP-only status server", "hint", "set server.status_tls_listen or pass -https-only=false")
 	}
 
 	var certPath, keyPath string
@@ -449,107 +437,36 @@ func main() {
 	var statusHTTPServer *http.Server
 	var statusHTTPSServer *http.Server
 
-	if httpsOnly {
-		// In HTTPS-only mode, ensure we have some TLS address. If
-		// none was configured, reuse the HTTP status address.
-		if httpsAddr == "" {
-			httpsAddr = httpAddr
+	// Start HTTP server.
+	if httpAddr != "" {
+		statusHTTPServer = &http.Server{
+			Addr:    httpAddr,
+			Handler: mux,
 		}
-		// Start HTTPS status server with auto-reloading certificates.
-		if httpsAddr != "" {
-			tlsConfig := &tls.Config{
-				GetCertificate: certReloader.getCertificate,
+		go func() {
+			logger.Info("status page listening (http)", "addr", httpAddr)
+			if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fatal("status server error", err)
 			}
-			statusHTTPSServer = &http.Server{
-				Addr:      httpsAddr,
-				Handler:   mux,
-				TLSConfig: tlsConfig,
-			}
-			go func() {
-				logger.Info("status page listening (https)", "addr", httpsAddr, "cert", certPath)
-				if err := statusHTTPSServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fatal("status server error", err)
-				}
-			}()
-		}
+		}()
+	}
 
-		// If HTTP and HTTPS ports differ, start HTTP server that serves
-		// main page (with auto-redirect), privacy, terms, and static files.
-		if httpAddr != "" && httpAddr != httpsAddr {
-			// Create a wrapper that injects meta refresh into main page HTML
-			httpOnlyHandler := &httpRedirectInjector{
-				mux:       mux,
-				httpsAddr: httpsAddr,
-			}
-			selectiveHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				path := r.URL.Path
-				// Main page, privacy, terms, and static files: serve via injector
-				if path == "/" || strings.HasPrefix(path, "/privacy") || strings.HasPrefix(path, "/terms") ||
-					strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".css") ||
-					strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".png") ||
-					strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".ico") ||
-					strings.HasPrefix(path, "/.well-known/") {
-					httpOnlyHandler.ServeHTTP(w, r)
-					return
-				}
-				// Redirect everything else to HTTPS
-				host := r.Host
-				if h, _, err := net.SplitHostPort(host); err == nil {
-					host = h
-				}
-				_, tlsPort, err := net.SplitHostPort(httpsAddr)
-				targetHost := host
-				if err == nil && tlsPort != "" && tlsPort != "443" {
-					targetHost = net.JoinHostPort(host, tlsPort)
-				}
-				target := "https://" + targetHost + r.URL.RequestURI()
-				// Use a temporary redirect so browsers don't cache it forever;
-				// local/dev setups often change ports/domains.
-				http.Redirect(w, r, target, http.StatusTemporaryRedirect)
-			})
-			statusHTTPServer = &http.Server{
-				Addr:    httpAddr,
-				Handler: selectiveHandler,
-			}
-			go func() {
-				logger.Info("status page listening (http, selective)", "addr", httpAddr)
-				if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fatal("status server error", err)
-				}
-			}()
+	// Start HTTPS server (unless -http-only).
+	if httpsAddr != "" {
+		tlsConfig := &tls.Config{
+			GetCertificate: certReloader.getCertificate,
 		}
-	} else {
-		// Mixed mode: serve plain HTTP on StatusAddr, and if a TLS
-		// status port is configured, also serve HTTPS there, but do
-		// not force redirects.
-		if httpAddr != "" {
-			statusHTTPServer = &http.Server{
-				Addr:    httpAddr,
-				Handler: mux,
-			}
-			go func() {
-				logger.Info("status page listening (http)", "addr", httpAddr)
-				if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fatal("status server error", err)
-				}
-			}()
+		statusHTTPSServer = &http.Server{
+			Addr:      httpsAddr,
+			Handler:   mux,
+			TLSConfig: tlsConfig,
 		}
-		if httpsAddr != "" {
-			tlsConfig := &tls.Config{
-				GetCertificate: certReloader.getCertificate,
+		go func() {
+			logger.Info("status page listening (https)", "addr", httpsAddr, "cert", certPath)
+			if err := statusHTTPSServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fatal("status server error", err)
 			}
-			statusHTTPSServer = &http.Server{
-				Addr:      httpsAddr,
-				Handler:   mux,
-				TLSConfig: tlsConfig,
-			}
-			go func() {
-				logger.Info("status page listening (https)", "addr", httpsAddr, "cert", certPath)
-				if err := statusHTTPSServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					fatal("status server error", err)
-				}
-			}()
-		}
+		}()
 	}
 
 	// Gracefully shut down status HTTP/HTTPS servers when a shutdown
