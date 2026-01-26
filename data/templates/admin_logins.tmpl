@@ -54,6 +54,32 @@
 				<div id="loginsToolbarUsers"></div>
 				<div id="loginsToolbarHashes"></div>
 			</form>
+			<div class="admin-pagination">
+				<div class="admin-pagination-summary text-sm">
+					{{if gt .AdminLoginPagination.TotalItems 0}}
+					Showing {{.AdminLoginPagination.RangeStart}} – {{.AdminLoginPagination.RangeEnd}} of {{.AdminLoginPagination.TotalItems}}
+					{{else}}
+					Showing 0 entries
+					{{end}}
+				</div>
+				<form class="pagination-form" method="get" action="/admin/logins">
+					<label for="logins-per-page">Items per page</label>
+					<select id="logins-per-page" name="per_page" onchange="this.form.submit()">
+						{{range $opt := .AdminPerPageOptions}}
+						<option value="{{$opt}}" {{if eq $opt $.AdminLoginPagination.PerPage}}selected{{end}}>{{$opt}}</option>
+						{{end}}
+					</select>
+					<input type="hidden" name="page" value="1">
+				</form>
+				<div class="pagination-links">
+					{{if .AdminLoginPagination.HasPrevPage}}
+					<a href="/admin/logins?page={{.AdminLoginPagination.PrevPage}}&per_page={{.AdminLoginPagination.PerPage}}">Previous</a>
+					{{end}}
+					{{if .AdminLoginPagination.HasNextPage}}
+					<a href="/admin/logins?page={{.AdminLoginPagination.NextPage}}&per_page={{.AdminLoginPagination.PerPage}}">Next</a>
+					{{end}}
+				</div>
+			</div>
 			<div class="table-responsive">
 				<table class="table">
 					<thead>

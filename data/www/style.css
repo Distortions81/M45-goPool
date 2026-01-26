@@ -1316,6 +1316,64 @@ h2 {
 	flex-wrap: wrap;
 }
 
+.admin-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--card-border);
+	border-radius: 12px;
+	background: var(--card-bg);
+	flex-wrap: wrap;
+}
+
+.admin-pagination-summary {
+	font-size: 13px;
+	color: var(--text-secondary);
+}
+
+.pagination-form {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.pagination-form label {
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.pagination-form select {
+	background: var(--card-bg);
+	border: 1px solid var(--card-border);
+	border-radius: 6px;
+	padding: 6px 8px;
+	color: inherit;
+}
+
+.pagination-links {
+	display: flex;
+	gap: 8px;
+}
+
+.pagination-links a {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	border: 1px solid transparent;
+	font-size: 13px;
+	text-decoration: none;
+	color: var(--text-primary);
+}
+
+.pagination-links a:hover {
+	border-color: var(--card-border);
+}
+
 .table-responsive {
 	width: 100%;
 	overflow-x: auto;

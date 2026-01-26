@@ -53,6 +53,32 @@
 				<input type="hidden" name="password" id="minerToolbarPasswordField">
 				<div id="minerToolbarConnections"></div>
 			</form>
+			<div class="admin-pagination">
+				<div class="admin-pagination-summary text-sm">
+					{{if gt .AdminMinerPagination.TotalItems 0}}
+					Showing {{.AdminMinerPagination.RangeStart}} – {{.AdminMinerPagination.RangeEnd}} of {{.AdminMinerPagination.TotalItems}}
+					{{else}}
+					Showing 0 entries
+					{{end}}
+				</div>
+				<form class="pagination-form" method="get" action="/admin/miners">
+					<label for="miners-per-page">Items per page</label>
+					<select id="miners-per-page" name="per_page" onchange="this.form.submit()">
+						{{range $opt := .AdminPerPageOptions}}
+						<option value="{{$opt}}" {{if eq $opt $.AdminMinerPagination.PerPage}}selected{{end}}>{{$opt}}</option>
+						{{end}}
+					</select>
+					<input type="hidden" name="page" value="1">
+				</form>
+				<div class="pagination-links">
+					{{if .AdminMinerPagination.HasPrevPage}}
+					<a href="/admin/miners?page={{.AdminMinerPagination.PrevPage}}&per_page={{.AdminMinerPagination.PerPage}}">Previous</a>
+					{{end}}
+					{{if .AdminMinerPagination.HasNextPage}}
+					<a href="/admin/miners?page={{.AdminMinerPagination.NextPage}}&per_page={{.AdminMinerPagination.PerPage}}">Next</a>
+					{{end}}
+				</div>
+			</div>
 			<div class="table-responsive">
 				<table class="table">
 					<thead>

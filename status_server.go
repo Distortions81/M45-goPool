@@ -618,6 +618,9 @@ type AdminPageData struct {
 	AdminSection         string
 	AdminMinerRows       []AdminMinerRow
 	AdminSavedWorkerRows []AdminSavedWorkerRow
+	AdminMinerPagination AdminPagination
+	AdminLoginPagination AdminPagination
+	AdminPerPageOptions  []int
 }
 
 type AdminSettingsData struct {
@@ -715,6 +718,26 @@ type AdminMinerConnection struct {
 	Listener        string
 }
 
+type AdminPagination struct {
+	Page        int
+	PerPage     int
+	TotalItems  int
+	TotalPages  int
+	RangeStart  int
+	RangeEnd    int
+	HasPrevPage bool
+	HasNextPage bool
+	PrevPage    int
+	NextPage    int
+}
+
+const (
+	defaultAdminPerPage = 25
+	maxAdminPerPage     = 200
+)
+
+var adminPerPageOptions = []int{10, 25, 50, 100}
+
 func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -739,7 +762,9 @@ func (s *StatusServer) handleAdminMinersPage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	data.AdminSection = "miners"
-	data.AdminMinerRows = s.buildAdminMinerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminMinerRows()
+	data.AdminMinerRows, data.AdminMinerPagination = paginateAdminSlice(allRows, page, perPage)
 	s.renderAdminPageTemplate(w, r, data, "admin_miners")
 }
 
@@ -758,7 +783,9 @@ func (s *StatusServer) handleAdminLoginsPage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	data.AdminSection = "logins"
-	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminSavedWorkerRows()
+	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	s.renderAdminPageTemplate(w, r, data, "admin_logins")
 }
 
@@ -1009,7 +1036,9 @@ func (s *StatusServer) handleAdminMinerDisconnect(w http.ResponseWriter, r *http
 	}
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "miners"
-	data.AdminMinerRows = s.buildAdminMinerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminMinerRows()
+	data.AdminMinerRows, data.AdminMinerPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
@@ -1051,7 +1080,9 @@ func (s *StatusServer) handleAdminMinerBan(w http.ResponseWriter, r *http.Reques
 	}
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "miners"
-	data.AdminMinerRows = s.buildAdminMinerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminMinerRows()
+	data.AdminMinerRows, data.AdminMinerPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
@@ -1095,7 +1126,9 @@ func (s *StatusServer) handleAdminLoginDelete(w http.ResponseWriter, r *http.Req
 	}
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "logins"
-	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminSavedWorkerRows()
+	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
 		s.renderAdminPageTemplate(w, r, data, "admin_logins")
@@ -1145,7 +1178,9 @@ func (s *StatusServer) handleAdminLoginBan(w http.ResponseWriter, r *http.Reques
 	}
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "logins"
-	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	page, perPage := adminPaginationFromRequest(r)
+	allRows := s.buildAdminSavedWorkerRows()
+	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
 		s.renderAdminPageTemplate(w, r, data, "admin_logins")
@@ -1199,12 +1234,84 @@ func (s *StatusServer) handleAdminLoginBan(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/admin/logins?notice=saved_worker_banned", http.StatusSeeOther)
 }
 
+func adminPaginationFromRequest(r *http.Request) (int, int) {
+	page := 1
+	perPage := defaultAdminPerPage
+	if r == nil {
+		return page, perPage
+	}
+	query := r.URL.Query()
+	if v := strings.TrimSpace(query.Get("page")); v != "" {
+		if p, err := strconv.Atoi(v); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if v := strings.TrimSpace(query.Get("per_page")); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			if p < 1 {
+				p = defaultAdminPerPage
+			}
+			if p > maxAdminPerPage {
+				p = maxAdminPerPage
+			}
+			perPage = p
+		}
+	}
+	return page, perPage
+}
+
+func paginateAdminSlice[T any](items []T, page, perPage int) ([]T, AdminPagination) {
+	total := len(items)
+	if perPage <= 0 {
+		perPage = defaultAdminPerPage
+	}
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * perPage
+	if start > total {
+		start = total
+	}
+	end := start + perPage
+	if end > total {
+		end = total
+	}
+	var paged []T
+	if end > start {
+		paged = items[start:end]
+	}
+	pagination := AdminPagination{
+		Page:        page,
+		PerPage:     perPage,
+		TotalItems:  total,
+		TotalPages:  totalPages,
+		RangeStart:  0,
+		RangeEnd:    end,
+		HasPrevPage: page > 1,
+		HasNextPage: end < total,
+		PrevPage:    page - 1,
+		NextPage:    page + 1,
+	}
+	if total > 0 {
+		pagination.RangeStart = start + 1
+	}
+	return paged, pagination
+}
+
 func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (AdminPageData, adminFileConfig, error) {
 	start := time.Now()
 	data := AdminPageData{
-		StatusData:      s.baseTemplateData(start),
-		AdminConfigPath: s.adminConfigPath,
-		AdminNotice:     adminNoticeMessage(noticeKey),
+		StatusData:          s.baseTemplateData(start),
+		AdminConfigPath:     s.adminConfigPath,
+		AdminNotice:         adminNoticeMessage(noticeKey),
+		AdminPerPageOptions: adminPerPageOptions,
 	}
 	cfg, err := loadAdminConfigFile(s.adminConfigPath)
 	if err != nil {
