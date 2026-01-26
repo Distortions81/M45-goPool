@@ -1168,6 +1168,7 @@ func rewriteTuningFile(path string, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("encode tuning: %w", err)
 	}
+	data = withPrependedTOMLComments(data, generatedTuningFileHeader(), tuningConfigDocComments())
 	if err := atomicWriteFile(path, data); err != nil {
 		return err
 	}
