@@ -1,5 +1,12 @@
 {{/* Admin control panel template */}}
 {{define "restart-required"}}<span class="restart-required" title="Requires restart">↻</span>{{end}}
+{{define "admin-nav"}}
+<div class="admin-tabs">
+	<a class="admin-tab {{if eq .AdminSection "settings"}}active{{end}}" href="/admin">Live settings</a>
+	<a class="admin-tab {{if eq .AdminSection "miners"}}active{{end}}" href="/admin/miners">Connected miners</a>
+	<a class="admin-tab {{if eq .AdminSection "logins"}}active{{end}}" href="/admin/logins">Saved logins</a>
+</div>
+{{end}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,6 +53,7 @@
 			</form>
 		</div>
 		{{else}}
+		{{template "admin-nav" .}}
 		<div class="card">
 				<div class="label">Live settings</div>
 				<p class="text-sm" style="margin:4px 0 10px 0;">

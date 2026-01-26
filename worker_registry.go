@@ -175,3 +175,12 @@ func (r *workerConnectionRegistry) getConnectionsByWalletHash(walletHash string)
 
 	return result
 }
+
+func (r *workerConnectionRegistry) connectionBySeq(seq uint64) *MinerConn {
+	if r == nil || seq == 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.conns[seq]
+}

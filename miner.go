@@ -1310,3 +1310,20 @@ func (mc *MinerConn) logBan(reason, worker string, invalidSubs int) {
 		"invalid_submissions", invalidSubs,
 	)
 }
+
+func (mc *MinerConn) adminBan(reason string, duration time.Duration) {
+	if mc == nil {
+		return
+	}
+	if duration <= 0 {
+		duration = defaultBanInvalidSubmissionsDuration
+	}
+	if reason == "" {
+		reason = "admin ban"
+	}
+	mc.stateMu.Lock()
+	mc.banUntil = time.Now().Add(duration)
+	mc.banReason = reason
+	mc.stateMu.Unlock()
+	mc.logBan(reason, mc.currentWorker(), 0)
+}

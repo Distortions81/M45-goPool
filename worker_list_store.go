@@ -222,6 +222,57 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	return workers, nil
 }
 
+func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT user_id, worker, worker_hash, notify_enabled FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []SavedWorkerRecord
+	for rows.Next() {
+		var (
+			userID    string
+			entry     SavedWorkerEntry
+			notifyInt int
+		)
+		if err := rows.Scan(&userID, &entry.Name, &entry.Hash, &notifyInt); err != nil {
+			return nil, err
+		}
+		userID = strings.TrimSpace(userID)
+		entry.Name = strings.TrimSpace(entry.Name)
+		entry.Hash = strings.TrimSpace(entry.Hash)
+		entry.NotifyEnabled = notifyInt != 0
+		if entry.Hash == "" {
+			entry.Hash = workerNameHash(entry.Name)
+			if entry.Hash != "" {
+				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+			}
+		}
+		if entry.Hash != "" {
+			lower := strings.ToLower(entry.Hash)
+			if lower != entry.Hash {
+				entry.Hash = lower
+				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+			}
+		}
+		if userID == "" {
+			continue
+		}
+		records = append(records, SavedWorkerRecord{
+			UserID:           userID,
+			SavedWorkerEntry: entry,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
 func (s *workerListStore) SetSavedWorkerNotifyEnabled(userID, workerHash string, enabled bool, now time.Time) error {
 	if s == nil || s.db == nil {
 		return nil
@@ -578,6 +629,18 @@ func (s *workerListStore) Remove(userID, worker string) error {
 		return err
 	}
 	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker)
+	return err
+}
+
+func (s *workerListStore) RemoveUser(userID string) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ?", userID)
 	return err
 }
 

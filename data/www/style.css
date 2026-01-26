@@ -1265,6 +1265,45 @@ h2 {
 	font-size: 13px;
 }
 
+.admin-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 12px 0 20px;
+}
+
+.admin-tab {
+	padding: 6px 14px;
+	border-radius: 12px;
+	border: 1px solid transparent;
+	font-size: 14px;
+	color: var(--text-secondary);
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-tab.active {
+	border-color: var(--card-border);
+	color: var(--text-primary);
+	background: var(--card-bg);
+}
+
+.table-responsive {
+	width: 100%;
+	overflow-x: auto;
+	margin-top: 8px;
+}
+
+.admin-action-form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: flex-end;
+}
+
+.admin-action-password {
+	width: 160px;
+}
+
 .grid.admin-grid {
 	grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
 	gap: 16px;
@@ -1472,6 +1511,17 @@ a:hover {
 .btn:hover {
 	background: #1b2030;
 	border-color: #3b455d;
+}
+
+.btn-danger {
+	background: #f44336;
+	border-color: #e53935;
+	color: #fff;
+}
+
+.btn-danger:hover {
+	background: #e53935;
+	border-color: #d32f2f;
 }
 
 .btn-secondary {

@@ -599,6 +599,12 @@ type SavedWorkerEntry struct {
 	NotifyEnabled bool   `json:"notify_enabled,omitempty"`
 }
 
+// SavedWorkerRecord pairs a Clerk user ID with a saved worker entry.
+type SavedWorkerRecord struct {
+	UserID string
+	SavedWorkerEntry
+}
+
 type StatusData struct {
 	ListenAddr                      string                `json:"listen_addr"`
 	StratumTLSListen                string                `json:"stratum_tls_listen,omitempty"`

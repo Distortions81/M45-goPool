@@ -1,0 +1,118 @@
+{{/* Admin connected miners page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Admin Miners</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page admin-page">
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			Inspect live miner connections and disconnect or ban risky peers instantly. Each action requires your admin password for confirmation.
+		</p>
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin panel is disabled. Enable it by editing <span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<p class="text-sm">
+				Sign in on the <a href="/admin">main admin page</a> to view connected miners.
+			</p>
+		</div>
+		{{else}}
+		{{template "admin-nav" .}}
+		<div class="card">
+			<div class="label">Connected miners</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				Disconnect a connection to force reconnect, or ban it to apply the configured invalid submission duration.
+			</p>
+			{{if .AdminMinerRows}}
+			<div class="admin-toolbar" id="minerToolbar">
+				<div class="toolbar-left">
+					<label class="label" for="toolbar-password">Admin password</label>
+					<input id="toolbar-password" class="textfield toolbar-password" type="password" name="password" autocomplete="current-password" placeholder="Admin password">
+				</div>
+				<div class="toolbar-actions">
+					<button class="btn btn-secondary" type="button" id="toolbar-disconnect" disabled>Disconnect selected</button>
+					<button class="btn btn-danger" type="button" id="toolbar-ban" disabled>Ban selected</button>
+				</div>
+			</div>
+			<form id="adminMinersActionForm" style="display:none;">
+				<input type="hidden" name="password" id="toolbarPasswordField">
+				<div id="toolbarConnections"></div>
+			</form>
+			<div class="table-responsive">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Worker</th>
+							<th>Remote</th>
+							<th>Listener</th>
+							<th>Difficulty</th>
+							<th>Hashrate</th>
+							<th>Accept/min</th>
+							<th>Submit/min</th>
+							<th>Connected</th>
+							<th>Last share</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						{{if .AdminMinerRows}}
+							{{range .AdminMinerRows}}
+							<tr>
+								<td>{{shortID .ConnectionLabel}}</td>
+								<td>
+									<div>{{if .Worker}}{{.Worker}}{{else}}—{{end}}</div>
+									{{if .WorkerHash}}<div class="mono" style="font-size:12px;">{{shortID .WorkerHash}}</div>{{end}}
+									{{if .ClientName}}<div class="text-sm">{{.ClientName}}{{if .ClientVersion}} {{.ClientVersion}}{{end}}</div>{{end}}
+								</td>
+								<td>{{.RemoteAddr}}</td>
+								<td>{{.Listener}}</td>
+								<td>{{formatDiff .Difficulty}}</td>
+								<td>{{formatHashrate .Hashrate}}</td>
+								<td>{{printf "%.2f" .AcceptRatePerMinute}}</td>
+								<td>{{printf "%.2f" .SubmitRatePerMinute}}</td>
+								<td>{{formatTime .ConnectedAt}}</td>
+								<td>{{formatTime .LastShare}}</td>
+								<td>
+									{{if .Banned}}
+										<span class="badge badge-danger">Banned until {{formatTimeUTC .BanUntil}}</span>
+										<div class="text-sm">{{.BanReason}}</div>
+									{{else}}
+										Active
+									{{end}}
+								</td>
+							<td>
+								<input type="checkbox" class="admin-row-checkbox" data-connection="{{.ConnectionSeq}}">
+							</td>
+							</tr>
+							{{end}}
+						{{else}}
+							<tr>
+								<td colspan="12" class="text-sm">No miner connections detected.</td>
+							</tr>
+						{{end}}
+					</tbody>
+				</table>
+			</div>
+		</div>
+		{{end}}
+	</div>
+	{{template "footer" .}}
+</body>
+</html>

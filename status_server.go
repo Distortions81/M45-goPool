@@ -9,8 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -604,15 +606,18 @@ const adminSessionCookieName = "admin_session"
 
 type AdminPageData struct {
 	StatusData
-	AdminEnabled      bool
-	AdminConfigPath   string
-	LoggedIn          bool
-	AdminLoginError   string
-	AdminApplyError   string
-	AdminPersistError string
-	AdminRebootError  string
-	AdminNotice       string
-	Settings          AdminSettingsData
+	AdminEnabled         bool
+	AdminConfigPath      string
+	LoggedIn             bool
+	AdminLoginError      string
+	AdminApplyError      string
+	AdminPersistError    string
+	AdminRebootError     string
+	AdminNotice          string
+	Settings             AdminSettingsData
+	AdminSection         string
+	AdminMinerRows       []AdminMinerRow
+	AdminSavedWorkerRows []AdminSavedWorkerRow
 }
 
 type AdminSettingsData struct {
@@ -673,6 +678,43 @@ type AdminSettingsData struct {
 	LogLevel string
 }
 
+type AdminMinerRow struct {
+	ConnectionSeq       uint64
+	ConnectionLabel     string
+	RemoteAddr          string
+	Listener            string
+	Worker              string
+	WorkerHash          string
+	ClientName          string
+	ClientVersion       string
+	Difficulty          float64
+	Hashrate            float64
+	AcceptRatePerMinute float64
+	SubmitRatePerMinute float64
+	Stats               MinerStats
+	ConnectedAt         time.Time
+	LastActivity        time.Time
+	LastShare           time.Time
+	Banned              bool
+	BanReason           string
+	BanUntil            time.Time
+}
+
+type AdminSavedWorkerRow struct {
+	UserID            string
+	Workers           []SavedWorkerEntry
+	NotifyCount       int
+	WorkerHashes      []string
+	OnlineConnections []AdminMinerConnection
+}
+
+type AdminMinerConnection struct {
+	ConnectionSeq   uint64
+	ConnectionLabel string
+	RemoteAddr      string
+	Listener        string
+}
+
 func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -680,6 +722,44 @@ func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
 	s.renderAdminPage(w, r, data)
+}
+
+func (s *StatusServer) handleAdminMinersPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin/miners", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	if !data.AdminEnabled {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !data.LoggedIn {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data.AdminSection = "miners"
+	data.AdminMinerRows = s.buildAdminMinerRows()
+	s.renderAdminPageTemplate(w, r, data, "admin_miners")
+}
+
+func (s *StatusServer) handleAdminLoginsPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin/logins", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	if !data.AdminEnabled {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !data.LoggedIn {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data.AdminSection = "logins"
+	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	s.renderAdminPageTemplate(w, r, data, "admin_logins")
 }
 
 func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
@@ -917,6 +997,197 @@ func (s *StatusServer) handleAdminReboot(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (s *StatusServer) handleAdminMinerDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin/miners", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin miner disconnect form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, _ := s.buildAdminPageData(r, "")
+	data.AdminSection = "miners"
+	data.AdminMinerRows = s.buildAdminMinerRows()
+	if !adminCfg.Enabled {
+		data.AdminApplyError = "Admin control panel is disabled."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if r.FormValue("password") == "" || !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminApplyError = "Password is required to disconnect miners."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	seq, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("connection_seq")), 10, 64)
+	if err != nil || seq == 0 || s.workerRegistry == nil {
+		data.AdminApplyError = "Connection not found."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
+		mc.Close("admin disconnect")
+		http.Redirect(w, r, "/admin/miners?notice=miner_disconnected", http.StatusSeeOther)
+		return
+	}
+	data.AdminApplyError = "Connection not found."
+	s.renderAdminPageTemplate(w, r, data, "admin_miners")
+}
+
+func (s *StatusServer) handleAdminMinerBan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin/miners", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin miner ban form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, _ := s.buildAdminPageData(r, "")
+	data.AdminSection = "miners"
+	data.AdminMinerRows = s.buildAdminMinerRows()
+	if !adminCfg.Enabled {
+		data.AdminApplyError = "Admin control panel is disabled."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if r.FormValue("password") == "" || !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminApplyError = "Password is required to ban miners."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	seq, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("connection_seq")), 10, 64)
+	if err != nil || seq == 0 || s.workerRegistry == nil {
+		data.AdminApplyError = "Connection not found."
+		s.renderAdminPageTemplate(w, r, data, "admin_miners")
+		return
+	}
+	if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
+		duration := s.Config().BanInvalidSubmissionsDuration
+		mc.adminBan("admin ban", duration)
+		mc.Close("admin ban")
+		http.Redirect(w, r, "/admin/miners?notice=miner_banned", http.StatusSeeOther)
+		return
+	}
+	data.AdminApplyError = "Connection not found."
+	s.renderAdminPageTemplate(w, r, data, "admin_miners")
+}
+
+func (s *StatusServer) handleAdminLoginDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin/logins", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin login delete form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, _ := s.buildAdminPageData(r, "")
+	data.AdminSection = "logins"
+	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	if !adminCfg.Enabled {
+		data.AdminApplyError = "Admin control panel is disabled."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if r.FormValue("password") == "" || !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminApplyError = "Password is required to delete saved workers."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	userID := strings.TrimSpace(r.FormValue("user_id"))
+	if userID == "" || s.workerLists == nil {
+		data.AdminApplyError = "Saved worker record not found."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	if err := s.workerLists.RemoveUser(userID); err != nil {
+		logger.Warn("delete saved worker", "error", err, "user_id", userID)
+	}
+	http.Redirect(w, r, "/admin/logins?notice=saved_worker_deleted", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminLoginBan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin/logins", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin login ban form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, _ := s.buildAdminPageData(r, "")
+	data.AdminSection = "logins"
+	data.AdminSavedWorkerRows = s.buildAdminSavedWorkerRows()
+	if !adminCfg.Enabled {
+		data.AdminApplyError = "Admin control panel is disabled."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if r.FormValue("password") == "" || !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminApplyError = "Password is required to ban saved workers."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	hashes := r.Form["worker_hash"]
+	userID := strings.TrimSpace(r.FormValue("user_id"))
+	if len(hashes) == 0 || s.workerRegistry == nil {
+		data.AdminApplyError = "Worker hash is required."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	connsFound := false
+	for _, hash := range hashes {
+		if hash == "" {
+			continue
+		}
+		hash = strings.ToLower(hash)
+		conns := s.workerRegistry.getConnectionsByHash(hash)
+		if len(conns) == 0 {
+			continue
+		}
+		connsFound = true
+		duration := s.Config().BanInvalidSubmissionsDuration
+		reason := "admin login ban"
+		if userID != "" {
+			reason = fmt.Sprintf("admin login ban (%s)", userID)
+		}
+		for _, mc := range conns {
+			if mc == nil {
+				continue
+			}
+			mc.adminBan(reason, duration)
+			mc.Close("admin login ban")
+		}
+	}
+	if !connsFound {
+		data.AdminApplyError = "No active connections for this worker."
+		s.renderAdminPageTemplate(w, r, data, "admin_logins")
+		return
+	}
+	http.Redirect(w, r, "/admin/logins?notice=saved_worker_banned", http.StatusSeeOther)
+}
+
 func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (AdminPageData, adminFileConfig, error) {
 	start := time.Now()
 	data := AdminPageData{
@@ -934,12 +1205,17 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	data.AdminEnabled = cfg.Enabled
 	data.LoggedIn = s.isAdminAuthenticated(r)
 	data.Settings = buildAdminSettingsData(s.Config())
+	data.AdminSection = "settings"
 	return data, cfg, nil
 }
 
 func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, data AdminPageData) {
+	s.renderAdminPageTemplate(w, r, data, "admin")
+}
+
+func (s *StatusServer) renderAdminPageTemplate(w http.ResponseWriter, r *http.Request, data AdminPageData, templateName string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "admin", data); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, templateName, data); err != nil {
 		logger.Error("admin template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Admin panel error",
@@ -960,6 +1236,14 @@ func adminNoticeMessage(key string) string {
 		return "Admin session unlocked."
 	case "logged_out":
 		return "Admin session cleared."
+	case "miner_disconnected":
+		return "Miner connection disconnected."
+	case "miner_banned":
+		return "Miner connection banned and closed."
+	case "saved_worker_deleted":
+		return "Saved worker entry deleted."
+	case "saved_worker_banned":
+		return "Worker was banned from saved logins."
 	default:
 		return ""
 	}
@@ -1012,6 +1296,147 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
 		LogLevel:                             cfg.LogLevel,
 	}
+}
+
+func (s *StatusServer) buildAdminMinerRows() []AdminMinerRow {
+	if s == nil || s.registry == nil {
+		return nil
+	}
+	now := time.Now()
+	conns := s.registry.Snapshot()
+	if len(conns) == 0 {
+		return nil
+	}
+	rows := make([]AdminMinerRow, 0, len(conns))
+	for _, mc := range conns {
+		if mc == nil {
+			continue
+		}
+		seq := atomic.LoadUint64(&mc.connectionSeq)
+		listener := "Stratum"
+		if mc.isTLSConnection {
+			listener = "Stratum TLS"
+		}
+		stats, acceptRate, submitRate := mc.snapshotStatsWithRates(now)
+		snap := mc.snapshotShareInfo()
+		until, reason, _ := mc.banDetails()
+		rows = append(rows, AdminMinerRow{
+			ConnectionSeq:       seq,
+			ConnectionLabel:     mc.connectionIDString(),
+			RemoteAddr:          mc.id,
+			Listener:            listener,
+			Worker:              mc.currentWorker(),
+			WorkerHash:          workerNameHash(mc.currentWorker()),
+			ClientName:          strings.TrimSpace(mc.minerClientName),
+			ClientVersion:       strings.TrimSpace(mc.minerClientVersion),
+			Difficulty:          atomicLoadFloat64(&mc.difficulty),
+			Hashrate:            snap.RollingHashrate,
+			AcceptRatePerMinute: acceptRate,
+			SubmitRatePerMinute: submitRate,
+			Stats:               stats,
+			ConnectedAt:         mc.connectedAt,
+			LastActivity:        mc.lastActivity,
+			LastShare:           stats.LastShare,
+			Banned:              mc.isBanned(now),
+			BanReason:           reason,
+			BanUntil:            until,
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].ConnectionSeq < rows[j].ConnectionSeq
+	})
+	return rows
+}
+
+func (s *StatusServer) buildAdminSavedWorkerRows() []AdminSavedWorkerRow {
+	if s == nil || s.workerLists == nil {
+		return nil
+	}
+	records, err := s.workerLists.ListAllSavedWorkers()
+	if err != nil {
+		logger.Warn("list saved workers for admin", "error", err)
+		return nil
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	rowsByUser := make(map[string]*AdminSavedWorkerRow)
+	for _, record := range records {
+		if record.UserID == "" {
+			continue
+		}
+		row, exists := rowsByUser[record.UserID]
+		if !exists {
+			row = &AdminSavedWorkerRow{UserID: record.UserID}
+			rowsByUser[record.UserID] = row
+		}
+		row.Workers = append(row.Workers, record.SavedWorkerEntry)
+		if record.NotifyEnabled {
+			row.NotifyCount++
+		}
+		if record.Hash != "" {
+			row.WorkerHashes = append(row.WorkerHashes, record.Hash)
+		}
+	}
+
+	rows := make([]AdminSavedWorkerRow, 0, len(rowsByUser))
+	for _, row := range rowsByUser {
+		seenHashes := make(map[string]struct{})
+		dedup := row.WorkerHashes[:0]
+		for _, h := range row.WorkerHashes {
+			if h == "" {
+				continue
+			}
+			lower := strings.ToLower(h)
+			if _, ok := seenHashes[lower]; ok {
+				continue
+			}
+			seenHashes[lower] = struct{}{}
+			dedup = append(dedup, lower)
+		}
+		row.WorkerHashes = dedup
+		rows = append(rows, *row)
+	}
+
+	if s.workerRegistry != nil {
+		for i := range rows {
+			seen := make(map[uint64]struct{})
+			for _, hash := range rows[i].WorkerHashes {
+				if hash == "" {
+					continue
+				}
+				conns := s.workerRegistry.getConnectionsByHash(hash)
+				for _, mc := range conns {
+					if mc == nil {
+						continue
+					}
+					seq := atomic.LoadUint64(&mc.connectionSeq)
+					if seq == 0 {
+						continue
+					}
+					if _, duplicate := seen[seq]; duplicate {
+						continue
+					}
+					seen[seq] = struct{}{}
+					listener := "Stratum"
+					if mc.isTLSConnection {
+						listener = "Stratum TLS"
+					}
+					rows[i].OnlineConnections = append(rows[i].OnlineConnections, AdminMinerConnection{
+						ConnectionSeq:   seq,
+						ConnectionLabel: mc.connectionIDString(),
+						RemoteAddr:      mc.id,
+						Listener:        listener,
+					})
+				}
+			}
+		}
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].UserID < rows[j].UserID
+	})
+	return rows
 }
 
 func applyAdminSettingsForm(cfg *Config, r *http.Request) error {

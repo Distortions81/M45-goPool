@@ -1,0 +1,104 @@
+{{/* Admin saved logins page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Admin Saved Logins</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page admin-page">
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			View Clerk login IDs and their saved worker slots. Delete entries or ban their active connections directly from here.
+		</p>
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin panel is disabled. Enable it by editing <span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<p class="text-sm">
+				Sign in on the <a href="/admin">main admin page</a> to manage saved login data.
+			</p>
+		</div>
+		{{else}}
+		{{template "admin-nav" .}}
+		<div class="card">
+			<div class="label">Saved logins</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				These worker names were saved by logged-in users. Deleting them simply removes the entry. Banning disconnects any current sessions with that worker.
+			</p>
+			{{if .AdminSavedWorkerRows}}
+			<div class="table-responsive">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>User ID</th>
+							<th>Workers</th>
+							<th>Saved</th>
+							<th>Online</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						{{range .AdminSavedWorkerRows}}
+						<tr>
+							<td class="mono" style="font-size:13px;">{{.UserID}}</td>
+							<td>
+								<ul class="text-sm" style="margin:4px 0;padding-left:16px;">
+									{{range .Workers}}
+									<li>{{.Name}}{{if .Hash}} <span class="mono" style="font-size:11px;">{{shortID .Hash}}</span>{{end}}</li>
+									{{end}}
+								</ul>
+							</td>
+							<td>{{len .Workers}} ({{.NotifyCount}} notify)</td>
+							<td>
+								{{if .OnlineConnections}}
+									{{range .OnlineConnections}}
+										<div class="badge">{{shortID .ConnectionLabel}} ({{.Listener}})</div>
+									{{end}}
+								{{else}}
+									<span class="text-sm">offline</span>
+								{{end}}
+							</td>
+							<td>
+								<div class="button-row">
+									<form method="post" action="/admin/logins/delete" class="admin-action-form">
+										<input type="hidden" name="user_id" value="{{.UserID}}">
+										<input class="textfield admin-action-password" type="password" name="password" autocomplete="current-password" placeholder="Admin password" required>
+										<button class="btn btn-secondary" type="submit">Delete login</button>
+									</form>
+									<form method="post" action="/admin/logins/ban" class="admin-action-form">
+										<input type="hidden" name="user_id" value="{{.UserID}}">
+										{{range .WorkerHashes}}<input type="hidden" name="worker_hash" value="{{.}}">{{end}}
+										<input class="textfield admin-action-password" type="password" name="password" autocomplete="current-password" placeholder="Admin password" required>
+										<button class="btn btn-danger" type="submit">Ban login</button>
+									</form>
+								</div>
+							</td>
+						</tr>
+						{{end}}
+					</tbody>
+				</table>
+			</div>
+			{{else}}
+			<p class="text-sm">
+				No saved login entries are available. This might mean the saved workers store is empty or not configured.
+			</p>
+			{{end}}
+		</div>
+		{{end}}
+	</div>
+	{{template "footer" .}}
+</body>
+</html>

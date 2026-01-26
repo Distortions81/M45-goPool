@@ -360,6 +360,12 @@ func main() {
 	}
 	// HTML endpoints
 	mux.HandleFunc("/admin", statusServer.handleAdminPage)
+	mux.HandleFunc("/admin/miners", statusServer.handleAdminMinersPage)
+	mux.HandleFunc("/admin/miners/disconnect", statusServer.handleAdminMinerDisconnect)
+	mux.HandleFunc("/admin/miners/ban", statusServer.handleAdminMinerBan)
+	mux.HandleFunc("/admin/logins", statusServer.handleAdminLoginsPage)
+	mux.HandleFunc("/admin/logins/delete", statusServer.handleAdminLoginDelete)
+	mux.HandleFunc("/admin/logins/ban", statusServer.handleAdminLoginBan)
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
 	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)
