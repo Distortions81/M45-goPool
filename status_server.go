@@ -1110,14 +1110,25 @@ func (s *StatusServer) handleAdminLoginDelete(w http.ResponseWriter, r *http.Req
 		s.renderAdminPageTemplate(w, r, data, "admin_logins")
 		return
 	}
-	userID := strings.TrimSpace(r.FormValue("user_id"))
-	if userID == "" || s.workerLists == nil {
+	userIDs := r.Form["user_id"]
+	if len(userIDs) == 0 || s.workerLists == nil {
 		data.AdminApplyError = "Saved worker record not found."
 		s.renderAdminPageTemplate(w, r, data, "admin_logins")
 		return
 	}
-	if err := s.workerLists.RemoveUser(userID); err != nil {
-		logger.Warn("delete saved worker", "error", err, "user_id", userID)
+	seen := make(map[string]struct{})
+	for _, rawID := range userIDs {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		if err := s.workerLists.RemoveUser(id); err != nil {
+			logger.Warn("delete saved worker", "error", err, "user_id", id)
+		}
 	}
 	http.Redirect(w, r, "/admin/logins?notice=saved_worker_deleted", http.StatusSeeOther)
 }

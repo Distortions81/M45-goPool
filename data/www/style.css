@@ -1287,6 +1287,35 @@ h2 {
 	background: var(--card-bg);
 }
 
+.admin-toolbar {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--card-border);
+	border-radius: 12px;
+	background: var(--card-bg);
+	position: sticky;
+	top: 82px;
+	z-index: 10;
+	backdrop-filter: blur(6px);
+}
+
+.toolbar-left {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.toolbar-actions {
+	display: inline-flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
 .table-responsive {
 	width: 100%;
 	overflow-x: auto;
