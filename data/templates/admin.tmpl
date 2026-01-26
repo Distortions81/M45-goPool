@@ -9,7 +9,7 @@
 </head>
 <body>
 	{{template "header" .}}
-	<div class="page">
+	<div class="page admin-page">
 		<h1>Admin Control Panel</h1>
 		<p class="text-sm" style="margin-top:4px;">
 			This panel is not linked anywhere else and is hidden until you configure <span class="mono">data/config/admin.toml</span>.
@@ -46,21 +46,250 @@
 		</div>
 		{{else}}
 		<div class="card">
-			<div class="label">Edit <span class="mono">config.toml</span></div>
-			<p class="text-sm" style="margin:4px 0 10px 0;">Changes are saved immediately; restart or reboot to apply them.</p>
-			{{if .AdminConfigError}}
-			<p class="text-sm" style="color:#f88d8d;">{{.AdminConfigError}}</p>
+			<div class="label">Live settings</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
+			</p>
+			{{if .AdminApplyError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
 			{{end}}
-			<form method="post" action="/admin/save-config">
-				<textarea name="config_text" rows="20" class="textfield" style="font-family:Menlo, Consolas, monospace; width:100%; min-height:320px; white-space:pre; resize:vertical;" required>{{.ConfigContent}}</textarea>
-				<label class="label" for="config-password">Password</label>
-				<input id="config-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
-				<button class="btn" type="submit" style="margin-top:12px;">Save configuration</button>
+			<form method="post" action="/admin/apply">
+				<h3 style="margin:0 0 8px 0;">Branding</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Shown across the status UI as the pool name.">Brand name</div>
+						<input name="status_brand_name" type="text" class="textfield" value="{{.Settings.StatusBrandName}}">
+					</div>
+					<div>
+						<div class="label" title="The hostname shown in the UI and used for copy/paste Stratum URLs (usually your public domain).">Brand domain</div>
+						<input name="status_brand_domain" type="text" class="textfield" value="{{.Settings.StatusBrandDomain}}">
+					</div>
+					<div>
+						<div class="label" title="Short one-line description shown on the overview page.">Tagline</div>
+						<input name="status_tagline" type="text" class="textfield" value="{{.Settings.StatusTagline}}">
+					</div>
+					<div>
+						<div class="label" title="Fiat currency code used for price conversions (e.g. usd, eur).">Fiat currency</div>
+						<input name="fiat_currency" type="text" class="textfield" value="{{.Settings.FiatCurrency}}">
+					</div>
+					<div>
+						<div class="label" title="Link shown in the header (optional).">GitHub URL</div>
+						<input name="github_url" type="text" class="textfield" value="{{.Settings.GitHubURL}}">
+					</div>
+					<div>
+						<div class="label" title="Link shown in the header (optional).">Discord URL</div>
+						<input name="discord_url" type="text" class="textfield" value="{{.Settings.DiscordURL}}">
+					</div>
+					<div>
+						<div class="label" title="Shown on the status UI (optional).">Server location</div>
+						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}">
+					</div>
+					<div>
+						<div class="label" title="Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.">status_public_url</div>
+						<input name="status_public_url" type="text" class="textfield" value="{{.Settings.StatusPublicURL}}">
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Listeners</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Stratum TCP listener for miners (requires restart to change).">pool_listen</div>
+						<input name="pool_listen" type="text" class="textfield" value="{{.Settings.ListenAddr}}">
+					</div>
+					<div>
+						<div class="label" title="Status UI HTTP listener. When TLS is enabled, HTTP redirects to HTTPS (requires restart to change).">status_listen (http)</div>
+						<input name="status_listen" type="text" class="textfield" value="{{.Settings.StatusAddr}}">
+					</div>
+					<div>
+						<div class="label" title="Status UI HTTPS listener (requires restart to change).">status_tls_listen (https)</div>
+						<input name="status_tls_listen" type="text" class="textfield" value="{{.Settings.StatusTLSAddr}}">
+					</div>
+					<div>
+						<div class="label" title="Optional Stratum TLS listener for miners that support TLS (requires restart to change).">stratum_tls_listen</div>
+						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}">
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Limits</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Maximum simultaneous stratum connections allowed.">max_conns</div>
+						<input name="max_conns" type="number" class="textfield" value="{{.Settings.MaxConns}}">
+					</div>
+					<div>
+						<div class="label" title="When enabled, goPool auto-computes accept limits from max_conns to ease miner reconnections.">auto_accept_rate_limits</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="auto_accept_rate_limits" value="1" {{if .Settings.AutoAcceptRateLimits}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Connection accept rate limit (accepts/sec).">max_accepts_per_second</div>
+						<input name="max_accepts_per_second" type="number" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
+					</div>
+					<div>
+						<div class="label" title="Burst size for accept rate limiter (token bucket).">max_accept_burst</div>
+						<input name="max_accept_burst" type="number" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
+					</div>
+					<div>
+						<div class="label" title="Seconds allowed for miners to reconnect after a restart.">accept_reconnect_window</div>
+						<input name="accept_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptReconnectWindow}}">
+					</div>
+					<div>
+						<div class="label" title="Initial burst window in seconds after restart (first phase of reconnect storm).">accept_burst_window</div>
+						<input name="accept_burst_window" type="number" class="textfield" value="{{.Settings.AcceptBurstWindow}}">
+					</div>
+					<div>
+						<div class="label" title="Seconds after startup before switching from reconnection limits to steady-state limits.">accept_steady_state_window</div>
+						<input name="accept_steady_state_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateWindow}}">
+					</div>
+					<div>
+						<div class="label" title="Accepts/sec limit once steady-state mode activates.">accept_steady_state_rate</div>
+						<input name="accept_steady_state_rate" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateRate}}">
+					</div>
+					<div>
+						<div class="label" title="Expected % of miners reconnecting at once during normal operation (not a restart).">steady_state_reconnect_percent</div>
+						<input name="accept_steady_state_reconnect_percent" type="text" class="textfield" value="{{printf \"%.4f\" .Settings.AcceptSteadyStateReconnectPercent}}">
+					</div>
+					<div>
+						<div class="label" title="Seconds to spread steady-state reconnects across.">steady_state_reconnect_window</div>
+						<input name="accept_steady_state_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateReconnectWindow}}">
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Difficulty</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Minimum vardiff target (0 uses defaults/auto).">min_difficulty</div>
+						<input name="min_difficulty" type="text" class="textfield" value="{{printf \"%.8f\" .Settings.MinDifficulty}}">
+					</div>
+					<div>
+						<div class="label" title="Maximum vardiff target (0 uses defaults/auto).">max_difficulty</div>
+						<input name="max_difficulty" type="text" class="textfield" value="{{printf \"%.8f\" .Settings.MaxDifficulty}}">
+					</div>
+					<div>
+						<div class="label" title="When enabled, miners cannot change difficulty suggestions.">lock_suggested_difficulty</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Bans</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="When enabled, expired bans are removed at startup (safer default).">clean_expired_on_startup</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="clean_expired_on_startup" value="1" {{if .Settings.CleanExpiredBansOnStartup}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Auto-ban after this many invalid submissions (0 disables).">ban_invalid_submissions_after</div>
+						<input name="ban_invalid_submissions_after" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsAfter}}">
+					</div>
+					<div>
+						<div class="label" title="Window size in seconds for invalid submission counting.">ban_invalid_submissions_window_seconds</div>
+						<input name="ban_invalid_submissions_window_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsWindowSeconds}}">
+					</div>
+					<div>
+						<div class="label" title="Ban duration in seconds once the invalid threshold is hit.">ban_invalid_submissions_duration_seconds</div>
+						<input name="ban_invalid_submissions_duration_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsDurationSeconds}}">
+					</div>
+					<div>
+						<div class="label" title="Reconnect flood ban threshold (0 disables).">reconnect_ban_threshold</div>
+						<input name="reconnect_ban_threshold" type="number" class="textfield" value="{{.Settings.ReconnectBanThreshold}}">
+					</div>
+					<div>
+						<div class="label" title="Reconnect ban counting window in seconds.">reconnect_ban_window_seconds</div>
+						<input name="reconnect_ban_window_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanWindowSeconds}}">
+					</div>
+					<div>
+						<div class="label" title="Reconnect ban duration in seconds once threshold is hit.">reconnect_ban_duration_seconds</div>
+						<input name="reconnect_ban_duration_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanDurationSeconds}}">
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Peer cleaning</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Enable best-effort pruning of high-latency peers (applies to node-info display and warnings).">peer_cleanup_enabled</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="peer_cleanup_enabled" value="1" {{if .Settings.PeerCleanupEnabled}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Max peer ping (ms) above which peers are considered unhealthy.">peer_cleanup_max_ping_ms</div>
+						<input name="peer_cleanup_max_ping_ms" type="text" class="textfield" value="{{printf \"%.2f\" .Settings.PeerCleanupMaxPingMs}}">
+					</div>
+					<div>
+						<div class="label" title="Minimum number of peers to keep connected before pruning.">peer_cleanup_min_peers</div>
+						<input name="peer_cleanup_min_peers" type="number" class="textfield" value="{{.Settings.PeerCleanupMinPeers}}">
+					</div>
+				</div>
+
+				<h3 style="margin:18px 0 8px 0;">Other</h3>
+				<div class="grid admin-grid">
+					<div>
+						<div class="label" title="Miner connection idle timeout.">connection_timeout_seconds</div>
+						<input name="connection_timeout_seconds" type="number" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
+					</div>
+					<div>
+						<div class="label" title="Logging verbosity for goPool (debug, info, warn, error).">log_level</div>
+						<input name="log_level" type="text" class="textfield" value="{{.Settings.LogLevel}}">
+					</div>
+					<div>
+						<div class="label" title="Solo mode uses lighter validation; disable for strict multi-miner checks.">solo_mode</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="solo_mode" value="1" {{if .Settings.SoloMode}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Process mining.submit inline (lower latency, less backpressure).">direct_submit_processing</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="direct_submit_processing" value="1" {{if .Settings.DirectSubmitProcessing}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Enable duplicate share detection even in solo mode.">check_duplicate_shares</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="check_duplicate_shares" value="1" {{if .Settings.CheckDuplicateShares}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+				</div>
+
+				<label class="label" for="apply-password" style="margin-top:16px;">Password</label>
+				<input id="apply-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
+				<button class="btn" type="submit" style="margin-top:12px;">Apply live settings</button>
 			</form>
 		</div>
+
+		<div class="card">
+			<div class="label">Save to disk</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				Force-write the current in-memory config to <span class="mono">config.toml</span> and <span class="mono">tuning.toml</span>.
+				This overwrites files on disk; use with care.
+			</p>
+			{{if .AdminPersistError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminPersistError}}</p>
+			{{end}}
+			<form method="post" action="/admin/persist">
+				<label class="label" for="persist-password">Password</label>
+				<input id="persist-password" name="password" type="password" class="textfield" autocomplete="current-password" required>
+				<label class="label" for="persist-confirm">Confirmation</label>
+				<input id="persist-confirm" name="confirm" type="text" class="textfield" placeholder="Type SAVE" required>
+				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Save config.toml + tuning.toml</button>
+			</form>
+		</div>
+
 		<div class="card">
 			<div class="label">Reboot the pool</div>
-			<p class="text-sm" style="margin:4px 0 10px 0;">This sends SIGTERM to goPool. Make sure your supervisor restarts it or hit the reboot button.</p>
+			<p class="text-sm" style="margin:4px 0 10px 0;">This sends SIGTERM to goPool. Make sure your supervisor restarts it.</p>
 			{{if .AdminRebootError}}
 			<p class="text-sm" style="color:#f88d8d;">{{.AdminRebootError}}</p>
 			{{end}}
@@ -72,6 +301,7 @@
 				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Reboot now</button>
 			</form>
 		</div>
+
 		<div class="card">
 			<form method="post" action="/admin/logout">
 				<button class="btn btn-secondary" type="submit">Sign out</button>
@@ -82,3 +312,4 @@
 	{{template "footer" .}}
 </body>
 </html>
+

@@ -287,7 +287,8 @@ func main() {
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
-	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, stop)
+	tuningPath := filepath.Join(cfg.DataDir, "config", "tuning.toml")
+	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, tuningPath, stop)
 	statusServer.startOneTimeCodeJanitor(ctx)
 	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)
 	statusServer.startOneTimeCodePersistence(ctx)
@@ -361,7 +362,8 @@ func main() {
 	mux.HandleFunc("/admin", statusServer.handleAdminPage)
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
-	mux.HandleFunc("/admin/save-config", statusServer.handleAdminConfigSave)
+	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)
+	mux.HandleFunc("/admin/persist", statusServer.handleAdminPersist)
 	mux.HandleFunc("/admin/reboot", statusServer.handleAdminReboot)
 	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
 	mux.HandleFunc("/worker/search", statusServer.withClerkUser(statusServer.handleWorkerWalletSearch))
