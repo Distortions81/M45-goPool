@@ -114,46 +114,46 @@
 				<h3 style="margin:18px 0 8px 0;">Limits</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Maximum simultaneous stratum connections allowed.">max_conns</div>
+						<div class="label" title="Maximum simultaneous Stratum connections allowed (checked on accept; requires restart to take effect).">max_conns</div>
 						<input name="max_conns" type="number" class="textfield" value="{{.Settings.MaxConns}}">
 					</div>
 					<div>
-						<div class="label" title="When enabled, goPool auto-computes accept limits from max_conns to ease miner reconnections.">auto_accept_rate_limits</div>
+						<div class="label" title="When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).">auto_accept_rate_limits</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="auto_accept_rate_limits" value="1" {{if .Settings.AutoAcceptRateLimits}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Connection accept rate limit (accepts/sec).">max_accepts_per_second</div>
+						<div class="label" title="Connection accept throttle (accepts/sec) for the initial restart/reconnect window (requires restart).">max_accepts_per_second</div>
 						<input name="max_accepts_per_second" type="number" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
 					</div>
 					<div>
-						<div class="label" title="Burst size for accept rate limiter (token bucket).">max_accept_burst</div>
+						<div class="label" title="Burst size for accept limiter (token bucket). Allows short spikes (requires restart).">max_accept_burst</div>
 						<input name="max_accept_burst" type="number" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
 					</div>
 					<div>
-						<div class="label" title="Seconds allowed for miners to reconnect after a restart.">accept_reconnect_window</div>
+						<div class="label" title="Target seconds for all miners to reconnect after a restart (used for auto_accept_rate_limits).">accept_reconnect_window</div>
 						<input name="accept_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptReconnectWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Initial burst window in seconds after restart (first phase of reconnect storm).">accept_burst_window</div>
+						<div class="label" title="Initial burst window (seconds) after restart (used for auto_accept_rate_limits).">accept_burst_window</div>
 						<input name="accept_burst_window" type="number" class="textfield" value="{{.Settings.AcceptBurstWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Seconds after startup before switching from reconnection limits to steady-state limits.">accept_steady_state_window</div>
+						<div class="label" title="Seconds after startup before switching accept throttles to steady-state (requires restart).">accept_steady_state_window</div>
 						<input name="accept_steady_state_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Accepts/sec limit once steady-state mode activates.">accept_steady_state_rate</div>
+						<div class="label" title="Accepts/sec limit once steady-state mode activates (requires restart).">accept_steady_state_rate</div>
 						<input name="accept_steady_state_rate" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateRate}}">
 					</div>
 					<div>
-						<div class="label" title="Expected % of miners reconnecting at once during normal operation (not a restart).">steady_state_reconnect_percent</div>
+						<div class="label" title="Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).">steady_state_reconnect_percent</div>
 						<input name="accept_steady_state_reconnect_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.AcceptSteadyStateReconnectPercent}}">
 					</div>
 					<div>
-						<div class="label" title="Seconds to spread steady-state reconnects across.">steady_state_reconnect_window</div>
+						<div class="label" title="Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).">steady_state_reconnect_window</div>
 						<input name="accept_steady_state_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateReconnectWindow}}">
 					</div>
 				</div>
@@ -161,15 +161,15 @@
 				<h3 style="margin:18px 0 8px 0;">Difficulty</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Minimum vardiff target (0 uses defaults/auto).">min_difficulty</div>
+						<div class="label" title="Minimum VarDiff target difficulty for miner connections (0 uses defaults/auto; requires restart).">min_difficulty</div>
 						<input name="min_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MinDifficulty}}">
 					</div>
 					<div>
-						<div class="label" title="Maximum vardiff target (0 uses defaults/auto).">max_difficulty</div>
+						<div class="label" title="Maximum VarDiff target difficulty for miner connections (0 uses defaults/auto; requires restart).">max_difficulty</div>
 						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>
-						<div class="label" title="When enabled, miners cannot change difficulty suggestions.">lock_suggested_difficulty</div>
+						<div class="label" title="When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).">lock_suggested_difficulty</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
@@ -180,34 +180,34 @@
 				<h3 style="margin:18px 0 8px 0;">Bans</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="When enabled, expired bans are removed at startup (safer default).">clean_expired_on_startup</div>
+						<div class="label" title="When enabled, expired bans are removed from disk at startup (startup-only).">clean_expired_on_startup</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="clean_expired_on_startup" value="1" {{if .Settings.CleanExpiredBansOnStartup}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Auto-ban after this many invalid submissions (0 disables).">ban_invalid_submissions_after</div>
+						<div class="label" title="Ban a worker after this many invalid submissions within the window (0 disables; requires restart).">ban_invalid_submissions_after</div>
 						<input name="ban_invalid_submissions_after" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsAfter}}">
 					</div>
 					<div>
-						<div class="label" title="Window size in seconds for invalid submission counting.">ban_invalid_submissions_window_seconds</div>
+						<div class="label" title="Window size (seconds) for invalid submission counting (requires restart).">ban_invalid_submissions_window_seconds</div>
 						<input name="ban_invalid_submissions_window_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Ban duration in seconds once the invalid threshold is hit.">ban_invalid_submissions_duration_seconds</div>
+						<div class="label" title="Ban duration (seconds) once the invalid threshold is hit (requires restart).">ban_invalid_submissions_duration_seconds</div>
 						<input name="ban_invalid_submissions_duration_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsDurationSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Reconnect flood ban threshold (0 disables).">reconnect_ban_threshold</div>
+						<div class="label" title="Ban a host after this many reconnects within the window (0 disables; requires restart).">reconnect_ban_threshold</div>
 						<input name="reconnect_ban_threshold" type="number" class="textfield" value="{{.Settings.ReconnectBanThreshold}}">
 					</div>
 					<div>
-						<div class="label" title="Reconnect ban counting window in seconds.">reconnect_ban_window_seconds</div>
+						<div class="label" title="Reconnect ban counting window (seconds; requires restart).">reconnect_ban_window_seconds</div>
 						<input name="reconnect_ban_window_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Reconnect ban duration in seconds once threshold is hit.">reconnect_ban_duration_seconds</div>
+						<div class="label" title="Reconnect ban duration (seconds) once threshold is hit (requires restart).">reconnect_ban_duration_seconds</div>
 						<input name="reconnect_ban_duration_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanDurationSeconds}}">
 					</div>
 				</div>
@@ -234,29 +234,29 @@
 				<h3 style="margin:18px 0 8px 0;">Other</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Miner connection idle timeout.">connection_timeout_seconds</div>
+						<div class="label" title="Miner connection idle timeout (seconds; requires restart).">connection_timeout_seconds</div>
 						<input name="connection_timeout_seconds" type="number" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Logging verbosity for goPool (debug, info, warn, error).">log_level</div>
+						<div class="label" title="Logging verbosity for goPool (debug, info, warn, error; requires restart).">log_level</div>
 						<input name="log_level" type="text" class="textfield" value="{{.Settings.LogLevel}}">
 					</div>
 					<div>
-						<div class="label" title="Solo mode uses lighter validation; disable for strict multi-miner checks.">solo_mode</div>
+						<div class="label" title="Solo mode uses lighter submit validation (skips worker-mismatch + some policy checks; requires restart).">solo_mode</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="solo_mode" value="1" {{if .Settings.SoloMode}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Process mining.submit inline (lower latency, less backpressure).">direct_submit_processing</div>
+						<div class="label" title="Process mining.submit on the connection goroutine (lower latency; can block reads; requires restart).">direct_submit_processing</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="direct_submit_processing" value="1" {{if .Settings.DirectSubmitProcessing}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Enable duplicate share detection even in solo mode.">check_duplicate_shares</div>
+						<div class="label" title="Enable duplicate share detection (keeps a per-connection cache; requires restart).">check_duplicate_shares</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="check_duplicate_shares" value="1" {{if .Settings.CheckDuplicateShares}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>

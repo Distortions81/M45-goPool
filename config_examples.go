@@ -33,8 +33,95 @@ func ensureExampleFile(path string, contents []byte) {
 	}
 }
 
+func withPrependedTOMLComments(data []byte, parts ...[]byte) []byte {
+	total := len(data)
+	for _, part := range parts {
+		total += len(part)
+	}
+	out := make([]byte, 0, total)
+	for _, part := range parts {
+		out = append(out, part...)
+	}
+	out = append(out, data...)
+	return out
+}
+
 func exampleHeader(text string) []byte {
 	return []byte(fmt.Sprintf("# Generated %s example (copy to a real config and edit as needed)\n\n", text))
+}
+
+func generatedConfigFileHeader() []byte {
+	return []byte(`# goPool config.toml
+# This file is read on startup.
+# goPool may rewrite it (keeping a .bak) when it needs to persist settings.
+#
+`)
+}
+
+func generatedTuningFileHeader() []byte {
+	return []byte(`# goPool tuning.toml
+# Optional advanced overrides loaded after config.toml on startup.
+# goPool may rewrite it when you use the admin panel "Save to disk".
+#
+`)
+}
+
+func baseConfigDocComments() []byte {
+	return []byte(`# Key notes
+# - [server].pool_listen: Stratum TCP listener for miners (requires restart).
+# - [server].status_listen: HTTP listener for status UI (requires restart).
+# - [server].status_tls_listen: HTTPS listener; "" disables TLS (requires restart).
+# - [server].status_public_url: Canonical public URL for redirects/cookies; empty = auto-detect.
+# - [stratum].stratum_tls_listen: Optional Stratum-over-TLS listener (requires restart).
+#
+# Mining behavior
+# - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).
+# - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
+# - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
+#
+# Logging
+# - [logging].level: debug, info, warn, error (requires restart).
+#
+# Advanced settings (rate limits, bans, peer cleaning, difficulty clamps) live in tuning.toml.
+#
+`)
+}
+
+func tuningConfigDocComments() []byte {
+	return []byte(`# Rate limits ([rate_limits])
+# - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
+# - auto_accept_rate_limits: When true, computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).
+# - max_accepts_per_second: Accepts/sec during the initial restart/reconnect window (requires restart).
+# - max_accept_burst: Token bucket burst size for accepts (requires restart).
+# - accept_reconnect_window: Target seconds for all miners to reconnect after restart (used for auto_accept_rate_limits).
+# - accept_burst_window: Initial burst window (seconds) after restart (used for auto_accept_rate_limits).
+# - accept_steady_state_window: Seconds after startup before switching to steady-state throttles (requires restart).
+# - accept_steady_state_rate: Accepts/sec once steady-state mode activates (requires restart).
+# - accept_steady_state_reconnect_percent: Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).
+# - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
+#
+# Timeouts ([timeouts])
+# - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
+#
+# Difficulty ([difficulty])
+# - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 uses defaults/auto (requires restart).
+# - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
+#
+# Bans ([bans])
+# - clean_expired_on_startup: Remove expired bans from disk on startup (startup-only).
+# - ban_invalid_submissions_after: Ban a worker after N invalid submissions within the window (0 disables; requires restart).
+# - ban_invalid_submissions_window_seconds: Window size (seconds) for invalid submission counting (requires restart).
+# - ban_invalid_submissions_duration_seconds: Ban duration (seconds) when threshold is hit (requires restart).
+# - reconnect_ban_threshold: Ban a host after N reconnects within the window (0 disables; requires restart).
+# - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
+# - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
+#
+# Peer cleaning ([peer_cleaning])
+# - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
+# - max_ping_ms: Peers above this ping (ms) are candidates for disconnect.
+# - min_peers: Minimum number of peers to keep connected.
+#
+`)
 }
 
 func exampleConfigBytes() []byte {
@@ -48,7 +135,7 @@ func exampleConfigBytes() []byte {
 		logger.Warn("encode config example failed", "error", err)
 		return nil
 	}
-	return append(exampleHeader("base config"), data...)
+	return withPrependedTOMLComments(data, exampleHeader("base config"), baseConfigDocComments())
 }
 
 func exampleTuningConfigBytes() []byte {
@@ -59,7 +146,7 @@ func exampleTuningConfigBytes() []byte {
 		logger.Warn("encode tuning config example failed", "error", err)
 		return nil
 	}
-	return append(exampleHeader("tuning config"), data...)
+	return withPrependedTOMLComments(data, exampleHeader("tuning config"), tuningConfigDocComments())
 }
 
 func rewriteConfigFile(path string, cfg Config) error {
@@ -73,6 +160,7 @@ func rewriteConfigFile(path string, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
+	data = withPrependedTOMLComments(data, generatedConfigFileHeader(), baseConfigDocComments())
 
 	tmpFile, err := os.CreateTemp(dir, "config-*.tmp")
 	if err != nil {
