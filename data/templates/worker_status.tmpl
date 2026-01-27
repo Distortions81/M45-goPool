@@ -4,17 +4,18 @@
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Worker Info</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Worker Info</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body{{if .PrivacyMode}} class="privacy-mode"{{end}}>
 	{{template "header" .}}
-	<div class="page">
+	<main class="page" id="content">
 		{{if .Error}}
 			<div class="card">
 				<p class="text-sm" style="color:#f88d8d;">{{.Error}}</p>
 				<p class="text-sm" style="margin-top:10px;">
-					<a href="/worker">← Back to worker login</a>
+					<a href="/worker">← Back to Workers</a>
 				</p>
 			</div>
 		{{else if .Worker}}
@@ -315,13 +316,13 @@
 			<div class="card">
 				<p class="text-sm">No worker found.</p>
 				<p class="text-sm" style="margin-top:10px;">
-					<a href="/worker">← Back to worker login</a>
+					<a href="/worker">← Back to Workers</a>
 				</p>
 			</div>
 		{{end}}
 
 		{{template "footer" .}}
-	</div>
+	</main>
 	<script>
 	document.addEventListener('DOMContentLoaded', function() {
 		const toggle = document.getElementById('privacyToggle');

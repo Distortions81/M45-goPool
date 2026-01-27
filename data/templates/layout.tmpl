@@ -1,6 +1,7 @@
 {{/* Shared layout pieces: header toolbar and footer */}}
 
 {{define "header"}}
+<a class="skip-link" href="#content">Skip to content</a>
 <header>
 	<div class="header-inner">
 		<div class="brand">
@@ -25,10 +26,10 @@
 		<nav class="header-links">
 			<a class="header-link home-link" href="/">🏠 Overview</a>
 			<div class="header-dropdown">
-				<button class="header-link more-info-toggle" id="moreInfoMenuButton" type="button" aria-haspopup="true">
+				<button class="header-link more-info-toggle" id="moreInfoMenuButton" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="moreInfoMenu">
 					More Info ▼
 				</button>
-				<div class="header-dropdown-menu" role="menu" aria-labelledby="moreInfoMenuButton">
+				<div class="header-dropdown-menu" id="moreInfoMenu" role="menu" aria-labelledby="moreInfoMenuButton">
 					<a class="header-dropdown-link" role="menuitem" href="/about">ℹ️ About Us</a>
 					<a class="header-dropdown-link" role="menuitem" href="/pool">💎 Pool Stats</a>
 					<a class="header-dropdown-link" role="menuitem" href="/help">📘 Solo Mining 101</a>
@@ -37,7 +38,7 @@
 				</div>
 			</div>
 			<a class="header-link poolcensus-link" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer">🔍 PoolCensus</a>
-			<a class="header-link worker-login-link" href="/worker">👤 Sign-In</a>
+			<a class="header-link worker-login-link" href="/worker">👤 Workers</a>
 			<span class="header-sep" aria-hidden="true"></span>
 			{{if .GitHubURL}}
 			<a class="header-link github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -143,6 +144,37 @@ document.addEventListener('click', function(e) {
 	if (window.ResizeObserver) {
 		new ResizeObserver(updatePagePadding).observe(header);
 	}
+})();
+
+// Header dropdown (touch + keyboard friendly)
+(function() {
+	const dropdown = document.querySelector('.header-dropdown');
+	if (!dropdown) return;
+	const button = document.getElementById('moreInfoMenuButton');
+	const menu = document.getElementById('moreInfoMenu');
+	if (!button || !menu) return;
+
+	const isOpen = () => dropdown.dataset.open === 'true';
+	function setOpen(open) {
+		dropdown.dataset.open = open ? 'true' : 'false';
+		button.setAttribute('aria-expanded', open ? 'true' : 'false');
+	}
+
+	setOpen(false);
+
+	button.addEventListener('click', function(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		setOpen(!isOpen());
+	});
+
+	document.addEventListener('click', function(e) {
+		if (!dropdown.contains(e.target)) setOpen(false);
+	});
+
+	document.addEventListener('keydown', function(e) {
+		if (e.key === 'Escape') setOpen(false);
+	});
 })();
 </script>
 {{end}}

@@ -4,12 +4,13 @@
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - About</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — About</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 	{{template "header" .}}
-	<div class="page">
+	<main class="page" id="content">
 		<h1>About This Pool</h1>
 
 		<div class="card">
@@ -48,6 +49,6 @@
 		</div>
 
 		{{template "footer" .}}
-	</div>
+	</main>
 </body>
 </html>

@@ -4,12 +4,20 @@
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Wallet Search</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Wallet Search</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 	{{template "header" .}}
-	<div class="page">
+	<main class="page" id="content">
+			<noscript>
+				<div class="card">
+					<p class="text-sm" style="color:#f88d8d;margin:0;">
+						This page requires JavaScript to safely hash your wallet address before searching.
+					</p>
+				</div>
+			</noscript>
 			<div class="card worker-search-card">
 				<div class="lookup-card-header">
 					<h2>Wallet search</h2>
@@ -18,9 +26,9 @@
 					</p>
 				</div>
 				<form method="get" action="/worker/search" id="walletSearchForm">
-					<div class="label">Wallet address</div>
+					<label class="label" for="walletInput">Wallet address</label>
 					<div class="input-row">
-						<input class="input" type="text" id="walletInput" placeholder="bc1..." autocomplete="off">
+						<input class="input" type="text" id="walletInput" placeholder="bc1..." autocomplete="off" spellcheck="false" required>
 						<input type="hidden" name="hash" id="walletHash">
 						<button class="btn" type="submit">Search wallet</button>
 					</div>
@@ -76,11 +84,11 @@
 
 		<div class="card" style="margin-top:16px;">
 			<p class="text-sm" style="margin:0;">
-				<a href="/worker">← Back to worker login</a>
+				<a href="/worker">← Back to Workers</a>
 			</p>
 		</div>
-	</div>
 		{{template "footer" .}}
+	</main>
 	<script>
 	// SHA256 implementation shared with login page
 	async function sha256Wallet(str) {

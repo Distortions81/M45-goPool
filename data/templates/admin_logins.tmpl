@@ -4,12 +4,20 @@
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Admin Saved Logins</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Saved Logins</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 	{{template "header" .}}
-	<div class="page admin-page">
+	<main class="page admin-page" id="content">
+		<noscript>
+			<div class="card">
+				<p class="text-sm" style="color:#f88d8d;margin:0;">
+					JavaScript is required for bulk actions on this page.
+				</p>
+			</div>
+		</noscript>
 		<h1>Admin Control Panel</h1>
 		<p class="text-sm" style="margin-top:4px;">
 			View Clerk login IDs and their saved worker slots. Select the logins you want to delete or ban, enter the admin password once, and apply the action below.
@@ -130,8 +138,8 @@
 			{{end}}
 		</div>
 		{{end}}
-	</div>
 	{{template "footer" .}}
+	</main>
 	<script>
 	(function() {
 		const form = document.getElementById('loginsActionsForm');

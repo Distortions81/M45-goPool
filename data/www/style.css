@@ -63,6 +63,27 @@ body {
 	transition: background 0.3s ease, color 0.3s ease;
 }
 
+.skip-link {
+	position: absolute;
+	left: -9999px;
+	top: 12px;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: var(--card-bg-mid);
+	border: 1px solid var(--card-border);
+	color: var(--text-primary);
+	text-decoration: none;
+	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+	z-index: 9999;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+	left: 12px;
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
 .page {
 	max-width: 1100px;
 	margin: 0 auto;
@@ -855,8 +876,11 @@ header {
 	position: relative;
 }
 
-.header-dropdown:hover .header-dropdown-menu,
-.header-dropdown:focus-within .header-dropdown-menu {
+.header-dropdown:hover .header-dropdown-menu {
+	display: flex;
+}
+
+.header-dropdown[data-open="true"] .header-dropdown-menu {
 	display: flex;
 }
 

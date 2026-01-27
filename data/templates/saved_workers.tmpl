@@ -4,7 +4,8 @@
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} Saved Workers</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Saved Workers</title>
 	<link rel="stylesheet" href="/style.css">
 	<style>
 		.discord-dialog {
@@ -70,7 +71,14 @@
 </head>
 <body>
 	{{template "header" .}}
-	<div class="page">
+	<main class="page" id="content">
+		<noscript>
+			<div class="card">
+				<p class="text-sm" style="color:#f88d8d;margin:0;">
+					JavaScript is required to use the saved workers dashboard.
+				</p>
+			</div>
+		</noscript>
 		{{if .ClerkUser}}
 		<div class="panel-stack panel-stack-wide">
 			<div class="saved-workers-status">
@@ -351,7 +359,7 @@
 		{{end}}
 
 	{{template "footer" .}}
-	</div>
+	</main>
 	{{if .DiscordNotificationsEnabled}}
 	<dialog id="discordNotifDialog" class="discord-dialog" aria-label="Discord notifications setup">
 		<div class="discord-dialog-header">
