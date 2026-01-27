@@ -101,28 +101,32 @@
 				</div>
 				<div style="overflow-x:auto; margin-top:12px;">
 					<table class="table">
-						<thead>
-							<tr>
-								<th>Worker</th>
-								<th>Hashrate</th>
-								<th>Diff</th>
-								<th>Shares/min</th>
-								<th>Accepted</th>
-								<th>Connected</th>
-								<th></th>
-							</tr>
-						</thead>
+					<thead>
+						<tr>
+							<th>Worker</th>
+							<th>Hashrate</th>
+							<th>Diff</th>
+							<th>Shares/min</th>
+							<th>Last share</th>
+							<th>Accepted</th>
+							<th>Rejected</th>
+							<th>Connected</th>
+							<th></th>
+						</tr>
+					</thead>
 						<tbody id="onlineWorkersBody">
 							{{if .OnlineWorkerEntries}}
 								{{range .OnlineWorkerEntries}}
-								<tr>
-									<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
-										<td data-hashrate="{{printf "%.0f" .Hashrate}}" class="hashrate-value">—</td>
-									<td>{{formatDiff .Difficulty}}</td>
-									<td>{{formatShareRate .ShareRate}}</td>
-									<td>{{.Accepted}}</td>
-									<td>{{humanDuration .ConnectedDuration}}</td>
-									<td style="text-align:right;">
+					<tr>
+						<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
+							<td data-hashrate="{{printf "%.0f" .Hashrate}}" class="hashrate-value">—</td>
+						<td>{{formatDiff .Difficulty}}</td>
+						<td>{{formatShareRate .ShareRate}}</td>
+						<td>{{formatTime .LastShare}}</td>
+						<td>{{.Accepted}}</td>
+						<td>{{.Rejected}}</td>
+						<td>{{humanDuration .ConnectedDuration}}</td>
+						<td style="text-align:right;">
 										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 											{{if $.DiscordNotificationsEnabled}}
 												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
@@ -146,7 +150,7 @@
 								</tr>
 								{{end}}
 							{{else}}
-								<tr><td colspan="7" class="text-sm">No saved workers online right now.</td></tr>
+								<tr><td colspan="9" class="text-sm">No saved workers online right now.</td></tr>
 							{{end}}
 						</tbody>
 					</table>
@@ -202,23 +206,13 @@
 
 			<div class="card">
 				<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
-					<div>
-						<h2 style="margin-top:0;">
-							{{if eq .SavedWorkersCount 0}}
-								Add your first worker!
-							{{else}}
-								Add workers
-							{{end}}
-						</h2>
-					</div>
-					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" style="gap:8px;">
-						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-							<polyline points="16 17 21 12 16 7"></polyline>
-							<line x1="21" y1="12" x2="9" y2="12"></line>
-						</svg>
-						<span>Sign out</span>
-					</a>
+					<h2 style="margin-top:0;">
+						{{if eq .SavedWorkersCount 0}}
+							Add your first worker!
+						{{else}}
+							Add workers
+						{{end}}
+					</h2>
 				</div>
 				<form method="post" action="/worker/save" style="margin-top:12px;">
 					<div class="input-row">
@@ -226,6 +220,85 @@
 						<button class="btn" type="submit">Add</button>
 					</div>
 				</form>
+			</div>
+
+			<div class="card">
+				<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+					<div>
+						<h2 style="margin-top:0;">Find miners by wallet</h2>
+						<p class="text-sm" style="color:var(--text-muted); margin:4px 0 0;">
+							Paste a wallet address to list active workers using it and save them without duplicates.
+						</p>
+					</div>
+				</div>
+				<form method="get" action="/saved-workers" id="walletLookupForm" style="margin-top:12px;">
+					<div class="label">Wallet address</div>
+					<div class="input-row">
+						<input class="input" type="text" id="walletLookupInput" placeholder="bc1..." autocomplete="off">
+						<input type="hidden" name="hash" id="walletLookupHash" value="{{.WalletLookupHash}}">
+						<button class="btn" type="submit">Search wallet</button>
+					</div>
+				</form>
+				{{if .WalletLookupError}}
+					<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.WalletLookupError}}</p>
+				{{else if and .WalletLookupHash (gt (len .WalletLookupResults) 0)}}
+					<p class="text-sm" style="margin-top:10px; color:#b3bbd4;">
+						Showing active workers for wallet hash <span class="mono sensitive-data">{{shortID .WalletLookupHash}}</span>.
+					</p>
+				{{end}}
+				{{if gt (len .WalletLookupResults) 0}}
+					<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px;">
+						<div class="text-sm" style="color:var(--text-muted);">
+							{{len .WalletLookupResults}} {{if gt (len .WalletLookupResults) 1}}miners{{else}}miner{{end}} found.
+						</div>
+						<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+							{{if gt .WalletLookupUnsavedCount 0}}
+								<button id="walletLookupAddAll" class="btn btn-highlight" type="button" aria-label="Add all miners from this wallet">
+									Add all ({{.WalletLookupUnsavedCount}})
+								</button>
+							{{else}}
+								<button class="btn btn-secondary" type="button" disabled>All results saved</button>
+							{{end}}
+						</div>
+					</div>
+					<p class="text-sm" style="color:var(--text-muted); margin-top:6px;">
+						Add actions skip workers that are already saved to prevent duplicates.
+					</p>
+					<div style="overflow-x:auto; margin-top:12px;">
+						<table class="table">
+							<thead>
+								<tr>
+									<th>Worker</th>
+									<th>Hashrate</th>
+									<th></th>
+								</tr>
+							</thead>
+							<tbody>
+								{{range .WalletLookupResults}}
+									<tr>
+										<td>
+											<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+												<a class="mono worker-link" href="/worker/sha256?hash={{.WorkerSHA256}}">
+													{{if .DisplayName}}{{.DisplayName}}{{else if .WorkerSHA256}}{{shortID .WorkerSHA256}}{{else}}Worker{{end}}
+												</a>
+											</div>
+										</td>
+										<td>{{if gt .RollingHashrate 0.0}}{{formatHashrate .RollingHashrate}}{{else}}—{{end}}</td>
+										<td style="text-align:right;">
+											{{if .AlreadySaved}}
+												<span class="badge" style="display:inline-flex; gap:4px;">Saved</span>
+											{{else}}
+												<button type="button" class="btn btn-secondary wallet-lookup-add" data-worker="{{.Name}}" data-worker-hash="{{.WorkerSHA256}}" aria-label="Save {{.Name}} to saved workers">
+													Add
+												</button>
+											{{end}}
+										</td>
+									</tr>
+								{{end}}
+							</tbody>
+						</table>
+					</div>
+				{{end}}
 			</div>
 
 			<div class="card">
@@ -258,6 +331,14 @@
 							Connect Your Discord Account!
 						</button>
 					{{end}}
+					<a class="btn btn-secondary" href="/logout?redirect=/worker" aria-label="Sign out" style="gap:8px;">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+							<polyline points="16 17 21 12 16 7"></polyline>
+							<line x1="21" y1="12" x2="9" y2="12"></line>
+						</svg>
+						<span>Sign out</span>
+					</a>
 				</div>
 			</div>
 		</div>
@@ -391,6 +472,127 @@
 			return res;
 		}
 
+		const walletLookupForm = document.getElementById('walletLookupForm');
+		const walletLookupInput = document.getElementById('walletLookupInput');
+		const walletLookupHashInput = document.getElementById('walletLookupHash');
+		const walletLookupAddAllButton = document.getElementById('walletLookupAddAll');
+
+		async function sha256Wallet(str) {
+			try {
+				const buffer = new TextEncoder().encode(str);
+				const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+				const hashArray = Array.from(new Uint8Array(hashBuffer));
+				return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+			} catch (error) {
+				console.error('SHA256 wallet error:', error);
+				alert('Error: Secure context (HTTPS) required for hashing. Please contact the pool administrator.');
+				throw error;
+			}
+		}
+
+		if (walletLookupForm) {
+			walletLookupForm.addEventListener('submit', async function(event) {
+				event.preventDefault();
+				const walletAddress = (walletLookupInput?.value || '').trim();
+				if (!walletAddress) {
+					alert('Please enter a wallet address');
+					return;
+				}
+				try {
+					const hash = await sha256Wallet(walletAddress);
+					if (walletLookupHashInput) {
+						walletLookupHashInput.value = hash;
+					}
+					this.submit();
+				} catch (error) {
+					console.error('Wallet lookup submit error:', error);
+				}
+			});
+		}
+
+			async function saveWorkerFromLookup(workerName, button) {
+				if (!workerName) {
+					return false;
+				}
+				if (button) {
+					button.disabled = true;
+				}
+				try {
+					const payload = new URLSearchParams();
+					payload.append('worker', workerName);
+					const res = await fetchWithAuthRefresh('/worker/save', {
+						method: 'POST',
+						credentials: 'same-origin',
+						body: payload.toString(),
+						headers: {
+							'Content-Type': 'application/x-www-form-urlencoded',
+						},
+					});
+				if (!res.ok) {
+					throw new Error('Failed to add worker');
+				}
+				if (button) {
+					button.textContent = 'Saved';
+					button.classList.remove('wallet-lookup-add');
+					button.dataset.saved = '1';
+					button.setAttribute('aria-label', 'Worker saved');
+					button.disabled = true;
+				}
+				await refreshSavedWorkers();
+				return true;
+			} catch (error) {
+				console.error('Add worker from wallet lookup failed:', error);
+				if (button) {
+					button.disabled = false;
+				}
+				return false;
+			}
+		}
+
+		function updateWalletLookupAddAllState() {
+			if (!walletLookupAddAllButton) {
+				return;
+			}
+			const remaining = Array.from(document.querySelectorAll('.wallet-lookup-add')).filter((btn) => !btn.disabled);
+			if (remaining.length === 0) {
+				walletLookupAddAllButton.disabled = true;
+				walletLookupAddAllButton.textContent = 'All results saved';
+				return;
+			}
+			walletLookupAddAllButton.disabled = false;
+			walletLookupAddAllButton.textContent = `Add all (${remaining.length})`;
+		}
+
+		function attachWalletLookupAddHandlers() {
+			const buttons = document.querySelectorAll('.wallet-lookup-add');
+			buttons.forEach((btn) => {
+				if (btn.__walletLookupAttached) {
+					return;
+				}
+				btn.__walletLookupAttached = true;
+				btn.addEventListener('click', async () => {
+					const worker = btn.getAttribute('data-worker') || '';
+					await saveWorkerFromLookup(worker, btn);
+					updateWalletLookupAddAllState();
+				});
+			});
+		}
+
+		if (walletLookupAddAllButton) {
+			walletLookupAddAllButton.addEventListener('click', async () => {
+				const buttons = Array.from(document.querySelectorAll('.wallet-lookup-add')).filter((btn) => !btn.disabled);
+				if (buttons.length === 0) {
+					return;
+				}
+				walletLookupAddAllButton.disabled = true;
+				for (const btn of buttons) {
+					const worker = btn.getAttribute('data-worker') || '';
+					await saveWorkerFromLookup(worker, btn);
+				}
+				updateWalletLookupAddAllState();
+			});
+		}
+
 		// One-time code (server-generated, stored in memory for 5 minutes).
 		const oneTimeCodeGenerateBtn = document.getElementById('oneTimeCodeGenerate');
 		const discordDialog = document.getElementById('discordNotifDialog');
@@ -466,17 +668,26 @@
 			return (value / 1000000000).toFixed(1) + 'B';
 		}
 
-		function formatDifficulty(diff) {
-			const value = Number(diff || 0);
-			if (!value || value <= 0) return '—';
+			function formatDifficulty(diff) {
+				const value = Number(diff || 0);
+				if (!value || value <= 0) return '—';
 			if (value < 1000000) return value.toFixed(0);
 			if (value >= 1000000000000000) return (value / 1000000000000000).toFixed(1) + 'P';
 			if (value >= 1000000000000) return (value / 1000000000000).toFixed(1) + 'T';
 			if (value >= 1000000000) return (value / 1000000000).toFixed(1) + 'G';
 			return (value / 1000000).toFixed(1) + 'M';
-		}
+			}
 
-		function formatDuration(seconds) {
+			function formatLastShare(value) {
+				if (!value) return '—';
+				const ts = Date.parse(value);
+				if (!isFinite(ts) || ts <= 0) return '—';
+				const seconds = Math.floor((Date.now() - ts) / 1000);
+				if (seconds < 60) return 'Just now';
+				return formatTimeAgo(seconds);
+			}
+
+			function formatDuration(seconds) {
 			const total = Math.max(0, Math.floor(seconds || 0));
 			const hours = Math.floor(total / 3600);
 			const minutes = Math.floor((total % 3600) / 60);
@@ -666,7 +877,9 @@
 					<td>${w.hashrate > 0 ? formatHashrate(w.hashrate) : '—'}</td>
 					<td>${formatDifficulty(w.difficulty)}</td>
 					<td>${formatShareRate(w.shares_per_minute)}</td>
+					<td>${formatLastShare(w.last_share)}</td>
 					<td>${Number(w.accepted || 0).toLocaleString()}</td>
+					<td>${Number(w.rejected || 0).toLocaleString()}</td>
 					<td>${formatDuration(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
 						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
@@ -1039,6 +1252,8 @@
 		applyLastOnlineLabels(document);
 		attachNotifyToggles(document);
 		attachNotifyAllButtons();
+		attachWalletLookupAddHandlers();
+		updateWalletLookupAddAllState();
 		updatePrivacyToggle();
 
 		// Best-effort: keep the login cookie fresh while this page is open.

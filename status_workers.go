@@ -16,6 +16,27 @@ import (
 
 const maxSavedWorkersPerNameDisplay = 16
 
+type savedWorkerEntry struct {
+	Name              string
+	Hash              string
+	NotifyEnabled     bool
+	LastOnlineAt      string
+	Hashrate          float64
+	ShareRate         float64
+	Accepted          uint64
+	Rejected          uint64
+	Difficulty        float64
+	LastShare         time.Time
+	ConnectedDuration time.Duration
+	ConnectionID      string
+	ConnectionSeq     uint64
+}
+
+type walletLookupResult struct {
+	WorkerView
+	AlreadySaved bool
+}
+
 func safeRedirectPath(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -199,6 +220,27 @@ func (s *StatusServer) handleWorkerWalletSearch(w http.ResponseWriter, r *http.R
 	}
 }
 
+func (s *StatusServer) lookupWorkerViewsByWalletHash(hash string, now time.Time) ([]WorkerView, string) {
+	if s.workerRegistry == nil {
+		return nil, "Worker registry unavailable."
+	}
+	conns := s.workerRegistry.getConnectionsByWalletHash(hash)
+	if len(conns) == 0 {
+		return nil, "No active workers were found for that wallet."
+	}
+
+	views := make([]WorkerView, 0, len(conns))
+	for _, mc := range conns {
+		views = append(views, workerViewFromConn(mc, now))
+	}
+
+	results := mergeWorkerViewsByHash(views)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].LastShare.After(results[j].LastShare)
+	})
+	return results, ""
+}
+
 func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) {
 	if s == nil {
 		http.NotFound(w, r)
@@ -313,26 +355,17 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	start := time.Now()
 	base := s.baseTemplateData(start)
 
-	type savedWorkerEntry struct {
-		Name              string
-		Hash              string
-		NotifyEnabled     bool
-		LastOnlineAt      string
-		Hashrate          float64
-		ShareRate         float64
-		Accepted          uint64
-		Difficulty        float64
-		ConnectedDuration time.Duration
-		ConnectionID      string
-		ConnectionSeq     uint64
-	}
 	data := struct {
 		StatusData
-		OnlineWorkerEntries  []savedWorkerEntry
-		OfflineWorkerEntries []savedWorkerEntry
-		SavedWorkersCount    int
-		SavedWorkersOnline   int
-		SavedWorkersMax      int
+		OnlineWorkerEntries      []savedWorkerEntry
+		OfflineWorkerEntries     []savedWorkerEntry
+		SavedWorkersCount        int
+		SavedWorkersOnline       int
+		SavedWorkersMax          int
+		WalletLookupHash         string
+		WalletLookupError        string
+		WalletLookupResults      []walletLookupResult
+		WalletLookupUnsavedCount int
 	}{StatusData: base}
 	data.HashrateGraphTitle = "Total Hashrate"
 	data.HashrateGraphID = "savedWorkersHashrateChart"
@@ -347,8 +380,17 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	data.SavedWorkersCount = len(data.SavedWorkers)
 	now := time.Now()
 
+	savedHashes := make(map[string]struct{}, len(data.SavedWorkers))
+	savedNames := make(map[string]struct{}, len(data.SavedWorkers))
+
 	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
+		if hash := strings.ToLower(strings.TrimSpace(saved.Hash)); hash != "" {
+			savedHashes[hash] = struct{}{}
+		}
+		if name := strings.ToLower(strings.TrimSpace(saved.Name)); name != "" {
+			savedNames[name] = struct{}{}
+		}
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
 		if lookupHash == "" {
 			continue
@@ -387,6 +429,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					Hashrate:          hashrate,
 					ShareRate:         view.ShareRate,
 					Accepted:          view.Accepted,
+					Rejected:          view.Rejected,
+					LastShare:         view.LastShare,
 					Difficulty:        view.Difficulty,
 					ConnectedDuration: duration,
 					ConnectionID:      view.ConnectionID,
@@ -395,6 +439,45 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				data.SavedWorkersOnline++
 				perNameRowsShown[lookupHash]++
 				data.OnlineWorkerEntries = append(data.OnlineWorkerEntries, entry)
+			}
+		}
+	}
+
+	walletLookupHash := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("hash")))
+	data.WalletLookupHash = walletLookupHash
+	if walletLookupHash != "" {
+		if len(walletLookupHash) != 64 {
+			data.WalletLookupError = "Invalid hash format; expected 64 hex characters."
+		} else if _, err := hex.DecodeString(walletLookupHash); err != nil {
+			data.WalletLookupError = "Invalid hash value."
+		} else {
+			results, errMsg := s.lookupWorkerViewsByWalletHash(walletLookupHash, now)
+			if errMsg != "" {
+				data.WalletLookupError = errMsg
+			} else {
+				data.WalletLookupResults = make([]walletLookupResult, 0, len(results))
+				for _, view := range results {
+					alreadySaved := false
+					if viewHash := strings.ToLower(strings.TrimSpace(view.WorkerSHA256)); viewHash != "" {
+						if _, ok := savedHashes[viewHash]; ok {
+							alreadySaved = true
+						}
+					}
+					if !alreadySaved {
+						if nameKey := strings.ToLower(strings.TrimSpace(view.Name)); nameKey != "" {
+							if _, ok := savedNames[nameKey]; ok {
+								alreadySaved = true
+							}
+						}
+					}
+					data.WalletLookupResults = append(data.WalletLookupResults, walletLookupResult{
+						WorkerView:   view,
+						AlreadySaved: alreadySaved,
+					})
+					if !alreadySaved {
+						data.WalletLookupUnsavedCount++
+					}
+				}
 			}
 		}
 	}
@@ -435,9 +518,11 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Online                    bool    `json:"online"`
 		NotifyEnabled             bool    `json:"notify_enabled"`
 		LastOnlineAt              string  `json:"last_online_at,omitempty"`
+		LastShare                 string  `json:"last_share,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
 		Accepted                  uint64  `json:"accepted"`
+		Rejected                  uint64  `json:"rejected"`
 		Difficulty                float64 `json:"difficulty"`
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
@@ -519,6 +604,10 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 						connectionDurationSeconds = 0
 					}
 				}
+				lastShare := ""
+				if !view.LastShare.IsZero() {
+					lastShare = view.LastShare.UTC().Format(time.RFC3339)
+				}
 				e := entry{
 					Name:                      savedEntry.Name,
 					Hash:                      view.WorkerSHA256,
@@ -527,7 +616,9 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Hashrate:                  hashrate,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
+					Rejected:                  view.Rejected,
 					Difficulty:                view.Difficulty,
+					LastShare:                 lastShare,
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
 				}

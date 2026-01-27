@@ -287,7 +287,7 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			s := humanShortDuration(time.Since(t))
 			if s == "just now" {
-				return s
+				return "Just now"
 			}
 			return s + " ago"
 		},
