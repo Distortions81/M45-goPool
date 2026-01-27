@@ -224,23 +224,25 @@ func (s *StatusServer) handleClerkCallback(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, redirect, http.StatusSeeOther)
 		return
 	}
+	if sessionToken := strings.TrimSpace(r.URL.Query().Get("session_token")); sessionToken != "" {
+		claims, err := s.clerk.Verify(sessionToken)
+		if err == nil && claims != nil && claims.Subject != "" {
+			s.setClerkSessionCookie(w, r, sessionToken, claims)
+			http.Redirect(w, r, redirect, http.StatusSeeOther)
+			return
+		}
+		if err != nil {
+			logger.Warn("clerk callback verify failed", "error", err)
+		} else {
+			logger.Warn("clerk callback verify failed", "reason", "missing session claims")
+		}
+	}
 	if s.clerkUserFromRequest(r) == nil {
 		if devBrowserJWT := strings.TrimSpace(r.URL.Query().Get(clerkDevBrowserJWTQueryParam)); devBrowserJWT != "" {
 			if jwtToken, claims, err := s.clerk.ExchangeDevBrowserJWT(r.Context(), devBrowserJWT); err != nil {
 				logger.Warn("clerk dev browser exchange failed", "error", err)
 			} else {
-				cookie := &http.Cookie{
-					Name:     s.clerk.SessionCookieName(),
-					Value:    jwtToken,
-					Path:     "/",
-					HttpOnly: true,
-					SameSite: http.SameSiteLaxMode,
-				}
-				cookie.Secure = s.clerkCookieSecure(r)
-				if claims != nil && claims.ExpiresAt != nil {
-					cookie.Expires = claims.ExpiresAt.Time
-				}
-				http.SetCookie(w, cookie)
+				s.setClerkSessionCookie(w, r, jwtToken, claims)
 				http.Redirect(w, r, redirect, http.StatusSeeOther)
 				return
 			}
@@ -912,18 +914,7 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 		return
 	}
 
-	cookie := &http.Cookie{
-		Name:     s.clerk.SessionCookieName(),
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	}
-	cookie.Secure = s.clerkCookieSecure(r)
-	if claims.ExpiresAt != nil {
-		cookie.Expires = claims.ExpiresAt.Time
-	}
-	http.SetCookie(w, cookie)
+	s.setClerkSessionCookie(w, r, token, claims)
 
 	resp := struct {
 		OK        bool   `json:"ok"`
@@ -942,6 +933,27 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 	} else {
 		_, _ = w.Write(out)
 	}
+}
+
+func (s *StatusServer) setClerkSessionCookie(w http.ResponseWriter, r *http.Request, token string, claims *ClerkSessionClaims) {
+	if s == nil || s.clerk == nil || token == "" {
+		return
+	}
+	if claims == nil || strings.TrimSpace(claims.Subject) == "" {
+		return
+	}
+	cookie := &http.Cookie{
+		Name:     s.clerk.SessionCookieName(),
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+	cookie.Secure = s.clerkCookieSecure(r)
+	if claims.ExpiresAt != nil {
+		cookie.Expires = claims.ExpiresAt.Time
+	}
+	http.SetCookie(w, cookie)
 }
 
 // handleWorkerStatusBySHA256 handles worker lookups using pre-computed SHA256 hashes.

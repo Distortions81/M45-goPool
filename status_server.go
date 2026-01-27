@@ -2027,7 +2027,8 @@ func (s *StatusServer) clerkLoginURL(r *http.Request, redirect string) string {
 	}
 	redirectURL := s.clerkRedirectURL(r, redirect)
 	if s.clerk != nil {
-		login := s.clerk.LoginURL(redirectURL, s.Config().ClerkFrontendAPIURL)
+		callbackRedirect := s.clerkRedirectURL(r, s.clerk.CallbackPath())
+		login := s.clerk.LoginURL(callbackRedirect, s.Config().ClerkFrontendAPIURL)
 		if redirect == "" {
 			return login
 		}
