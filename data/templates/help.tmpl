@@ -1,0 +1,75 @@
+{{/* Solo mining help page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - Solo Mining 101</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<div class="page">
+		<h1>Solo Mining 101</h1>
+
+		<p class="text-sm" style="margin-top:-10px;margin-bottom:14px;">
+			A simple guide to what the stats mean in a solo pool.
+		</p>
+
+		<div class="panel-stack">
+			<div class="overview-banner" style="margin-bottom:0;">
+				<div style="position:relative;z-index:1;">
+					<div class="overview-banner-title">TL;DR</div>
+					<div class="overview-banner-line">
+						<span class="overview-banner-label">PAYOUT</span>
+						<span class="overview-banner-value">Only when you find a block</span>
+					</div>
+					<div class="overview-banner-line">
+						<span class="overview-banner-label">SPEED</span>
+						<span class="overview-banner-value">Hashrate (not shares/min)</span>
+					</div>
+					<div class="overview-banner-line">
+						<span class="overview-banner-label">SHARES</span>
+						<span class="overview-banner-value">Activity signal the pool uses for stats</span>
+					</div>
+					<div class="overview-banner-line">
+						<span class="overview-banner-label">REALITY</span>
+						<span class="overview-banner-value">Most hobby miners lose money at normal power rates</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>Shares/min is like counting steps</h2>
+				<p>Think of mining like walking. Each share is a step you tell the pool you took. Shares per minute tells you if you kept moving, but not how heavy your backpack is.</p>
+				<p>Shares/min means nothing on its own. The pool uses shares/sec (and how hard each share was) to estimate your hashrate. Hashrate is the only number that reflects mining power.</p>
+				<p>Shares are just "I'm still here" notes - only a block earns the reward.</p>
+				<details class="connect-advanced">
+					<summary>Footnote: why shares/min can change</summary>
+					<div class="connect-advanced-body">
+						<p class="connect-note">The pool can raise or lower your share difficulty so you submit at a steady pace.</p>
+						<p class="connect-note">That means shares/min can go up or down even if your miner's hashrate is the same.</p>
+					</div>
+				</details>
+			</div>
+
+			<div class="card">
+				<h2>Solo vs "normal" pools</h2>
+				<p>Solo mining is simple: if your miner finds a block, you get the reward. If you do not find a block, you get nothing (even if you sent lots of shares).</p>
+				<p>This pool uses <strong>split coinbase</strong>: when a block is found, it pays the miner that actually discovered it (your address is in the block; no pool wallet holding your funds).</p>
+				<p>Most other pools split rewards between many miners to make payouts feel steady. Solo mining trades that smoothing for transparency and the chance at a full block.</p>
+				<p>Reality check: most hobby miners pay more for electricity and hardware than they earn, so treat mining as a hobby rather than guaranteed income.</p>
+				<div class="button-row">
+					<a class="btn btn-highlight no-glow" href="https://www.cryptocompare.com/mining/calculator/btc?HashingPower=1&HashingUnit=TH%2Fs&PowerConsumption=15&CostPerkWh=0.12&MiningPoolFee=2" target="_blank" rel="noopener noreferrer">Open Profitability Calculator</a>
+					<a class="btn btn-secondary" href="/">Back to Overview</a>
+				</div>
+				<p class="text-sm" style="margin-top:8px;">
+					This link is a rough "Bitaxe-style" example: 1 TH/s at ~15 J/TH (about 15 W) and $0.12/kWh with a 2% fee. It is an approximation and cannot predict solo luck.
+				</p>
+			</div>
+		</div>
+
+		{{template "footer" .}}
+	</div>
+</body>
+</html>

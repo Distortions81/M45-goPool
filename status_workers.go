@@ -1375,3 +1375,16 @@ func (s *StatusServer) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 			"Template error while rendering the about page view.")
 	}
 }
+
+func (s *StatusServer) handleHelpPage(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	data := s.baseTemplateData(start)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "help", data); err != nil {
+		logger.Error("help page template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Solo mining help page error",
+			"We couldn't render the solo mining help page.",
+			"Template error while rendering the solo mining help page view.")
+	}
+}
