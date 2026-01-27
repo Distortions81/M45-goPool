@@ -184,6 +184,10 @@ Because the admin login is intentionally simple, bind this UI to trusted network
 - `solo_mode` defaults to `true` (lighter validation). Set to `false` to enforce stricter duplicate detection and low-difficulty checks.
 - `check_duplicate_shares` enables duplicate share detection when `solo_mode = true`; set it to `true` to apply the same checks used in multi-worker pools.
 - `direct_submit_processing` lets each stratum connection process `mining.submit` inline instead of via the worker queue; useful for low-latency environments but eases backpressure.
+- `solo_mode` skips several policy guards that multi-worker pools still perform:
+  - worker-mismatch validation (the connection’s authorized worker name is trusted once you authenticate),
+  - strict stale-job/prevhash checks, tight `ntime` window enforcement, and BIP320 version/mask requirements,
+  - duplicate-share filtering and low-difficulty rejection.
 
 ## Logging and diagnostics
 
