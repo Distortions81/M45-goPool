@@ -152,7 +152,7 @@ To upgrade to a new version:
 5. Review release notes for any configuration changes
 6. Start the new version
 
-**Important:** Always back up `data/state/workers.db.bak` (the snapshot) rather than the live database.
+**Important:** Prefer backing up a snapshot (for example `data/state/workers.db.bak` when `[backblaze_backup].keep_local_copy = true`) rather than the live database. If you do not have a snapshot configured, stop goPool before copying `data/state/workers.db`.
 
 ## Building from Source
 
