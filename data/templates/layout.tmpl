@@ -24,10 +24,10 @@
 			</div>
 		</div>
 		<nav class="header-links">
-			<a class="header-link home-link" href="/">🏠 Overview</a>
+			<a class="header-link home-link" href="/"><span class="nav-icon" aria-hidden="true">🏠</span><span class="nav-text">Overview</span></a>
 			<div class="header-dropdown">
 				<button class="header-link more-info-toggle" id="moreInfoMenuButton" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="moreInfoMenu">
-					More Info ▼
+					<span class="nav-icon" aria-hidden="true">☰</span><span class="nav-text">Menu</span> ▼
 				</button>
 				<div class="header-dropdown-menu" id="moreInfoMenu" role="menu" aria-labelledby="moreInfoMenuButton">
 					<a class="header-dropdown-link" role="menuitem" href="/about">ℹ️ About Us</a>
@@ -35,17 +35,16 @@
 					<a class="header-dropdown-link" role="menuitem" href="/help">📘 Solo Mining 101</a>
 					<a class="header-dropdown-link" role="menuitem" href="/node">🔗 Bitcoin Node Info</a>
 					<a class="header-dropdown-link" role="menuitem" href="/server">🖥️ Server Stats</a>
+					<a class="header-dropdown-link" role="menuitem" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer">🔍 PoolCensus</a>
+					{{if .GitHubURL}}
+					<a class="header-dropdown-link" role="menuitem" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a>
+					{{end}}
+					{{if .DiscordURL}}
+					<a class="header-dropdown-link" role="menuitem" href="{{.DiscordURL}}" target="_blank" rel="noopener noreferrer">Discord</a>
+					{{end}}
 				</div>
 			</div>
-			<a class="header-link poolcensus-link" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer">🔍 PoolCensus</a>
 			<a class="header-link worker-login-link" href="/worker">👤 Workers</a>
-			<span class="header-sep" aria-hidden="true"></span>
-			{{if .GitHubURL}}
-			<a class="header-link github-link" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a>
-			{{end}}
-			{{if .DiscordURL}}
-			<a class="header-link discord-link" href="{{.DiscordURL}}" target="_blank" rel="noopener noreferrer">Discord</a>
-			{{end}}
 			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
 				<span class="theme-toggle-icon">🌙</span>
 			</button>
@@ -110,6 +109,7 @@
 			localStorage.setItem('theme', newTheme);
 		});
 	}
+
 })();
 
 // Copy-to-clipboard functionality for code boxes
@@ -153,11 +153,15 @@ document.addEventListener('click', function(e) {
 	const button = document.getElementById('moreInfoMenuButton');
 	const menu = document.getElementById('moreInfoMenu');
 	if (!button || !menu) return;
+	const header = document.querySelector('header');
 
 	const isOpen = () => dropdown.dataset.open === 'true';
 	function setOpen(open) {
 		dropdown.dataset.open = open ? 'true' : 'false';
 		button.setAttribute('aria-expanded', open ? 'true' : 'false');
+		if (header) {
+			header.dataset.dropdownOpen = open ? 'true' : 'false';
+		}
 	}
 
 	setOpen(false);

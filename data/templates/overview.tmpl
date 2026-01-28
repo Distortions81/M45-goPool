@@ -100,7 +100,7 @@
 				<table class="table" id="status-workers-table">
 					<thead>
 						<tr>
-							<th title="Worker name">Worker</th>
+							<th title="Worker name"><span class="th-full">Worker</span><span class="th-short">.worker</span></th>
 							<th title="Connection number">Conn</th>
 							<th title="Rolling hashrate">Hashrate</th>
 							<th title="Current difficulty">Difficulty</th>
@@ -123,9 +123,9 @@
 				<table class="table" id="status-best-shares-table">
 					<thead>
 						<tr>
-							<th>Worker</th>
+							<th><span class="th-full">Worker</span><span class="th-short">.worker</span></th>
 							<th>Difficulty</th>
-							<th>When</th>
+							<th><span class="th-full">When</span><span class="th-short">Age</span></th>
 							<th>Hash</th>
 						</tr>
 					</thead>
@@ -146,12 +146,12 @@
 						<tr>
 							<th>Height</th>
 							<th>Hash</th>
-							<th>Miner</th>
+							<th><span class="th-full">Miner</span><span class="th-short">.worker</span></th>
 							<th>Result</th>
-							<th>Confirmations</th>
+							<th><span class="th-full">Confirmations</span><span class="th-short">Conf</span></th>
 							<th>Pool (sats)</th>
 							<th>Worker (sats)</th>
-							<th>Share difficulty</th>
+							<th><span class="th-full">Share difficulty</span><span class="th-short">Diff</span></th>
 							<th>When</th>
 						</tr>
 					</thead>
@@ -291,6 +291,31 @@
 			return `${Math.floor(days / 365)}y ago`;
 		}
 
+		function formatTimeAgoShort(value) {
+			if (!value) return '—';
+			const date = new Date(value);
+			if (Number.isNaN(date.getTime())) return '—';
+			const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+			if (diffSec < 0) return 'now';
+			if (diffSec < 5) return 'now';
+			if (diffSec < 60) return `${diffSec}s`;
+			if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+			if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
+			const days = Math.floor(diffSec / 86400);
+			if (days < 7) return `${days}d`;
+			if (days < 30) return `${Math.floor(days / 7)}w`;
+			if (days < 365) return `${Math.floor(days / 30)}mo`;
+			return `${Math.floor(days / 365)}y`;
+		}
+
+		function workerSuffix(value) {
+			if (!value) return '—';
+			const str = String(value);
+			const idx = str.indexOf('.');
+			if (idx === -1) return str;
+			return str.slice(idx);
+		}
+
 		function formatBTCShort(sats) {
 			const btc = (Number(sats) || 0) / 1e8;
 			return `${btc.toFixed(8)} BTC`;
@@ -312,12 +337,13 @@
 				}
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
+					const suffix = workerSuffix(name);
 					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
 					let connectionId = worker.connection_id ?? '—';
 					if (connectionId === '') connectionId = '0';
 					return `
 						<tr>
-							<td class="mono">${name}</td>
+							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
 							<td class="mono">${connectionId}</td>
 							<td>${formatHashrate(worker.rolling_hashrate)}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
@@ -335,14 +361,18 @@
 				tbody.innerHTML = '<tr><td colspan="4" class="text-sm">No high-difficulty shares recorded yet.</td></tr>';
 				return;
 			}
-			const rows = bestShares.map(share => `
-				<tr>
-					<td class="mono">${share.display_worker || share.worker || '—'}</td>
-					<td>${formatBestShareDiff(share.difficulty)}</td>
-					<td>${formatTimeAgo(share.timestamp)}</td>
-					<td class="mono">${share.display_hash || share.hash || '—'}</td>
-				</tr>
-			`);
+			const rows = bestShares.map(share => {
+				const worker = share.display_worker || share.worker || '—';
+				const suffix = workerSuffix(worker);
+				return `
+					<tr>
+						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
+						<td>${formatBestShareDiff(share.difficulty)}</td>
+						<td><span class="time-full">${formatTimeAgo(share.timestamp)}</span><span class="time-short">${formatTimeAgoShort(share.timestamp)}</span></td>
+						<td class="mono">${share.display_hash || share.hash || '—'}</td>
+					</tr>
+				`;
+			});
 			tbody.innerHTML = rows.join('');
 		}
 
@@ -367,11 +397,13 @@
 						resultLabel = 'Stale';
 						resultStyle = 'color:#fca5a5;';
 					}
+					const worker = block.display_worker || block.worker || '—';
+					const suffix = workerSuffix(worker);
 					return `
 					<tr>
 						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
 						<td class="mono">${block.display_hash || block.hash || '—'}</td>
-						<td class="mono">${block.display_worker || block.worker || '—'}</td>
+						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
 						<td style="${resultStyle}">${resultLabel}</td>
 						<td class="mono">${confirmations}</td>
 						<td>${block.pool_fee_sats || 0}</td>
