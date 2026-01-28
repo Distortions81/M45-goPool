@@ -1582,6 +1582,18 @@ a:hover {
 	background: var(--table-hover);
 }
 
+.worker-suffix,
+.time-short,
+.th-short {
+	display: none;
+}
+
+.worker-full,
+.time-full,
+.th-full {
+	display: inline;
+}
+
 .badge {
 	display: inline-block;
 	background: rgba(246, 179, 74, 0.15);
@@ -1731,8 +1743,37 @@ a:hover {
 }
 
 @media (max-width: 768px) {
+	body {
+		font-size: 13px;
+	}
+
+	h1 {
+		font-size: 19px;
+	}
+
+	h2 {
+		font-size: 16px;
+	}
+
+	.text-sm {
+		font-size: 11px;
+	}
+
+	.card-context {
+		font-size: 10px;
+	}
+
 	.page {
 		padding: 32px 16px 32px;
+	}
+
+	.connect-panel-header {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.connect-steps {
+		grid-template-columns: 1fr;
 	}
 
 	header {
@@ -1741,26 +1782,130 @@ a:hover {
 
 	.header-inner {
 		padding: 0 16px;
-		flex-direction: column;
+		flex-direction: row;
 		gap: 8px;
-		align-items: flex-start;
+		align-items: center;
 	}
 
 	.header-links {
-		gap: 4px;
-		width: 100%;
-		justify-content: flex-start;
+		gap: 6px;
+		width: auto;
+		justify-content: flex-end;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	header[data-dropdown-open="true"] .header-links {
+		overflow: visible;
+	}
+
+	/* Mobile header: keep logo, reduce titlebar width pressure */
+	.brand > div {
+		display: none;
+	}
+
+	.home-link .nav-text {
+		display: none;
+	}
+
+	.header-dropdown .nav-text {
+		display: none;
 	}
 
 	.header-link {
 		font-size: 13px;
-		padding: 6px 10px;
+		padding: 8px 10px;
+		border-radius: 9px;
+	}
+
+	.brand-logo {
+		height: 40px;
+		width: 40px;
+	}
+
+	.brand-title {
+		font-size: 16px;
+	}
+
+	.brand-sub {
+		font-size: 11px;
 	}
 
 	.theme-toggle {
-		padding: 4px 8px;
+		padding: 8px 10px;
 		font-size: 16px;
-		min-width: 36px;
+		min-width: 40px;
 		margin-left: 8px;
+	}
+
+	.btn {
+		padding: 8px 12px;
+		font-size: 14px;
+	}
+
+	.worker-full,
+	.time-full,
+	.th-full {
+		display: none;
+	}
+
+	.worker-suffix,
+	.time-short,
+	.th-short {
+		display: inline;
+	}
+
+	/* Overview tables: reduce columns on mobile only */
+	#status-workers-table th:nth-child(2),
+	#status-workers-table td:nth-child(2),
+	#status-workers-table th:nth-child(4),
+	#status-workers-table td:nth-child(4),
+	#status-workers-table th:nth-child(6),
+	#status-workers-table td:nth-child(6) {
+		display: none;
+	}
+
+	#status-best-shares-table th:nth-child(4),
+	#status-best-shares-table td:nth-child(4) {
+		display: none;
+	}
+
+	#status-found-blocks-table th:nth-child(1),
+	#status-found-blocks-table td:nth-child(1),
+	#status-found-blocks-table th:nth-child(2),
+	#status-found-blocks-table td:nth-child(2),
+	#status-found-blocks-table th:nth-child(4),
+	#status-found-blocks-table td:nth-child(4),
+	#status-found-blocks-table th:nth-child(6),
+	#status-found-blocks-table td:nth-child(6),
+	#status-found-blocks-table th:nth-child(7),
+	#status-found-blocks-table td:nth-child(7),
+	#status-found-blocks-table th:nth-child(9),
+	#status-found-blocks-table td:nth-child(9) {
+		display: none;
+	}
+
+	.table th {
+		font-size: 11px;
+	}
+
+	.table td {
+		font-size: 11px;
+	}
+
+	.admin-toolbar {
+		flex-direction: column;
+		align-items: stretch;
+		top: 74px;
+	}
+
+	.toolbar-left,
+	.toolbar-actions {
+		width: 100%;
+	}
+
+	.toolbar-actions .btn {
+		flex: 1 1 auto;
 	}
 }
