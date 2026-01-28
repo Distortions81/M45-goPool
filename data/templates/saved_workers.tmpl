@@ -113,6 +113,7 @@
 						<tr>
 							<th>Worker</th>
 							<th>Hashrate</th>
+							<th>Best diff</th>
 							<th>Diff</th>
 							<th>Shares/min</th>
 							<th>Last share</th>
@@ -128,6 +129,7 @@
 					<tr>
 						<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
 							<td data-hashrate="{{printf "%.0f" .Hashrate}}" class="hashrate-value">—</td>
+						<td>{{formatDiff .BestDifficulty}}</td>
 						<td>{{formatDiff .Difficulty}}</td>
 						<td>{{formatShareRate .ShareRate}}</td>
 						<td>{{formatTime .LastShare}}</td>
@@ -180,10 +182,11 @@
 				<ul class="offline-list text-sm" id="offlineWorkersList" {{if eq $offlineCount 0}}style="display:none;"{{end}}>
 					{{range .OfflineWorkerEntries}}
 						<li>
-							<div class="offline-worker-meta">
-								<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
-								<span class="text-sm offline-last-online" data-last-online-at="{{.LastOnlineAt}}"></span>
-							</div>
+								<div class="offline-worker-meta">
+									<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+									<span class="text-sm offline-last-online" data-last-online-at="{{.LastOnlineAt}}"></span>
+									<span class="text-sm" style="color:var(--text-muted);">Best diff: {{formatDiff .BestDifficulty}}</span>
+								</div>
 							<span class="badge badge-danger">Offline</span>
 							<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 							{{if $.DiscordNotificationsEnabled}}
@@ -880,10 +883,11 @@
 			}
 			if (onlineWorkersCard) onlineWorkersCard.style.display = '';
 			onlineWorkersBody.innerHTML = data.map((w) => `
-				<tr>
-					<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
-					<td>${w.hashrate > 0 ? formatHashrate(w.hashrate) : '—'}</td>
-					<td>${formatDifficulty(w.difficulty)}</td>
+					<tr>
+						<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
+						<td>${w.hashrate > 0 ? formatHashrate(w.hashrate) : '—'}</td>
+						<td>${formatDifficulty(w.best_difficulty)}</td>
+						<td>${formatDifficulty(w.difficulty)}</td>
 					<td>${formatShareRate(w.shares_per_minute)}</td>
 					<td>${formatLastShare(w.last_share)}</td>
 					<td>${Number(w.accepted || 0).toLocaleString()}</td>
@@ -1210,11 +1214,12 @@
 							offlineCountBadge.textContent = `${offline.length} offline`;
 						}
 						offlineList.innerHTML = offline.map(w => `
-							<li>
-								<div class="offline-worker-meta">
-									<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
-									<span class="text-sm offline-last-online" data-last-online-at="${escapeAttr(w.last_online_at || '')}"></span>
-								</div>
+								<li>
+									<div class="offline-worker-meta">
+										<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+										<span class="text-sm offline-last-online" data-last-online-at="${escapeAttr(w.last_online_at || '')}"></span>
+										<span class="text-sm" style="color:var(--text-muted);">Best diff: ${formatDifficulty(w.best_difficulty)}</span>
+									</div>
 								<span class="badge badge-danger">Offline</span>
 								<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 									${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}

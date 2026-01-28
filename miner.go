@@ -221,6 +221,9 @@ type MinerConn struct {
 	metrics              *PoolMetrics
 	accounting           *AccountStore
 	workerRegistry       *workerConnectionRegistry
+	savedWorkerStore     *workerListStore
+	savedWorkerTracked   bool
+	savedWorkerBestDiff  float64
 	registeredWorker     string
 	registeredWorkerHash string
 	jobMu                sync.Mutex
@@ -657,6 +660,7 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	prev := mc.workerRegistry.register(hash, walletHash, mc)
 	mc.registeredWorker = worker
 	mc.registeredWorkerHash = hash
+	mc.syncSavedWorkerState(hash)
 	return prev
 }
 
@@ -669,6 +673,47 @@ func (mc *MinerConn) unregisterRegisteredWorker() {
 	mc.workerRegistry.unregister(mc.registeredWorkerHash, walletHash, mc)
 	mc.registeredWorker = ""
 	mc.registeredWorkerHash = ""
+	mc.savedWorkerTracked = false
+	mc.savedWorkerBestDiff = 0
+}
+
+func (mc *MinerConn) syncSavedWorkerState(hash string) {
+	if mc == nil {
+		return
+	}
+	mc.savedWorkerTracked = false
+	mc.savedWorkerBestDiff = 0
+	if mc.savedWorkerStore == nil {
+		return
+	}
+	hash = strings.TrimSpace(hash)
+	if hash == "" {
+		return
+	}
+	best, ok, err := mc.savedWorkerStore.BestDifficultyForHash(hash)
+	if err != nil {
+		logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
+		return
+	}
+	mc.savedWorkerBestDiff = best
+	mc.savedWorkerTracked = ok
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
+	if mc == nil || !mc.savedWorkerTracked || mc.savedWorkerStore == nil {
+		return
+	}
+	if diff <= mc.savedWorkerBestDiff {
+		return
+	}
+	hash := mc.registeredWorkerHash
+	if hash == "" {
+		return
+	}
+	if _, err := mc.savedWorkerStore.UpdateSavedWorkerBestDifficulty(hash, diff); err != nil {
+		logger.Warn("saved worker best difficulty update failed", "error", err, "hash", hash)
+	}
+	mc.savedWorkerBestDiff = diff
 }
 
 // dualPayoutParams returns the pool and worker payout scripts and fee
@@ -713,7 +758,7 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	return job.PayoutScript, ws, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
 }
 
-func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, isTLS bool) *MinerConn {
+func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, workerLists *workerListStore, isTLS bool) *MinerConn {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -782,6 +827,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		metrics:           metrics,
 		accounting:        accounting,
 		workerRegistry:    workerRegistry,
+		savedWorkerStore:  workerLists,
 		activeJobs:        make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
 		connectedAt:       now,
 		lastActivity:      now,
