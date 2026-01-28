@@ -113,7 +113,7 @@
 						<tr>
 							<th>Worker</th>
 							<th>Hashrate</th>
-							<th>Best diff</th>
+							<th>Best share</th>
 							<th>Diff</th>
 							<th>Shares/min</th>
 							<th>Last share</th>
@@ -185,7 +185,7 @@
 								<div class="offline-worker-meta">
 									<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
 									<span class="text-sm offline-last-online" data-last-online-at="{{.LastOnlineAt}}"></span>
-									<span class="text-sm" style="color:var(--text-muted);">Best diff: {{formatDiff .BestDifficulty}}</span>
+									<span class="text-sm" style="color:var(--text-muted);">Best share: {{formatDiff .BestDifficulty}}</span>
 								</div>
 							<span class="badge badge-danger">Offline</span>
 							<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
@@ -1218,7 +1218,7 @@
 									<div class="offline-worker-meta">
 										<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
 										<span class="text-sm offline-last-online" data-last-online-at="${escapeAttr(w.last_online_at || '')}"></span>
-										<span class="text-sm" style="color:var(--text-muted);">Best diff: ${formatDifficulty(w.best_difficulty)}</span>
+										<span class="text-sm" style="color:var(--text-muted);">Best share: ${formatDifficulty(w.best_difficulty)}</span>
 									</div>
 								<span class="badge badge-danger">Offline</span>
 								<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">

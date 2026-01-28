@@ -141,8 +141,11 @@ func (s *workerListStore) BestDifficultyForHash(hash string) (float64, bool, err
 	}
 	s.bestDiffMu.Unlock()
 
-	var best sql.NullFloat64
-	if err := s.db.QueryRow("SELECT MAX(best_difficulty) FROM saved_workers WHERE worker_hash = ?", hash).Scan(&best); err != nil {
+	var (
+		count int
+		best  sql.NullFloat64
+	)
+	if err := s.db.QueryRow("SELECT COUNT(*), MAX(best_difficulty) FROM saved_workers WHERE worker_hash = ?", hash).Scan(&count, &best); err != nil {
 		return 0, false, err
 	}
 
@@ -155,10 +158,7 @@ func (s *workerListStore) BestDifficultyForHash(hash string) (float64, bool, err
 	if pending > out {
 		out = pending
 	}
-	if out <= 0 {
-		return 0, false, nil
-	}
-	return out, true, nil
+	return out, count > 0, nil
 }
 
 func (s *workerListStore) UpdateSavedWorkerBestDifficulty(hash string, diff float64) (bool, error) {
