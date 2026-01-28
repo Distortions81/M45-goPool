@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -14,6 +15,12 @@ const maxSavedWorkersPerUser = 64
 
 type workerListStore struct {
 	db *sql.DB
+
+	bestDiffMu      sync.Mutex
+	bestDiffPending map[string]float64
+	bestDiffCh      chan bestDiffUpdate
+	bestDiffStop    chan struct{}
+	bestDiffWg      sync.WaitGroup
 }
 
 type discordLink struct {
@@ -119,7 +126,9 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 
-	return &workerListStore{db: db}, nil
+	store := &workerListStore{db: db}
+	store.startBestDiffWorker(10 * time.Second)
+	return store, nil
 }
 
 func addSavedWorkersHashColumn(db *sql.DB) error {
@@ -203,14 +212,32 @@ func (s *workerListStore) BestDifficultyForHash(hash string) (float64, bool, err
 	if hash == "" {
 		return 0, false, nil
 	}
+
+	pending := 0.0
+	s.bestDiffMu.Lock()
+	if s.bestDiffPending != nil {
+		pending = s.bestDiffPending[hash]
+	}
+	s.bestDiffMu.Unlock()
+
 	var best sql.NullFloat64
 	if err := s.db.QueryRow("SELECT MAX(best_difficulty) FROM saved_workers WHERE worker_hash = ?", hash).Scan(&best); err != nil {
 		return 0, false, err
 	}
-	if !best.Valid || best.Float64 <= 0 {
+
+	dbBest := 0.0
+	if best.Valid && best.Float64 > 0 {
+		dbBest = best.Float64
+	}
+
+	out := dbBest
+	if pending > out {
+		out = pending
+	}
+	if out <= 0 {
 		return 0, false, nil
 	}
-	return best.Float64, true, nil
+	return out, true, nil
 }
 
 func (s *workerListStore) UpdateSavedWorkerBestDifficulty(hash string, diff float64) (bool, error) {
@@ -221,19 +248,29 @@ func (s *workerListStore) UpdateSavedWorkerBestDifficulty(hash string, diff floa
 	if hash == "" || diff <= 0 {
 		return false, nil
 	}
-	res, err := s.db.Exec(`
-		UPDATE saved_workers
-		SET best_difficulty = ?
-		WHERE worker_hash = ? AND (best_difficulty < ? OR best_difficulty IS NULL)
-	`, diff, hash, diff)
-	if err != nil {
-		return false, err
+
+	updated := false
+	s.bestDiffMu.Lock()
+	if s.bestDiffPending == nil {
+		s.bestDiffPending = make(map[string]float64)
 	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return false, err
+	if diff > s.bestDiffPending[hash] {
+		s.bestDiffPending[hash] = diff
+		updated = true
 	}
-	return rows > 0, nil
+	s.bestDiffMu.Unlock()
+
+	if !updated {
+		return false, nil
+	}
+
+	if ch := s.bestDiffCh; ch != nil {
+		select {
+		case ch <- bestDiffUpdate{hash: hash, diff: diff}:
+		default:
+		}
+	}
+	return true, nil
 }
 
 func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
@@ -277,6 +314,20 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	s.bestDiffMu.Lock()
+	pending := s.bestDiffPending
+	s.bestDiffMu.Unlock()
+	if len(pending) > 0 {
+		for i := range workers {
+			if workers[i].Hash == "" {
+				continue
+			}
+			if v := pending[workers[i].Hash]; v > workers[i].BestDifficulty {
+				workers[i].BestDifficulty = v
+			}
+		}
 	}
 	return workers, nil
 }
@@ -331,7 +382,114 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	s.bestDiffMu.Lock()
+	pending := s.bestDiffPending
+	s.bestDiffMu.Unlock()
+	if len(pending) > 0 {
+		for i := range records {
+			hash := strings.TrimSpace(records[i].Hash)
+			if hash == "" {
+				continue
+			}
+			if v := pending[hash]; v > records[i].BestDifficulty {
+				records[i].BestDifficulty = v
+			}
+		}
+	}
 	return records, nil
+}
+
+type bestDiffUpdate struct {
+	hash string
+	diff float64
+}
+
+func (s *workerListStore) startBestDiffWorker(flushInterval time.Duration) {
+	if s == nil || s.db == nil {
+		return
+	}
+	if flushInterval <= 0 {
+		flushInterval = 10 * time.Second
+	}
+	if s.bestDiffStop != nil {
+		return
+	}
+	s.bestDiffCh = make(chan bestDiffUpdate, 4096)
+	s.bestDiffStop = make(chan struct{})
+	s.bestDiffWg.Add(1)
+	go func() {
+		defer s.bestDiffWg.Done()
+		ticker := time.NewTicker(flushInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.bestDiffStop:
+				s.flushBestDiffPending()
+				return
+			case upd := <-s.bestDiffCh:
+				if upd.hash == "" || upd.diff <= 0 {
+					continue
+				}
+				s.bestDiffMu.Lock()
+				if s.bestDiffPending == nil {
+					s.bestDiffPending = make(map[string]float64)
+				}
+				if upd.diff > s.bestDiffPending[upd.hash] {
+					s.bestDiffPending[upd.hash] = upd.diff
+				}
+				s.bestDiffMu.Unlock()
+			case <-ticker.C:
+				s.flushBestDiffPending()
+			}
+		}
+	}()
+}
+
+func (s *workerListStore) flushBestDiffPending() {
+	if s == nil || s.db == nil {
+		return
+	}
+	s.bestDiffMu.Lock()
+	if len(s.bestDiffPending) == 0 {
+		s.bestDiffMu.Unlock()
+		return
+	}
+	batch := s.bestDiffPending
+	s.bestDiffPending = make(map[string]float64, len(batch))
+	s.bestDiffMu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		logger.Warn("saved worker best diff flush begin failed", "error", err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		UPDATE saved_workers
+		SET best_difficulty = ?
+		WHERE worker_hash = ? AND best_difficulty < ?
+	`)
+	if err != nil {
+		logger.Warn("saved worker best diff flush prepare failed", "error", err)
+		return
+	}
+	defer stmt.Close()
+
+	for hash, diff := range batch {
+		if hash == "" || diff <= 0 {
+			continue
+		}
+		if _, err := stmt.Exec(diff, hash, diff); err != nil {
+			logger.Warn("saved worker best diff flush update failed", "error", err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		logger.Warn("saved worker best diff flush commit failed", "error", err)
+		return
+	}
 }
 
 func (s *workerListStore) SetSavedWorkerNotifyEnabled(userID, workerHash string, enabled bool, now time.Time) error {
@@ -708,6 +866,10 @@ func (s *workerListStore) RemoveUser(userID string) error {
 func (s *workerListStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
+	}
+	if s.bestDiffStop != nil {
+		close(s.bestDiffStop)
+		s.bestDiffWg.Wait()
 	}
 	return s.db.Close()
 }
