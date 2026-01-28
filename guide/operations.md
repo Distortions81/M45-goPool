@@ -203,7 +203,7 @@ The internal `simpleLogger` writes a daily rolling file per log type, rotating a
 
 ## Backups and bans
 
-goPool maintains `data/state/workers.db`. It snapshots the database to `data/state/workers.db.bak` automatically before each backup upload.
+goPool maintains its state in `data/state/workers.db` (inside `config.DataDir`). For Backblaze uploads, it takes a consistent SQLite snapshot first (using SQLite's backup API). If you enable a local snapshot (`keep_local_copy = true` or set `snapshot_path`), goPool also writes a persistent snapshot you can back up safely (for example `data/state/workers.db.bak`).
 
 ### Backblaze B2
 
@@ -229,7 +229,9 @@ Clean bans happen inside `NewAccountStore` as it opens the shared state DB; when
 
 ## State database and snapshots
 
-Before copying `data/state/workers.db`, stop the pool and copy the `.bak` snapshot instead; the snapshot is created atomically before each backup, so it is safe to tarball without shutting down goPool. If you must inspect the live DB, keep the process stopped to avoid corruption.
+If you need a “safe to copy while goPool is running” database file, enable a local snapshot via `[backblaze_backup].keep_local_copy` (defaults the snapshot to `data/state/workers.db.bak`) or `[backblaze_backup].snapshot_path`. That snapshot is written atomically during each backup run.
+
+If you do not have a snapshot configured, stop the pool before copying `data/state/workers.db`. Avoid opening the live DB with external tools while goPool is running.
 
 The `data/state/` directory also holds ban metadata, saved workers snapshots, and any auto-generated JSON caches—keep it alongside your main `data/` backup strategy.
 
