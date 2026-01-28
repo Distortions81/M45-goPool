@@ -10,18 +10,6 @@ import (
 	"time"
 )
 
-// validateWorkerWallet checks whether the given worker name appears to be a
-// valid Bitcoin address for the current network using local address
-// validation (btcsuite).
-func validateWorkerWallet(_ rpcCaller, _ *AccountStore, worker string) bool {
-	base := workerBaseAddress(worker)
-	if base == "" {
-		return false
-	}
-	_, err := scriptForAddress(base, ChainParams())
-	return err == nil
-}
-
 func (mc *MinerConn) recordActivity(now time.Time) {
 	mc.lastActivity = now
 }
@@ -209,21 +197,6 @@ func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, 
 	})
 }
 
-func (mc *MinerConn) shareRates(now time.Time) (float64, float64) {
-	mc.statsMu.Lock()
-	defer mc.statsMu.Unlock()
-	if mc.stats.WindowStart.IsZero() {
-		return 0, 0
-	}
-	window := now.Sub(mc.stats.WindowStart)
-	if window <= 0 {
-		return 0, 0
-	}
-	accRate := float64(mc.stats.WindowAccepted) / window.Minutes()
-	subRate := float64(mc.stats.WindowSubmissions) / window.Minutes()
-	return accRate, subRate
-}
-
 func (mc *MinerConn) currentDifficulty() float64 {
 	return atomicLoadFloat64(&mc.difficulty)
 }
@@ -403,13 +376,6 @@ func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {
 		return st
 	}
 	return fallback
-}
-
-func (mc *MinerConn) jobForID(jobID string) (*Job, bool) {
-	mc.jobMu.Lock()
-	defer mc.jobMu.Unlock()
-	job, ok := mc.activeJobs[jobID]
-	return job, ok
 }
 
 // jobForIDWithLast returns the job for the given ID along with the current lastJob

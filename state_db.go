@@ -19,15 +19,6 @@ var (
 	sharedStateDBPath string
 )
 
-const (
-	stateMigrationBansJSON                = "bans_json"
-	stateMigrationBestSharesJSON          = "best_shares_json"
-	stateMigrationOneTimeCodesJSON        = "one_time_codes_json"
-	stateMigrationFoundBlocksJSONL        = "found_blocks_jsonl"
-	stateMigrationPendingSubmissionsJSONL = "pending_submissions_jsonl"
-	stateMigrationBackupStampFiles        = "backup_stamp_files"
-)
-
 func stateDBPathFromDataDir(dataDir string) string {
 	dataDir = strings.TrimSpace(dataDir)
 	if dataDir == "" {
@@ -99,32 +90,9 @@ func closeSharedStateDB() {
 	}
 }
 
-// setSharedStateDBForTest allows tests to set a custom shared DB.
-// Returns a cleanup function that restores the previous state.
-// This is only for testing purposes.
-func setSharedStateDBForTest(db *sql.DB) func() {
-	sharedStateDBMu.Lock()
-	oldDB := sharedStateDB
-	sharedStateDB = db
-	sharedStateDBMu.Unlock()
-	return func() {
-		sharedStateDBMu.Lock()
-		sharedStateDB = oldDB
-		sharedStateDBMu.Unlock()
-	}
-}
-
 func ensureStateTables(db *sql.DB) error {
 	if db == nil {
 		return nil
-	}
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS state_migrations (
-			key TEXT PRIMARY KEY,
-			migrated_at_unix INTEGER NOT NULL
-		)
-	`); err != nil {
-		return err
 	}
 
 	if _, err := db.Exec(`
@@ -291,52 +259,4 @@ func unixOrZero(t time.Time) int64 {
 		return 0
 	}
 	return t.Unix()
-}
-
-func hasStateMigration(db *sql.DB, key string) (bool, error) {
-	if db == nil {
-		return false, nil
-	}
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return false, nil
-	}
-	var v int
-	if err := db.QueryRow("SELECT 1 FROM state_migrations WHERE key = ? LIMIT 1", key).Scan(&v); err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func recordStateMigration(db *sql.DB, key string, now time.Time) error {
-	if db == nil {
-		return nil
-	}
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return nil
-	}
-	_, err := db.Exec("INSERT OR REPLACE INTO state_migrations (key, migrated_at_unix) VALUES (?, ?)", key, now.Unix())
-	return err
-}
-
-func renameLegacyFileToOld(path string) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	old := path + ".old"
-	if _, err := os.Stat(old); err == nil {
-		_ = os.Remove(old)
-	}
-	if err := os.Rename(path, old); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }

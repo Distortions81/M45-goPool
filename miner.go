@@ -301,7 +301,6 @@ type MinerConn struct {
 }
 
 type rpcCaller interface {
-	call(method string, params interface{}, out interface{}) error
 	callCtx(ctx context.Context, method string, params interface{}, out interface{}) error
 }
 

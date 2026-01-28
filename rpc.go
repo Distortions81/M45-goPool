@@ -57,16 +57,16 @@ func (e *httpStatusError) Error() string {
 }
 
 type RPCClient struct {
-	url     string
-	user    string
-	pass    string
-	client  *http.Client
-	lp      *http.Client
-	idMu    sync.Mutex
-	nextID  int
-	metrics *PoolMetrics
+	url       string
+	user      string
+	pass      string
+	client    *http.Client
+	lp        *http.Client
+	idMu      sync.Mutex
+	nextID    int
+	metrics   *PoolMetrics
 	connected atomic.Bool
-	unhealthy  atomic.Bool
+	unhealthy atomic.Bool
 
 	authMu        sync.RWMutex
 	cookiePath    string
@@ -166,14 +166,6 @@ func (c *RPCClient) SetResultHook(hook func(method string, params interface{}, r
 	c.hookMu.Lock()
 	c.resultHook = hook
 	c.hookMu.Unlock()
-}
-
-func (c *RPCClient) call(method string, params interface{}, out interface{}) error {
-	return c.callCtx(context.Background(), method, params, out)
-}
-
-func (c *RPCClient) callLongPoll(method string, params interface{}, out interface{}) error {
-	return c.callLongPollCtx(context.Background(), method, params, out)
 }
 
 func (c *RPCClient) callCtx(ctx context.Context, method string, params interface{}, out interface{}) error {

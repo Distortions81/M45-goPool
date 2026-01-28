@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -106,7 +107,7 @@ func TestFoundBlockSubmission_BtcdCompat(t *testing.T) {
 
 	// Submit the block
 	var submitRes interface{}
-	err = rpc.call("submitblock", []interface{}{blockHex}, &submitRes)
+	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
 	if err != nil {
 		t.Fatalf("submitblock error: %v", err)
 	}
@@ -234,7 +235,7 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 
 	// Submit
 	var submitRes interface{}
-	err = rpc.call("submitblock", []interface{}{blockHex}, &submitRes)
+	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
 	if err != nil {
 		t.Fatalf("submitblock error: %v", err)
 	}
@@ -470,7 +471,7 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 
 	// Try to submit (will fail)
 	var submitRes interface{}
-	err = rpc.call("submitblock", []interface{}{blockHex}, &submitRes)
+	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
 	if err == nil {
 		t.Fatal("expected submitblock to fail, but it succeeded")
 	}

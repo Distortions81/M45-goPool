@@ -31,9 +31,7 @@ type backblazeBackupService struct {
 }
 
 const lastBackupStampFilename = "last_backup"
-const legacyBackblazeLastBackupFilename = "backblaze_last_backup"
 const backupLocalCopySuffix = ".bak"
-const legacyBackblazeLocalCopySuffix = ".b2last"
 const backupStateKeyWorkerDB = "worker_db"
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
@@ -85,7 +83,6 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		logger.Warn("read last backup stamp from sqlite failed (ignored)", "error", err)
 	}
 
-
 	snapshotPath := strings.TrimSpace(cfg.BackupSnapshotPath)
 	if snapshotPath != "" && !filepath.IsAbs(snapshotPath) {
 		base := strings.TrimSpace(cfg.DataDir)
@@ -96,16 +93,6 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	}
 	if snapshotPath == "" && cfg.BackblazeKeepLocalCopy {
 		snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
-		legacySnapshotPath := filepath.Join(stateDir, filepath.Base(dbPath)+legacyBackblazeLocalCopySuffix)
-		if _, err := os.Stat(snapshotPath); err != nil && errors.Is(err, os.ErrNotExist) {
-			if _, legacyErr := os.Stat(legacySnapshotPath); legacyErr == nil {
-				if err := os.Rename(legacySnapshotPath, snapshotPath); err != nil {
-					logger.Warn("migrate legacy local snapshot failed (ignored)", "error", err, "from", legacySnapshotPath, "to", snapshotPath)
-				} else {
-					logger.Info("migrated legacy local snapshot", "from", legacySnapshotPath, "to", snapshotPath)
-				}
-			}
-		}
 	}
 
 	return &backblazeBackupService{
@@ -317,7 +304,6 @@ func writeLastBackupStampToDB(db *sql.DB, key string, ts time.Time, dataVersion 
 	`, key, unixOrZero(ts), dataVersion, now)
 	return err
 }
-
 
 func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {
 	if srcPath == "" {

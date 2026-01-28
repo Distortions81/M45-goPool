@@ -11,3 +11,4 @@ gopool-test
 *.test
 *.out
 bitcoin-node/
+.VSCodeCounter/

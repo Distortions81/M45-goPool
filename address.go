@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/base58"
 	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcd/btcutil/base58"
 )
 
 // scriptForAddress performs local validation of a Bitcoin address for the given
@@ -35,24 +35,6 @@ func scriptForAddress(addr string, params *chaincfg.Params) ([]byte, error) {
 		return nil, fmt.Errorf("pay to addr script: %w", err)
 	}
 	return script, nil
-}
-
-func bech32Decode(s string) (hrp string, data []byte, err error) {
-	hrp, data, version, err := bech32.DecodeGeneric(s)
-	if err != nil {
-		return "", nil, err
-	}
-	if len(data) == 0 {
-		return "", nil, errors.New("empty segwit data")
-	}
-	witnessVer := data[0]
-	if witnessVer == 0 && version != bech32.Version0 {
-		return "", nil, errors.New("witness version 0 must use bech32 encoding")
-	}
-	if witnessVer >= 1 && witnessVer <= 16 && version != bech32.VersionM {
-		return "", nil, errors.New("witness version 1+ must use bech32m encoding")
-	}
-	return hrp, data, nil
 }
 
 // scriptToAddress attempts to derive a human-readable Bitcoin address from a

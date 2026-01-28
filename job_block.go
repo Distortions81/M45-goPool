@@ -241,10 +241,6 @@ func (job *Job) buildBlockHeaderU32(merkleRootBE []byte, ntime uint32, nonce uin
 	return hdr[:], nil
 }
 
-func buildBlock(job *Job, extranonce1 []byte, extranonce2 []byte, ntimeHex string, nonceHex string, version int32) (string, []byte, []byte, []byte, error) {
-	return buildBlockWithScriptTime(job, extranonce1, extranonce2, ntimeHex, nonceHex, version, job.ScriptTime)
-}
-
 func buildBlockWithScriptTime(job *Job, extranonce1 []byte, extranonce2 []byte, ntimeHex string, nonceHex string, version int32, scriptTime int64) (string, []byte, []byte, []byte, error) {
 	if len(extranonce2) != job.Extranonce2Size {
 		return "", nil, nil, nil, fmt.Errorf("extranonce2 must be %d bytes", job.Extranonce2Size)
