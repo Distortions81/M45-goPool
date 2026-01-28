@@ -594,9 +594,10 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 }
 
 type SavedWorkerEntry struct {
-	Name          string `json:"name"`
-	Hash          string `json:"hash"`
-	NotifyEnabled bool   `json:"notify_enabled,omitempty"`
+	Name           string  `json:"name"`
+	Hash           string  `json:"hash"`
+	NotifyEnabled  bool    `json:"notify_enabled,omitempty"`
+	BestDifficulty float64 `json:"best_difficulty,omitempty"`
 }
 
 // SavedWorkerRecord pairs a Clerk user ID with a saved worker entry.

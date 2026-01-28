@@ -1014,11 +1014,13 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	if ctx.isBlock {
 		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
 	}
 
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 
 	// Respond first; any vardiff adjustment and follow-up notify can happen after
 	// the submit is acknowledged to minimize perceived submit latency.
@@ -1066,12 +1068,14 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 	if ctx.isBlock {
 		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
+		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
 	}
 
 	shareHash := ctx.hashHex
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, nil, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 
 	// Respond first; vardiff adjustments and notifies can follow.
 	mc.writeTrueResponse(reqID)

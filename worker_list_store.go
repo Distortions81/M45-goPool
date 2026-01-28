@@ -52,6 +52,7 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 			worker TEXT NOT NULL,
 			worker_hash TEXT,
 			notify_enabled INTEGER NOT NULL DEFAULT 1,
+			best_difficulty REAL NOT NULL DEFAULT 0,
 			PRIMARY KEY(user_id, worker)
 		)
 	`); err != nil {
@@ -63,6 +64,10 @@ func newWorkerListStore(path string) (*workerListStore, error) {
 		return nil, err
 	}
 	if err := addSavedWorkersNotifyEnabledColumn(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := addSavedWorkersBestDifficultyColumn(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -139,6 +144,17 @@ func addSavedWorkersNotifyEnabledColumn(db *sql.DB) error {
 	return nil
 }
 
+func addSavedWorkersBestDifficultyColumn(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("ALTER TABLE saved_workers ADD COLUMN best_difficulty REAL NOT NULL DEFAULT 0")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	return nil
+}
+
 func addDiscordWorkerStateOfflineEligibleColumn(db *sql.DB) error {
 	if db == nil {
 		return nil
@@ -179,6 +195,47 @@ func (s *workerListStore) Add(userID, worker string) error {
 	return err
 }
 
+func (s *workerListStore) BestDifficultyForHash(hash string) (float64, bool, error) {
+	if s == nil || s.db == nil {
+		return 0, false, nil
+	}
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if hash == "" {
+		return 0, false, nil
+	}
+	var best sql.NullFloat64
+	if err := s.db.QueryRow("SELECT MAX(best_difficulty) FROM saved_workers WHERE worker_hash = ?", hash).Scan(&best); err != nil {
+		return 0, false, err
+	}
+	if !best.Valid || best.Float64 <= 0 {
+		return 0, false, nil
+	}
+	return best.Float64, true, nil
+}
+
+func (s *workerListStore) UpdateSavedWorkerBestDifficulty(hash string, diff float64) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, nil
+	}
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if hash == "" || diff <= 0 {
+		return false, nil
+	}
+	res, err := s.db.Exec(`
+		UPDATE saved_workers
+		SET best_difficulty = ?
+		WHERE worker_hash = ? AND (best_difficulty < ? OR best_difficulty IS NULL)
+	`, diff, hash, diff)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
@@ -187,7 +244,7 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if userID == "" {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT worker, worker_hash, notify_enabled FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	rows, err := s.db.Query("SELECT worker, worker_hash, notify_enabled, best_difficulty FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,10 +254,12 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	for rows.Next() {
 		var entry SavedWorkerEntry
 		var notifyEnabledInt int
-		if err := rows.Scan(&entry.Name, &entry.Hash, &notifyEnabledInt); err != nil {
+		var best sql.NullFloat64
+		if err := rows.Scan(&entry.Name, &entry.Hash, &notifyEnabledInt, &best); err != nil {
 			return nil, err
 		}
 		entry.NotifyEnabled = notifyEnabledInt != 0
+		entry.BestDifficulty = best.Float64
 		entry.Hash = strings.TrimSpace(entry.Hash)
 		if entry.Hash == "" {
 			entry.Hash = workerNameHash(entry.Name)
@@ -226,7 +285,7 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT user_id, worker, worker_hash, notify_enabled FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
+	rows, err := s.db.Query("SELECT user_id, worker, worker_hash, notify_enabled, best_difficulty FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
 	if err != nil {
 		return nil, err
 	}
@@ -238,14 +297,16 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 			userID    string
 			entry     SavedWorkerEntry
 			notifyInt int
+			best      sql.NullFloat64
 		)
-		if err := rows.Scan(&userID, &entry.Name, &entry.Hash, &notifyInt); err != nil {
+		if err := rows.Scan(&userID, &entry.Name, &entry.Hash, &notifyInt, &best); err != nil {
 			return nil, err
 		}
 		userID = strings.TrimSpace(userID)
 		entry.Name = strings.TrimSpace(entry.Name)
 		entry.Hash = strings.TrimSpace(entry.Hash)
 		entry.NotifyEnabled = notifyInt != 0
+		entry.BestDifficulty = best.Float64
 		if entry.Hash == "" {
 			entry.Hash = workerNameHash(entry.Name)
 			if entry.Hash != "" {

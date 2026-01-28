@@ -30,6 +30,7 @@ type savedWorkerEntry struct {
 	ConnectedDuration time.Duration
 	ConnectionID      string
 	ConnectionSeq     uint64
+	BestDifficulty    float64
 }
 
 type walletLookupResult struct {
@@ -402,9 +403,10 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				continue
 			}
 			entry := savedWorkerEntry{
-				Name:          saved.Name,
-				Hash:          lookupHash,
-				NotifyEnabled: saved.NotifyEnabled,
+				Name:           saved.Name,
+				Hash:           lookupHash,
+				NotifyEnabled:  saved.NotifyEnabled,
+				BestDifficulty: saved.BestDifficulty,
 			}
 			perNameRowsShown[lookupHash]++
 			data.OfflineWorkerEntries = append(data.OfflineWorkerEntries, entry)
@@ -426,6 +428,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					Name:              saved.Name,
 					Hash:              view.WorkerSHA256,
 					NotifyEnabled:     saved.NotifyEnabled,
+					BestDifficulty:    saved.BestDifficulty,
 					Hashrate:          hashrate,
 					ShareRate:         view.ShareRate,
 					Accepted:          view.Accepted,
@@ -517,6 +520,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Hash                      string  `json:"hash"`
 		Online                    bool    `json:"online"`
 		NotifyEnabled             bool    `json:"notify_enabled"`
+		BestDifficulty            float64 `json:"best_difficulty"`
 		LastOnlineAt              string  `json:"last_online_at,omitempty"`
 		LastShare                 string  `json:"last_share,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
@@ -576,10 +580,11 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				continue
 			}
 			e := entry{
-				Name:          savedEntry.Name,
-				Hash:          lookupHash,
-				Online:        false,
-				NotifyEnabled: savedEntry.NotifyEnabled,
+				Name:           savedEntry.Name,
+				Hash:           lookupHash,
+				Online:         false,
+				NotifyEnabled:  savedEntry.NotifyEnabled,
+				BestDifficulty: savedEntry.BestDifficulty,
 			}
 			perNameRowsShown[lookupHash]++
 			totalRowsSent++
@@ -613,6 +618,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Hash:                      view.WorkerSHA256,
 					Online:                    true,
 					NotifyEnabled:             savedEntry.NotifyEnabled,
+					BestDifficulty:            savedEntry.BestDifficulty,
 					Hashrate:                  hashrate,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
