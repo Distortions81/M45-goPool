@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +13,8 @@ import (
 const maxSavedWorkersPerUser = 64
 
 type workerListStore struct {
-	db *sql.DB
+	db     *sql.DB
+	ownsDB bool
 
 	bestDiffMu      sync.Mutex
 	bestDiffPending map[string]float64
@@ -32,101 +32,22 @@ type discordLink struct {
 }
 
 func newWorkerListStore(path string) (*workerListStore, error) {
-	if path == "" {
-		return nil, os.ErrInvalid
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+	// Prefer the shared state DB to avoid multiple concurrent connections to
+	// the same SQLite file (modernc.org/sqlite can corrupt the page cache).
+	if db := getSharedStateDB(); db != nil {
+		store := &workerListStore{db: db, ownsDB: false}
+		store.startBestDiffWorker(10 * time.Second)
+		return store, nil
 	}
 
-	db, err := sql.Open("sqlite", path+"?_foreign_keys=1&_journal=WAL&_busy_timeout=5000")
+	if strings.TrimSpace(path) == "" {
+		return nil, os.ErrInvalid
+	}
+	db, err := openStateDB(path)
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	if err := ensureStateTables(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS saved_workers (
-			user_id TEXT NOT NULL,
-			worker TEXT NOT NULL,
-			worker_hash TEXT,
-			notify_enabled INTEGER NOT NULL DEFAULT 1,
-			best_difficulty REAL NOT NULL DEFAULT 0,
-			PRIMARY KEY(user_id, worker)
-		)
-	`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := addSavedWorkersHashColumn(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := addSavedWorkersNotifyEnabledColumn(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := addSavedWorkersBestDifficultyColumn(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS saved_workers_hash_idx ON saved_workers (user_id, worker_hash)`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS discord_links (
-			user_id TEXT PRIMARY KEY,
-			discord_user_id TEXT NOT NULL,
-			enabled INTEGER NOT NULL DEFAULT 1,
-			linked_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
-	`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS discord_links_discord_user_idx ON discord_links (discord_user_id)`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS discord_worker_state (
-			user_id TEXT NOT NULL,
-			worker_hash TEXT NOT NULL,
-			online INTEGER NOT NULL,
-			since INTEGER NOT NULL,
-			seen_online INTEGER NOT NULL,
-			seen_offline INTEGER NOT NULL,
-			offline_eligible INTEGER NOT NULL DEFAULT 0,
-			offline_notified INTEGER NOT NULL,
-			recovery_eligible INTEGER NOT NULL,
-			recovery_notified INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL,
-			PRIMARY KEY(user_id, worker_hash)
-		)
-	`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS discord_worker_state_user_idx ON discord_worker_state (user_id)`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := addDiscordWorkerStateOfflineEligibleColumn(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	store := &workerListStore{db: db}
+	store := &workerListStore{db: db, ownsDB: true}
 	store.startBestDiffWorker(10 * time.Second)
 	return store, nil
 }
@@ -871,5 +792,8 @@ func (s *workerListStore) Close() error {
 		close(s.bestDiffStop)
 		s.bestDiffWg.Wait()
 	}
-	return s.db.Close()
+	if s.ownsDB {
+		return s.db.Close()
+	}
+	return nil
 }

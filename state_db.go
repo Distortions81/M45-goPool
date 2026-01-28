@@ -158,6 +158,71 @@ func ensureStateTables(db *sql.DB) error {
 	}
 
 	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS saved_workers (
+			user_id TEXT NOT NULL,
+			worker TEXT NOT NULL,
+			worker_hash TEXT,
+			notify_enabled INTEGER NOT NULL DEFAULT 1,
+			best_difficulty REAL NOT NULL DEFAULT 0,
+			PRIMARY KEY(user_id, worker)
+		)
+	`); err != nil {
+		return err
+	}
+	if err := addSavedWorkersHashColumn(db); err != nil {
+		return err
+	}
+	if err := addSavedWorkersNotifyEnabledColumn(db); err != nil {
+		return err
+	}
+	if err := addSavedWorkersBestDifficultyColumn(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS saved_workers_hash_idx ON saved_workers (user_id, worker_hash)`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS discord_links (
+			user_id TEXT PRIMARY KEY,
+			discord_user_id TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			linked_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS discord_links_discord_user_idx ON discord_links (discord_user_id)`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS discord_worker_state (
+			user_id TEXT NOT NULL,
+			worker_hash TEXT NOT NULL,
+			online INTEGER NOT NULL,
+			since INTEGER NOT NULL,
+			seen_online INTEGER NOT NULL,
+			seen_offline INTEGER NOT NULL,
+			offline_eligible INTEGER NOT NULL DEFAULT 0,
+			offline_notified INTEGER NOT NULL,
+			recovery_eligible INTEGER NOT NULL,
+			recovery_notified INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY(user_id, worker_hash)
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS discord_worker_state_user_idx ON discord_worker_state (user_id)`); err != nil {
+		return err
+	}
+	if err := addDiscordWorkerStateOfflineEligibleColumn(db); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS one_time_codes (
 			user_id TEXT PRIMARY KEY,
 			code TEXT NOT NULL,
