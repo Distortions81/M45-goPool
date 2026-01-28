@@ -15,8 +15,7 @@ What it does:
        <data-dir>/tls_key.pem   (from privkey.pem)
 
 Options:
-  --data-dir PATH       goPool data dir (default: ./data)
-  --www-dir PATH        webroot dir for ACME (default: <data-dir>/www)
+  --www-dir PATH        webroot dir for ACME (default: ./data/www)
   -d, --domain DOMAIN   domain name (repeatable; first domain is the default cert name)
   --cert-name NAME      certbot "cert-name" (default: first --domain)
 
@@ -31,14 +30,14 @@ Options:
   --force-renewal       force renewal even if not due
 
   --link-mode MODE      symlink (default) or copy
-  --owner USER:GROUP    chown the resulting <data-dir>/tls_*.pem (copy mode only; symlink uses -h)
+  --owner USER:GROUP    chown the resulting ./data/tls_*.pem (copy mode only; symlink uses -h)
   --restart-cmd CMD     run CMD after updating tls_*.pem (e.g. "systemctl restart gopool")
   --sync-only           skip certbot; only link/copy from /etc/letsencrypt/live/<cert-name>
 
 Notes:
   - For HTTP-01, the domain must reach your server on port 80. If goPool isn't
     directly on :80, put a reverse proxy in front or use a different challenge.
-  - goPool reads <data-dir>/tls_cert.pem and <data-dir>/tls_key.pem.
+  - goPool reads ./data/tls_cert.pem and ./data/tls_key.pem.
 EOF
 }
 
@@ -62,8 +61,6 @@ SYNC_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --data-dir)
-      DATA_DIR="${2:-}"; shift 2 ;;
     --www-dir)
       WWW_DIR="${2:-}"; shift 2 ;;
     -d|--domain)
@@ -99,9 +96,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${DATA_DIR}" ]]; then
-  die "--data-dir is required"
-fi
 if [[ -z "${WWW_DIR}" ]]; then
   WWW_DIR="${DATA_DIR%/}/www"
 fi
@@ -230,4 +224,3 @@ if [[ -n "${RESTART_CMD}" ]]; then
   log "running restart cmd: ${RESTART_CMD}"
   bash -lc "${RESTART_CMD}"
 fi
-

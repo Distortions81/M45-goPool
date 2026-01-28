@@ -202,7 +202,6 @@ type EffectiveConfig struct {
 	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
 	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
 	BackupSnapshotPath                string  `json:"backup_snapshot_path,omitempty"`
-	DataDir                           string  `json:"data_dir"`
 	MaxConns                          int     `json:"max_conns,omitempty"`
 	MaxAcceptsPerSecond               int     `json:"max_accepts_per_second,omitempty"`
 	MaxAcceptBurst                    int     `json:"max_accept_burst,omitempty"`
@@ -279,7 +278,6 @@ type authConfig struct {
 type nodeConfig struct {
 	RPCURL         string `toml:"rpc_url"`
 	PayoutAddress  string `toml:"payout_address"`
-	DataDir        string `toml:"data_dir"`
 	ZMQBlockAddr   string `toml:"zmq_block_addr"`
 	RPCCookiePath  string `toml:"rpc_cookie_path"`
 	AllowPublicRPC bool   `toml:"allow_public_rpc"`
@@ -447,14 +445,13 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
-		Node: nodeConfig{
-			RPCURL:         cfg.RPCURL,
-			PayoutAddress:  cfg.PayoutAddress,
-			DataDir:        cfg.DataDir,
-			ZMQBlockAddr:   cfg.ZMQBlockAddr,
-			RPCCookiePath:  cfg.RPCCookiePath,
-			AllowPublicRPC: cfg.AllowPublicRPC,
-		},
+			Node: nodeConfig{
+				RPCURL:         cfg.RPCURL,
+				PayoutAddress:  cfg.PayoutAddress,
+				ZMQBlockAddr:   cfg.ZMQBlockAddr,
+				RPCCookiePath:  cfg.RPCCookiePath,
+				AllowPublicRPC: cfg.AllowPublicRPC,
+			},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
 			OperatorDonationPercent:   float64Ptr(cfg.OperatorDonationPercent),
@@ -748,9 +745,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	}
 	if fc.Node.PayoutAddress != "" {
 		cfg.PayoutAddress = fc.Node.PayoutAddress
-	}
-	if fc.Node.DataDir != "" {
-		cfg.DataDir = fc.Node.DataDir
 	}
 	if fc.Node.ZMQBlockAddr != "" {
 		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
@@ -1251,7 +1245,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazeBackupInterval:           backblazeInterval,
 		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
 		BackupSnapshotPath:                cfg.BackupSnapshotPath,
-		DataDir:                           cfg.DataDir,
 		MaxConns:                          cfg.MaxConns,
 		MaxAcceptsPerSecond:               cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                    cfg.MaxAcceptBurst,

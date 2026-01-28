@@ -101,7 +101,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, GitHub link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum).
 - `[auth]`: Clerk URLs and session cookies used for the status UI.
-- `[node]`: `rpc_url`, `rpc_cookie_path`, `data_dir`, `zmq_block_addr`, and `allow_public_rpc`.
+- `[node]`: `rpc_url`, `rpc_cookie_path`, `zmq_block_addr`, and `allow_public_rpc`.
 - `[mining]`: Pool fee, donation settings, `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `pooltag_prefix`, and flags that control solo-mode shortcuts.
 - `[backblaze_backup]`: Cloud backup toggle, bucket name, prefix, and upload interval.
 - `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.
@@ -191,7 +191,7 @@ Because the admin login is intentionally simple, bind this UI to trusted network
 
 ## Logging and diagnostics
 
-Log files live under `data/logs/` (inside `config.DataDir`):
+Log files live under `data/logs/`:
 
 - `pool.log` – structured log of pool events.
 - `errors.log` – captures `ERROR` events for quick troubleshooting.
@@ -203,7 +203,7 @@ The internal `simpleLogger` writes a daily rolling file per log type, rotating a
 
 ## Backups and bans
 
-goPool maintains its state in `data/state/workers.db` (inside `config.DataDir`). For Backblaze uploads, it takes a consistent SQLite snapshot first (using SQLite's backup API). If you enable a local snapshot (`keep_local_copy = true` or set `snapshot_path`), goPool also writes a persistent snapshot you can back up safely (for example `data/state/workers.db.bak`).
+goPool maintains its state in `data/state/workers.db`. For Backblaze uploads, it takes a consistent SQLite snapshot first (using SQLite's backup API). If you enable a local snapshot (`keep_local_copy = true` or set `snapshot_path`), goPool also writes a persistent snapshot you can back up safely (for example `data/state/workers.db.bak`).
 
 ### Backblaze B2
 
