@@ -33,6 +33,16 @@ type savedWorkerEntry struct {
 	BestDifficulty    float64
 }
 
+func maxSavedWorkerBestDifficulty(entries []SavedWorkerEntry) float64 {
+	var best float64
+	for _, entry := range entries {
+		if entry.BestDifficulty > best {
+			best = entry.BestDifficulty
+		}
+	}
+	return best
+}
+
 type walletLookupResult struct {
 	WorkerView
 	AlreadySaved bool
@@ -363,6 +373,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		SavedWorkersCount        int
 		SavedWorkersOnline       int
 		SavedWorkersMax          int
+		SavedWorkersBestDifficulty float64
 		WalletLookupHash         string
 		WalletLookupError        string
 		WalletLookupResults      []walletLookupResult
@@ -376,6 +387,8 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/worker", http.StatusSeeOther)
 		return
 	}
+
+	data.SavedWorkersBestDifficulty = maxSavedWorkerBestDifficulty(data.SavedWorkers)
 
 	data.SavedWorkersMax = maxSavedWorkersPerUser
 	data.SavedWorkersCount = len(data.SavedWorkers)
@@ -514,6 +527,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 			logger.Warn("load saved workers", "error", err, "user_id", user.UserID)
 		}
 	}
+	bestSavedDifficulty := maxSavedWorkerBestDifficulty(saved)
 
 	type entry struct {
 		Name                      string  `json:"name"`
@@ -550,6 +564,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		OnlineCount          int     `json:"online_count"`
 		DiscordRegistered    bool    `json:"discord_registered,omitempty"`
 		DiscordNotifyEnabled bool    `json:"discord_notify_enabled,omitempty"`
+		BestDifficulty       float64 `json:"best_difficulty"`
 		OnlineWorkers        []entry `json:"online_workers"`
 		OfflineWorkers       []entry `json:"offline_workers"`
 	}{
@@ -558,6 +573,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		SavedCount:           len(saved),
 		DiscordRegistered:    discordRegistered,
 		DiscordNotifyEnabled: discordUserEnabled,
+		BestDifficulty:       bestSavedDifficulty,
 	}
 
 	perNameRowsShown := make(map[string]int, 16)

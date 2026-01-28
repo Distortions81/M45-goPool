@@ -85,6 +85,15 @@
 				{{template "status_boxes" .}}
 			</div>
 
+			<div class="card">
+				<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+					<div>
+						<p class="text-sm" style="margin:0; color:var(--text-muted);">Best difficulty (any saved worker)</p>
+						<div class="mono" id="savedBestDiffValue" style="font-size:1.2rem;">{{formatDiff .SavedWorkersBestDifficulty}}</div>
+					</div>
+				</div>
+			</div>
+
 			{{template "hashrate_graph" .}}
 
 			<div class="card" id="onlineWorkersCard" {{if not .OnlineWorkerEntries}}style="display:none;"{{end}}>
@@ -1177,6 +1186,10 @@
 				if (savedCount) savedCount.textContent = data.saved_count ?? '';
 				if (savedMax) savedMax.textContent = data.saved_max ?? '';
 				if (onlineCount) onlineCount.textContent = data.online_count ?? '';
+				const bestDiffEl = document.getElementById('savedBestDiffValue');
+				if (bestDiffEl) {
+					bestDiffEl.textContent = formatDifficulty(data.best_difficulty);
+				}
 
 				const online = Array.isArray(data.online_workers) ? data.online_workers : [];
 				// Update total hashrate time series (sum of online worker hashrate).
