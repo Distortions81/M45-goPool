@@ -1323,6 +1323,21 @@
 		let templateUpdatedAtMillis = null;
 		let templateTxFeesSats = null;
 
+		// Used by the saved workers table (hashrate cells render from data-hashrate attributes).
+		// This script block runs separately from the main saved-workers dashboard script above,
+		// so it must define its own helper to avoid ReferenceError and breaking status boxes.
+		function renderStoredHashrates() {
+			const cells = document.querySelectorAll('[data-hashrate]');
+			cells.forEach((el) => {
+				const value = Number(el.getAttribute('data-hashrate'));
+				if (!value) {
+					el.textContent = '—';
+					return;
+				}
+				el.textContent = formatHashrate(value);
+			});
+		}
+
 		function normalizeFiatCurrency(cur) {
 			const s = String(cur ?? '').trim();
 			return s ? s.toUpperCase() : 'USD';
@@ -1794,7 +1809,6 @@
 
 		fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
 		fetchOverview();
-		renderStoredHashrates();
 		renderStoredHashrates();
 		fetchHashrate();
 		setInterval(fetchOverview, REFRESH_INTERVAL);
