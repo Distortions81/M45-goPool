@@ -45,19 +45,20 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	var bucket *b2.Bucket
 	if cfg.BackblazeBackupEnabled {
 		if cfg.BackblazeAccountID == "" || cfg.BackblazeApplicationKey == "" || cfg.BackblazeBucket == "" {
-			return nil, fmt.Errorf("backblaze credentials are incomplete")
-		}
-
-		client, err := b2.NewClient(ctx, cfg.BackblazeAccountID, cfg.BackblazeApplicationKey)
-		if err != nil {
-			return nil, fmt.Errorf("create backblaze client: %w", err)
-		}
-		bucket, err = client.Bucket(ctx, cfg.BackblazeBucket)
-		if err != nil {
-			return nil, fmt.Errorf("access backblaze bucket: %w", err)
-		}
-		if _, err := bucket.Attrs(ctx); err != nil {
-			return nil, fmt.Errorf("access backblaze bucket: %w", err)
+			logger.Warn("backblaze credentials incomplete, falling back to local-only backups")
+		} else {
+			client, err := b2.NewClient(ctx, cfg.BackblazeAccountID, cfg.BackblazeApplicationKey)
+			if err != nil {
+				logger.Warn("create backblaze client failed, falling back to local-only backups", "error", err)
+			} else {
+				bucket, err = client.Bucket(ctx, cfg.BackblazeBucket)
+				if err != nil {
+					logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+				} else if _, err := bucket.Attrs(ctx); err != nil {
+					logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+					bucket = nil
+				}
+			}
 		}
 	}
 
@@ -91,7 +92,8 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		}
 		snapshotPath = filepath.Join(base, snapshotPath)
 	}
-	if snapshotPath == "" && cfg.BackblazeKeepLocalCopy {
+	// Enable local backup if explicitly requested, or if B2 was enabled but failed to initialize
+	if snapshotPath == "" && (cfg.BackblazeKeepLocalCopy || (cfg.BackblazeBackupEnabled && bucket == nil)) {
 		snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
 	}
 
