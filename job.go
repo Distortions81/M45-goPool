@@ -105,27 +105,30 @@ type ZMQBlockTip struct {
 const jobFeedErrorHistorySize = 3
 
 type JobManager struct {
-	rpc               *RPCClient
-	cfg               Config
-	metrics           *PoolMetrics
-	mu                sync.RWMutex
-	curJob            *Job
-	payoutScript      []byte
-	donationScript    []byte
-	extraID           uint32
-	subs              map[chan *Job]struct{}
-	subsMu            sync.Mutex
-	zmqHealthy        atomic.Bool
-	zmqDisconnects    uint64
-	zmqReconnects     uint64
-	lastErrMu         sync.RWMutex
-	lastErr           error
-	lastErrAt         time.Time
-	lastJobSuccess    time.Time
-	jobFeedErrHistory []string
-	// Refresh coordination to prevent duplicate refreshes from longpoll/ZMQ
+	rpc                 *RPCClient
+	cfg                 Config
+	metrics             *PoolMetrics
+	mu                  sync.RWMutex
+	curJob              *Job
+	payoutScript        []byte
+	donationScript      []byte
+	extraID             uint32
+	subs                map[chan *Job]struct{}
+	subsMu              sync.Mutex
+	zmqHashblockHealthy atomic.Bool
+	zmqRawblockHealthy  atomic.Bool
+	zmqDisconnects      uint64
+	zmqReconnects       uint64
+	lastErrMu           sync.RWMutex
+	lastErr             error
+	lastErrAt           time.Time
+	lastJobSuccess      time.Time
+	jobFeedErrHistory   []string
+	// Refresh/apply coordination to prevent concurrent refreshes and concurrent
+	// template application from longpoll/ZMQ.
 	refreshMu          sync.Mutex
 	lastRefreshAttempt time.Time
+	applyMu            sync.Mutex
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
 	// Async notification queue
@@ -249,13 +252,19 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 		lastSuccess = cur.CreatedAt
 	}
 
+	zmqEnabled := jm.cfg.ZMQHashBlockAddr != "" || jm.cfg.ZMQRawBlockAddr != ""
+	zmqHealthy := false
+	if zmqEnabled {
+		zmqHealthy = jm.zmqHashblockHealthy.Load() || jm.zmqRawblockHealthy.Load()
+	}
+
 	return JobFeedStatus{
 		Ready:          cur != nil,
 		LastSuccess:    lastSuccess,
 		LastError:      lastErr,
 		LastErrorAt:    lastErrAt,
 		ErrorHistory:   errorHistory,
-		ZMQHealthy:     jm.zmqHealthy.Load(),
+		ZMQHealthy:     zmqHealthy,
 		ZMQDisconnects: atomic.LoadUint64(&jm.zmqDisconnects),
 		ZMQReconnects:  atomic.LoadUint64(&jm.zmqReconnects),
 		Payload:        jm.payloadStatus(),
@@ -481,9 +490,7 @@ func (jm *JobManager) Start(ctx context.Context) {
 	}
 
 	go jm.longpollLoop(ctx)
-	if jm.cfg.ZMQBlockAddr != "" {
-		go jm.zmqBlockLoop(ctx)
-	}
+	jm.startZMQLoops(ctx)
 }
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
@@ -526,6 +533,9 @@ func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]in
 }
 
 func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
+	jm.applyMu.Lock()
+	defer jm.applyMu.Unlock()
+
 	needsNewJob, clean := jm.templateChanged(tpl)
 
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.

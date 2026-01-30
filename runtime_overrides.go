@@ -94,14 +94,15 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 		}
 	}
 
-	if cfg.ZMQBlockAddr == "" {
+	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {
 		if overrides.mainnet || overrides.testnet || overrides.signet || overrides.regtest {
-			cfg.ZMQBlockAddr = "tcp://127.0.0.1:28332"
+			cfg.ZMQHashBlockAddr = defaultZMQHashBlockAddr
+			cfg.ZMQRawBlockAddr = defaultZMQRawBlockAddr
 		}
 	}
 
-	if cfg.ZMQBlockAddr == "" {
-		logger.Warn("zmq_block_addr is empty; using RPC/longpoll-only mode", "hint", "set node.zmq_block_addr in config.toml to re-enable ZMQ")
+	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {
+		logger.Warn("zmq is not configured; using RPC/longpoll-only mode", "hint", "set node.zmq_hashblock_addr/node.zmq_rawblock_addr in config.toml to enable ZMQ (legacy node.zmq_block_addr is read-only for migration)")
 	}
 
 	return nil

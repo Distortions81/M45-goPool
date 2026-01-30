@@ -56,7 +56,7 @@ func TestJobManagerRefreshFromTemplate_UpdatesBlockTip_WithZMQEnabled(t *testing
 	t.Cleanup(srv.Close)
 
 	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
-	jm := NewJobManager(rpc, Config{ZMQBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, nil, []byte{0x51}, nil)
+	jm := NewJobManager(rpc, Config{ZMQRawBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, nil, []byte{0x51}, nil)
 
 	tpl := GetBlockTemplateResult{
 		Height:                   103,

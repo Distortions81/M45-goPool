@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -12,40 +13,68 @@ import (
 	"github.com/pebbe/zmq4"
 )
 
-func (jm *JobManager) markZMQHealthy() {
-	if jm.cfg.ZMQBlockAddr == "" {
+func (jm *JobManager) zmqEnabled() bool {
+	return jm.cfg.ZMQHashBlockAddr != "" || jm.cfg.ZMQRawBlockAddr != ""
+}
+
+func (jm *JobManager) zmqAnyHealthy() bool {
+	return jm.zmqHashblockHealthy.Load() || jm.zmqRawblockHealthy.Load()
+}
+
+func (jm *JobManager) markZMQHealthy(topics []string, addr string) {
+	if !jm.zmqEnabled() {
 		return
 	}
-	if jm.zmqHealthy.Swap(true) {
+	prevAny := jm.zmqAnyHealthy()
+	for _, topic := range topics {
+		switch topic {
+		case "hashblock":
+			jm.zmqHashblockHealthy.Store(true)
+		case "rawblock":
+			jm.zmqRawblockHealthy.Store(true)
+		}
+	}
+	if prevAny || !jm.zmqAnyHealthy() {
 		return
 	}
-	logger.Info("zmq watcher healthy", "addr", jm.cfg.ZMQBlockAddr)
+
+	logger.Info("zmq watcher healthy", "addr", addr, "topics", topics)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
 	if jm.metrics != nil {
 		verb := "connected"
 		if atomic.LoadUint64(&jm.zmqDisconnects) > 0 {
 			verb = "reconnected"
 		}
-		jm.metrics.RecordErrorEvent("zmq", verb+" to "+jm.cfg.ZMQBlockAddr, time.Now())
+		jm.metrics.RecordErrorEvent("zmq", verb+" to "+addr, time.Now())
 	}
 	verb := "connected"
 	if atomic.LoadUint64(&jm.zmqDisconnects) > 0 {
 		verb = "reconnected"
 	}
 	jm.lastErrMu.Lock()
-	jm.appendJobFeedError("event: zmq " + verb + " (" + jm.cfg.ZMQBlockAddr + ")")
+	jm.appendJobFeedError("event: zmq " + verb + " (" + addr + ")")
 	jm.lastErrMu.Unlock()
 }
 
-func (jm *JobManager) markZMQUnhealthy(reason string, err error) {
-	if jm.cfg.ZMQBlockAddr == "" {
+func (jm *JobManager) markZMQUnhealthy(topics []string, addr string, reason string, err error) {
+	if !jm.zmqEnabled() {
 		return
 	}
-	fields := []interface{}{"reason", reason}
+	prevAny := jm.zmqAnyHealthy()
+	for _, topic := range topics {
+		switch topic {
+		case "hashblock":
+			jm.zmqHashblockHealthy.Store(false)
+		case "rawblock":
+			jm.zmqRawblockHealthy.Store(false)
+		}
+	}
+
+	fields := []interface{}{"reason", reason, "addr", addr, "topics", topics}
 	if err != nil {
 		fields = append(fields, "error", err)
 	}
-	if jm.zmqHealthy.Swap(false) {
+	if prevAny && !jm.zmqAnyHealthy() {
 		atomic.AddUint64(&jm.zmqDisconnects, 1)
 		logger.Warn("zmq watcher unhealthy", fields...)
 	} else if err != nil {
@@ -111,10 +140,6 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 }
 
 func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, payload []byte) error {
-	// Any ZMQ message implies the socket is alive and we can consider it healthy
-	// (even if the deployment only publishes a subset of topics).
-	jm.markZMQHealthy()
-
 	switch topic {
 	case "hashblock":
 		blockHash := hex.EncodeToString(payload)
@@ -138,12 +163,12 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 	}
 }
 
-func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket) (*zmq4.Socket, error) {
+func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket, remoteAddr string, topics []string) (*zmq4.Socket, error) {
 	// inproc address must be unique per socket.
-	addr := fmt.Sprintf("inproc://gopool.zmq.sub.monitor.%d", time.Now().UnixNano())
+	inprocAddr := fmt.Sprintf("inproc://gopool.zmq.sub.monitor.%d", time.Now().UnixNano())
 
 	events := zmq4.EVENT_CONNECTED | zmq4.EVENT_CONNECT_DELAYED | zmq4.EVENT_CONNECT_RETRIED | zmq4.EVENT_DISCONNECTED | zmq4.EVENT_CLOSED | zmq4.EVENT_MONITOR_STOPPED
-	if err := sub.Monitor(addr, events); err != nil {
+	if err := sub.Monitor(inprocAddr, events); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +178,7 @@ func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket) (*z
 	}
 	_ = mon.SetLinger(0)
 	_ = mon.SetRcvtimeo(time.Second)
-	if err := mon.Connect(addr); err != nil {
+	if err := mon.Connect(inprocAddr); err != nil {
 		mon.Close()
 		return nil, err
 	}
@@ -171,20 +196,20 @@ func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket) (*z
 					continue
 				}
 				// Monitor socket errors typically mean the monitored socket closed.
-				jm.markZMQUnhealthy("monitor_receive", err)
+				jm.markZMQUnhealthy(topics, remoteAddr, "monitor_receive", err)
 				return
 			}
 
 			switch ev {
 			case zmq4.EVENT_CONNECTED:
-				jm.markZMQHealthy()
+				jm.markZMQHealthy(topics, remoteAddr)
 				if err := jm.refreshJobCtxForce(ctx); err != nil {
 					logger.Warn("refresh after zmq monitor connect failed", "error", err)
 				}
 			case zmq4.EVENT_DISCONNECTED, zmq4.EVENT_CLOSED, zmq4.EVENT_MONITOR_STOPPED:
-				jm.markZMQUnhealthy("monitor_"+ev.String(), nil)
+				jm.markZMQUnhealthy(topics, remoteAddr, "monitor_"+ev.String(), nil)
 			case zmq4.EVENT_CONNECT_DELAYED, zmq4.EVENT_CONNECT_RETRIED:
-				jm.markZMQUnhealthy("monitor_"+ev.String(), nil)
+				jm.markZMQUnhealthy(topics, remoteAddr, "monitor_"+ev.String(), nil)
 			default:
 				_ = evAddr
 			}
@@ -194,8 +219,32 @@ func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket) (*z
 	return mon, nil
 }
 
-// Prefer block notifications when bitcoind is configured with -zmqpubhashblock (docs/protocols/zmq.md).
-func (jm *JobManager) zmqBlockLoop(ctx context.Context) {
+func (jm *JobManager) startZMQLoops(ctx context.Context) {
+	type topicSpec struct {
+		name string
+		addr string
+	}
+	specs := []topicSpec{
+		{name: "hashblock", addr: jm.cfg.ZMQHashBlockAddr},
+		{name: "rawblock", addr: jm.cfg.ZMQRawBlockAddr},
+	}
+
+	addrTopics := make(map[string][]string)
+	for _, spec := range specs {
+		addr := spec.addr
+		if addr == "" {
+			continue
+		}
+		addrTopics[addr] = append(addrTopics[addr], spec.name)
+	}
+
+	for addr, topics := range addrTopics {
+		label := strings.Join(topics, "+")
+		go jm.zmqLoop(ctx, addr, topics, label)
+	}
+}
+
+func (jm *JobManager) zmqLoop(ctx context.Context, addr string, topics []string, label string) {
 	backoff := defaultZMQRecreateBackoffMin
 zmqLoop:
 	for {
@@ -214,7 +263,7 @@ zmqLoop:
 
 		sub, err := zmq4.NewSocket(zmq4.SUB)
 		if err != nil {
-			jm.markZMQUnhealthy("socket", err)
+			jm.markZMQUnhealthy(topics, addr, label+"_socket", err)
 			if err := sleepContext(ctx, backoff); err != nil {
 				return
 			}
@@ -228,10 +277,9 @@ zmqLoop:
 		}
 		_ = sub.SetLinger(0)
 
-		topics := []string{"hashblock", "rawblock"}
 		for _, topic := range topics {
 			if err := sub.SetSubscribe(topic); err != nil {
-				jm.markZMQUnhealthy("subscribe", err)
+				jm.markZMQUnhealthy(topics, addr, label+"_subscribe", err)
 				sub.Close()
 				if err := sleepContext(ctx, backoff); err != nil {
 					return
@@ -247,7 +295,7 @@ zmqLoop:
 		}
 
 		if err := sub.SetRcvtimeo(defaultZMQReceiveTimeout); err != nil {
-			jm.markZMQUnhealthy("set_rcvtimeo", err)
+			jm.markZMQUnhealthy(topics, addr, label+"_set_rcvtimeo", err)
 			sub.Close()
 			if err := sleepContext(ctx, backoff); err != nil {
 				return
@@ -270,9 +318,9 @@ zmqLoop:
 		_ = sub.SetHeartbeatTimeout(defaultZMQHeartbeatTimeout)
 		_ = sub.SetHeartbeatTtl(defaultZMQHeartbeatTTL)
 
-		mon, err := jm.startZMQMonitor(ctx, sub)
+		mon, err := jm.startZMQMonitor(ctx, sub, addr, topics)
 		if err != nil {
-			jm.markZMQUnhealthy("monitor", err)
+			jm.markZMQUnhealthy(topics, addr, label+"_monitor", err)
 			sub.Close()
 			if err := sleepContext(ctx, backoff); err != nil {
 				return
@@ -287,8 +335,8 @@ zmqLoop:
 		}
 		_ = mon
 
-		if err := sub.Connect(jm.cfg.ZMQBlockAddr); err != nil {
-			jm.markZMQUnhealthy("connect", err)
+		if err := sub.Connect(addr); err != nil {
+			jm.markZMQUnhealthy(topics, addr, label+"_connect", err)
 			sub.Close()
 			if err := sleepContext(ctx, backoff); err != nil {
 				return
@@ -302,12 +350,13 @@ zmqLoop:
 			continue
 		}
 
-		jm.markZMQHealthy()
-		logger.Info("watching ZMQ block notifications", "addr", jm.cfg.ZMQBlockAddr)
+		jm.markZMQHealthy(topics, addr)
+		logger.Info("watching ZMQ notifications", "addr", addr, "topics", topics, "label", label)
 		backoff = defaultZMQRecreateBackoffMin
 
 		for {
 			if ctx.Err() != nil {
+				jm.markZMQUnhealthy(topics, addr, label+"_context_done", nil)
 				sub.Close()
 				return
 			}
@@ -317,7 +366,7 @@ zmqLoop:
 				if eno == zmq4.Errno(syscall.EAGAIN) || eno == zmq4.ETIMEDOUT {
 					continue
 				}
-				jm.markZMQUnhealthy("receive", err)
+				jm.markZMQUnhealthy(topics, addr, label+"_receive", err)
 				sub.Close()
 				if err := sleepContext(ctx, backoff); err != nil {
 					return
@@ -338,6 +387,7 @@ zmqLoop:
 
 			topic := string(frames[0])
 			payload := frames[1]
+			jm.markZMQHealthy([]string{topic}, addr)
 			if err := jm.handleZMQNotification(ctx, topic, payload); err != nil {
 				logger.Error("refresh after zmq notification error", "topic", topic, "error", err)
 				if err := sleepContext(ctx, backoff); err != nil {
