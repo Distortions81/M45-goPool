@@ -151,6 +151,20 @@ func ensureStateTables(db *sql.DB) error {
 	}
 
 	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS clerk_users (
+			user_id TEXT PRIMARY KEY,
+			first_seen_unix INTEGER NOT NULL,
+			last_seen_unix INTEGER NOT NULL,
+			seen_count INTEGER NOT NULL DEFAULT 0
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS clerk_users_last_seen_idx ON clerk_users (last_seen_unix)`); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS discord_links (
 			user_id TEXT PRIMARY KEY,
 			discord_user_id TEXT NOT NULL,

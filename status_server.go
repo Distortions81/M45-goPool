@@ -605,6 +605,7 @@ type AdminPageData struct {
 	AdminPersistError    string
 	AdminRebootError     string
 	AdminNotice          string
+	AdminLoginsLoadError string
 	Settings             AdminSettingsData
 	AdminSection         string
 	AdminMinerRows       []AdminMinerRow
@@ -700,6 +701,9 @@ type AdminSavedWorkerRow struct {
 	NotifyCount       int
 	WorkerHashes      []string
 	OnlineConnections []AdminMinerConnection
+	FirstSeen         time.Time
+	LastSeen          time.Time
+	SeenCount         int
 }
 
 type AdminMinerConnection struct {
@@ -775,7 +779,8 @@ func (s *StatusServer) handleAdminLoginsPage(w http.ResponseWriter, r *http.Requ
 	}
 	data.AdminSection = "logins"
 	page, perPage := adminPaginationFromRequest(r)
-	allRows := s.buildAdminSavedWorkerRows()
+	allRows, loadErr := s.buildAdminLoginRows()
+	data.AdminLoginsLoadError = loadErr
 	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	s.renderAdminPageTemplate(w, r, data, "admin_logins")
 }
@@ -1118,7 +1123,8 @@ func (s *StatusServer) handleAdminLoginDelete(w http.ResponseWriter, r *http.Req
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "logins"
 	page, perPage := adminPaginationFromRequest(r)
-	allRows := s.buildAdminSavedWorkerRows()
+	allRows, loadErr := s.buildAdminLoginRows()
+	data.AdminLoginsLoadError = loadErr
 	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
@@ -1170,7 +1176,8 @@ func (s *StatusServer) handleAdminLoginBan(w http.ResponseWriter, r *http.Reques
 	data, adminCfg, _ := s.buildAdminPageData(r, "")
 	data.AdminSection = "logins"
 	page, perPage := adminPaginationFromRequest(r)
-	allRows := s.buildAdminSavedWorkerRows()
+	allRows, loadErr := s.buildAdminLoginRows()
+	data.AdminLoginsLoadError = loadErr
 	data.AdminSavedWorkerRows, data.AdminLoginPagination = paginateAdminSlice(allRows, page, perPage)
 	if !adminCfg.Enabled {
 		data.AdminApplyError = "Admin control panel is disabled."
@@ -1352,7 +1359,7 @@ func adminNoticeMessage(key string) string {
 	case "saved_worker_deleted":
 		return "Saved worker entry deleted."
 	case "saved_worker_banned":
-		return "Worker was banned from saved logins."
+		return "Worker was banned from saved accounts."
 	default:
 		return ""
 	}
@@ -1458,26 +1465,55 @@ func (s *StatusServer) buildAdminMinerRows() []AdminMinerRow {
 }
 
 func (s *StatusServer) buildAdminSavedWorkerRows() []AdminSavedWorkerRow {
+	rows, _ := s.buildAdminLoginRows()
+	return rows
+}
+
+func (s *StatusServer) buildAdminLoginRows() ([]AdminSavedWorkerRow, string) {
 	if s == nil || s.workerLists == nil {
-		return nil
+		return nil, "Saved worker store is not enabled (workers.db not available)."
 	}
-	records, err := s.workerLists.ListAllSavedWorkers()
+	savedRecords, err := s.workerLists.ListAllSavedWorkers()
 	if err != nil {
 		logger.Warn("list saved workers for admin", "error", err)
-		return nil
 	}
-	if len(records) == 0 {
-		return nil
+	loadErr := ""
+	if err != nil {
+		loadErr = fmt.Sprintf("Failed to list saved workers: %v", err)
 	}
-	rowsByUser := make(map[string]*AdminSavedWorkerRow)
-	for _, record := range records {
-		if record.UserID == "" {
+	users, err := s.workerLists.ListAllClerkUsers()
+	if err != nil {
+		logger.Warn("list clerk users for admin", "error", err)
+		if loadErr == "" {
+			loadErr = fmt.Sprintf("Failed to list clerk users: %v", err)
+		} else {
+			loadErr = loadErr + fmt.Sprintf(" (also failed to list clerk users: %v)", err)
+		}
+	}
+
+	rowsByUser := make(map[string]*AdminSavedWorkerRow, len(users))
+	for _, u := range users {
+		userID := strings.TrimSpace(u.UserID)
+		if userID == "" {
 			continue
 		}
-		row, exists := rowsByUser[record.UserID]
+		rowsByUser[userID] = &AdminSavedWorkerRow{
+			UserID:    userID,
+			FirstSeen: u.FirstSeen,
+			LastSeen:  u.LastSeen,
+			SeenCount: u.SeenCount,
+		}
+	}
+
+	for _, record := range savedRecords {
+		userID := strings.TrimSpace(record.UserID)
+		if userID == "" {
+			continue
+		}
+		row, exists := rowsByUser[userID]
 		if !exists {
-			row = &AdminSavedWorkerRow{UserID: record.UserID}
-			rowsByUser[record.UserID] = row
+			row = &AdminSavedWorkerRow{UserID: userID}
+			rowsByUser[userID] = row
 		}
 		row.Workers = append(row.Workers, record.SavedWorkerEntry)
 		if record.NotifyEnabled {
@@ -1490,20 +1526,22 @@ func (s *StatusServer) buildAdminSavedWorkerRows() []AdminSavedWorkerRow {
 
 	rows := make([]AdminSavedWorkerRow, 0, len(rowsByUser))
 	for _, row := range rowsByUser {
-		seenHashes := make(map[string]struct{})
-		dedup := row.WorkerHashes[:0]
-		for _, h := range row.WorkerHashes {
-			if h == "" {
-				continue
+		if len(row.WorkerHashes) > 0 {
+			seenHashes := make(map[string]struct{})
+			dedup := row.WorkerHashes[:0]
+			for _, h := range row.WorkerHashes {
+				if h == "" {
+					continue
+				}
+				lower := strings.ToLower(h)
+				if _, ok := seenHashes[lower]; ok {
+					continue
+				}
+				seenHashes[lower] = struct{}{}
+				dedup = append(dedup, lower)
 			}
-			lower := strings.ToLower(h)
-			if _, ok := seenHashes[lower]; ok {
-				continue
-			}
-			seenHashes[lower] = struct{}{}
-			dedup = append(dedup, lower)
+			row.WorkerHashes = dedup
 		}
-		row.WorkerHashes = dedup
 		rows = append(rows, *row)
 	}
 
@@ -1543,9 +1581,22 @@ func (s *StatusServer) buildAdminSavedWorkerRows() []AdminSavedWorkerRow {
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
-		return rows[i].UserID < rows[j].UserID
+		a := rows[i].LastSeen
+		b := rows[j].LastSeen
+		switch {
+		case a.IsZero() && b.IsZero():
+			return rows[i].UserID < rows[j].UserID
+		case a.IsZero():
+			return false
+		case b.IsZero():
+			return true
+		case !a.Equal(b):
+			return a.After(b)
+		default:
+			return rows[i].UserID < rows[j].UserID
+		}
 	})
-	return rows
+	return rows, loadErr
 }
 
 func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
@@ -1802,6 +1853,9 @@ func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := s.clerkUserFromRequest(r)
 		if user != nil {
+			if s.workerLists != nil {
+				_ = s.workerLists.RecordClerkUserSeen(user.UserID, time.Now())
+			}
 			r = r.WithContext(contextWithClerkUser(r.Context(), user))
 		}
 		h(w, r)

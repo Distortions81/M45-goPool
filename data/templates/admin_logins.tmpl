@@ -1,11 +1,11 @@
-{{/* Admin saved logins page template */}}
+{{/* Admin logins page template */}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Saved Logins</title>
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Accounts</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -20,7 +20,7 @@
 		</noscript>
 		<h1>Admin Control Panel</h1>
 		<p class="text-sm" style="margin-top:4px;">
-			View Clerk login IDs and their saved worker slots. Select the logins you want to delete or ban, enter the admin password once, and apply the action below.
+			View Clerk user IDs and their saved worker slots. Select the accounts you want to delete or ban, enter the admin password once, and apply the action below.
 		</p>
 		{{if .AdminNotice}}
 		<div class="card">
@@ -36,16 +36,22 @@
 		{{else if not .LoggedIn}}
 		<div class="card">
 			<p class="text-sm">
-				Sign in on the <a href="/admin">main admin page</a> to manage saved login data.
+				Sign in on the <a href="/admin">main admin page</a> to manage login data.
 			</p>
 		</div>
 		{{else}}
 		{{template "admin-nav" .}}
 		<div class="card">
-			<div class="label">Saved logins</div>
+			<div class="label">Accounts</div>
 			<p class="text-sm" style="margin:4px 0 10px 0;">
-				Deleting a login removes all saved workers for that Clerk account. Banning disconnects any active connections matching the saved workers.
+				This page lists Clerk accounts that have been seen by this goPool instance (or have saved worker state). Deleting an account removes all saved workers and related state for that Clerk account. Banning disconnects any active connections matching that account’s saved workers.
 			</p>
+			{{if .AdminApplyError}}
+			<p class="text-sm" style="color:#f88d8d;margin:0 0 10px 0;">{{.AdminApplyError}}</p>
+			{{end}}
+			{{if .AdminLoginsLoadError}}
+			<p class="text-sm" style="color:#f88d8d;margin:0 0 10px 0;">{{.AdminLoginsLoadError}}</p>
+			{{end}}
 			{{if .AdminSavedWorkerRows}}
 			<div class="admin-toolbar">
 				<div class="toolbar-left">
@@ -105,8 +111,12 @@
 							<td class="mono" style="font-size:13px;">{{.UserID}}</td>
 							<td>
 								<ul class="text-sm" style="margin:4px 0;padding-left:16px;">
-									{{range .Workers}}
-									<li>{{.Name}}{{if .Hash}} <span class="mono" style="font-size:11px;">{{shortID .Hash}}</span>{{end}}</li>
+									{{if .Workers}}
+										{{range .Workers}}
+										<li>{{.Name}}{{if .Hash}} <span class="mono" style="font-size:11px;">{{shortID .Hash}}</span>{{end}}</li>
+										{{end}}
+									{{else}}
+										<li><span class="text-sm">—</span></li>
 									{{end}}
 								</ul>
 							</td>
@@ -133,7 +143,7 @@
 			</div>
 			{{else}}
 			<p class="text-sm">
-				No saved login entries are available. This may mean the saved worker store is empty or not yet configured.
+				No login entries are available yet.
 			</p>
 			{{end}}
 		</div>
@@ -155,7 +165,8 @@
 			const selected = checkboxes.filter(cb => cb.checked);
 			const enabled = selected.length > 0;
 			deleteBtn.disabled = !enabled;
-			banBtn.disabled = !enabled;
+			const hasAnyHashes = selected.some(cb => cb.closest('tr').querySelectorAll('.admin-row-hashes span').length > 0);
+			banBtn.disabled = !enabled || !hasAnyHashes;
 			return selected;
 		}
 
