@@ -371,12 +371,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			foundBlocks = append(foundBlocks, censorFoundBlock(fb))
 		}
 
-		poolTag := view.CoinbaseMessage
-		if poolTag != "" && !strings.HasSuffix(poolTag, "/") {
-			if lastSlash := strings.LastIndex(poolTag, "/"); lastSlash >= 0 {
-				poolTag = poolTag[:lastSlash+1]
-			}
-		}
+		poolTag := displayPoolTagFromCoinbaseMessage(view.CoinbaseMessage)
 
 		// Keep banned-worker payloads bounded; the UI only needs a small sample.
 		const maxBannedOnOverview = 200
