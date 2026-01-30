@@ -89,10 +89,6 @@ var errStaleTemplate = errors.New("stale template")
 type JobFeedPayloadStatus struct {
 	LastRawBlockAt    time.Time
 	LastRawBlockBytes int
-	LastHashTx        string
-	LastHashTxAt      time.Time
-	LastRawTxAt       time.Time
-	LastRawTxBytes    int
 	BlockTip          ZMQBlockTip
 	RecentBlockTimes  []time.Time // Last 4 block times
 	BlockTimerActive  bool        // Whether block timer should count down (only after first new block)
@@ -395,23 +391,6 @@ func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	if isNewBlock && !tip.Time.IsZero() && jm.onNewBlock != nil {
 		jm.onNewBlock()
 	}
-}
-
-func (jm *JobManager) recordHashTx(hash string) {
-	if hash == "" {
-		return
-	}
-	jm.zmqPayloadMu.Lock()
-	jm.zmqPayload.LastHashTx = hash
-	jm.zmqPayload.LastHashTxAt = time.Now()
-	jm.zmqPayloadMu.Unlock()
-}
-
-func (jm *JobManager) recordRawTxPayload(size int) {
-	jm.zmqPayloadMu.Lock()
-	jm.zmqPayload.LastRawTxAt = time.Now()
-	jm.zmqPayload.LastRawTxBytes = size
-	jm.zmqPayloadMu.Unlock()
 }
 
 func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {

@@ -409,23 +409,11 @@ func (s *StatusServer) buildStatusData() StatusData {
 		if !payload.LastRawBlockAt.IsZero() {
 			jobFeed.LastRawBlockAt = payload.LastRawBlockAt.UTC().Format("2006-01-02 15:04:05 MST")
 		}
-		if payload.LastRawBlockBytes > 0 {
-			jobFeed.LastRawBlockBytes = payload.LastRawBlockBytes
+			if payload.LastRawBlockBytes > 0 {
+				jobFeed.LastRawBlockBytes = payload.LastRawBlockBytes
+			}
+			jobFeed.ErrorHistory = fs.ErrorHistory
 		}
-		if payload.LastHashTx != "" {
-			jobFeed.LastHashTx = payload.LastHashTx
-		}
-		if !payload.LastHashTxAt.IsZero() {
-			jobFeed.LastHashTxAt = payload.LastHashTxAt.UTC().Format("2006-01-02 15:04:05 MST")
-		}
-		if !payload.LastRawTxAt.IsZero() {
-			jobFeed.LastRawTxAt = payload.LastRawTxAt.UTC().Format("2006-01-02 15:04:05 MST")
-		}
-		if payload.LastRawTxBytes > 0 {
-			jobFeed.LastRawTxBytes = payload.LastRawTxBytes
-		}
-		jobFeed.ErrorHistory = fs.ErrorHistory
-	}
 
 	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {

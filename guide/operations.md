@@ -149,9 +149,35 @@ To change network defaults, use the `-network` flag:
 
 ### ZMQ block updates
 
-`node.zmq_block_addr` controls raw block notifications. When it is empty goPool disables ZMQ and logs a warning that you are running RPC/longpoll-only; this lets regtest or longpoll-only pools skip configuring a publisher. When a network flag (`-network`) is set and `zmq_block_addr` is blank, goPool auto-fills the default `tcp://127.0.0.1:28332` for that network.
+goPool can use Bitcoin Core's ZMQ publisher to learn about new blocks quickly, but it still uses RPC (including longpoll) to fetch the actual `getblocktemplate` payload and keep templates current.
+
+`node.zmq_block_addr` controls the ZMQ subscriber connection. When it is empty goPool disables ZMQ and logs a warning that you are running RPC/longpoll-only; this lets regtest or longpoll-only pools skip configuring a publisher. When a network flag (`-network`) is set and `zmq_block_addr` is blank, goPool auto-fills the default `tcp://127.0.0.1:28332` for that network.
 
 **Tip:** The warning message includes a hint to set `node.zmq_block_addr` back in `config.toml` if you accidentally run longpoll-only accidentally.
+
+#### What goPool subscribes to
+
+goPool subscribes to these Bitcoin Core ZMQ topics:
+
+- `hashblock`: triggers an immediate template refresh (new block).
+- `rawblock`: records block-tip telemetry (height/time/difficulty + payload size) and triggers an immediate template refresh (new block).
+
+Only `hashblock` and `rawblock` affect job freshness.
+
+#### Minimal topics (without affecting mining correctness)
+
+To avoid losing anything that affects mining/job freshness:
+
+- Publish/subscribe **at least one** of `hashblock` or `rawblock` so goPool refreshes immediately on new blocks.
+
+Common choices:
+
+- **Lowest bandwidth:** enable only `hashblock`.
+- **More block-tip telemetry without extra RPC:** enable `rawblock` (and optionally also `hashblock`).
+
+#### Why longpoll still matters
+
+Even with ZMQ enabled, goPool still uses RPC longpoll to keep templates current when the mempool/tx set changes. ZMQ tx topics are not used to refresh templates today, so if you disable longpoll you may stop picking up transaction-only template updates (fees/txs) between blocks.
 
 ## Status UI, TLS, and listeners
 

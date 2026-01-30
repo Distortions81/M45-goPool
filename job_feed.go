@@ -133,13 +133,6 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		// Some deployments only publish rawblock and not hashblock; refresh the
 		// template on rawblock as well so job/tip advance on new blocks.
 		return jm.refreshJobCtxForce(ctx)
-	case "hashtx":
-		txHash := hex.EncodeToString(payload)
-		jm.recordHashTx(txHash)
-		return nil
-	case "rawtx":
-		jm.recordRawTxPayload(len(payload))
-		return nil
 	default:
 		return nil
 	}
@@ -235,7 +228,7 @@ zmqLoop:
 		}
 		_ = sub.SetLinger(0)
 
-		topics := []string{"hashblock", "rawblock", "hashtx", "rawtx"}
+		topics := []string{"hashblock", "rawblock"}
 		for _, topic := range topics {
 			if err := sub.SetSubscribe(topic); err != nil {
 				jm.markZMQUnhealthy("subscribe", err)

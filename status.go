@@ -721,10 +721,6 @@ type ServerPageJobFeed struct {
 	ZMQReconnects     uint64   `json:"zmq_reconnects"`
 	LastRawBlockAt    string   `json:"last_raw_block_at,omitempty"`
 	LastRawBlockBytes int      `json:"last_raw_block_bytes,omitempty"`
-	LastHashTx        string   `json:"last_hash_tx,omitempty"`
-	LastHashTxAt      string   `json:"last_hash_tx_at,omitempty"`
-	LastRawTxAt       string   `json:"last_raw_tx_at,omitempty"`
-	LastRawTxBytes    int      `json:"last_raw_tx_bytes,omitempty"`
 	BlockHash         string   `json:"block_hash,omitempty"`
 	BlockHeight       int64    `json:"block_height,omitempty"`
 	BlockTime         string   `json:"block_time,omitempty"`
@@ -867,10 +863,6 @@ type JobFeedView struct {
 	ZMQReconnects     uint64   `json:"zmq_reconnects"`
 	LastRawBlockAt    string   `json:"last_raw_block_at,omitempty"`
 	LastRawBlockBytes int      `json:"last_raw_block_bytes,omitempty"`
-	LastHashTx        string   `json:"last_hash_tx,omitempty"`
-	LastHashTxAt      string   `json:"last_hash_tx_at,omitempty"`
-	LastRawTxAt       string   `json:"last_raw_tx_at,omitempty"`
-	LastRawTxBytes    int      `json:"last_raw_tx_bytes,omitempty"`
 	BlockHash         string   `json:"block_hash,omitempty"`
 	BlockHeight       int64    `json:"block_height,omitempty"`
 	BlockTime         string   `json:"block_time,omitempty"`
