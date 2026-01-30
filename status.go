@@ -478,6 +478,13 @@ type WorkerStatusData struct {
 	QueriedWorkerHash string // SHA256 hash used by the UI refresh logic
 	Worker            *WorkerView
 	Error             string
+	// Current job coinbase is constructed directly from the active stratum job
+	// template (coinb1/coinb2) for this worker, without relying on last-share
+	// debug data.
+	CurrentJobID       string
+	CurrentJobHeight   int64
+	CurrentJobPrevHash string
+	CurrentJobCoinbase *ShareDetail
 	// Hex-encoded scriptPubKey for pool payout, donation, and worker wallet so the
 	// UI can label coinbase outputs without re-parsing addresses.
 	PoolScriptHex     string
