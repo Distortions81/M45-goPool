@@ -60,6 +60,10 @@ func addSavedWorkersHashColumn(db *sql.DB) error {
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return err
 	}
+	// Backfill existing rows created before worker_hash existed.
+	if _, err := db.Exec("UPDATE saved_workers SET worker_hash = '' WHERE worker_hash IS NULL"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -202,7 +206,7 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if userID == "" {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT worker, worker_hash, notify_enabled, best_difficulty FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	rows, err := s.db.Query("SELECT worker, COALESCE(worker_hash, ''), notify_enabled, best_difficulty FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +261,7 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT user_id, worker, worker_hash, notify_enabled, best_difficulty FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
+	rows, err := s.db.Query("SELECT user_id, worker, COALESCE(worker_hash, ''), notify_enabled, best_difficulty FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
 	if err != nil {
 		return nil, err
 	}
