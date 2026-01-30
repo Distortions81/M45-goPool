@@ -210,9 +210,13 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var workers []SavedWorkerEntry
+	type hashBackfill struct {
+		worker string
+		hash   string
+	}
+	var backfills []hashBackfill
 	for rows.Next() {
 		var entry SavedWorkerEntry
 		var notifyEnabledInt int
@@ -226,19 +230,40 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 		if entry.Hash == "" {
 			entry.Hash = workerNameHash(entry.Name)
 			if entry.Hash != "" {
-				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+				backfills = append(backfills, hashBackfill{worker: entry.Name, hash: entry.Hash})
 			}
 		} else {
 			lower := strings.ToLower(entry.Hash)
 			if lower != entry.Hash {
 				entry.Hash = lower
-				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+				backfills = append(backfills, hashBackfill{worker: entry.Name, hash: entry.Hash})
 			}
 		}
 		workers = append(workers, entry)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	iterErr := rows.Err()
+	closeErr := rows.Close()
+	if iterErr != nil {
+		return nil, iterErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+
+	if len(backfills) > 0 {
+		if tx, err := s.db.Begin(); err == nil {
+			stmt, prepErr := tx.Prepare("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?")
+			if prepErr == nil {
+				for _, bf := range backfills {
+					if strings.TrimSpace(bf.worker) == "" || strings.TrimSpace(bf.hash) == "" {
+						continue
+					}
+					_, _ = stmt.Exec(bf.hash, userID, bf.worker)
+				}
+				_ = stmt.Close()
+			}
+			_ = tx.Commit()
+		}
 	}
 
 	s.bestDiffMu.Lock()
@@ -265,9 +290,14 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var records []SavedWorkerRecord
+	type hashBackfill struct {
+		userID string
+		worker string
+		hash   string
+	}
+	var backfills []hashBackfill
 	for rows.Next() {
 		var (
 			userID    string
@@ -286,14 +316,14 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 		if entry.Hash == "" {
 			entry.Hash = workerNameHash(entry.Name)
 			if entry.Hash != "" {
-				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+				backfills = append(backfills, hashBackfill{userID: userID, worker: entry.Name, hash: entry.Hash})
 			}
 		}
 		if entry.Hash != "" {
 			lower := strings.ToLower(entry.Hash)
 			if lower != entry.Hash {
 				entry.Hash = lower
-				_, _ = s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?", entry.Hash, userID, entry.Name)
+				backfills = append(backfills, hashBackfill{userID: userID, worker: entry.Name, hash: entry.Hash})
 			}
 		}
 		if userID == "" {
@@ -304,8 +334,29 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 			SavedWorkerEntry: entry,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	iterErr := rows.Err()
+	closeErr := rows.Close()
+	if iterErr != nil {
+		return nil, iterErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+
+	if len(backfills) > 0 {
+		if tx, err := s.db.Begin(); err == nil {
+			stmt, prepErr := tx.Prepare("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?")
+			if prepErr == nil {
+				for _, bf := range backfills {
+					if strings.TrimSpace(bf.userID) == "" || strings.TrimSpace(bf.worker) == "" || strings.TrimSpace(bf.hash) == "" {
+						continue
+					}
+					_, _ = stmt.Exec(bf.hash, bf.userID, bf.worker)
+				}
+				_ = stmt.Close()
+			}
+			_ = tx.Commit()
+		}
 	}
 
 	s.bestDiffMu.Lock()
