@@ -124,9 +124,11 @@ type JobManager struct {
 	lastErrAt           time.Time
 	lastJobSuccess      time.Time
 	jobFeedErrHistory   []string
-	// Refresh coordination to prevent duplicate refreshes from longpoll/ZMQ
+	// Refresh/apply coordination to prevent concurrent refreshes and concurrent
+	// template application from longpoll/ZMQ.
 	refreshMu          sync.Mutex
 	lastRefreshAttempt time.Time
+	applyMu            sync.Mutex
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
 	// Async notification queue
@@ -531,6 +533,9 @@ func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]in
 }
 
 func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
+	jm.applyMu.Lock()
+	defer jm.applyMu.Unlock()
+
 	needsNewJob, clean := jm.templateChanged(tpl)
 
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.

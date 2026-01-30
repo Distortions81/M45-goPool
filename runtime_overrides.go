@@ -96,8 +96,8 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 
 	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {
 		if overrides.mainnet || overrides.testnet || overrides.signet || overrides.regtest {
-			cfg.ZMQHashBlockAddr = "tcp://127.0.0.1:28332"
-			cfg.ZMQRawBlockAddr = "tcp://127.0.0.1:28332"
+			cfg.ZMQHashBlockAddr = defaultZMQHashBlockAddr
+			cfg.ZMQRawBlockAddr = defaultZMQRawBlockAddr
 		}
 	}
 
