@@ -286,6 +286,16 @@ type nodeConfig struct {
 	AllowPublicRPC   bool   `toml:"allow_public_rpc"`
 }
 
+type nodeConfigRead struct {
+	RPCURL             string `toml:"rpc_url"`
+	PayoutAddress      string `toml:"payout_address"`
+	ZMQLegacyBlockAddr string `toml:"zmq_block_addr"`
+	ZMQHashBlockAddr   string `toml:"zmq_hashblock_addr"`
+	ZMQRawBlockAddr    string `toml:"zmq_rawblock_addr"`
+	RPCCookiePath      string `toml:"rpc_cookie_path"`
+	AllowPublicRPC     bool   `toml:"allow_public_rpc"`
+}
+
 type loggingConfig struct {
 	Level string `toml:"level"`
 }
@@ -322,6 +332,17 @@ type baseFileConfig struct {
 	Stratum   stratumConfig         `toml:"stratum"`
 	Auth      authConfig            `toml:"auth"`
 	Node      nodeConfig            `toml:"node"`
+	Mining    miningConfig          `toml:"mining"`
+	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
+	Logging   loggingConfig         `toml:"logging"`
+}
+
+type baseFileConfigRead struct {
+	Server    serverConfig          `toml:"server"`
+	Branding  brandingConfig        `toml:"branding"`
+	Stratum   stratumConfig         `toml:"stratum"`
+	Auth      authConfig            `toml:"auth"`
+	Node      nodeConfigRead        `toml:"node"`
 	Mining    miningConfig          `toml:"mining"`
 	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
 	Logging   loggingConfig         `toml:"logging"`
@@ -570,11 +591,12 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	}
 
 	var configFileExisted bool
+	var needsRewrite bool
 	if bc, ok, err := loadBaseConfigFile(configPath); err != nil {
 		fatal("config file", err, "path", configPath)
 	} else if ok {
 		configFileExisted = true
-		applyBaseConfig(&cfg, *bc)
+		needsRewrite = applyBaseConfig(&cfg, *bc)
 	} else {
 		examplePath := filepath.Join(cfg.DataDir, "config", "examples", "config.toml.example")
 		ensureExampleFiles(cfg.DataDir)
@@ -593,12 +615,14 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 
 	if cfg.PoolEntropy == "" {
 		cfg.PoolEntropy = generatePoolEntropy()
-		if configFileExisted {
-			if err := rewriteConfigFile(configPath, cfg); err != nil {
-				logger.Warn("persist pool_entropy", "path", configPath, "error", err)
-			} else {
-				logger.Info("generated pool_entropy and updated config", "path", configPath, "pool_entropy", cfg.PoolEntropy)
-			}
+		needsRewrite = true
+	}
+
+	if needsRewrite && configFileExisted {
+		if err := rewriteConfigFile(configPath, cfg); err != nil {
+			logger.Warn("rewrite config file", "path", configPath, "error", err)
+		} else if cfg.PoolEntropy != "" {
+			logger.Info("rewrote config file", "path", configPath)
 		}
 	}
 
@@ -655,8 +679,8 @@ func loadTOMLFile[T any](path string) (*T, bool, error) {
 	return &cfg, true, nil
 }
 
-func loadBaseConfigFile(path string) (*baseFileConfig, bool, error) {
-	return loadTOMLFile[baseFileConfig](path)
+func loadBaseConfigFile(path string) (*baseFileConfigRead, bool, error) {
+	return loadTOMLFile[baseFileConfigRead](path)
 }
 
 func loadTuningFile(path string) (*tuningFileConfig, bool, error) {
@@ -667,7 +691,7 @@ func loadSecretsFile(path string) (*secretsConfig, bool, error) {
 	return loadTOMLFile[secretsConfig](path)
 }
 
-func applyBaseConfig(cfg *Config, fc baseFileConfig) {
+func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Server.PoolListen != "" {
 		cfg.ListenAddr = fc.Server.PoolListen
 	}
@@ -750,6 +774,15 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.PayoutAddress != "" {
 		cfg.PayoutAddress = fc.Node.PayoutAddress
 	}
+	if fc.Node.ZMQLegacyBlockAddr != "" && fc.Node.ZMQHashBlockAddr == "" && fc.Node.ZMQRawBlockAddr == "" {
+		legacy := strings.TrimSpace(fc.Node.ZMQLegacyBlockAddr)
+		if legacy != "" {
+			logger.Warn("node.zmq_block_addr is deprecated; migrating to node.zmq_hashblock_addr/node.zmq_rawblock_addr", "addr", legacy)
+			cfg.ZMQHashBlockAddr = legacy
+			cfg.ZMQRawBlockAddr = legacy
+			migrated = true
+		}
+	}
 	if fc.Node.ZMQHashBlockAddr != "" {
 		cfg.ZMQHashBlockAddr = fc.Node.ZMQHashBlockAddr
 	}
@@ -825,6 +858,7 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
 		cfg.BackupSnapshotPath = strings.TrimSpace(fc.Backblaze.SnapshotPath)
 	}
+	return migrated
 }
 
 func applyTuningConfig(cfg *Config, fc tuningFileConfig) {

@@ -102,7 +102,7 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	}
 
 	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {
-		logger.Warn("zmq is not configured; using RPC/longpoll-only mode", "hint", "set node.zmq_hashblock_addr/node.zmq_rawblock_addr in config.toml to enable ZMQ")
+		logger.Warn("zmq is not configured; using RPC/longpoll-only mode", "hint", "set node.zmq_hashblock_addr/node.zmq_rawblock_addr in config.toml to enable ZMQ (legacy node.zmq_block_addr is read-only for migration)")
 	}
 
 	return nil
