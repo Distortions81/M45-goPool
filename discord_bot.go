@@ -746,6 +746,17 @@ type queuedDiscordMessage struct {
 	LinesByUser map[string][]string
 }
 
+func (n *discordNotifier) noticePrefix() string {
+	if n == nil || n.s == nil {
+		return "[goPool] "
+	}
+	tag := displayPoolTagFromCoinbaseMessage(n.s.Config().CoinbaseMsg)
+	if tag == "" {
+		tag = "/" + poolSoftwareName + "/"
+	}
+	return "[" + tag + "] "
+}
+
 func (n *discordNotifier) enqueueNotice(msg string) {
 	if n == nil {
 		return
@@ -754,7 +765,7 @@ func (n *discordNotifier) enqueueNotice(msg string) {
 	if msg == "" {
 		return
 	}
-	n.enqueueQueuedLine("", "[goPool] "+msg)
+	n.enqueueQueuedLine("", n.noticePrefix()+msg)
 }
 
 func (n *discordNotifier) enqueuePing(discordUserID, line string) {
@@ -984,6 +995,8 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 		return
 	}
 
+	prefix := n.noticePrefix()
+
 	n.pingMu.Lock()
 	if len(n.pingQueue) > 0 {
 		n.pingQueue = n.pingQueue[1:]
@@ -997,7 +1010,7 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 			// Best-effort: only enqueue if there's capacity.
 			if len(n.pingQueue) < 3 {
 				n.pingQueue = append(n.pingQueue, queuedDiscordMessage{
-					Notices: []string{fmt.Sprintf("[goPool] Notification backlog full; dropped %d updates to stay within rate limits.", dropped)},
+					Notices: []string{prefix + fmt.Sprintf("Notification backlog full; dropped %d updates to stay within rate limits.", dropped)},
 				})
 			}
 		}
