@@ -95,7 +95,8 @@ type Config struct {
 	PoolEntropy               string
 	PoolTagPrefix             string
 	CoinbaseScriptSigMaxBytes int
-	ZMQBlockAddr              string
+	ZMQHashBlockAddr          string
+	ZMQRawBlockAddr           string
 
 	// Backblaze B2 backup.
 	BackblazeBackupEnabled         bool
@@ -136,9 +137,9 @@ type Config struct {
 	NTimeForwardSlackSeconds int     // max seconds ntime can roll forward
 	CheckDuplicateShares     bool    // enable duplicate detection (off by default for solo)
 
-	SoloMode               bool // light validation for solo pools (default true)
-	DirectSubmitProcessing bool // process submits on connection goroutine (bypass worker pool)
-	LogLevel              string // log level: debug, info, warn, error
+	SoloMode               bool   // light validation for solo pools (default true)
+	DirectSubmitProcessing bool   // process submits on connection goroutine (bypass worker pool)
+	LogLevel               string // log level: debug, info, warn, error
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
@@ -195,7 +196,8 @@ type EffectiveConfig struct {
 	JobEntropy                        int     `json:"job_entropy"`
 	PoolID                            string  `json:"pool_id,omitempty"`
 	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
-	ZMQBlockAddr                      string  `json:"zmq_block_addr,omitempty"`
+	ZMQHashBlockAddr                  string  `json:"zmq_hashblock_addr,omitempty"`
+	ZMQRawBlockAddr                   string  `json:"zmq_rawblock_addr,omitempty"`
 	BackblazeBackupEnabled            bool    `json:"backblaze_backup_enabled,omitempty"`
 	BackblazeBucket                   string  `json:"backblaze_bucket,omitempty"`
 	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
@@ -276,11 +278,12 @@ type authConfig struct {
 }
 
 type nodeConfig struct {
-	RPCURL         string `toml:"rpc_url"`
-	PayoutAddress  string `toml:"payout_address"`
-	ZMQBlockAddr   string `toml:"zmq_block_addr"`
-	RPCCookiePath  string `toml:"rpc_cookie_path"`
-	AllowPublicRPC bool   `toml:"allow_public_rpc"`
+	RPCURL           string `toml:"rpc_url"`
+	PayoutAddress    string `toml:"payout_address"`
+	ZMQHashBlockAddr string `toml:"zmq_hashblock_addr"`
+	ZMQRawBlockAddr  string `toml:"zmq_rawblock_addr"`
+	RPCCookiePath    string `toml:"rpc_cookie_path"`
+	AllowPublicRPC   bool   `toml:"allow_public_rpc"`
 }
 
 type loggingConfig struct {
@@ -394,12 +397,12 @@ type peerCleaningTuning struct {
 
 type banTuning struct {
 	CleanExpiredOnStartup            *bool `toml:"clean_expired_on_startup"`
-	BanInvalidSubmissionsAfter       *int `toml:"ban_invalid_submissions_after"`
-	BanInvalidSubmissionsWindowSec   *int `toml:"ban_invalid_submissions_window_seconds"`
-	BanInvalidSubmissionsDurationSec *int `toml:"ban_invalid_submissions_duration_seconds"`
-	ReconnectBanThreshold            *int `toml:"reconnect_ban_threshold"`
-	ReconnectBanWindowSeconds        *int `toml:"reconnect_ban_window_seconds"`
-	ReconnectBanDurationSeconds      *int `toml:"reconnect_ban_duration_seconds"`
+	BanInvalidSubmissionsAfter       *int  `toml:"ban_invalid_submissions_after"`
+	BanInvalidSubmissionsWindowSec   *int  `toml:"ban_invalid_submissions_window_seconds"`
+	BanInvalidSubmissionsDurationSec *int  `toml:"ban_invalid_submissions_duration_seconds"`
+	ReconnectBanThreshold            *int  `toml:"reconnect_ban_threshold"`
+	ReconnectBanWindowSeconds        *int  `toml:"reconnect_ban_window_seconds"`
+	ReconnectBanDurationSeconds      *int  `toml:"reconnect_ban_duration_seconds"`
 }
 
 type versionTuning struct {
@@ -445,13 +448,14 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 		Stratum: stratumConfig{
 			StratumTLSListen: cfg.StratumTLSListen,
 		},
-			Node: nodeConfig{
-				RPCURL:         cfg.RPCURL,
-				PayoutAddress:  cfg.PayoutAddress,
-				ZMQBlockAddr:   cfg.ZMQBlockAddr,
-				RPCCookiePath:  cfg.RPCCookiePath,
-				AllowPublicRPC: cfg.AllowPublicRPC,
-			},
+		Node: nodeConfig{
+			RPCURL:           cfg.RPCURL,
+			PayoutAddress:    cfg.PayoutAddress,
+			ZMQHashBlockAddr: cfg.ZMQHashBlockAddr,
+			ZMQRawBlockAddr:  cfg.ZMQRawBlockAddr,
+			RPCCookiePath:    cfg.RPCCookiePath,
+			AllowPublicRPC:   cfg.AllowPublicRPC,
+		},
 		Mining: miningConfig{
 			PoolFeePercent:            float64Ptr(cfg.PoolFeePercent),
 			OperatorDonationPercent:   float64Ptr(cfg.OperatorDonationPercent),
@@ -746,8 +750,11 @@ func applyBaseConfig(cfg *Config, fc baseFileConfig) {
 	if fc.Node.PayoutAddress != "" {
 		cfg.PayoutAddress = fc.Node.PayoutAddress
 	}
-	if fc.Node.ZMQBlockAddr != "" {
-		cfg.ZMQBlockAddr = fc.Node.ZMQBlockAddr
+	if fc.Node.ZMQHashBlockAddr != "" {
+		cfg.ZMQHashBlockAddr = fc.Node.ZMQHashBlockAddr
+	}
+	if fc.Node.ZMQRawBlockAddr != "" {
+		cfg.ZMQRawBlockAddr = fc.Node.ZMQRawBlockAddr
 	}
 	cookiePath := strings.TrimSpace(fc.Node.RPCCookiePath)
 	cfg.rpCCookiePathFromConfig = cookiePath
@@ -1238,7 +1245,8 @@ func (cfg Config) Effective() EffectiveConfig {
 		JobEntropy:                        cfg.JobEntropy,
 		PoolID:                            cfg.PoolEntropy,
 		CoinbaseScriptSigMaxBytes:         cfg.CoinbaseScriptSigMaxBytes,
-		ZMQBlockAddr:                      cfg.ZMQBlockAddr,
+		ZMQHashBlockAddr:                  cfg.ZMQHashBlockAddr,
+		ZMQRawBlockAddr:                   cfg.ZMQRawBlockAddr,
 		BackblazeBackupEnabled:            cfg.BackblazeBackupEnabled,
 		BackblazeBucket:                   cfg.BackblazeBucket,
 		BackblazePrefix:                   cfg.BackblazePrefix,

@@ -125,6 +125,7 @@ rpcworkqueue=256
 rpcallowip=127.0.0.1
 
 	# ZMQ (miner-safe when bound to localhost). goPool uses block notifications to refresh templates quickly.
+	zmqpubhashblock=tcp://127.0.0.1:28332
 	zmqpubrawblock=tcp://127.0.0.1:28332
 	
 	EOF

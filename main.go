@@ -534,8 +534,8 @@ func main() {
 
 	jobMgr := NewJobManager(rpcClient, cfg, metrics, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
-	if cfg.ZMQBlockAddr != "" {
-		logger.Info("block updates via zmq + longpoll", "addr", cfg.ZMQBlockAddr)
+	if cfg.ZMQHashBlockAddr != "" || cfg.ZMQRawBlockAddr != "" {
+		logger.Info("block updates via zmq + longpoll", "hashblock_addr", cfg.ZMQHashBlockAddr, "rawblock_addr", cfg.ZMQRawBlockAddr)
 	} else {
 		logger.Info("block updates via longpoll")
 	}

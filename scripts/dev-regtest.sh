@@ -227,7 +227,8 @@ fi
 set_toml_value "node" "payout_address" "\"${PAYOUT_ADDRESS}\""
 set_toml_value "node" "rpc_url" "\"http://127.0.0.1:18443\""
 set_toml_value "node" "rpc_cookie_path" "\"${COOKIE_PATH}\""
-set_toml_value "node" "zmq_block_addr" "\"tcp://127.0.0.1:28332\""
+set_toml_value "node" "zmq_hashblock_addr" "\"tcp://127.0.0.1:28332\""
+set_toml_value "node" "zmq_rawblock_addr" "\"tcp://127.0.0.1:28332\""
 
 set_toml_value "server" "status_listen" "\":${STATUS_HTTP_PORT}\""
 if [ "${HTTP_ONLY}" = "1" ]; then

@@ -38,7 +38,7 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 ## Initial configuration
 
 1. Run `./goPool`; it generates `data/config/examples/` and exits.
-2. Copy the base example to `data/config/config.toml` and edit required values (especially `node.payout_address`, `node.rpc_url`, and `node.zmq_block_addr`—leave this blank to fall back to RPC/longpoll).
+2. Copy the base example to `data/config/config.toml` and edit required values (especially `node.payout_address`, `node.rpc_url`, and ZMQ addresses: `node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`—leave blank to fall back to RPC/longpoll).
 3. Optional: copy `data/config/examples/secrets.toml.example` and `data/config/examples/tuning.toml.example` to `data/config/` for sensitive credentials or advanced tuning.
 4. Re-run `./goPool`; it may regenerate `pool_entropy` and normalized listener ports if you later invoke `./goPool -rewrite-config`.
 
@@ -101,7 +101,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, GitHub link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum).
 - `[auth]`: Clerk URLs and session cookies used for the status UI.
-- `[node]`: `rpc_url`, `rpc_cookie_path`, `zmq_block_addr`, and `allow_public_rpc`.
+- `[node]`: `rpc_url`, `rpc_cookie_path`, ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`), and `allow_public_rpc`.
 - `[mining]`: Pool fee, donation settings, `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `pooltag_prefix`, and flags that control solo-mode shortcuts.
 - `[backblaze_backup]`: Cloud backup toggle, bucket name, prefix, and upload interval.
 - `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.
@@ -151,9 +151,14 @@ To change network defaults, use the `-network` flag:
 
 goPool can use Bitcoin Core's ZMQ publisher to learn about new blocks quickly, but it still uses RPC (including longpoll) to fetch the actual `getblocktemplate` payload and keep templates current.
 
-`node.zmq_block_addr` controls the ZMQ subscriber connection. When it is empty goPool disables ZMQ and logs a warning that you are running RPC/longpoll-only; this lets regtest or longpoll-only pools skip configuring a publisher. When a network flag (`-network`) is set and `zmq_block_addr` is blank, goPool auto-fills the default `tcp://127.0.0.1:28332` for that network.
+`node.zmq_hashblock_addr` and `node.zmq_rawblock_addr` control the ZMQ subscriber connections. When both are empty goPool disables ZMQ and logs a warning that you are running RPC/longpoll-only; this lets regtest or longpoll-only pools skip configuring a publisher. When a network flag (`-network`) is set and both are blank, goPool auto-fills the default `tcp://127.0.0.1:28332` for that network.
 
-**Tip:** The warning message includes a hint to set `node.zmq_block_addr` back in `config.toml` if you accidentally run longpoll-only accidentally.
+If you publish `hashblock` and `rawblock` on different ports, configure:
+
+- `node.zmq_hashblock_addr` for `hashblock`
+- `node.zmq_rawblock_addr` for `rawblock`
+
+If both are set to the same `tcp://IP:port`, goPool will share a single ZMQ connection.
 
 #### What goPool subscribes to
 

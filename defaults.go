@@ -28,7 +28,6 @@ func defaultConfig() Config {
 		JobEntropy:                          defaultJobEntropy,
 		CoinbaseMsg:                         poolSoftwareName,
 		CoinbaseScriptSigMaxBytes:           defaultCoinbaseScriptSigMaxBytes,
-		ZMQBlockAddr:                        defaultZMQBlockAddr,
 		BackblazeBackupIntervalSeconds:      defaultBackblazeBackupIntervalSeconds,
 		BackblazeKeepLocalCopy:              true,
 		DataDir:                             defaultDataDir,

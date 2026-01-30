@@ -19,13 +19,13 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
     go build -o goPool
     ```
 3. Run `./goPool` once to generate example config files under `data/config/examples/`, then copy the base example into `data/config/config.toml` and edit it.
-4. Set the required `node.payout_address`, `node.rpc_url`, and `node.zmq_block_addr` (leave it empty to run RPC/longpoll-only) before restarting the pool.
+4. Set the required `node.payout_address`, `node.rpc_url`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to run RPC/longpoll-only) before restarting the pool.
 
 ## Configuration overview
 
 - `data/config/config.toml` controls listener ports, branding, RPC credentials, fee percentages, and most runtime behavior.
 - TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
-- `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and `node.zmq_block_addr` (leave it empty to disable ZMQ and rely on RPC/longpoll). The first run writes helper examples to `data/config/examples/`.
+- `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). The first run writes helper examples to `data/config/examples/`.
 - `data/config/tuning.toml` lets you override advanced limits (rate limits, bans, EMA windows, etc.) while `data/config/secrets.toml` holds sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
 - `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + `tuning.toml`, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
 - `[logging].level` controls runtime verbosity (`debug`, `info`, `warn`, `error`) and gates features like `net-debug.log`; override it temporarily with `-log-level <level>`.

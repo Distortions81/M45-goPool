@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func formatNodeZMQAddr(cfg Config) string {
+	hashAddr := strings.TrimSpace(cfg.ZMQHashBlockAddr)
+	rawAddr := strings.TrimSpace(cfg.ZMQRawBlockAddr)
+
+	if hashAddr != "" && rawAddr != "" && hashAddr == rawAddr {
+		return "hashblock+rawblock " + hashAddr
+	}
+
+	var parts []string
+	if hashAddr != "" {
+		parts = append(parts, "hashblock "+hashAddr)
+	}
+	if rawAddr != "" {
+		parts = append(parts, "rawblock "+rawAddr)
+	}
+	return strings.Join(parts, " | ")
+}
+
 func (s *StatusServer) buildStatusData() StatusData {
 	var currentJob *Job
 	if s.jobMgr != nil {
@@ -409,11 +427,11 @@ func (s *StatusServer) buildStatusData() StatusData {
 		if !payload.LastRawBlockAt.IsZero() {
 			jobFeed.LastRawBlockAt = payload.LastRawBlockAt.UTC().Format("2006-01-02 15:04:05 MST")
 		}
-			if payload.LastRawBlockBytes > 0 {
-				jobFeed.LastRawBlockBytes = payload.LastRawBlockBytes
-			}
-			jobFeed.ErrorHistory = fs.ErrorHistory
+		if payload.LastRawBlockBytes > 0 {
+			jobFeed.LastRawBlockBytes = payload.LastRawBlockBytes
 		}
+		jobFeed.ErrorHistory = fs.ErrorHistory
+	}
 
 	brandName := strings.TrimSpace(s.Config().StatusBrandName)
 	if brandName == "" {
@@ -496,7 +514,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		NodeHeaders:                    nodeHeaders,
 		NodeInitialBlockDownload:       nodeIBD,
 		NodeRPCURL:                     s.Config().RPCURL,
-		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		NodeZMQAddr:                    formatNodeZMQAddr(s.Config()),
 		PayoutAddress:                  s.Config().PayoutAddress,
 		PoolFeePercent:                 s.Config().PoolFeePercent,
 		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
@@ -655,7 +673,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		DiscordNotificationsEnabled:    discordNotificationsEnabled,
 		GitHubURL:                      s.Config().GitHubURL,
 		NodeRPCURL:                     s.Config().RPCURL,
-		NodeZMQAddr:                    s.Config().ZMQBlockAddr,
+		NodeZMQAddr:                    formatNodeZMQAddr(s.Config()),
 		PayoutAddress:                  s.Config().PayoutAddress,
 		PoolFeePercent:                 s.Config().PoolFeePercent,
 		OperatorDonationPercent:        s.Config().OperatorDonationPercent,
