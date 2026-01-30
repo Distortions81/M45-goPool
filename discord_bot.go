@@ -323,7 +323,7 @@ func (n *discordNotifier) registerCommands() error {
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "code",
-					Description: "One-time code from the goPool saved-workers page",
+					Description: "One-time code from goPool",
 					Type:        discordgo.ApplicationCommandOptionString,
 					Required:    true,
 				},

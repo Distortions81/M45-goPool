@@ -54,8 +54,44 @@ func (s *StatusServer) oneTimeCodeInUseLocked(code string) bool {
 	return false
 }
 
+func (s *StatusServer) oneTimeCodePoolTag() string {
+	if s == nil {
+		return ""
+	}
+	return normalizePoolTag(s.Config().PoolEntropy)
+}
+
+func (s *StatusServer) parseOneTimeCodeInput(code string) (raw string, ok bool) {
+	code = strings.TrimSpace(code)
+	if s == nil || code == "" {
+		return "", false
+	}
+	tag := s.oneTimeCodePoolTag()
+	if tag == "" {
+		return "", false
+	}
+	if len(code) <= poolTagLength+1 {
+		return "", false
+	}
+	if code[poolTagLength] != '-' {
+		return "", false
+	}
+	if !strings.EqualFold(code[:poolTagLength], tag) {
+		return "", false
+	}
+	raw = strings.TrimSpace(code[poolTagLength+1:])
+	if raw == "" {
+		return "", false
+	}
+	return raw, true
+}
+
 func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code string, expiresAt time.Time) {
 	if s == nil || strings.TrimSpace(userID) == "" {
+		return "", time.Time{}
+	}
+	tag := s.oneTimeCodePoolTag()
+	if tag == "" {
 		return "", time.Time{}
 	}
 
@@ -71,20 +107,20 @@ func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code 
 	s.evictOneTimeCodesLocked(now)
 
 	for i := 0; i < 50; i++ {
-		code = strings.TrimSpace(oneTimeCodeGenerator())
-		if code == "" {
+		raw := strings.TrimSpace(oneTimeCodeGenerator())
+		if raw == "" {
 			continue
 		}
-		if s.oneTimeCodeInUseLocked(code) {
+		if s.oneTimeCodeInUseLocked(raw) {
 			continue
 		}
 		expiresAt = now.Add(oneTimeCodeTTL)
 		s.oneTimeCodes[userID] = oneTimeCodeEntry{
-			Code:      code,
+			Code:      raw,
 			CreatedAt: now,
 			ExpiresAt: expiresAt,
 		}
-		return code, expiresAt
+		return tag + "-" + raw, expiresAt
 	}
 	return "", time.Time{}
 }
@@ -123,6 +159,10 @@ func (s *StatusServer) clearOneTimeCode(userID, code string, now time.Time) bool
 	if s == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(code) == "" {
 		return false
 	}
+	raw, ok := s.parseOneTimeCodeInput(code)
+	if !ok {
+		return false
+	}
 
 	s.oneTimeCodeMu.Lock()
 	defer s.oneTimeCodeMu.Unlock()
@@ -134,7 +174,7 @@ func (s *StatusServer) clearOneTimeCode(userID, code string, now time.Time) bool
 	if !ok {
 		return false
 	}
-	if entry.Code != code {
+	if entry.Code != raw {
 		return false
 	}
 	delete(s.oneTimeCodes, userID)
@@ -145,8 +185,8 @@ func (s *StatusServer) redeemOneTimeCode(code string, now time.Time) (userID str
 	if s == nil {
 		return "", false
 	}
-	code = strings.TrimSpace(code)
-	if code == "" {
+	raw, ok := s.parseOneTimeCodeInput(code)
+	if !ok {
 		return "", false
 	}
 
@@ -157,7 +197,7 @@ func (s *StatusServer) redeemOneTimeCode(code string, now time.Time) (userID str
 	s.cleanupExpiredOneTimeCodesLocked(now)
 
 	for uid, entry := range s.oneTimeCodes {
-		if entry.Code != code {
+		if entry.Code != raw {
 			continue
 		}
 		if entry.ExpiresAt.IsZero() || now.After(entry.ExpiresAt) {
