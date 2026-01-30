@@ -124,11 +124,10 @@ rpcworkqueue=256
 
 rpcallowip=127.0.0.1
 
-# ZMQ (miner-safe when bound to localhost). goPool requires rawblock; rawtx is optional (status metrics).
-zmqpubrawblock=tcp://127.0.0.1:28332
-zmqpubrawtx=tcp://127.0.0.1:28333
-
-EOF
+	# ZMQ (miner-safe when bound to localhost). goPool uses block notifications to refresh templates quickly.
+	zmqpubrawblock=tcp://127.0.0.1:28332
+	
+	EOF
 
 case "${AUTH_MODE}" in
   cookie)
