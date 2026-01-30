@@ -25,6 +25,11 @@ type backblazeBackupService struct {
 	interval     time.Duration
 	objectPrefix string
 
+	b2Enabled     bool
+	b2BucketName  string
+	b2AccountID   string
+	b2AppKey      string
+
 	lastBackup      time.Time
 	lastDataVersion int64
 	snapshotPath    string
@@ -40,26 +45,6 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	}
 	if dbPath == "" {
 		return nil, fmt.Errorf("worker database path is empty")
-	}
-
-	var bucket *b2.Bucket
-	if cfg.BackblazeBackupEnabled {
-		if cfg.BackblazeAccountID == "" || cfg.BackblazeApplicationKey == "" || cfg.BackblazeBucket == "" {
-			logger.Warn("backblaze credentials incomplete, falling back to local-only backups")
-		} else {
-			client, err := b2.NewClient(ctx, cfg.BackblazeAccountID, cfg.BackblazeApplicationKey)
-			if err != nil {
-				logger.Warn("create backblaze client failed, falling back to local-only backups", "error", err)
-			} else {
-				bucket, err = client.Bucket(ctx, cfg.BackblazeBucket)
-				if err != nil {
-					logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
-				} else if _, err := bucket.Attrs(ctx); err != nil {
-					logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
-					bucket = nil
-				}
-			}
-		}
 	}
 
 	interval := time.Duration(cfg.BackblazeBackupIntervalSeconds) * time.Second
@@ -92,20 +77,55 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		}
 		snapshotPath = filepath.Join(base, snapshotPath)
 	}
-	// Enable local backup if explicitly requested, or if B2 was enabled but failed to initialize
-	if snapshotPath == "" && (cfg.BackblazeKeepLocalCopy || (cfg.BackblazeBackupEnabled && bucket == nil)) {
-		snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
-	}
-
-	return &backblazeBackupService{
-		bucket:          bucket,
+	svc := &backblazeBackupService{
 		dbPath:          dbPath,
 		objectPrefix:    objectPrefix,
 		interval:        interval,
+		b2Enabled:       cfg.BackblazeBackupEnabled,
+		b2BucketName:    strings.TrimSpace(cfg.BackblazeBucket),
+		b2AccountID:     strings.TrimSpace(cfg.BackblazeAccountID),
+		b2AppKey:        strings.TrimSpace(cfg.BackblazeApplicationKey),
 		lastBackup:      lastBackup,
 		lastDataVersion: lastDataVersion,
 		snapshotPath:    snapshotPath,
-	}, nil
+	}
+	svc.bucket = svc.tryInitBucket(ctx)
+	// Enable local backup if explicitly requested, or if B2 was enabled but has not
+	// initialized yet (so operators still get a safe-to-copy snapshot).
+	//
+	// Additionally, when B2 is enabled, always write a local snapshot by default
+	// even if keep_local_copy is disabled. This guarantees operators have a local
+	// "safe to copy while running" snapshot regardless of B2 health.
+	if svc.snapshotPath == "" && (cfg.BackblazeKeepLocalCopy || cfg.BackblazeBackupEnabled) {
+		svc.snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
+	}
+	return svc, nil
+}
+
+func (s *backblazeBackupService) tryInitBucket(ctx context.Context) *b2.Bucket {
+	if !s.b2Enabled {
+		return nil
+	}
+	if s.b2AccountID == "" || s.b2AppKey == "" || s.b2BucketName == "" {
+		logger.Warn("backblaze credentials incomplete, falling back to local-only backups")
+		return nil
+	}
+
+	client, err := b2.NewClient(ctx, s.b2AccountID, s.b2AppKey)
+	if err != nil {
+		logger.Warn("create backblaze client failed, falling back to local-only backups", "error", err)
+		return nil
+	}
+	bucket, err := client.Bucket(ctx, s.b2BucketName)
+	if err != nil {
+		logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+		return nil
+	}
+	if _, err := bucket.Attrs(ctx); err != nil {
+		logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+		return nil
+	}
+	return bucket
 }
 
 func (s *backblazeBackupService) start(ctx context.Context) {
@@ -127,6 +147,14 @@ func (s *backblazeBackupService) start(ctx context.Context) {
 func (s *backblazeBackupService) run(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
+	}
+
+	if s.bucket == nil && s.b2Enabled {
+		prevNil := s.bucket == nil
+		s.bucket = s.tryInitBucket(ctx)
+		if prevNil && s.bucket != nil {
+			logger.Info("backblaze bucket access recovered", "bucket", s.b2BucketName)
+		}
 	}
 
 	now := time.Now()
