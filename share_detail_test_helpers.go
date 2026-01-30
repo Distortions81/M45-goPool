@@ -2,32 +2,16 @@ package main
 
 import (
 	"encoding/hex"
-	"math/big"
 )
 
 // buildShareDetail is a test-only helper; production share processing uses
 // buildShareDetailFromCoinbase to avoid re-serializing the coinbase.
-func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, hash []byte, target *big.Int, extranonce2 string, merkleRoot []byte) *ShareDetail {
+func (mc *MinerConn) buildShareDetail(job *Job, worker string, extranonce2 string) *ShareDetail {
 	if job == nil {
 		return nil
 	}
 
 	detail := &ShareDetail{}
-
-	if debugLogging || verboseLogging {
-		detail.Header = hex.EncodeToString(header)
-		detail.ShareHash = hex.EncodeToString(hash)
-		detail.MerkleBranches = append([]string{}, job.MerkleBranches...)
-
-		if target != nil {
-			var targetBuf [32]byte
-			detail.Target = hex.EncodeToString(target.FillBytes(targetBuf[:]))
-		}
-		if len(merkleRoot) == 32 {
-			detail.MerkleRootBE = hex.EncodeToString(merkleRoot)
-			detail.MerkleRootLE = hex.EncodeToString(reverseBytes(merkleRoot))
-		}
-	}
 
 	en2, err := hex.DecodeString(extranonce2)
 	if err != nil {
@@ -96,8 +80,6 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, header []byte, ha
 		}
 	}
 	detail.Coinbase = hex.EncodeToString(cbTx)
-	if debugLogging || verboseLogging {
-		detail.DecodeCoinbaseFields()
-	}
+	detail.DecodeCoinbaseFields()
 	return detail
 }

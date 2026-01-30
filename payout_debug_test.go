@@ -166,10 +166,8 @@ func TestShareDetailCoinbaseMatchesBlockCoinbase(t *testing.T) {
 			en2 := []byte{0x01, 0x02, 0x03, 0x04}
 			cbBlock := buildBlockCoinbase(t, mc, job, workerName, en2)
 
-			header := []byte("header")
-			hash := []byte("hash")
 			extraHex := hex.EncodeToString(en2)
-			debug := mc.buildShareDetail(job, workerName, header, hash, nil, extraHex, nil)
+			debug := mc.buildShareDetail(job, workerName, extraHex)
 			if debug == nil || debug.Coinbase == "" {
 				t.Fatalf("buildShareDetail returned nil or empty coinbase")
 			}

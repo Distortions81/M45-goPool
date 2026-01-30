@@ -368,16 +368,16 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 
 	data := struct {
 		StatusData
-		OnlineWorkerEntries      []savedWorkerEntry
-		OfflineWorkerEntries     []savedWorkerEntry
-		SavedWorkersCount        int
-		SavedWorkersOnline       int
-		SavedWorkersMax          int
+		OnlineWorkerEntries        []savedWorkerEntry
+		OfflineWorkerEntries       []savedWorkerEntry
+		SavedWorkersCount          int
+		SavedWorkersOnline         int
+		SavedWorkersMax            int
 		SavedWorkersBestDifficulty float64
-		WalletLookupHash         string
-		WalletLookupError        string
-		WalletLookupResults      []walletLookupResult
-		WalletLookupUnsavedCount int
+		WalletLookupHash           string
+		WalletLookupError          string
+		WalletLookupResults        []walletLookupResult
+		WalletLookupUnsavedCount   int
 	}{StatusData: base}
 	data.HashrateGraphTitle = "Total Hashrate"
 	data.HashrateGraphID = "savedWorkersHashrateChart"

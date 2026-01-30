@@ -74,13 +74,7 @@ type RecentWorkView struct {
 
 // ShareDetail holds detailed data for each share, including coinbase transaction details.
 type ShareDetail struct {
-	Header         string   `json:"header,omitempty"`
-	ShareHash      string   `json:"share_hash,omitempty"`
-	Target         string   `json:"target,omitempty"`
-	Coinbase       string   `json:"coinbase,omitempty"`
-	MerkleBranches []string `json:"merkle_branches,omitempty"`
-	MerkleRootBE   string   `json:"merkle_root_be,omitempty"`
-	MerkleRootLE   string   `json:"merkle_root_le,omitempty"`
+	Coinbase string `json:"coinbase,omitempty"`
 	// Decoded coinbase transaction fields for easier inspection.
 	CoinbaseVersion    int32                 `json:"coinbase_version,omitempty"`
 	CoinbaseLockTime   uint32                `json:"coinbase_locktime,omitempty"`
@@ -89,13 +83,6 @@ type ShareDetail struct {
 	TotalCoinbaseValue int64                 `json:"total_coinbase_value,omitempty"`
 	BlockSubsidy       int64                 `json:"block_subsidy,omitempty"`
 	TransactionFees    int64                 `json:"transaction_fees,omitempty"`
-	// Aggregated payout split (computed at view time on the worker page).
-	WorkerValueSats   int64   `json:"worker_value_sats,omitempty"`
-	PoolValueSats     int64   `json:"pool_value_sats,omitempty"`
-	DonationValueSats int64   `json:"donation_value_sats,omitempty"`
-	WorkerPercent     float64 `json:"worker_percent,omitempty"`
-	PoolPercent       float64 `json:"pool_percent,omitempty"`
-	DonationPercent   float64 `json:"donation_percent,omitempty"`
 }
 
 // CoinbaseOutputDebug is a minimal decoded view of a coinbase output.

@@ -885,7 +885,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
 		var detail *ShareDetail
 		if debugLogging || verboseLogging {
-			detail = mc.buildShareDetailFromCoinbase(job, workerName, header, nil, nil, expectedMerkle, cbTx)
+			detail = mc.buildShareDetailFromCoinbase(job, cbTx)
 		}
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
@@ -987,7 +987,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 		}
 		var detail *ShareDetail
 		if debugLogging || verboseLogging {
-			detail = mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, nil, ctx.merkleRoot, ctx.cbTx)
+			detail = mc.buildShareDetailFromCoinbase(job, ctx.cbTx)
 		}
 		acceptedForStats := false
 		mc.recordShare(workerName, acceptedForStats, 0, ctx.shareDiff, "lowDiff", ctx.hashHex, detail, now)
@@ -1008,7 +1008,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	shareHash := ctx.hashHex
 	var detail *ShareDetail
 	if debugLogging || verboseLogging {
-		detail = mc.buildShareDetailFromCoinbase(job, workerName, ctx.header, ctx.hashLE, job.Target, ctx.merkleRoot, ctx.cbTx)
+		detail = mc.buildShareDetailFromCoinbase(job, ctx.cbTx)
 	}
 
 	if ctx.isBlock {

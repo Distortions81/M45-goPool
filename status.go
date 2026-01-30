@@ -543,37 +543,6 @@ type ErrorPageData struct {
 	Path       string
 }
 
-func aggregateCoinbaseSplit(poolScriptHex, donationScriptHex, workerScriptHex string, dbg *ShareDetail) {
-	if dbg == nil || len(dbg.CoinbaseOutputs) == 0 {
-		return
-	}
-	var poolVal, donationVal, workerVal int64
-	for _, o := range dbg.CoinbaseOutputs {
-		if o.ValueSats <= 0 {
-			continue
-		}
-		if workerScriptHex != "" && strings.EqualFold(o.ScriptHex, workerScriptHex) {
-			workerVal += o.ValueSats
-		}
-		if poolScriptHex != "" && strings.EqualFold(o.ScriptHex, poolScriptHex) {
-			poolVal += o.ValueSats
-		}
-		if donationScriptHex != "" && strings.EqualFold(o.ScriptHex, donationScriptHex) {
-			donationVal += o.ValueSats
-		}
-	}
-	total := poolVal + donationVal + workerVal
-	if total <= 0 {
-		return
-	}
-	dbg.WorkerValueSats = workerVal
-	dbg.PoolValueSats = poolVal
-	dbg.DonationValueSats = donationVal
-	dbg.WorkerPercent = float64(workerVal) * 100 / float64(total)
-	dbg.PoolPercent = float64(poolVal) * 100 / float64(total)
-	dbg.DonationPercent = float64(donationVal) * 100 / float64(total)
-}
-
 func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 	data.HasWalletAddress = strings.TrimSpace(wv.WalletAddress) != ""
 	data.HasShareHashDetails = strings.TrimSpace(wv.LastShareHash) != "" || strings.TrimSpace(wv.DisplayLastShare) != ""
@@ -594,7 +563,6 @@ func setWorkerStatusView(data *WorkerStatusData, wv WorkerView) {
 
 	// Always set script hex values for template matching
 	data.WorkerScriptHex = workerScriptHex
-	aggregateCoinbaseSplit(data.PoolScriptHex, data.DonationScriptHex, workerScriptHex, wv.LastShareDetail)
 
 	// Privacy mode is handled client-side, so always send real data
 	data.Worker = &wv
@@ -888,10 +856,10 @@ func (s *StatusServer) statusDataView() StatusData {
 	return data
 }
 
-	type JobFeedView struct {
-		Ready             bool     `json:"ready"`
-		LastSuccess       string   `json:"last_success"`
-		LastError         string   `json:"last_error,omitempty"`
+type JobFeedView struct {
+	Ready             bool     `json:"ready"`
+	LastSuccess       string   `json:"last_success"`
+	LastError         string   `json:"last_error,omitempty"`
 	LastErrorAt       string   `json:"last_error_at,omitempty"`
 	ErrorHistory      []string `json:"error_history,omitempty"`
 	ZMQHealthy        bool     `json:"zmq_healthy"`
