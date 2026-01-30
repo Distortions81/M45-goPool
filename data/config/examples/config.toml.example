@@ -72,7 +72,7 @@
   payout_address = "YOUR_POOL_WALLET_ADDRESS_HERE"
   rpc_cookie_path = ""
   rpc_url = "http://127.0.0.1:8332"
-  zmq_hashblock_addr = "tcp://127.0.0.1:28332"
+  zmq_hashblock_addr = "tcp://127.0.0.1:28334"
   zmq_rawblock_addr = "tcp://127.0.0.1:28332"
 
 [server]
