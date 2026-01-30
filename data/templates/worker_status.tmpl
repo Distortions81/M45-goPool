@@ -312,6 +312,117 @@
 					{{end}}
 				{{end}}
 			</div>
+			<div class="card" style="margin-top:16px;">
+				<div class="label">Current job coinbase</div>
+				{{if .CurrentJobCoinbase}}
+					<p class="text-sm" style="margin-top:8px;">
+						Height: {{if gt .CurrentJobHeight 0}}{{.CurrentJobHeight}}{{else}}unknown{{end}}<br>
+						{{if .CurrentJobPrevHash}}
+							Prevhash: <span class="code-box copyable sensitive-data" title="Click to copy prevhash" data-copy="{{.CurrentJobPrevHash}}">{{.CurrentJobPrevHash}}</span><br>
+						{{end}}
+						{{if .CurrentJobID}}
+							Job ID: <span class="mono">{{.CurrentJobID}}</span>
+						{{end}}
+					</p>
+					{{$root := .}}
+					{{with .CurrentJobCoinbase}}
+						<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
+							This coinbase is constructed directly from the current stratum job (coinb1/coinb2) for this worker. Extranonce values are zeroed for display; coinbase outputs are identical to what miners receive.
+						</p>
+						{{if .Coinbase}}
+							<p class="text-sm">
+								<span class="mono">
+									<a href="https://www.blockchain.com/explorer/assets/btc/decode-transaction" target="_blank" rel="noreferrer" title="Open decode tool; paste this coinbase hex there">
+										coinbase_tx (hex):
+									</a>
+								</span><br>
+								<span class="code-box copyable sensitive-data" title="Click to copy coinbase hex" data-copy="{{.Coinbase}}">{{.Coinbase}}</span>
+							</p>
+						{{end}}
+						{{if or .CoinbaseVersion .CoinbaseLockTime .CoinbaseHeight .CoinbaseOutputs}}
+							<h2 style="margin-top:16px;margin-bottom:6px;font-size:14px;">Decoded coinbase</h2>
+							<p class="text-sm">
+								Version: {{if .CoinbaseVersion}}{{.CoinbaseVersion}}{{else}}unknown{{end}}<br>
+								Locktime: {{if .CoinbaseLockTime}}{{.CoinbaseLockTime}}{{else}}0{{end}}<br>
+								Block height (BIP34): {{if .CoinbaseHeight}}{{.CoinbaseHeight}}{{else}}unknown{{end}}
+							</p>
+							{{if .TotalCoinbaseValue}}
+								<p class="text-sm" style="margin-top:12px;">
+									<strong>Total coinbase value:</strong> {{formatBTCShort .TotalCoinbaseValue}}{{if gt $root.BTCPriceFiat 0.0}} ({{formatFiat .TotalCoinbaseValue $root.BTCPriceFiat $root.FiatCurrency}}){{end}}
+									{{if and .BlockSubsidy (gt .BlockSubsidy 0)}}
+										<br><span style="color:#b3bbd4;">Block subsidy: {{formatBTCShort .BlockSubsidy}}{{if .TransactionFees}} + Transaction fees: {{formatBTCShort .TransactionFees}}{{end}}</span>
+									{{end}}
+								</p>
+							{{end}}
+							{{if .CoinbaseOutputs}}
+								<div style="overflow-x:auto;margin-top:8px;">
+									<table class="table">
+										<thead>
+											<tr>
+												<th>Output #</th>
+												<th>Role</th>
+												<th>Value (BTC)</th>
+												<th>Value (fiat)</th>
+												<th>% of coinbase</th>
+												<th>Address</th>
+												<th>scriptPubKey (hex)</th>
+											</tr>
+										</thead>
+										<tbody>
+											{{range $i, $o := .CoinbaseOutputs}}
+												<tr>
+													<td>{{$i}}</td>
+													<td>
+														{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex)}}
+															Miner reward
+														{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex)}}
+															Pool fee
+														{{else if and $root.DonationScriptHex (eq $o.ScriptHex $root.DonationScriptHex)}}
+															{{if $root.OperatorDonationName}}
+																Pool donation to {{$root.OperatorDonationName}}
+															{{else}}
+																Pool donation
+															{{end}}
+														{{else if and (eq $i 0) (eq $o.ValueSats 0)}}
+															Witness commitment
+														{{else if $o.Address}}
+															Coinbase output ({{$o.Address}})
+														{{else}}
+															Other coinbase output
+														{{end}}
+													</td>
+													<td>{{formatBTCShort $o.ValueSats}}</td>
+													<td>
+														{{if gt $root.BTCPriceFiat 0.0}}
+															{{formatFiat $o.ValueSats $root.BTCPriceFiat $root.FiatCurrency}}
+														{{else}}
+															—
+														{{end}}
+													</td>
+													<td>{{printf "%.4f%%" $o.Percent}}</td>
+													<td>
+														{{if and $root.WorkerScriptHex (eq $o.ScriptHex $root.WorkerScriptHex) $root.Worker.WalletAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.Worker.WalletAddress}}" target="_blank" rel="noreferrer" title="View {{$root.Worker.WalletAddress}} on mempool.space">{{$root.Worker.WalletAddress}}</a></span>{{else if and $root.PoolScriptHex (eq $o.ScriptHex $root.PoolScriptHex) $root.PayoutAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.PayoutAddress}}" target="_blank" rel="noreferrer" title="View {{$root.PayoutAddress}} on mempool.space">{{$root.PayoutAddress}}</a></span>{{else if and $root.DonationScriptHex (eq $o.ScriptHex $root.DonationScriptHex) $root.OperatorDonationAddress}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$root.OperatorDonationAddress}}" target="_blank" rel="noreferrer" title="View {{$root.OperatorDonationAddress}} on mempool.space">{{$root.OperatorDonationAddress}}</a></span>{{else if $o.Address}}<span class="mono sensitive-data"><a href="https://mempool.space/address/{{$o.Address}}" target="_blank" rel="noreferrer" title="View {{$o.Address}} on mempool.space">{{$o.Address}}</a></span>{{else}}—{{end}}
+													</td>
+													<td>
+														<span class="code-box copyable sensitive-data" title="Click to copy scriptPubKey hex" data-copy="{{$o.ScriptHex}}">{{$o.ScriptHex}}</span>
+													</td>
+												</tr>
+											{{end}}
+										</tbody>
+									</table>
+								</div>
+								{{if $root.FiatNote}}
+									<p class="text-sm" style="margin-top:8px;color:#b3bbd4;">
+										{{$root.FiatNote}}
+									</p>
+								{{end}}
+							{{end}}
+						{{end}}
+					{{end}}
+				{{else}}
+					<p class="text-sm" style="margin-top:8px;">No active job available.</p>
+				{{end}}
+			</div>
 		{{else}}
 			<div class="card">
 				<p class="text-sm">No worker found.</p>

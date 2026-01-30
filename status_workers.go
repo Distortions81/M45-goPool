@@ -1131,6 +1131,10 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	}
 
 	now := time.Now()
+	var curJob *Job
+	if s.jobMgr != nil {
+		curJob = s.jobMgr.CurrentJob()
+	}
 
 	if workerHash != "" {
 		// Validate hash format (64 hex characters for SHA256)
@@ -1147,6 +1151,11 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			if privacyMode {
 				cacheKey = cacheKey + "|priv"
 			}
+			// Include the current job ID in the cache key so the worker page
+			// updates immediately when new work arrives (coinbase changes per job).
+			if curJob != nil && strings.TrimSpace(curJob.JobID) != "" {
+				cacheKey = cacheKey + "|job:" + strings.TrimSpace(curJob.JobID)
+			}
 			s.workerPageMu.RLock()
 			if entry, ok := s.workerPageCache[cacheKey]; ok && now.Before(entry.expiresAt) {
 				payload := entry.payload
@@ -1159,6 +1168,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 			if wv, ok := s.findWorkerViewByHash(workerHash); ok {
 				setWorkerStatusView(&data, wv)
+				s.setWorkerCurrentJobCoinbase(&data, curJob, wv)
 				if data.BTCPriceFiat > 0 {
 					cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
 					if cur == "" {
@@ -1173,6 +1183,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			} else if s.accounting != nil {
 				if wv, ok := s.accounting.WorkerViewBySHA256(workerHash); ok {
 					setWorkerStatusView(&data, wv)
+					s.setWorkerCurrentJobCoinbase(&data, curJob, wv)
 					if data.BTCPriceFiat > 0 {
 						cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
 						if cur == "" {
@@ -1211,9 +1222,117 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 		if privacyMode {
 			cacheKey = cacheKey + "|priv"
 		}
+		if curJob != nil && strings.TrimSpace(curJob.JobID) != "" {
+			cacheKey = cacheKey + "|job:" + strings.TrimSpace(curJob.JobID)
+		}
 		s.cacheWorkerPage(cacheKey, now, buf.Bytes())
 	}
 	_, _ = w.Write(buf.Bytes())
+}
+
+func (s *StatusServer) setWorkerCurrentJobCoinbase(data *WorkerStatusData, job *Job, wv WorkerView) {
+	if data == nil || job == nil {
+		return
+	}
+	data.CurrentJobID = strings.TrimSpace(job.JobID)
+	data.CurrentJobHeight = job.Template.Height
+	data.CurrentJobPrevHash = strings.TrimSpace(job.PrevHash)
+
+	coinbase, ok := buildWorkerCoinbaseForJob(job, wv, s.Config())
+	if ok {
+		data.CurrentJobCoinbase = coinbase
+	}
+}
+
+func buildWorkerCoinbaseForJob(job *Job, wv WorkerView, cfg Config) (*ShareDetail, bool) {
+	if job == nil || job.CoinbaseValue <= 0 {
+		return nil, false
+	}
+	if len(job.PayoutScript) == 0 {
+		return nil, false
+	}
+
+	extranonce1 := make([]byte, coinbaseExtranonce1Size)
+	scriptTime := job.ScriptTime
+
+	var workerScript []byte
+	if ws := strings.TrimSpace(wv.WalletScript); ws != "" {
+		if b, err := hex.DecodeString(ws); err == nil && len(b) > 0 {
+			workerScript = b
+		}
+	}
+
+	var (
+		coinb1 string
+		coinb2 string
+		err    error
+	)
+	workerAddr := strings.TrimSpace(wv.WalletAddress)
+	poolAddr := strings.TrimSpace(cfg.PayoutAddress)
+	useDual := cfg.PoolFeePercent > 0 && len(workerScript) > 0 && !strings.EqualFold(workerAddr, poolAddr)
+	if useDual {
+		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
+				job.Template.Height,
+				extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				job.PayoutScript,
+				job.DonationScript,
+				workerScript,
+				job.CoinbaseValue,
+				cfg.PoolFeePercent,
+				job.OperatorDonationPercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				scriptTime,
+			)
+		} else {
+			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
+				job.Template.Height,
+				extranonce1,
+				job.Extranonce2Size,
+				job.TemplateExtraNonce2Size,
+				job.PayoutScript,
+				workerScript,
+				job.CoinbaseValue,
+				cfg.PoolFeePercent,
+				job.WitnessCommitment,
+				job.Template.CoinbaseAux.Flags,
+				job.CoinbaseMsg,
+				scriptTime,
+			)
+		}
+	}
+	if coinb1 == "" || coinb2 == "" || err != nil {
+		coinb1, coinb2, err = buildCoinbaseParts(
+			job.Template.Height,
+			extranonce1,
+			job.Extranonce2Size,
+			job.TemplateExtraNonce2Size,
+			job.PayoutScript,
+			job.CoinbaseValue,
+			job.WitnessCommitment,
+			job.Template.CoinbaseAux.Flags,
+			job.CoinbaseMsg,
+			scriptTime,
+		)
+	}
+	if err != nil || coinb1 == "" || coinb2 == "" {
+		return nil, false
+	}
+
+	extranonce2Size := job.Extranonce2Size
+	if extranonce2Size < 0 {
+		extranonce2Size = 0
+	}
+	extranonce2 := make([]byte, extranonce2Size)
+	coinbaseHex := coinb1 + hex.EncodeToString(extranonce1) + hex.EncodeToString(extranonce2) + coinb2
+
+	detail := &ShareDetail{Coinbase: coinbaseHex}
+	detail.DecodeCoinbaseFields()
+	return detail, true
 }
 
 // cacheWorkerPage stores a rendered worker-status HTML payload in the

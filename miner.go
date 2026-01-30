@@ -736,25 +736,18 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	if mc.cfg.PoolFeePercent <= 0 {
 		return nil, nil, 0, 0, false
 	}
+	addr, script, ok := mc.workerWalletDataRef(worker)
+	if !ok || len(script) == 0 {
+		return nil, nil, 0, 0, false
+	}
 	// If the worker's wallet address is the same as the pool payout address,
 	// there is no benefit to building a dual-payout coinbase; treat it as a
 	// single-output payout to that address.
-	rawAddr := strings.TrimSpace(worker)
-	if rawAddr != "" {
-		if parts := strings.SplitN(rawAddr, ".", 2); len(parts) > 1 {
-			rawAddr = parts[0]
-		}
-	}
-	baseAddr := sanitizePayoutAddress(rawAddr)
-	if baseAddr != "" && strings.EqualFold(baseAddr, mc.cfg.PayoutAddress) {
+	if addr != "" && strings.EqualFold(addr, mc.cfg.PayoutAddress) {
 		return nil, nil, 0, 0, false
 	}
 
-	ws := mc.workerPayoutScript(worker)
-	if len(ws) == 0 {
-		return nil, nil, 0, 0, false
-	}
-	return job.PayoutScript, ws, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
+	return job.PayoutScript, script, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
 }
 
 func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, workerLists *workerListStore, isTLS bool) *MinerConn {
