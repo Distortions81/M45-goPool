@@ -252,6 +252,8 @@ snapshot_path = ""
 
 Store credentials in `secrets.toml` and keep them secure.
 
+If Backblaze is temporarily unavailable at startup (network outage, transient auth failure), goPool keeps writing local snapshots (when enabled) and will retry connecting to B2 on later backup runs without requiring a restart.
+
 ### Ban cleanup
 
 Expired bans are rewritten on every startup by default. Control this via `[tuning.bans].clean_expired_on_startup` (defaults to `true`). Set it to `false` to inspect expired entries without clearing them.
@@ -261,6 +263,8 @@ Clean bans happen inside `NewAccountStore` as it opens the shared state DB; when
 ## State database and snapshots
 
 If you need a “safe to copy while goPool is running” database file, enable a local snapshot via `[backblaze_backup].keep_local_copy` (defaults the snapshot to `data/state/workers.db.bak`) or `[backblaze_backup].snapshot_path`. That snapshot is written atomically during each backup run.
+
+When `[backblaze_backup].enabled = true`, goPool always writes a local snapshot (defaulting to `data/state/workers.db.bak` when `snapshot_path` is empty) so you still have a reliable local backup even if B2 is temporarily unavailable.
 
 If you do not have a snapshot configured, stop the pool before copying `data/state/workers.db`. Avoid opening the live DB with external tools while goPool is running.
 

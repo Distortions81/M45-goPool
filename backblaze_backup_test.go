@@ -122,6 +122,48 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	}
 }
 
+func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := defaultConfig()
+	cfg.DataDir = tmp
+	cfg.BackblazeBackupEnabled = true
+	cfg.BackblazeKeepLocalCopy = false
+	cfg.BackupSnapshotPath = ""
+	cfg.BackblazeBackupIntervalSeconds = 1
+	// Deliberately omit credentials so B2 init fails; local snapshot should still be written.
+	cfg.BackblazeBucket = ""
+	cfg.BackblazeAccountID = ""
+	cfg.BackblazeApplicationKey = ""
+
+	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	createTestWorkerDB(t, dbPath)
+
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if svc == nil {
+		t.Fatalf("expected service")
+	}
+	svc.run(context.Background())
+
+	wantSnapshot := filepath.Join(cfg.DataDir, "state", "workers.db.bak")
+	if svc.snapshotPath != wantSnapshot {
+		t.Fatalf("snapshotPath mismatch: got %q want %q", svc.snapshotPath, wantSnapshot)
+	}
+	if _, err := os.Stat(wantSnapshot); err != nil {
+		t.Fatalf("snapshot file missing: %v", err)
+	}
+}
+
 func TestSnapshotWorkerDB_CreatesCopy(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "state", "workers.db")
