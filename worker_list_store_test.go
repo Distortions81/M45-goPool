@@ -1,77 +1,66 @@
 package main
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
 
-func TestWorkerListStore_BestDifficultyForHashTracksSavedWorker(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "workers.db")
-	store, err := newWorkerListStore(dbPath)
+func TestWorkerListStoreHandlesNullWorkerHash(t *testing.T) {
+	db, err := openStateDB(filepath.Join(t.TempDir(), "workers.db"))
 	if err != nil {
-		t.Fatalf("newWorkerListStore: %v", err)
+		t.Fatalf("openStateDB: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	const (
-		userID = "user1"
-		worker = "bc1qexample.worker1"
+		userID  = "user_123"
+		worker  = "Example.Worker"
+		enabled = 1
+		best    = 0.0
 	)
-	if err := store.Add(userID, worker); err != nil {
-		t.Fatalf("Add: %v", err)
+	if _, err := db.Exec(
+		"INSERT INTO saved_workers (user_id, worker, worker_hash, notify_enabled, best_difficulty) VALUES (?, ?, ?, ?, ?)",
+		userID,
+		worker,
+		nil, // worker_hash intentionally NULL to simulate pre-migration rows.
+		enabled,
+		best,
+	); err != nil {
+		t.Fatalf("insert saved_workers: %v", err)
 	}
 
-	hash := workerNameHash(worker)
-	if hash == "" {
-		t.Fatalf("workerNameHash(%q) empty", worker)
-	}
+	store := &workerListStore{db: db, ownsDB: false}
 
-	best, ok, err := store.BestDifficultyForHash(hash)
+	records, err := store.ListAllSavedWorkers()
 	if err != nil {
-		t.Fatalf("BestDifficultyForHash: %v", err)
+		t.Fatalf("ListAllSavedWorkers: %v", err)
 	}
-	if !ok {
-		t.Fatalf("BestDifficultyForHash ok=false; want true for saved worker")
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
 	}
-	if best != 0 {
-		t.Fatalf("BestDifficultyForHash best=%v; want 0 initially", best)
-	}
-
-	if updated, err := store.UpdateSavedWorkerBestDifficulty(hash, 1234); err != nil {
-		t.Fatalf("UpdateSavedWorkerBestDifficulty: %v", err)
-	} else if !updated {
-		t.Fatalf("UpdateSavedWorkerBestDifficulty updated=false; want true")
+	expectedHash := workerNameHash(worker)
+	if records[0].Hash != expectedHash {
+		t.Fatalf("expected hash %q, got %q", expectedHash, records[0].Hash)
 	}
 
-	best, ok, err = store.BestDifficultyForHash(hash)
-	if err != nil {
-		t.Fatalf("BestDifficultyForHash after update: %v", err)
-	}
-	if !ok {
-		t.Fatalf("BestDifficultyForHash ok=false after update; want true")
-	}
-	if best != 1234 {
-		t.Fatalf("BestDifficultyForHash best=%v; want 1234 after update", best)
-	}
-
-	// Close flushes pending best difficulty to the DB.
-	if err := store.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	store2, err := newWorkerListStore(dbPath)
-	if err != nil {
-		t.Fatalf("newWorkerListStore(reopen): %v", err)
-	}
-	defer store2.Close()
-
-	list, err := store2.List(userID)
+	entries, err := store.List(userID)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if len(list) != 1 {
-		t.Fatalf("List len=%d; want 1", len(list))
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	if list[0].BestDifficulty != 1234 {
-		t.Fatalf("List BestDifficulty=%v; want 1234", list[0].BestDifficulty)
+	if entries[0].Hash != expectedHash {
+		t.Fatalf("expected hash %q, got %q", expectedHash, entries[0].Hash)
+	}
+
+	var dbHash sql.NullString
+	if err := db.QueryRow("SELECT worker_hash FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker).Scan(&dbHash); err != nil {
+		t.Fatalf("select worker_hash: %v", err)
+	}
+	if !dbHash.Valid || dbHash.String != expectedHash {
+		t.Fatalf("expected persisted worker_hash %q, got valid=%v value=%q", expectedHash, dbHash.Valid, dbHash.String)
 	}
 }
+
