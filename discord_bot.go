@@ -750,9 +750,23 @@ func (n *discordNotifier) noticePrefix() string {
 	if n == nil || n.s == nil {
 		return "[goPool] "
 	}
-	tag := displayPoolTagFromCoinbaseMessage(n.s.Config().CoinbaseMsg)
+	cfg := n.s.Config()
+
+	// Prefer the stable coinbase-based tag when available, but fall back to
+	// PoolTagPrefix so config reloads (which may omit CoinbaseMsg) still keep a
+	// distinct tag in Discord messages.
+	tag := displayPoolTagFromCoinbaseMessage(cfg.CoinbaseMsg)
 	if tag == "" {
-		tag = "/" + poolSoftwareName + "/"
+		brand := poolSoftwareName
+		if cfg.PoolTagPrefix != "" {
+			brand = cfg.PoolTagPrefix + "-" + brand
+		}
+		tag = "/" + brand + "/"
+	}
+	// For Discord notices, use a compact bracket tag without slashes.
+	tag = strings.Trim(tag, "/")
+	if tag == "" {
+		tag = poolSoftwareName
 	}
 	return "[" + tag + "] "
 }
