@@ -555,6 +555,78 @@ func (s *workerListStore) SetSavedWorkerNotifyEnabled(userID, workerHash string,
 	return err
 }
 
+// ListNotifiedUsersForWorker returns saved worker rows (paired with Clerk user
+// IDs) for a given worker name, limited to those with notify_enabled=1.
+//
+// This is used for user-facing notifications (e.g. Discord pings) when a given
+// worker triggers an event (like a found block).
+func (s *workerListStore) ListNotifiedUsersForWorker(worker string) ([]SavedWorkerRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	worker = strings.TrimSpace(worker)
+	if worker == "" {
+		return nil, nil
+	}
+	hash := workerNameHash(worker)
+
+	rows, err := s.db.Query(`
+		SELECT user_id, worker, COALESCE(worker_hash, '')
+		FROM saved_workers
+		WHERE notify_enabled = 1 AND (worker_hash = ? OR worker = ?)
+	`, strings.ToLower(strings.TrimSpace(hash)), worker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seen := make(map[string]struct{}, 8)
+	out := make([]SavedWorkerRecord, 0, 8)
+	for rows.Next() {
+		var (
+			userID string
+			name   string
+			h      string
+		)
+		if err := rows.Scan(&userID, &name, &h); err != nil {
+			return nil, err
+		}
+		userID = strings.TrimSpace(userID)
+		name = strings.TrimSpace(name)
+		h = strings.TrimSpace(h)
+		if userID == "" || name == "" {
+			continue
+		}
+		// Dedupe by (userID, worker) to avoid duplicates if both hash and name match.
+		key := userID + "\x00" + name
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		if h == "" {
+			h = workerNameHash(name)
+		} else {
+			h = strings.ToLower(h)
+		}
+		out = append(out, SavedWorkerRecord{
+			UserID: userID,
+			SavedWorkerEntry: SavedWorkerEntry{
+				Name:          name,
+				Hash:          h,
+				NotifyEnabled: true,
+			},
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 func (s *workerListStore) UpsertDiscordLink(userID, discordUserID string, enabled bool, now time.Time) error {
 	if s == nil || s.db == nil {
 		return nil

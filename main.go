@@ -650,7 +650,7 @@ func main() {
 				_ = conn.Close()
 				continue
 			}
-			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, workerRegistry, workerLists, label == "tls")
+			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, workerRegistry, workerLists, notifier, label == "tls")
 			registry.Add(mc)
 
 			connWg.Add(1)

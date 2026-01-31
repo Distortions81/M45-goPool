@@ -1277,6 +1277,8 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 	if dir == "" {
 		dir = defaultDataDir
 	}
+	workerName := mc.minerName(worker)
+	now := time.Now().UTC()
 	// Compute a simple view of the payout split used for this block. In
 	// dual-payout mode with a validated worker script, the coinbase uses a
 	// pool-fee + worker output; otherwise the entire reward is logically
@@ -1320,10 +1322,10 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 	}
 
 	rec := map[string]interface{}{
-		"timestamp":            time.Now().UTC(),
+		"timestamp":            now,
 		"height":               job.Template.Height,
 		"hash":                 hashHex,
-		"worker":               mc.minerName(worker),
+		"worker":               workerName,
 		"share_diff":           shareDiff,
 		"job_id":               job.JobID,
 		"payout_address":       mc.cfg.PayoutAddress,
@@ -1345,6 +1347,15 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 		// the submit path; this log is best-effort operator metadata.
 		logger.Warn("found block log queue full; dropping entry")
 	}
+
+	mc.notifyDiscordFoundBlock(workerName, job.Template.Height, hashHex, now)
+}
+
+func (mc *MinerConn) notifyDiscordFoundBlock(worker string, height int64, hashHex string, now time.Time) {
+	if mc == nil || mc.discordNotifier == nil {
+		return
+	}
+	mc.discordNotifier.NotifyFoundBlock(worker, height, hashHex, now)
 }
 
 // logPendingSubmission appends a JSON line describing a block that failed

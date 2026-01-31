@@ -384,7 +384,7 @@ func (n *discordNotifier) handleCommand(s *discordgo.Session, i *discordgo.Inter
 		if ch := strings.TrimSpace(n.notifyChannelID); ch != "" {
 			channelRef = fmt.Sprintf(" in <#%s>", ch)
 		}
-		_ = respondEphemeral(s, i, "Enabled. You’ll be pinged"+channelRef+" when a saved worker stays offline for over 2 minutes (and again when it’s back online for 2+ minutes). To turn this off, run `/notify-stop`.")
+		_ = respondEphemeral(s, i, "Enabled. You’ll be pinged"+channelRef+" when a saved worker stays offline for over 2 minutes (and again when it’s back online for 2+ minutes), and when a saved worker finds a block. To turn this off, run `/notify-stop`.")
 	case "notify-stop":
 		if n.s.workerLists != nil {
 			_ = n.s.workerLists.DisableDiscordLinkByDiscordUserID(i.Member.User.ID, time.Now())
@@ -560,6 +560,60 @@ func (n *discordNotifier) checkUser(link discordLink, now time.Time) {
 
 	line := strings.Join(parts, " | ")
 	n.enqueuePing(link.DiscordUserID, line)
+}
+
+// NotifyFoundBlock pings any subscribed Discord users who have this worker
+// saved with notifications enabled.
+func (n *discordNotifier) NotifyFoundBlock(worker string, height int64, hashHex string, now time.Time) {
+	if n == nil || n.s == nil || n.dg == nil || n.s.workerLists == nil {
+		return
+	}
+	if !n.enabled() {
+		return
+	}
+	if strings.TrimSpace(n.notifyChannelID) == "" {
+		return
+	}
+	worker = strings.TrimSpace(worker)
+	hashHex = strings.TrimSpace(hashHex)
+	if worker == "" || hashHex == "" || height <= 0 {
+		return
+	}
+
+	subscribers, err := n.s.workerLists.ListNotifiedUsersForWorker(worker)
+	if err != nil || len(subscribers) == 0 {
+		return
+	}
+
+	workerLabel := shortWorkerName(worker, workerNamePrefix, workerNameSuffix)
+	if workerLabel == "" {
+		workerLabel = worker
+	}
+	hashLabel := shortDisplayID(hashHex, hashPrefix, hashSuffix)
+	if hashLabel == "" {
+		hashLabel = hashHex
+	}
+
+	// Keep the message short; it's posted in a shared channel.
+	line := fmt.Sprintf("Block found: height %d by %s (hash %s)", height, workerLabel, hashLabel)
+	_ = now // reserved for future time-based de-dupe/persistence
+
+	seenDiscord := make(map[string]struct{}, 8)
+	for _, sub := range subscribers {
+		discordUserID, enabled, ok, err := n.s.workerLists.GetDiscordLink(sub.UserID)
+		if err != nil || !ok || !enabled {
+			continue
+		}
+		discordUserID = strings.TrimSpace(discordUserID)
+		if discordUserID == "" {
+			continue
+		}
+		if _, dup := seenDiscord[discordUserID]; dup {
+			continue
+		}
+		seenDiscord[discordUserID] = struct{}{}
+		n.enqueuePing(discordUserID, line)
+	}
 }
 
 func (n *discordNotifier) workerNotifyThreshold() time.Duration {

@@ -222,6 +222,7 @@ type MinerConn struct {
 	accounting           *AccountStore
 	workerRegistry       *workerConnectionRegistry
 	savedWorkerStore     *workerListStore
+	discordNotifier      *discordNotifier
 	savedWorkerTracked   bool
 	savedWorkerBestDiff  float64
 	registeredWorker     string
@@ -750,7 +751,7 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	return job.PayoutScript, script, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
 }
 
-func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, workerLists *workerListStore, isTLS bool) *MinerConn {
+func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCaller, cfg Config, metrics *PoolMetrics, accounting *AccountStore, workerRegistry *workerConnectionRegistry, workerLists *workerListStore, notifier *discordNotifier, isTLS bool) *MinerConn {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -820,6 +821,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		accounting:        accounting,
 		workerRegistry:    workerRegistry,
 		savedWorkerStore:  workerLists,
+		discordNotifier:   notifier,
 		activeJobs:        make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
 		connectedAt:       now,
 		lastActivity:      now,
