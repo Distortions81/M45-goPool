@@ -14,7 +14,7 @@
 			<noscript>
 				<div class="card">
 					<p class="text-sm" style="color:#f88d8d;margin:0;">
-						This page requires JavaScript to safely hash your wallet address before searching.
+						JavaScript is optional, but without it your wallet address will be sent in the URL.
 					</p>
 				</div>
 			</noscript>
@@ -28,7 +28,7 @@
 				<form method="get" action="/worker/search" id="walletSearchForm">
 					<label class="label" for="walletInput">Wallet address</label>
 					<div class="input-row">
-						<input class="input" type="text" id="walletInput" placeholder="bc1..." autocomplete="off" spellcheck="false" required>
+						<input class="input" type="text" id="walletInput" name="wallet" placeholder="bc1..." autocomplete="off" spellcheck="false" required>
 						<input type="hidden" name="hash" id="walletHash">
 						<button class="btn" type="submit">Search wallet</button>
 					</div>
@@ -89,34 +89,48 @@
 		</div>
 		{{template "footer" .}}
 	</main>
+	<script src="/sha256.js"></script>
 	<script>
-	// SHA256 implementation shared with login page
-	async function sha256Wallet(str) {
-		try {
-			const buffer = new TextEncoder().encode(str);
-			const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-			const hashArray = Array.from(new Uint8Array(hashBuffer));
-			return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-		} catch (error) {
-			console.error('SHA256 wallet error:', error);
-			alert('Error: Secure context (HTTPS) required for hashing. Please contact the pool administrator.');
-			throw error;
-		}
+	function isSHA256Hex(str) {
+		return /^[a-f0-9]{64}$/i.test((str || '').trim());
+	}
+
+	async function sha256Always(str) {
+		if (typeof window.sha256Hex !== 'function') return null;
+		try { return await window.sha256Hex(str); } catch (_) { return null; }
 	}
 
 	document.getElementById('walletSearchForm').addEventListener('submit', async function(e) {
 		e.preventDefault();
-		const walletInput = document.getElementById('walletInput').value.trim();
+		const walletEl = document.getElementById('walletInput');
+		const hashEl = document.getElementById('walletHash');
+		const walletInput = (walletEl?.value || '').trim();
 		if (!walletInput) {
-			alert('Please enter a wallet address');
+			alert('Please enter a wallet address or wallet hash');
 			return;
 		}
 		try {
-			const hash = await sha256Wallet(walletInput);
-			document.getElementById('walletHash').value = hash;
+			walletEl.setAttribute('name', 'wallet');
+			hashEl.value = '';
+
+			// If the user already pasted a SHA256, just submit it.
+			if (isSHA256Hex(walletInput)) {
+				hashEl.value = walletInput.toLowerCase();
+				walletEl.removeAttribute('name');
+				this.submit();
+				return;
+			}
+
+			// Hash client-side (works on HTTP via /sha256.js fallback); otherwise submit wallet and let server hash it.
+			const hash = await sha256Always(walletInput);
+			if (hash) {
+				hashEl.value = hash;
+				walletEl.removeAttribute('name');
+			}
 			this.submit();
-		} catch (error) {
-			console.error('Wallet search submission error:', error);
+		} catch (_) {
+			// Best-effort fallback: submit wallet value, server will hash.
+			this.submit();
 		}
 	});
 	</script>

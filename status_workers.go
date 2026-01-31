@@ -48,6 +48,57 @@ type walletLookupResult struct {
 	AlreadySaved bool
 }
 
+func parseSHA256HexStrict(value string) (hash string, errMsg string) {
+	hash = strings.ToLower(strings.TrimSpace(value))
+	if hash == "" {
+		return "", ""
+	}
+	if len(hash) != 64 {
+		return "", "Invalid hash format; expected 64 hex characters."
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return "", "Invalid hash value."
+	}
+	return hash, ""
+}
+
+// parseSHA256HexMaybe treats value as a hash only if it is 64 characters long.
+// Non-64-length inputs are treated as "not a hash" without error.
+func parseSHA256HexMaybe(value string) (hash string, errMsg string) {
+	hash = strings.ToLower(strings.TrimSpace(value))
+	if hash == "" {
+		return "", ""
+	}
+	if len(hash) != 64 {
+		return "", ""
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return "", "Invalid hash value."
+	}
+	return hash, ""
+}
+
+func parseOrDeriveSHA256(rawHash, rawValue string) (hash string, errMsg string) {
+	if strings.TrimSpace(rawHash) != "" {
+		return parseSHA256HexStrict(rawHash)
+	}
+
+	rawValue = strings.TrimSpace(rawValue)
+	if rawValue == "" {
+		return "", ""
+	}
+	if len(rawValue) > 1024 {
+		return "", "Input too long."
+	}
+
+	// Allow users to paste a pre-computed SHA256 in the "wallet"/"worker" field.
+	if hash, errMsg = parseSHA256HexMaybe(rawValue); errMsg != "" || hash != "" {
+		return hash, errMsg
+	}
+
+	return workerNameHash(rawValue), ""
+}
+
 func safeRedirectPath(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -191,15 +242,13 @@ func (s *StatusServer) handleWorkerWalletSearch(w http.ResponseWriter, r *http.R
 	}
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
-	hash := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("hash")))
+	hash, errMsg := parseOrDeriveSHA256(r.URL.Query().Get("hash"), r.URL.Query().Get("wallet"))
 	data.QueriedWalletHash = hash
 
-	if hash == "" {
-		data.Error = "Please provide a wallet hash to search."
-	} else if len(hash) != 64 {
-		data.Error = "Invalid hash format; expected 64 hex characters."
-	} else if _, err := hex.DecodeString(hash); err != nil {
-		data.Error = "Invalid hash value."
+	if errMsg != "" {
+		data.Error = errMsg
+	} else if hash == "" {
+		data.Error = "Please provide a wallet address or wallet hash to search."
 	} else if s.workerRegistry == nil {
 		data.Error = "Worker registry unavailable."
 	} else {
@@ -459,13 +508,11 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	walletLookupHash := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("hash")))
+	walletLookupHash, walletLookupErr := parseOrDeriveSHA256(r.URL.Query().Get("hash"), r.URL.Query().Get("wallet"))
 	data.WalletLookupHash = walletLookupHash
 	if walletLookupHash != "" {
-		if len(walletLookupHash) != 64 {
-			data.WalletLookupError = "Invalid hash format; expected 64 hex characters."
-		} else if _, err := hex.DecodeString(walletLookupHash); err != nil {
-			data.WalletLookupError = "Invalid hash value."
+		if walletLookupErr != "" {
+			data.WalletLookupError = walletLookupErr
 		} else {
 			results, errMsg := s.lookupWorkerViewsByWalletHash(walletLookupHash, now)
 			if errMsg != "" {
@@ -1119,6 +1166,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	s.enrichStatusDataWithClerk(r, &data.StatusData)
 
 	var workerHash string
+	var workerValue string
 	switch r.Method {
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
@@ -1126,8 +1174,17 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			break
 		}
 		workerHash = strings.TrimSpace(r.FormValue("hash"))
+		workerValue = strings.TrimSpace(r.FormValue("worker"))
 	case http.MethodGet:
 		workerHash = strings.TrimSpace(r.URL.Query().Get("hash"))
+		workerValue = strings.TrimSpace(r.URL.Query().Get("worker"))
+	}
+	if workerHash == "" && workerValue != "" {
+		if derived, errMsg := parseOrDeriveSHA256("", workerValue); errMsg != "" {
+			data.Error = strings.ToLower(errMsg)
+		} else {
+			workerHash = derived
+		}
 	}
 
 	now := time.Now()
@@ -1138,8 +1195,11 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 	if workerHash != "" {
 		// Validate hash format (64 hex characters for SHA256)
+		workerHash = strings.TrimSpace(strings.ToLower(workerHash))
 		if len(workerHash) != 64 {
 			data.Error = "invalid hash format (expected 64 hex characters)"
+		} else if _, err := hex.DecodeString(workerHash); err != nil {
+			data.Error = "invalid hash value"
 		} else {
 			data.QueriedWorker = workerHash
 			data.QueriedWorkerHash = workerHash

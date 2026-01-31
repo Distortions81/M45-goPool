@@ -254,7 +254,7 @@
 				<form method="get" action="/saved-workers" id="walletLookupForm" style="margin-top:12px;">
 					<div class="label">Wallet address</div>
 					<div class="input-row">
-						<input class="input" type="text" id="walletLookupInput" placeholder="bc1..." autocomplete="off">
+						<input class="input" type="text" id="walletLookupInput" name="wallet" placeholder="bc1..." autocomplete="off">
 						<input type="hidden" name="hash" id="walletLookupHash" value="{{.WalletLookupHash}}">
 						<button class="btn" type="submit">Search wallet</button>
 					</div>
@@ -413,6 +413,7 @@
 	{{end}}
 	{{if .ClerkUser}}
 	{{template "hashrate_graph_script" .}}
+	<script src="/sha256.js"></script>
 	<script>
 	(function() {
 		let hideWorkerNames = true;
@@ -497,17 +498,13 @@
 		const walletLookupHashInput = document.getElementById('walletLookupHash');
 		const walletLookupAddAllButton = document.getElementById('walletLookupAddAll');
 
-		async function sha256Wallet(str) {
-			try {
-				const buffer = new TextEncoder().encode(str);
-				const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-				const hashArray = Array.from(new Uint8Array(hashBuffer));
-				return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-			} catch (error) {
-				console.error('SHA256 wallet error:', error);
-				alert('Error: Secure context (HTTPS) required for hashing. Please contact the pool administrator.');
-				throw error;
-			}
+		function isSHA256Hex(str) {
+			return /^[a-f0-9]{64}$/i.test((str || '').trim());
+		}
+
+		async function sha256Always(str) {
+			if (typeof window.sha256Hex !== 'function') return null;
+			try { return await window.sha256Hex(str); } catch (_) { return null; }
 		}
 
 		if (walletLookupForm) {
@@ -515,17 +512,31 @@
 				event.preventDefault();
 				const walletAddress = (walletLookupInput?.value || '').trim();
 				if (!walletAddress) {
-					alert('Please enter a wallet address');
+					alert('Please enter a wallet address or wallet hash');
 					return;
 				}
 				try {
-					const hash = await sha256Wallet(walletAddress);
+					walletLookupInput.setAttribute('name', 'wallet');
 					if (walletLookupHashInput) {
+						walletLookupHashInput.value = '';
+					}
+
+					if (walletLookupHashInput && isSHA256Hex(walletAddress)) {
+						walletLookupHashInput.value = walletAddress.toLowerCase();
+						walletLookupInput.removeAttribute('name');
+						this.submit();
+						return;
+					}
+
+					const hash = await sha256Always(walletAddress);
+					if (walletLookupHashInput && hash) {
 						walletLookupHashInput.value = hash;
+						walletLookupInput.removeAttribute('name');
 					}
 					this.submit();
 				} catch (error) {
 					console.error('Wallet lookup submit error:', error);
+					this.submit();
 				}
 			});
 		}
