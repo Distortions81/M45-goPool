@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -56,10 +57,10 @@ func TestBackups_WriteStampAndLocalSnapshot_DefaultPath(t *testing.T) {
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
-	svc.run(context.Background())
+	svc.RunOnce(context.Background(), "test", true)
 
 	// Use the shared DB that was set up earlier
-	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
+	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
 	if err != nil {
 		t.Fatalf("read sqlite stamp: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
-	svc.run(context.Background())
+	svc.RunOnce(context.Background(), "test", true)
 
 	wantSnapshot := filepath.Join(cfg.DataDir, "snapshots", "workers.snapshot.db")
 	if svc.snapshotPath != wantSnapshot {
@@ -113,7 +114,7 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 		t.Fatalf("snapshot file missing: %v", err)
 	}
 	// Use the shared DB that was set up earlier
-	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDB)
+	ts, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
 	if err != nil {
 		t.Fatalf("read sqlite stamp: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testin
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
-	svc.run(context.Background())
+	svc.RunOnce(context.Background(), "test", true)
 
 	wantSnapshot := filepath.Join(cfg.DataDir, "state", "workers.db.bak")
 	if svc.snapshotPath != wantSnapshot {
@@ -161,6 +162,112 @@ func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testin
 	}
 	if _, err := os.Stat(wantSnapshot); err != nil {
 		t.Fatalf("snapshot file missing: %v", err)
+	}
+}
+
+func TestBackups_RunOnInterval_EvenWhenDBUnchanged(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := defaultConfig()
+	cfg.DataDir = tmp
+	cfg.BackblazeBackupEnabled = false
+	cfg.BackblazeKeepLocalCopy = true
+	cfg.BackblazeForceEveryInterval = true
+	cfg.BackupSnapshotPath = ""
+	cfg.BackblazeBackupIntervalSeconds = 1
+
+	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	createTestWorkerDB(t, dbPath)
+
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if svc == nil {
+		t.Fatalf("expected service")
+	}
+
+	// First backup.
+	svc.RunOnce(context.Background(), "test", true)
+	ts1, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if ts1.IsZero() {
+		t.Fatalf("expected non-zero sqlite stamp time")
+	}
+
+	// Second backup with no DB writes. Ensure the stamp advances even if the DB
+	// is unchanged (interval-driven backups).
+	time.Sleep(1100 * time.Millisecond)
+	svc.RunOnce(context.Background(), "test", true)
+	ts2, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if !ts2.After(ts1) {
+		t.Fatalf("expected stamp to advance: ts1=%v ts2=%v", ts1, ts2)
+	}
+}
+
+func TestBackups_DefaultSkipsWhenDBUnchanged(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := defaultConfig()
+	cfg.DataDir = tmp
+	cfg.BackblazeBackupEnabled = false
+	cfg.BackblazeKeepLocalCopy = true
+	cfg.BackblazeForceEveryInterval = false
+	cfg.BackupSnapshotPath = ""
+	cfg.BackblazeBackupIntervalSeconds = 1
+
+	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	createTestWorkerDB(t, dbPath)
+
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if svc == nil {
+		t.Fatalf("expected service")
+	}
+
+	// First backup.
+	svc.RunOnce(context.Background(), "test", true)
+	ts1, dv1, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if ts1.IsZero() || dv1 == 0 {
+		t.Fatalf("expected non-zero stamp and data_version, got ts=%v dv=%d", ts1, dv1)
+	}
+
+	// Second run after interval with no DB writes should be skipped.
+	time.Sleep(1100 * time.Millisecond)
+	svc.RunOnce(context.Background(), "test", false)
+	ts2, dv2, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if !ts2.Equal(ts1) {
+		t.Fatalf("expected stamp unchanged when DB unchanged: ts1=%v ts2=%v", ts1, ts2)
+	}
+	if dv2 != dv1 {
+		t.Fatalf("expected data_version unchanged when DB unchanged: dv1=%d dv2=%d", dv1, dv2)
 	}
 }
 

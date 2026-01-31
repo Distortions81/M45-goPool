@@ -26,7 +26,10 @@ rpc_pass = "password"
 # clerk_publishable_key = "pk_test_..."
 
 # Backblaze B2 credentials for database backups (optional).
-# backblaze_account_id = "B1234567890XXXXXXXX"
+# Note: Backblaze requires a "key ID" + "application key" pair.
+# - If using an Application Key you created in B2, use its Key ID here.
+# - If using the master key, the Key ID is your Account ID.
+# backblaze_account_id = "003xxxxxxxxxxxxxxxxxxxx"
 # backblaze_application_key = "KXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 `)
 
@@ -106,6 +109,7 @@ type Config struct {
 	BackblazePrefix                string
 	BackblazeBackupIntervalSeconds int
 	BackblazeKeepLocalCopy         bool
+	BackblazeForceEveryInterval    bool // when true, run backups every interval even if DB unchanged
 	BackupSnapshotPath             string // defaults to data/state/workers.db.bak
 
 	DataDir  string
@@ -203,6 +207,7 @@ type EffectiveConfig struct {
 	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
 	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
 	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
+	BackblazeForceEveryInterval       bool    `json:"backblaze_force_every_interval,omitempty"`
 	BackupSnapshotPath                string  `json:"backup_snapshot_path,omitempty"`
 	MaxConns                          int     `json:"max_conns,omitempty"`
 	MaxAcceptsPerSecond               int     `json:"max_accepts_per_second,omitempty"`
@@ -306,6 +311,7 @@ type backblazeBackupConfig struct {
 	Prefix          string `toml:"prefix"`
 	IntervalSeconds *int   `toml:"interval_seconds"`
 	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
+	ForceEveryInterval *bool `toml:"force_every_interval"`
 	SnapshotPath    string `toml:"snapshot_path"`
 }
 
@@ -508,6 +514,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			Prefix:          cfg.BackblazePrefix,
 			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
 			KeepLocalCopy:   boolPtr(cfg.BackblazeKeepLocalCopy),
+			ForceEveryInterval: boolPtr(cfg.BackblazeForceEveryInterval),
 			SnapshotPath:    cfg.BackupSnapshotPath,
 		},
 		Logging: loggingConfig{
@@ -854,6 +861,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	}
 	if fc.Backblaze.KeepLocalCopy != nil {
 		cfg.BackblazeKeepLocalCopy = *fc.Backblaze.KeepLocalCopy
+	}
+	if fc.Backblaze.ForceEveryInterval != nil {
+		cfg.BackblazeForceEveryInterval = *fc.Backblaze.ForceEveryInterval
 	}
 	if strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
 		cfg.BackupSnapshotPath = strings.TrimSpace(fc.Backblaze.SnapshotPath)
@@ -1286,6 +1296,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazePrefix:                   cfg.BackblazePrefix,
 		BackblazeBackupInterval:           backblazeInterval,
 		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
+		BackblazeForceEveryInterval:       cfg.BackblazeForceEveryInterval,
 		BackupSnapshotPath:                cfg.BackupSnapshotPath,
 		MaxConns:                          cfg.MaxConns,
 		MaxAcceptsPerSecond:               cfg.MaxAcceptsPerSecond,
