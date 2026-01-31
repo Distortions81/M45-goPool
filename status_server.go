@@ -440,6 +440,9 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 			APIVersion:      apiVersion,
 			Uptime:          view.Uptime,
 			RPCError:        view.RPCError,
+			RPCHealthy:      view.RPCHealthy,
+			RPCDisconnects:  view.RPCDisconnects,
+			RPCReconnects:   view.RPCReconnects,
 			AccountingError: view.AccountingError,
 			JobFeed: ServerPageJobFeed{
 				LastError:         view.JobFeed.LastError,

@@ -663,6 +663,9 @@ type StatusData struct {
 	WindowSubmissions               uint64                `json:"window_submissions"`
 	WindowStart                     string                `json:"window_start"`
 	RPCError                        string                `json:"rpc_error,omitempty"`
+	RPCHealthy                      bool                  `json:"rpc_healthy"`
+	RPCDisconnects                  uint64                `json:"rpc_disconnects"`
+	RPCReconnects                   uint64                `json:"rpc_reconnects"`
 	AccountingError                 string                `json:"accounting_error,omitempty"`
 	JobFeed                         JobFeedView           `json:"job_feed"`
 	BestShares                      []BestShare           `json:"best_shares"`
@@ -803,6 +806,9 @@ type ServerPageData struct {
 	APIVersion          string            `json:"api_version"`
 	Uptime              time.Duration     `json:"uptime"`
 	RPCError            string            `json:"rpc_error,omitempty"`
+	RPCHealthy          bool              `json:"rpc_healthy"`
+	RPCDisconnects      uint64            `json:"rpc_disconnects"`
+	RPCReconnects       uint64            `json:"rpc_reconnects"`
 	AccountingError     string            `json:"accounting_error,omitempty"`
 	JobFeed             ServerPageJobFeed `json:"job_feed"`
 	ProcessGoroutines   int               `json:"process_goroutines"`

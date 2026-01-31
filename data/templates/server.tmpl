@@ -26,6 +26,7 @@
 				<div>
 					<div class="label">Bitcoin RPC</div>
 					<div class="mono" id="server-rpc-status">--</div>
+					<div class="text-sm" id="server-rpc-counts">disconnects: --, reconnects: --</div>
 				</div>
 				<div>
 					<div class="label">Accounting</div>
@@ -117,6 +118,7 @@
 
 		const uptimeEl = document.getElementById('server-uptime');
 		const rpcStatusEl = document.getElementById('server-rpc-status');
+		const rpcCountsEl = document.getElementById('server-rpc-counts');
 		const accountingEl = document.getElementById('server-accounting-status');
 		const jobFeedEl = document.getElementById('server-job-feed-error');
 		const zmqStatusEl = document.getElementById('server-zmq-status');
@@ -189,7 +191,12 @@
 				uptimeEl.textContent = formatDuration(data.uptime);
 			}
 			if (rpcStatusEl) {
-				rpcStatusEl.textContent = data.rpc_error ? 'Not connected' : 'OK';
+				rpcStatusEl.textContent = data.rpc_healthy ? 'OK' : (data.rpc_error ? 'Offline' : 'Offline');
+			}
+			if (rpcCountsEl) {
+				const disconnects = data.rpc_disconnects ?? 0;
+				const reconnects = data.rpc_reconnects ?? 0;
+				rpcCountsEl.textContent = `disconnects: ${disconnects}, reconnects: ${reconnects}`;
 			}
 			if (accountingEl) {
 				accountingEl.textContent = data.accounting_error ? `Error: ${data.accounting_error}` : 'OK';

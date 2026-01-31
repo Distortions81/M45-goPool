@@ -278,10 +278,16 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 
 	var rpcErr, acctErr string
+	var rpcHealthy bool
+	var rpcDisconnects uint64
+	var rpcReconnects uint64
 	if s.rpc != nil {
 		if err := s.rpc.LastError(); err != nil {
 			rpcErr = err.Error()
 		}
+		rpcHealthy = s.rpc.Healthy()
+		rpcDisconnects = s.rpc.Disconnects()
+		rpcReconnects = s.rpc.Reconnects()
 	}
 	var nodeNetwork string
 	var nodeSubversion string
@@ -564,6 +570,9 @@ func (s *StatusServer) buildStatusData() StatusData {
 		WindowSubmissions:              windowSubmissions,
 		WindowStart:                    windowStartStr,
 		RPCError:                       rpcErr,
+		RPCHealthy:                     rpcHealthy,
+		RPCDisconnects:                 rpcDisconnects,
+		RPCReconnects:                  rpcReconnects,
 		AccountingError:                acctErr,
 		JobFeed:                        jobFeed,
 		BestShares:                     bestShares,

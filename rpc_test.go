@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -146,4 +147,99 @@ func TestRPCErrorPropagatesAndLabelsMetrics(t *testing.T) {
 
 	// With Prometheus removed, we only assert that the calls still
 	// propagate rpcError and do not panic when recording metrics.
+}
+
+func TestRPCClientIgnoresDisconnectNodeNotFoundHTTP500(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(rpcResponse{
+			Error: &rpcError{Code: -29, Message: "Node not found in connected nodes"},
+			ID:    req.ID,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	metrics := NewPoolMetrics()
+	client := &RPCClient{
+		url:     srv.URL,
+		client:  srv.Client(),
+		lp:      srv.Client(),
+		metrics: metrics,
+	}
+
+	if err := client.call("disconnectnode", []interface{}{"180.181.249.116:20630"}, nil); err != nil {
+		t.Fatalf("expected disconnectnode -29 to be ignored, got: %v", err)
+	}
+
+	_, _, _, _, _, _, _, _, _, _, rpcErrors, _ := metrics.SnapshotDiagnostics()
+	if rpcErrors != 0 {
+		t.Fatalf("expected rpcErrors=0, got %d", rpcErrors)
+	}
+}
+
+func TestRPCClientIgnoresDisconnectNodeNotFoundHTTP200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewEncoder(w).Encode(rpcResponse{
+			Error: &rpcError{Code: -29, Message: "Node not found in connected nodes"},
+			ID:    req.ID,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	metrics := NewPoolMetrics()
+	client := &RPCClient{
+		url:     srv.URL,
+		client:  srv.Client(),
+		lp:      srv.Client(),
+		metrics: metrics,
+	}
+
+	if err := client.call("disconnectnode", []interface{}{"180.181.249.116:20630"}, nil); err != nil {
+		t.Fatalf("expected disconnectnode -29 to be ignored, got: %v", err)
+	}
+
+	_, _, _, _, _, _, _, _, _, _, rpcErrors, _ := metrics.SnapshotDiagnostics()
+	if rpcErrors != 0 {
+		t.Fatalf("expected rpcErrors=0, got %d", rpcErrors)
+	}
+}
+
+func TestRPCClientTracksDisconnectsAndReconnects(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(rpcResponse{
+			Result: json.RawMessage("null"),
+			ID:     req.ID,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := &RPCClient{
+		url:    srv.URL,
+		client: srv.Client(),
+		lp:     srv.Client(),
+	}
+
+	if err := client.call("getblockchaininfo", nil, nil); err != nil {
+		t.Fatalf("expected call to succeed after retry, got: %v", err)
+	}
+	if got := client.Disconnects(); got != 1 {
+		t.Fatalf("expected disconnects=1, got %d", got)
+	}
+	if got := client.Reconnects(); got != 1 {
+		t.Fatalf("expected reconnects=1, got %d", got)
+	}
+	if !client.Healthy() {
+		t.Fatalf("expected client to be healthy after retry")
+	}
 }

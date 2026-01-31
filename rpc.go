@@ -67,6 +67,8 @@ type RPCClient struct {
 	metrics   *PoolMetrics
 	connected atomic.Bool
 	unhealthy atomic.Bool
+	disconnects atomic.Uint64
+	reconnects  atomic.Uint64
 
 	authMu        sync.RWMutex
 	cookiePath    string
@@ -184,12 +186,15 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 		}
 		err := c.performCall(ctx, client, method, params, out)
 		if err == nil {
-			if c.unhealthy.Swap(false) && c.metrics != nil {
-				verb := "reconnected"
-				if !c.connected.Load() {
-					verb = "connected"
+			if c.unhealthy.Swap(false) {
+				c.reconnects.Add(1)
+				if c.metrics != nil {
+					verb := "reconnected"
+					if !c.connected.Load() {
+						verb = "connected"
+					}
+					c.metrics.RecordErrorEvent("rpc", verb+" to "+c.endpointLabel(), time.Now())
 				}
-				c.metrics.RecordErrorEvent("rpc", verb+" to "+c.endpointLabel(), time.Now())
 			}
 			c.connected.Store(true)
 			c.recordRPCCallSuccess()
@@ -200,7 +205,12 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 			c.metrics.RecordRPCError(err)
 		}
 		if isRPCConnectivityError(err) {
-			c.unhealthy.Store(true)
+			if !c.unhealthy.Swap(true) {
+				c.disconnects.Add(1)
+				if c.metrics != nil {
+					c.metrics.RecordErrorEvent("rpc", "disconnected from "+c.endpointLabel(), time.Now())
+				}
+			}
 		}
 		if c.shouldRetry(err) {
 			c.reloadCookieIfChanged()
@@ -235,6 +245,27 @@ func (c *RPCClient) endpointLabel() string {
 
 func (c *RPCClient) EndpointLabel() string {
 	return c.endpointLabel()
+}
+
+func (c *RPCClient) Healthy() bool {
+	if c == nil {
+		return false
+	}
+	return c.connected.Load() && !c.unhealthy.Load()
+}
+
+func (c *RPCClient) Disconnects() uint64 {
+	if c == nil {
+		return 0
+	}
+	return c.disconnects.Load()
+}
+
+func (c *RPCClient) Reconnects() uint64 {
+	if c == nil {
+		return 0
+	}
+	return c.reconnects.Load()
 }
 
 func isRPCConnectivityError(err error) bool {
@@ -308,6 +339,9 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 		// Surface the RPC error (e.g. -32601 method not found) instead of losing it behind the HTTP status.
 		var rpcResp rpcResponse
 		if err := fastJSONUnmarshal(data, &rpcResp); err == nil && rpcResp.Error != nil {
+			if shouldIgnoreRPCError(method, rpcResp.Error) {
+				return nil
+			}
 			return rpcResp.Error
 		}
 		errBody := string(bytes.TrimSpace(data))
@@ -323,6 +357,9 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 		return fmt.Errorf("decode rpc response: %w", err)
 	}
 	if rpcResp.Error != nil {
+		if shouldIgnoreRPCError(method, rpcResp.Error) {
+			return nil
+		}
 		return rpcResp.Error
 	}
 
@@ -339,6 +376,16 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 		return nil
 	}
 	return fastJSONUnmarshal(rpcResp.Result, out)
+}
+
+func shouldIgnoreRPCError(method string, err *rpcError) bool {
+	if err == nil {
+		return false
+	}
+	// disconnectnode returns code -29 when the peer is already disconnected:
+	// "Node not found in connected nodes". Treat it as success so peer cleanup
+	// doesn't spam warnings or inflate RPC error counts.
+	return method == "disconnectnode" && err.Code == -29
 }
 
 func (c *RPCClient) recordRPCCallSuccess() {
