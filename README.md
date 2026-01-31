@@ -46,6 +46,7 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
 ## Documentation & resources
 
 - **`guide/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
+- **`guide/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
 - **`guide/performance.md`** – Capacity planning, benchmark data, and CPU/network ballparks.
 - **`guide/TESTING.md`** – Test suite instructions and how to add or run existing tests.
 - **`guide/RELEASES.md`** – Release package contents, verification, and upgrade steps.
