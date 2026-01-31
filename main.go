@@ -49,6 +49,7 @@ func main() {
 	disableJSONFlag := flag.Bool("no-json", false, "disable JSON API")
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
 	logLevelFlag := flag.String("log-level", "", "override log level (debug/info/warn/error)")
+	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
 	flag.Parse()
 
 	network := strings.ToLower(*networkFlag)
@@ -256,9 +257,35 @@ func main() {
 		logger.Warn("initialize backblaze backup service", "error", err)
 	} else if svc != nil {
 		if cfg.BackblazeBackupEnabled {
-			logger.Info("backblaze database backups enabled", "bucket", cfg.BackblazeBucket, "interval", svc.interval.String(), "snapshot_path", svc.snapshotPath)
+			if svc.bucket == nil {
+				logger.Warn("backblaze backups enabled but bucket is not reachable; using local snapshots only",
+					"bucket", cfg.BackblazeBucket,
+					"interval", svc.interval.String(),
+					"force_every_interval", cfg.BackblazeForceEveryInterval,
+					"snapshot_path", svc.snapshotPath,
+				)
+			} else {
+				logger.Info("backblaze database backups enabled",
+					"bucket", cfg.BackblazeBucket,
+					"interval", svc.interval.String(),
+					"force_every_interval", cfg.BackblazeForceEveryInterval,
+					"snapshot_path", svc.snapshotPath,
+				)
+			}
 		} else {
-			logger.Info("local database backups enabled", "interval", svc.interval.String(), "snapshot_path", svc.snapshotPath)
+			logger.Info("local database backups enabled",
+				"interval", svc.interval.String(),
+				"force_every_interval", cfg.BackblazeForceEveryInterval,
+				"snapshot_path", svc.snapshotPath,
+			)
+		}
+		if *backupOnBootFlag {
+			logger.Info("backup-on-boot enabled; forcing one backup now")
+			go func() {
+				runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+				defer cancel()
+				svc.RunOnce(runCtx, "boot_flag", true)
+			}()
 		}
 		svc.start(ctx)
 	}

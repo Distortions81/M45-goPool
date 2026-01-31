@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Backblaze/blazer/b2"
@@ -29,15 +30,33 @@ type backblazeBackupService struct {
 	b2BucketName  string
 	b2AccountID   string
 	b2AppKey      string
+	forceInterval bool
 
-	lastBackup      time.Time
-	lastDataVersion int64
+	runMu sync.Mutex
+
+	lastAttemptAt time.Time
+
+	lastSnapshotAt      time.Time
+	lastSnapshotVersion int64
+
+	lastUploadAt      time.Time
+	lastUploadVersion int64
 	snapshotPath    string
+
+	lastB2InitLogAt time.Time
+	lastB2InitMsg   string
+
+	lastSkipLogAt time.Time
+	lastSkipMsg   string
 }
 
 const lastBackupStampFilename = "last_backup"
 const backupLocalCopySuffix = ".bak"
-const backupStateKeyWorkerDB = "worker_db"
+const (
+	backupStateKeyWorkerDBSnapshot = "worker_db"
+	backupStateKeyWorkerDBUpload   = "worker_db_upload"
+	backupStateKeyWorkerDBAttempt  = "worker_db_attempt"
+)
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
 	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy && strings.TrimSpace(cfg.BackupSnapshotPath) == "" {
@@ -64,9 +83,21 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		return nil, fmt.Errorf("shared state db not initialized")
 	}
 
-	lastBackup, lastDataVersion, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDB)
+	lastSnapshotAt, lastSnapshotVersion, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDBSnapshot)
 	if err != nil {
 		logger.Warn("read last backup stamp from sqlite failed (ignored)", "error", err)
+	}
+	lastUploadAt, lastUploadVersion, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDBUpload)
+	if err != nil {
+		logger.Warn("read last upload stamp from sqlite failed (ignored)", "error", err)
+	}
+	lastAttemptAt, _, err := readLastBackupStampFromDB(stateDB, backupStateKeyWorkerDBAttempt)
+	if err != nil {
+		logger.Warn("read last attempt stamp from sqlite failed (ignored)", "error", err)
+	}
+	if lastAttemptAt.IsZero() {
+		// Backward compatibility: older versions only tracked the last snapshot.
+		lastAttemptAt = lastSnapshotAt
 	}
 
 	snapshotPath := strings.TrimSpace(cfg.BackupSnapshotPath)
@@ -85,8 +116,12 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		b2BucketName:    strings.TrimSpace(cfg.BackblazeBucket),
 		b2AccountID:     strings.TrimSpace(cfg.BackblazeAccountID),
 		b2AppKey:        strings.TrimSpace(cfg.BackblazeApplicationKey),
-		lastBackup:      lastBackup,
-		lastDataVersion: lastDataVersion,
+		forceInterval:   cfg.BackblazeForceEveryInterval,
+		lastAttemptAt:         lastAttemptAt,
+		lastSnapshotAt:        lastSnapshotAt,
+		lastSnapshotVersion:   lastSnapshotVersion,
+		lastUploadAt:          lastUploadAt,
+		lastUploadVersion:     lastUploadVersion,
 		snapshotPath:    snapshotPath,
 	}
 	svc.bucket = svc.tryInitBucket(ctx)
@@ -102,27 +137,61 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	return svc, nil
 }
 
+func (s *backblazeBackupService) warnB2InitThrottled(msg string, attrs ...any) {
+	if s == nil {
+		return
+	}
+	msg = strings.TrimSpace(msg)
+	now := time.Now()
+	const throttle = 10 * time.Minute
+	if msg != "" && msg == s.lastB2InitMsg && !s.lastB2InitLogAt.IsZero() && now.Sub(s.lastB2InitLogAt) < throttle {
+		return
+	}
+	s.lastB2InitMsg = msg
+	s.lastB2InitLogAt = now
+	logger.Warn(msg, attrs...)
+}
+
+func (s *backblazeBackupService) infoSkipThrottled(msg string, attrs ...any) {
+	if s == nil {
+		return
+	}
+	msg = strings.TrimSpace(msg)
+	now := time.Now()
+	const throttle = 10 * time.Minute
+	if msg != "" && msg == s.lastSkipMsg && !s.lastSkipLogAt.IsZero() && now.Sub(s.lastSkipLogAt) < throttle {
+		return
+	}
+	s.lastSkipMsg = msg
+	s.lastSkipLogAt = now
+	logger.Info(msg, attrs...)
+}
+
 func (s *backblazeBackupService) tryInitBucket(ctx context.Context) *b2.Bucket {
 	if !s.b2Enabled {
 		return nil
 	}
 	if s.b2AccountID == "" || s.b2AppKey == "" || s.b2BucketName == "" {
-		logger.Warn("backblaze credentials incomplete, falling back to local-only backups")
+		s.warnB2InitThrottled("backblaze B2 not configured (missing credentials or bucket); falling back to local-only backups",
+			"bucket", s.b2BucketName,
+			"missing_account_id", s.b2AccountID == "",
+			"missing_application_key", s.b2AppKey == "",
+		)
 		return nil
 	}
 
 	client, err := b2.NewClient(ctx, s.b2AccountID, s.b2AppKey)
 	if err != nil {
-		logger.Warn("create backblaze client failed, falling back to local-only backups", "error", err)
+		s.warnB2InitThrottled("create backblaze client failed, falling back to local-only backups", "error", err)
 		return nil
 	}
 	bucket, err := client.Bucket(ctx, s.b2BucketName)
 	if err != nil {
-		logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+		s.warnB2InitThrottled("access backblaze bucket failed, falling back to local-only backups", "error", err)
 		return nil
 	}
 	if _, err := bucket.Attrs(ctx); err != nil {
-		logger.Warn("access backblaze bucket failed, falling back to local-only backups", "error", err)
+		s.warnB2InitThrottled("access backblaze bucket failed, falling back to local-only backups", "error", err)
 		return nil
 	}
 	return bucket
@@ -132,20 +201,36 @@ func (s *backblazeBackupService) start(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	go func() {
 		defer ticker.Stop()
-		s.run(ctx)
+		s.RunOnce(ctx, "startup", false)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.run(ctx)
+				s.RunOnce(ctx, "interval", false)
 			}
 		}
 	}()
 }
 
-func (s *backblazeBackupService) run(ctx context.Context) {
+func (s *backblazeBackupService) RunOnce(ctx context.Context, reason string, force bool) {
+	if s == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "unspecified"
+	}
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	s.runLocked(ctx, reason, force)
+}
+
+func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, force bool) {
 	if ctx.Err() != nil {
+		if logger.Enabled(logLevelDebug) {
+			logger.Debug("backblaze backup skipped (context canceled)", "reason", reason, "force", force)
+		}
 		return
 	}
 
@@ -158,64 +243,134 @@ func (s *backblazeBackupService) run(ctx context.Context) {
 	}
 
 	now := time.Now()
-	if !s.lastBackup.IsZero() && now.Sub(s.lastBackup) < s.interval {
+	if !force && !s.lastAttemptAt.IsZero() && now.Sub(s.lastAttemptAt) < s.interval {
+		wait := s.interval - now.Sub(s.lastAttemptAt)
+		if wait < 0 {
+			wait = 0
+		}
+		if logger.Enabled(logLevelDebug) {
+			logger.Debug("backblaze backup skipped (interval not elapsed)",
+				"reason", reason,
+				"since_last", now.Sub(s.lastAttemptAt).Truncate(time.Second).String(),
+				"interval", s.interval.String(),
+				"next_in", wait.Truncate(time.Second).String(),
+			)
+		}
 		return
-	}
-	if !s.lastBackup.IsZero() {
-		if s.lastDataVersion == 0 {
-			logger.Info("backblaze backup missing data_version stamp, forcing one backup to initialize change tracking")
-		}
-		if dv, err := workerDBDataVersion(ctx, s.dbPath); err == nil {
-			if dv == s.lastDataVersion {
-				return
-			}
-		} else {
-			logger.Warn("backblaze backup change check failed, proceeding", "error", err)
-		}
 	}
 
-	snapshot, dataVersion, err := snapshotWorkerDB(ctx, s.dbPath)
-	if err != nil {
-		logger.Warn("backblaze backup snapshot failed", "error", err)
+	// Always fetch the current data_version to drive "dirty since last snapshot".
+	dataVersion, dvErr := workerDBDataVersion(ctx, s.dbPath)
+	if dvErr != nil {
+		logger.Warn("backblaze backup data_version check failed, proceeding", "error", dvErr, "reason", reason, "force", force)
+	}
+
+	dbDirty := dvErr != nil || s.lastSnapshotVersion == 0 || dataVersion != s.lastSnapshotVersion
+	retryUpload := s.b2Enabled && s.bucket != nil && s.lastSnapshotVersion > 0 && s.lastUploadVersion != s.lastSnapshotVersion
+
+	// When force_every_interval is off, skip unless the DB is dirty OR we have an upload backlog.
+	if !force && !s.forceInterval && !dbDirty && !retryUpload {
+		s.infoSkipThrottled("backblaze backup skipped (database unchanged)",
+			"reason", reason,
+			"data_version", dataVersion,
+			"last_snapshot_version", s.lastSnapshotVersion,
+			"last_upload_version", s.lastUploadVersion,
+			"force_every_interval", false,
+		)
+		s.lastAttemptAt = now
+		_ = writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDBAttempt, now, 0)
 		return
 	}
-	defer os.Remove(snapshot)
+
+	start := time.Now()
+	s.lastAttemptAt = now
+	_ = writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDBAttempt, now, 0)
 
 	localWritten := false
-	if strings.TrimSpace(s.snapshotPath) != "" {
-		if err := atomicCopyFile(snapshot, s.snapshotPath, 0o644); err != nil {
-			logger.Warn("write local database backup snapshot failed", "error", err, "path", s.snapshotPath)
-		} else {
-			localWritten = true
+	snapshotBytes := int64(0)
+	var snapshotPath string
+	snapshotTaken := false
+
+	// Snapshot only when the DB is dirty, force is set, force_every_interval is on,
+	// or we need an upload retry but the local snapshot file is missing.
+	needSnapshot := force || s.forceInterval || dbDirty
+	if !needSnapshot && retryUpload {
+		if strings.TrimSpace(s.snapshotPath) == "" {
+			needSnapshot = true
+		} else if _, err := os.Stat(s.snapshotPath); err != nil {
+			needSnapshot = true
 		}
 	}
 
-	// Record that we've produced a snapshot so quick restarts don't trigger
-	// another full copy immediately. If the upload fails, we persist a 0
-	// data_version so we'll retry later even if the DB hasn't changed.
-	stampDataVersion := int64(0)
+	if needSnapshot {
+		snapshot, snapDV, err := snapshotWorkerDB(ctx, s.dbPath)
+		if err != nil {
+			logger.Warn("backblaze backup snapshot failed", "error", err, "reason", reason, "force", force)
+			return
+		}
+		defer os.Remove(snapshot)
+		snapshotPath = snapshot
+		dataVersion = snapDV
+		snapshotTaken = true
+
+		if st, err := os.Stat(snapshot); err == nil {
+			snapshotBytes = st.Size()
+		}
+		if strings.TrimSpace(s.snapshotPath) != "" {
+			if err := atomicCopyFile(snapshot, s.snapshotPath, 0o644); err != nil {
+				logger.Warn("write local database backup snapshot failed", "error", err, "path", s.snapshotPath)
+			} else {
+				localWritten = true
+			}
+		}
+
+		s.lastSnapshotAt = now
+		s.lastSnapshotVersion = dataVersion
+		if err := writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDBSnapshot, now, dataVersion); err != nil {
+			logger.Warn("record snapshot timestamp", "error", err, "reason", reason, "force", force)
+		}
+	} else if retryUpload {
+		// DB unchanged, but we have an upload backlog; use the local snapshot.
+		snapshotPath = s.snapshotPath
+	}
+
 	uploaded := false
-	if s.bucket != nil {
+	uploadSkipped := false
+	if s.bucket != nil && strings.TrimSpace(snapshotPath) != "" {
 		object := s.objectName()
-		if err := s.upload(ctx, snapshot, object); err != nil {
-			logger.Warn("backblaze backup upload failed", "error", err, "object", object)
+		if err := s.upload(ctx, snapshotPath, object); err != nil {
+			logger.Warn("backblaze backup upload failed", "error", err, "object", object, "reason", reason, "force", force)
 		} else {
 			uploaded = true
-			stampDataVersion = dataVersion
+			s.lastUploadAt = now
+			s.lastUploadVersion = s.lastSnapshotVersion
+			if err := writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDBUpload, now, s.lastUploadVersion); err != nil {
+				logger.Warn("record upload timestamp", "error", err, "reason", reason, "force", force)
+			}
+			logger.Info("backblaze backup uploaded", "object", s.objectName())
 		}
-	} else {
-		stampDataVersion = dataVersion
+	} else if s.b2Enabled {
+		uploadSkipped = true
 	}
-	s.lastBackup = now
-	s.lastDataVersion = stampDataVersion
-	if err := writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDB, now, stampDataVersion); err != nil {
-		logger.Warn("record backup timestamp", "error", err)
-	}
-	if uploaded {
-		logger.Info("backblaze backup uploaded", "object", s.objectName())
+
+	if uploadSkipped && logger.Enabled(logLevelInfo) {
+		logger.Info("backblaze backup upload skipped (bucket unavailable)", "bucket", s.b2BucketName, "reason", reason, "force", force)
 	}
 	if localWritten {
-		logger.Info("local database snapshot written", "path", s.snapshotPath)
+		logger.Info("local database snapshot written", "path", s.snapshotPath, "bytes", snapshotBytes, "reason", reason, "force", force)
+	}
+	if logger.Enabled(logLevelInfo) {
+		logger.Info("backblaze backup completed",
+			"elapsed", time.Since(start).Truncate(time.Millisecond).String(),
+			"reason", reason,
+			"force", force,
+			"data_version", dataVersion,
+			"db_dirty", dbDirty,
+			"snapshot_taken", snapshotTaken,
+			"force_every_interval", s.forceInterval,
+			"uploaded", uploaded,
+			"local_snapshot", localWritten,
+		)
 	}
 }
 

@@ -30,6 +30,7 @@
 [backblaze_backup]
   bucket = ""
   enabled = false
+  force_every_interval = false
   interval_seconds = 43200
   keep_local_copy = true
   prefix = ""

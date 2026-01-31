@@ -32,6 +32,7 @@ func defaultConfig() Config {
 		ZMQRawBlockAddr:                     defaultZMQRawBlockAddr,
 		BackblazeBackupIntervalSeconds:      defaultBackblazeBackupIntervalSeconds,
 		BackblazeKeepLocalCopy:              true,
+		BackblazeForceEveryInterval:         false,
 		DataDir:                             defaultDataDir,
 		MaxConns:                            defaultMaxConns,
 		MaxAcceptsPerSecond:                 defaultMaxAcceptsPerSecond,
