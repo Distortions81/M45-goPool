@@ -49,6 +49,7 @@ type Config struct {
 	FiatCurrency                    string // display currency for BTC prices
 	PoolDonationAddress             string // shown in footer for tips to operator
 	GitHubURL                       string
+	MempoolAddressURL               string // URL prefix for explorer links (defaults to mempool.space/address/)
 	ServerLocation                  string
 
 	// Discord integration.
@@ -437,6 +438,10 @@ type versionTuning struct {
 	IgnoreMinVersionBits *bool `toml:"ignore_min_version_bits"`
 }
 
+type statusTuning struct {
+	MempoolAddressURL *string `toml:"mempool_address_url"`
+}
+
 // tuningFileConfig holds optional overrides from tuning.toml.
 type tuningFileConfig struct {
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
@@ -445,6 +450,7 @@ type tuningFileConfig struct {
 	Mining       miningTuning       `toml:"mining"`
 	Hashrate     hashrateTuning     `toml:"hashrate"`
 	Discord      discordTuning      `toml:"discord"`
+	Status       statusTuning       `toml:"status"`
 	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
 	Bans         banTuning          `toml:"bans"`
 	Version      versionTuning      `toml:"version"`
@@ -556,6 +562,9 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		Discord: discordTuning{
 			WorkerNotifyThresholdSeconds: intPtr(cfg.DiscordWorkerNotifyThresholdSeconds),
 		},
+		Status: statusTuning{
+			MempoolAddressURL: stringPtr(cfg.MempoolAddressURL),
+		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   boolPtr(cfg.PeerCleanupEnabled),
 			MaxPingMs: float64Ptr(cfg.PeerCleanupMaxPingMs),
@@ -660,6 +669,7 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	// Sanitize payout address to strip stray whitespace or unexpected
 	// characters before it is used for RPC validation and coinbase outputs.
 	cfg.PayoutAddress = sanitizePayoutAddress(cfg.PayoutAddress)
+	cfg.MempoolAddressURL = normalizeMempoolAddressURL(cfg.MempoolAddressURL)
 
 	// Auto-configure accept rate limits based on max_conns if they weren't
 	// explicitly set in the config file. This ensures miners can reconnect
@@ -930,6 +940,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Discord.WorkerNotifyThresholdSeconds != nil && *fc.Discord.WorkerNotifyThresholdSeconds > 0 {
 		cfg.DiscordWorkerNotifyThresholdSeconds = *fc.Discord.WorkerNotifyThresholdSeconds
+	}
+	if fc.Status.MempoolAddressURL != nil {
+		cfg.MempoolAddressURL = strings.TrimSpace(*fc.Status.MempoolAddressURL)
 	}
 	if fc.PeerCleaning.Enabled != nil {
 		cfg.PeerCleanupEnabled = *fc.PeerCleaning.Enabled

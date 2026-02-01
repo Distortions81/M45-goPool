@@ -18,6 +18,7 @@ const (
 	defaultStatusTagline    = "Solo Mining Pool"
 	defaultFiatCurrency     = "usd"
 	defaultGitHubURL        = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
+	defaultMempoolAddressURL = "https://mempool.space/address/"
 	defaultStratumTLSListen = ":4333"
 	defaultRPCURL           = "http://127.0.0.1:8332"
 

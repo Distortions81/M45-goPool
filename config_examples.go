@@ -107,6 +107,9 @@ func tuningConfigDocComments() []byte {
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 uses defaults/auto (requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 #
+# Status UI ([status])
+# - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
+#
 # Bans ([bans])
 # - clean_expired_on_startup: Remove expired bans from disk on startup (startup-only).
 # - ban_invalid_submissions_after: Ban a worker after N invalid submissions within the window (0 disables; requires restart).

@@ -13,6 +13,7 @@ func defaultConfig() Config {
 		FiatCurrency:                        defaultFiatCurrency,
 		DiscordWorkerNotifyThresholdSeconds: defaultDiscordWorkerNotifyThresholdSeconds,
 		GitHubURL:                           defaultGitHubURL,
+		MempoolAddressURL:                   defaultMempoolAddressURL,
 		StratumTLSListen:                    defaultStratumTLSListen,
 		ClerkIssuerURL:                      defaultClerkIssuerURL,
 		ClerkJWKSURL:                        defaultClerkJWKSURL,

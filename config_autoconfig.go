@@ -34,6 +34,17 @@ func sanitizePayoutAddress(addr string) string {
 	return string(cleaned)
 }
 
+func normalizeMempoolAddressURL(raw string) string {
+	url := strings.TrimSpace(raw)
+	if url == "" {
+		return defaultMempoolAddressURL
+	}
+	if !strings.HasSuffix(url, "/") {
+		url += "/"
+	}
+	return url
+}
+
 // versionMaskRPC is the minimal RPC interface needed by
 // autoConfigureVersionMaskFromNode. It is satisfied by *RPCClient and by
 // test fakes.

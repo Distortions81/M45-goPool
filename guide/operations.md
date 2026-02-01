@@ -118,6 +118,7 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 - `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix.
 - `[hashrate]`: `hashrate_ema_tau_seconds`, `hashrate_ema_min_shares`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
+- `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.
 - `[peer_cleaning]`: Enable/disable peer cleanup and tune thresholds.
 - `[bans]`: Ban thresholds/durations and the new `clean_expired_on_startup` boolean (defaults to `true`). Set it to `false` if you want to keep expired bans for inspection.
 - `[version]`: `min_version_bits` and `ignore_min_version_bits`.

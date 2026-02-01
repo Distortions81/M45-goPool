@@ -605,6 +605,7 @@ type StatusData struct {
 	DiscordNotificationsRegistered  bool                  `json:"-"`
 	DiscordNotificationsUserEnabled bool                  `json:"-"`
 	GitHubURL                       string                `json:"github_url,omitempty"`
+	MempoolAddressURL               string                `json:"mempool_address_url,omitempty"`
 	NodeNetwork                     string                `json:"node_network,omitempty"`
 	NodeSubversion                  string                `json:"node_subversion,omitempty"`
 	NodeBlocks                      int64                 `json:"node_blocks"`
