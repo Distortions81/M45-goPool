@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRPCClientHTTPStatusError(t *testing.T) {
@@ -112,6 +114,64 @@ func TestRPCClientReloadsCookieOnModification(t *testing.T) {
 
 	if user != "second" || pass != "secret" {
 		t.Fatalf("expected credentials reloaded, got %q/%q", user, pass)
+	}
+}
+
+func TestRPCClientLoadsCookieWhenCredentialsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	cookiePath := filepath.Join(dir, ".cookie")
+	if err := os.WriteFile(cookiePath, []byte("user:pass"), 0o600); err != nil {
+		t.Fatalf("write cookie: %v", err)
+	}
+
+	client := &RPCClient{
+		cookiePath: cookiePath,
+	}
+	client.initCookieStat()
+
+	client.authMu.RLock()
+	user, pass := client.user, client.pass
+	client.authMu.RUnlock()
+
+	if user != "user" || pass != "pass" {
+		t.Fatalf("expected credentials loaded, got %q/%q", user, pass)
+	}
+}
+
+func TestRPCClientCookieWatcherLoadsWhenCookieAppears(t *testing.T) {
+	oldInterval := rpcCookieWatchInterval
+	rpcCookieWatchInterval = 10 * time.Millisecond
+	t.Cleanup(func() { rpcCookieWatchInterval = oldInterval })
+
+	dir := t.TempDir()
+	cookiePath := filepath.Join(dir, ".cookie")
+
+	client := &RPCClient{
+		cookiePath: cookiePath,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	client.StartCookieWatcher(ctx)
+
+	time.Sleep(20 * time.Millisecond)
+	if err := os.WriteFile(cookiePath, []byte("alice:secret"), 0o600); err != nil {
+		t.Fatalf("write cookie: %v", err)
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		client.authMu.RLock()
+		user, pass := client.user, client.pass
+		client.authMu.RUnlock()
+		if user == "alice" && pass == "secret" {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("expected watcher to load cookie credentials, got %q/%q", user, pass)
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 

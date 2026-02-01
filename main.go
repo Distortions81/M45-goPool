@@ -290,6 +290,7 @@ func main() {
 		svc.start(ctx)
 	}
 	rpcClient := NewRPCClient(cfg, metrics)
+	rpcClient.StartCookieWatcher(ctx)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
 	startPendingSubmissionReplayer(ctx, cfg, rpcClient)
