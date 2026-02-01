@@ -21,6 +21,8 @@ const (
 	rpcRetryDelay = 100 * time.Millisecond
 )
 
+var rpcCookieWatchInterval = time.Second
+
 type rpcRequest struct {
 	Jsonrpc string      `json:"jsonrpc"`
 	ID      int         `json:"id"`
@@ -69,6 +71,7 @@ type RPCClient struct {
 	unhealthy atomic.Bool
 	disconnects atomic.Uint64
 	reconnects  atomic.Uint64
+	cookieWatchStarted atomic.Bool
 
 	authMu        sync.RWMutex
 	cookiePath    string
@@ -130,6 +133,15 @@ func (c *RPCClient) initCookieStat() {
 	c.cookieModTime = info.ModTime()
 	c.cookieSize = info.Size()
 	c.authMu.Unlock()
+
+	// If no credentials are configured yet, opportunistically load the cookie
+	// immediately so the first RPC call doesn't depend on receiving a 401 first.
+	c.authMu.RLock()
+	empty := strings.TrimSpace(c.user) == "" && strings.TrimSpace(c.pass) == ""
+	c.authMu.RUnlock()
+	if empty {
+		c.reloadCookieIfChanged()
+	}
 }
 
 func (c *RPCClient) reloadCookieIfChanged() {
@@ -143,22 +155,63 @@ func (c *RPCClient) reloadCookieIfChanged() {
 	c.authMu.RLock()
 	modTime := c.cookieModTime
 	size := c.cookieSize
+	user, pass := c.user, c.pass
 	c.authMu.RUnlock()
-	if info.ModTime().Equal(modTime) && info.Size() == size {
+
+	credsEmpty := strings.TrimSpace(user) == "" && strings.TrimSpace(pass) == ""
+	changed := !info.ModTime().Equal(modTime) || info.Size() != size
+	if !changed && !credsEmpty {
 		return
 	}
-	user, pass, err := readRPCCookie(c.cookiePath)
+	newUser, newPass, err := readRPCCookie(c.cookiePath)
 	if err != nil {
 		logger.Warn("reload rpc cookie", "path", c.cookiePath, "error", err)
 		return
 	}
 	c.authMu.Lock()
-	c.user = strings.TrimSpace(user)
-	c.pass = strings.TrimSpace(pass)
+	c.user = strings.TrimSpace(newUser)
+	c.pass = strings.TrimSpace(newPass)
 	c.cookieModTime = info.ModTime()
 	c.cookieSize = info.Size()
 	c.authMu.Unlock()
-	logger.Info("rpc cookie reloaded", "path", c.cookiePath)
+	if changed {
+		logger.Info("rpc cookie reloaded", "path", c.cookiePath)
+	} else {
+		logger.Info("rpc cookie loaded", "path", c.cookiePath)
+	}
+}
+
+// StartCookieWatcher monitors the node auth cookie and reloads credentials when
+// it appears or changes. It is safe to call multiple times; subsequent calls
+// are no-ops.
+func (c *RPCClient) StartCookieWatcher(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(c.cookiePath) == "" {
+		return
+	}
+	if !c.cookieWatchStarted.CompareAndSwap(false, true) {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(rpcCookieWatchInterval)
+		defer ticker.Stop()
+		// Try once immediately so startup doesn't wait for the first tick.
+		c.reloadCookieIfChanged()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.reloadCookieIfChanged()
+			}
+		}
+	}()
 }
 
 // SetResultHook registers a callback that is invoked after every successful
