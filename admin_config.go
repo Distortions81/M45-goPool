@@ -2,7 +2,9 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -24,10 +26,12 @@ var adminConfigTemplate = `# Administrative control panel (hidden by default).
 # - Set enabled = true and change the credentials before opening /admin.
 # - The admin UI edits live (in-memory) settings and can request a reboot.
 # - Major actions such as rebooting require re-entering the password and typing REBOOT.
+# - password_sha256 is used for authentication; password can be cleared after first login.
 # Keep this file off version control and serve the UI only on trusted networks.
 enabled = %t
 username = %s
 password = %s
+password_sha256 = %s
 session_expiration_seconds = %d
 `
 
@@ -35,6 +39,7 @@ type adminFileConfig struct {
 	Enabled                  bool   `toml:"enabled"`
 	Username                 string `toml:"username"`
 	Password                 string `toml:"password"`
+	PasswordSHA256           string `toml:"password_sha256"`
 	SessionExpirationSeconds int    `toml:"session_expiration_seconds"`
 }
 
@@ -51,11 +56,13 @@ func renderAdminConfig(cfg adminFileConfig) string {
 		username = "admin"
 	}
 	password := strings.TrimSpace(cfg.Password)
+	passwordHash := strings.TrimSpace(cfg.PasswordSHA256)
 	return fmt.Sprintf(
 		adminConfigTemplate,
 		cfg.Enabled,
 		strconv.Quote(username),
 		strconv.Quote(password),
+		strconv.Quote(passwordHash),
 		cfg.SessionExpirationSeconds,
 	)
 }
@@ -79,6 +86,7 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 			Enabled:                  false,
 			Username:                 "admin",
 			Password:                 password,
+			PasswordSHA256:           adminPasswordHash(password),
 			SessionExpirationSeconds: defaultAdminSessionExpirationSeconds,
 		}
 		if err := os.WriteFile(adminPath, []byte(renderAdminConfig(cfg)), 0o644); err != nil {
@@ -92,16 +100,35 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if len(cfg.Password) < minAdminPasswordLen {
+		needsRewrite := false
+		if cfg.PasswordSHA256 == "" && cfg.Password != "" {
+			cfg.PasswordSHA256 = adminPasswordHash(cfg.Password)
+			needsRewrite = true
+		}
+		if cfg.Password == "" && cfg.PasswordSHA256 == "" {
 			password, err := generateAdminPassword()
 			if err != nil {
 				return "", fmt.Errorf("generate admin password: %w", err)
 			}
 			cfg.Password = password
+			cfg.PasswordSHA256 = adminPasswordHash(password)
+			needsRewrite = true
+			logger.Warn("admin password was missing; generated a new one", "path", adminPath)
+		}
+		if len(cfg.Password) > 0 && len(cfg.Password) < minAdminPasswordLen {
+			password, err := generateAdminPassword()
+			if err != nil {
+				return "", fmt.Errorf("generate admin password: %w", err)
+			}
+			cfg.Password = password
+			cfg.PasswordSHA256 = adminPasswordHash(password)
+			needsRewrite = true
+			logger.Warn("admin password was missing/weak; generated a new one", "path", adminPath)
+		}
+		if needsRewrite {
 			if err := atomicWriteFile(adminPath, []byte(renderAdminConfig(cfg))); err != nil {
 				return "", fmt.Errorf("rewrite %s: %w", adminPath, err)
 			}
-			logger.Warn("admin password was missing/weak; generated a new one", "path", adminPath)
 		}
 	}
 
@@ -119,6 +146,7 @@ func loadAdminConfigFile(path string) (adminFileConfig, error) {
 	}
 	cfg.Username = strings.TrimSpace(cfg.Username)
 	cfg.Password = strings.TrimSpace(cfg.Password)
+	cfg.PasswordSHA256 = strings.TrimSpace(strings.ToLower(cfg.PasswordSHA256))
 	if cfg.SessionExpirationSeconds <= 0 {
 		cfg.SessionExpirationSeconds = defaultAdminSessionExpirationSeconds
 	}
@@ -171,4 +199,9 @@ func generateAdminPassword() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func adminPasswordHash(password string) string {
+	sum := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(sum[:])
 }

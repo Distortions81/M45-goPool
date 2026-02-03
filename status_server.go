@@ -852,6 +852,9 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 		s.renderAdminPage(w, r, data)
 		return
 	}
+	if err := s.scrubAdminPasswordPlaintext(adminCfg); err != nil {
+		logger.Warn("admin password scrub failed", "error", err, "path", s.adminConfigPath)
+	}
 	token, expiry, err := s.createAdminSession(adminCfg.sessionDuration())
 	if err != nil {
 		logger.Error("create admin session failed", "error", err)
@@ -2016,6 +2019,10 @@ func (s *StatusServer) adminCredentialsMatch(cfg adminFileConfig, username, pass
 }
 
 func (s *StatusServer) adminPasswordMatches(cfg adminFileConfig, password string) bool {
+	hash := strings.TrimSpace(cfg.PasswordSHA256)
+	if hash != "" {
+		return compareStringsConstantTime(hash, adminPasswordHash(password))
+	}
 	return compareStringsConstantTime(cfg.Password, password)
 }
 
@@ -2033,6 +2040,20 @@ func (s *StatusServer) invalidateAdminSession(token string) {
 	s.adminSessionsMu.Lock()
 	delete(s.adminSessions, token)
 	s.adminSessionsMu.Unlock()
+}
+
+func (s *StatusServer) scrubAdminPasswordPlaintext(cfg adminFileConfig) error {
+	if s == nil {
+		return fmt.Errorf("status server is nil")
+	}
+	if cfg.Password == "" {
+		return nil
+	}
+	if cfg.PasswordSHA256 == "" {
+		cfg.PasswordSHA256 = adminPasswordHash(cfg.Password)
+	}
+	cfg.Password = ""
+	return atomicWriteFile(s.adminConfigPath, []byte(renderAdminConfig(cfg)))
 }
 
 func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
