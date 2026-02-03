@@ -1440,6 +1440,29 @@ h2 {
 	vertical-align: baseline;
 }
 
+.page.admin-page .sensitive {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+	padding: 2px 6px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: rgba(0, 0, 0, 0.25);
+	color: var(--text-muted);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.page.admin-page .textfield:disabled {
+	background: #1b1f2d;
+	border-color: rgba(255, 255, 255, 0.08);
+	color: var(--text-muted);
+	opacity: 0.75;
+	cursor: not-allowed;
+}
+
 .grid.status-grid {
 	gap: 8px;
 	margin-top: 0;

@@ -1,6 +1,6 @@
 {{/* Admin control panel template */}}
 {{define "restart-required"}}<span class="restart-required" title="Requires restart">↻</span>{{end}}
-{{define "sensitive"}}<span class="sensitive" title="Sensitive setting (edit config.toml)">locked</span>{{end}}
+{{define "sensitive"}}<span class="sensitive" title="Sensitive setting (edit config.toml)">[LOCKED]</span>{{end}}
 {{define "admin-nav"}}
 <div class="admin-tabs">
 	<a class="admin-tab {{if eq .AdminSection "settings"}}active{{end}}" href="/admin">Live settings</a>
@@ -61,7 +61,7 @@
 				<p class="text-sm" style="margin:4px 0 10px 0;">
 					This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
 					Hover over field labels to see tooltips with extra detail. <span class="restart-required" title="Requires restart">↻</span> indicates a restart is required.
-					Fields marked <span class="sensitive" title="Sensitive setting (edit config.toml)">locked</span> are read-only in the admin panel and must be edited in config files.
+					Fields marked <span class="sensitive" title="Sensitive setting (edit config.toml)">[LOCKED]</span> are read-only in the admin panel and must be edited in config files.
 				</p>
 				{{if .AdminApplyError}}
 				<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
