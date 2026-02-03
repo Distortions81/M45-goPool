@@ -110,7 +110,7 @@ type Config struct {
 	BackblazePrefix                string
 	BackblazeBackupIntervalSeconds int
 	BackblazeKeepLocalCopy         bool
-	BackblazeForceEveryInterval    bool // when true, run backups every interval even if DB unchanged
+	BackblazeForceEveryInterval    bool   // when true, run backups every interval even if DB unchanged
 	BackupSnapshotPath             string // defaults to data/state/workers.db.bak
 
 	DataDir  string
@@ -229,7 +229,7 @@ type EffectiveConfig struct {
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
-	VardiffFine                      bool    `json:"vardiff_fine,omitempty"`
+	VardiffFine                       bool    `json:"vardiff_fine,omitempty"`
 	SoloMode                          bool    `json:"solo_mode"`
 	DirectSubmitProcessing            bool    `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
@@ -309,13 +309,13 @@ type loggingConfig struct {
 }
 
 type backblazeBackupConfig struct {
-	Enabled         bool   `toml:"enabled"`
-	Bucket          string `toml:"bucket"`
-	Prefix          string `toml:"prefix"`
-	IntervalSeconds *int   `toml:"interval_seconds"`
-	KeepLocalCopy   *bool  `toml:"keep_local_copy"`
-	ForceEveryInterval *bool `toml:"force_every_interval"`
-	SnapshotPath    string `toml:"snapshot_path"`
+	Enabled            bool   `toml:"enabled"`
+	Bucket             string `toml:"bucket"`
+	Prefix             string `toml:"prefix"`
+	IntervalSeconds    *int   `toml:"interval_seconds"`
+	KeepLocalCopy      *bool  `toml:"keep_local_copy"`
+	ForceEveryInterval *bool  `toml:"force_every_interval"`
+	SnapshotPath       string `toml:"snapshot_path"`
 }
 
 type miningConfig struct {
@@ -518,13 +518,13 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ClerkSessionAudience:   cfg.ClerkSessionAudience,
 		},
 		Backblaze: backblazeBackupConfig{
-			Enabled:         cfg.BackblazeBackupEnabled,
-			Bucket:          cfg.BackblazeBucket,
-			Prefix:          cfg.BackblazePrefix,
-			IntervalSeconds: intPtr(cfg.BackblazeBackupIntervalSeconds),
-			KeepLocalCopy:   boolPtr(cfg.BackblazeKeepLocalCopy),
+			Enabled:            cfg.BackblazeBackupEnabled,
+			Bucket:             cfg.BackblazeBucket,
+			Prefix:             cfg.BackblazePrefix,
+			IntervalSeconds:    intPtr(cfg.BackblazeBackupIntervalSeconds),
+			KeepLocalCopy:      boolPtr(cfg.BackblazeKeepLocalCopy),
 			ForceEveryInterval: boolPtr(cfg.BackblazeForceEveryInterval),
-			SnapshotPath:    cfg.BackupSnapshotPath,
+			SnapshotPath:       cfg.BackupSnapshotPath,
 		},
 		Logging: loggingConfig{
 			Level: cfg.LogLevel,
@@ -649,6 +649,7 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	if secretsPath == "" {
 		secretsPath = filepath.Join(cfg.DataDir, "config", "secrets.toml")
 	}
+	ensureSecretFilePermissions(secretsPath)
 	if sc, ok, err := loadSecretsFile(secretsPath); err != nil {
 		fatal("secrets file", err, "path", secretsPath)
 	} else if ok {
@@ -710,6 +711,30 @@ func loadTuningFile(path string) (*tuningFileConfig, bool, error) {
 
 func loadSecretsFile(path string) (*secretsConfig, bool, error) {
 	return loadTOMLFile[secretsConfig](path)
+}
+
+func ensureSecretFilePermissions(path string) {
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			logger.Warn("secrets file stat failed", "path", path, "error", err)
+		}
+		return
+	}
+	if !info.Mode().IsRegular() {
+		return
+	}
+	if info.Mode().Perm()&0o077 == 0 {
+		return
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		logger.Warn("secrets file chmod failed", "path", path, "error", err)
+		return
+	}
+	logger.Warn("secrets file permissions tightened", "path", path, "mode", "0600")
 }
 
 func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
