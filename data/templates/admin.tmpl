@@ -130,12 +130,12 @@
 						<input name="pool_tag_prefix" type="text" class="textfield" value="{{.Settings.PoolTagPrefix}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="Donation name shown on the status page when operator donation is enabled.">Operator donation name</div>
-						<input name="operator_donation_name" type="text" class="textfield" value="{{.Settings.OperatorDonationName}}">
+						<div class="label" title="Donation name shown on the status page when operator donation is enabled.">Operator donation name {{template "sensitive" .}}</div>
+						<input name="operator_donation_name" type="text" class="textfield" value="{{.Settings.OperatorDonationName}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="Donation link shown on the status page when operator donation is enabled.">Operator donation URL</div>
-						<input name="operator_donation_url" type="text" class="textfield" value="{{.Settings.OperatorDonationURL}}">
+						<div class="label" title="Donation link shown on the status page when operator donation is enabled.">Operator donation URL {{template "sensitive" .}}</div>
+						<input name="operator_donation_url" type="text" class="textfield" value="{{.Settings.OperatorDonationURL}}" disabled>
 					</div>
 					<div>
 						<div class="label" title="Shown on the status UI (optional).">Server location {{template "sensitive" .}}</div>
