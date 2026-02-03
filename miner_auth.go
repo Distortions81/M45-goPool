@@ -42,15 +42,17 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 				return
 			}
 			if id != "" {
-				mc.minerType = id
 				// Best-effort split into name/version for nicer aggregation.
 				name, ver := parseMinerID(id)
+				mc.stateMu.Lock()
+				mc.minerType = id
 				if name != "" {
 					mc.minerClientName = name
 				}
 				if ver != "" {
 					mc.minerClientVersion = ver
 				}
+				mc.stateMu.Unlock()
 			}
 		}
 	}
