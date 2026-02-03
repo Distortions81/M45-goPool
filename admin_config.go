@@ -91,7 +91,7 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 			PasswordSHA256:           adminPasswordHash(password),
 			SessionExpirationSeconds: defaultAdminSessionExpirationSeconds,
 		}
-		if err := os.WriteFile(adminPath, []byte(renderAdminConfig(cfg)), 0o644); err != nil {
+		if err := os.WriteFile(adminPath, []byte(renderAdminConfig(cfg)), 0o600); err != nil {
 			return "", fmt.Errorf("write %s: %w", adminPath, err)
 		}
 		logger.Info("generated admin config template (disabled)", "path", adminPath)
@@ -131,7 +131,7 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 			logger.Warn("admin password was missing/weak; generated a new one", "path", adminPath)
 		}
 		if needsRewrite {
-			if err := atomicWriteFile(adminPath, []byte(renderAdminConfig(cfg))); err != nil {
+			if err := atomicWriteFileMode(adminPath, []byte(renderAdminConfig(cfg)), 0o600); err != nil {
 				return "", fmt.Errorf("rewrite %s: %w", adminPath, err)
 			}
 		}
@@ -159,6 +159,10 @@ func loadAdminConfigFile(path string) (adminFileConfig, error) {
 }
 
 func atomicWriteFile(path string, data []byte) error {
+	return atomicWriteFileMode(path, data, 0o644)
+}
+
+func atomicWriteFileMode(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
@@ -187,7 +191,7 @@ func atomicWriteFile(path string, data []byte) error {
 	}
 	tmpPath = tmpFile.Name()
 
-	if err := os.Chmod(tmpPath, 0o644); err != nil {
+	if err := os.Chmod(tmpPath, mode); err != nil {
 		return fmt.Errorf("chmod %s: %w", tmpPath, err)
 	}
 
