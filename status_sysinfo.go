@@ -220,7 +220,7 @@ func (s *StatusServer) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "node", data); err != nil {
+	if err := s.executeTemplate(w, "node", data); err != nil {
 		logger.Error("node info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Node info error",
@@ -490,7 +490,7 @@ func (s *StatusServer) renderErrorPage(w http.ResponseWriter, r *http.Request, s
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(statusCode)
-	if err := s.tmpl.ExecuteTemplate(w, "error", data); err != nil {
+	if err := s.executeTemplate(w, "error", data); err != nil {
 		logger.Error("error page template error", "error", err)
 		http.Error(w, message, statusCode)
 	}
