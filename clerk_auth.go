@@ -196,7 +196,11 @@ func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {
 		kid, _ := t.Header["kid"].(string)
 		pub := v.keyFor(kid)
 		if pub == nil {
-			if time.Since(v.lastKeyRefresh) > v.keyRefreshLimit {
+			v.mu.RLock()
+			lastRefresh := v.lastKeyRefresh
+			refreshLimit := v.keyRefreshLimit
+			v.mu.RUnlock()
+			if time.Since(lastRefresh) > refreshLimit {
 				if err := v.refreshKeys(); err != nil {
 					logger.Warn("failed to refresh clerk jwks keys", "error", err, "kid", kid)
 				}
