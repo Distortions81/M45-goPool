@@ -86,7 +86,9 @@ func (l *acceptRateLimiter) wait(ctx context.Context) bool {
 		return true
 	}
 
-	need := 1 - l.tokens
+	// Reserve a token so concurrent waiters can't all pass after sleeping.
+	l.tokens -= 1
+	need := -l.tokens
 	rate := l.rate
 	l.mu.Unlock()
 
@@ -98,17 +100,28 @@ func (l *acceptRateLimiter) wait(ctx context.Context) bool {
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
+		// Undo the reservation so canceled waits don't depress the bucket.
+		l.mu.Lock()
+		now := time.Now()
+		if l.last.IsZero() {
+			l.last = now
+		}
+		elapsed := now.Sub(l.last).Seconds()
+		if elapsed > 0 {
+			l.tokens += elapsed * l.rate
+			if l.tokens > l.burst {
+				l.tokens = l.burst
+			}
+			l.last = now
+		}
+		l.tokens += 1
+		if l.tokens > l.burst {
+			l.tokens = l.burst
+		}
+		l.mu.Unlock()
 		return false
 	case <-timer.C:
 	}
 
-	l.mu.Lock()
-	l.last = time.Now()
-	if l.tokens < 1 {
-		l.tokens = 0
-	} else {
-		l.tokens -= 1
-	}
-	l.mu.Unlock()
 	return true
 }

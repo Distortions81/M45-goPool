@@ -113,8 +113,14 @@ func (s *workerListStore) Add(userID, worker string) error {
 		return nil
 	}
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var count int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM saved_workers WHERE user_id = ?", userID).Scan(&count); err != nil {
+	if err := tx.QueryRow("SELECT COUNT(*) FROM saved_workers WHERE user_id = ?", userID).Scan(&count); err != nil {
 		return err
 	}
 	if count >= maxSavedWorkersPerUser {
@@ -122,11 +128,13 @@ func (s *workerListStore) Add(userID, worker string) error {
 	}
 
 	hash := workerNameHash(worker)
-	if _, err := s.db.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, notify_enabled) VALUES (?, ?, ?, 1)", userID, worker, hash); err != nil {
+	if _, err := tx.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, notify_enabled) VALUES (?, ?, ?, 1)", userID, worker, hash); err != nil {
 		return err
 	}
-	_, err := s.db.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ? AND (worker_hash IS NULL OR worker_hash = '')", hash, userID, worker)
-	return err
+	if _, err := tx.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ? AND (worker_hash IS NULL OR worker_hash = '')", hash, userID, worker); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *workerListStore) BestDifficultyForHash(hash string) (float64, bool, error) {
@@ -267,7 +275,13 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	}
 
 	s.bestDiffMu.Lock()
-	pending := s.bestDiffPending
+	var pending map[string]float64
+	if len(s.bestDiffPending) > 0 {
+		pending = make(map[string]float64, len(s.bestDiffPending))
+		for k, v := range s.bestDiffPending {
+			pending[k] = v
+		}
+	}
 	s.bestDiffMu.Unlock()
 	if len(pending) > 0 {
 		for i := range workers {
@@ -360,7 +374,13 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	}
 
 	s.bestDiffMu.Lock()
-	pending := s.bestDiffPending
+	var pending map[string]float64
+	if len(s.bestDiffPending) > 0 {
+		pending = make(map[string]float64, len(s.bestDiffPending))
+		for k, v := range s.bestDiffPending {
+			pending[k] = v
+		}
+	}
 	s.bestDiffMu.Unlock()
 	if len(pending) > 0 {
 		for i := range records {
