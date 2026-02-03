@@ -1608,8 +1608,15 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return fmt.Errorf("missing request/config")
 	}
 
+	orig := *cfg
+	next := orig
+
 	getTrim := func(key string) string { return strings.TrimSpace(r.FormValue(key)) }
 	getBool := func(key string) bool { return strings.TrimSpace(r.FormValue(key)) != "" }
+	fieldProvided := func(key string) bool {
+		_, ok := r.Form[key]
+		return ok
+	}
 
 	parseInt := func(key string, current int) (int, error) {
 		raw := getTrim(key)
@@ -1646,105 +1653,145 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return s
 	}
 
-	cfg.StatusBrandName = getTrim("status_brand_name")
-	cfg.StatusBrandDomain = getTrim("status_brand_domain")
-	cfg.StatusTagline = getTrim("status_tagline")
-	cfg.FiatCurrency = strings.ToLower(getTrim("fiat_currency"))
-	cfg.GitHubURL = getTrim("github_url")
-	cfg.DiscordURL = getTrim("discord_url")
-	cfg.ServerLocation = getTrim("server_location")
-	cfg.StatusPublicURL = getTrim("status_public_url")
+	next.StatusBrandName = getTrim("status_brand_name")
+	next.StatusBrandDomain = getTrim("status_brand_domain")
+	next.StatusTagline = getTrim("status_tagline")
+	next.FiatCurrency = strings.ToLower(getTrim("fiat_currency"))
+	next.GitHubURL = getTrim("github_url")
+	next.DiscordURL = getTrim("discord_url")
+	next.ServerLocation = getTrim("server_location")
+	next.StatusPublicURL = orig.StatusPublicURL
+	if fieldProvided("status_public_url") {
+		next.StatusPublicURL = getTrim("status_public_url")
+	}
 
-	cfg.ListenAddr = normalizeListen(getTrim("pool_listen"))
-	cfg.StatusAddr = normalizeListen(getTrim("status_listen"))
-	cfg.StatusTLSAddr = normalizeListen(getTrim("status_tls_listen"))
-	cfg.StratumTLSListen = normalizeListen(getTrim("stratum_tls_listen"))
+	next.ListenAddr = orig.ListenAddr
+	if fieldProvided("pool_listen") {
+		next.ListenAddr = normalizeListen(getTrim("pool_listen"))
+	}
+	next.StatusAddr = orig.StatusAddr
+	if fieldProvided("status_listen") {
+		next.StatusAddr = normalizeListen(getTrim("status_listen"))
+	}
+	next.StatusTLSAddr = orig.StatusTLSAddr
+	if fieldProvided("status_tls_listen") {
+		next.StatusTLSAddr = normalizeListen(getTrim("status_tls_listen"))
+	}
+	next.StratumTLSListen = orig.StratumTLSListen
+	if fieldProvided("stratum_tls_listen") {
+		next.StratumTLSListen = normalizeListen(getTrim("stratum_tls_listen"))
+	}
 
 	var err error
-	if cfg.MaxConns, err = parseInt("max_conns", cfg.MaxConns); err != nil {
+	if next.MaxConns, err = parseInt("max_conns", next.MaxConns); err != nil {
 		return err
 	}
-	cfg.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
-	if cfg.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", cfg.MaxAcceptsPerSecond); err != nil {
+	next.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
+	if next.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", next.MaxAcceptsPerSecond); err != nil {
 		return err
 	}
-	if cfg.MaxAcceptBurst, err = parseInt("max_accept_burst", cfg.MaxAcceptBurst); err != nil {
+	if next.MaxAcceptBurst, err = parseInt("max_accept_burst", next.MaxAcceptBurst); err != nil {
 		return err
 	}
-	if cfg.AcceptReconnectWindow, err = parseInt("accept_reconnect_window", cfg.AcceptReconnectWindow); err != nil {
+	if next.AcceptReconnectWindow, err = parseInt("accept_reconnect_window", next.AcceptReconnectWindow); err != nil {
 		return err
 	}
-	if cfg.AcceptBurstWindow, err = parseInt("accept_burst_window", cfg.AcceptBurstWindow); err != nil {
+	if next.AcceptBurstWindow, err = parseInt("accept_burst_window", next.AcceptBurstWindow); err != nil {
 		return err
 	}
-	if cfg.AcceptSteadyStateWindow, err = parseInt("accept_steady_state_window", cfg.AcceptSteadyStateWindow); err != nil {
+	if next.AcceptSteadyStateWindow, err = parseInt("accept_steady_state_window", next.AcceptSteadyStateWindow); err != nil {
 		return err
 	}
-	if cfg.AcceptSteadyStateRate, err = parseInt("accept_steady_state_rate", cfg.AcceptSteadyStateRate); err != nil {
+	if next.AcceptSteadyStateRate, err = parseInt("accept_steady_state_rate", next.AcceptSteadyStateRate); err != nil {
 		return err
 	}
-	if cfg.AcceptSteadyStateReconnectPercent, err = parseFloat("accept_steady_state_reconnect_percent", cfg.AcceptSteadyStateReconnectPercent); err != nil {
+	if next.AcceptSteadyStateReconnectPercent, err = parseFloat("accept_steady_state_reconnect_percent", next.AcceptSteadyStateReconnectPercent); err != nil {
 		return err
 	}
-	if cfg.AcceptSteadyStateReconnectWindow, err = parseInt("accept_steady_state_reconnect_window", cfg.AcceptSteadyStateReconnectWindow); err != nil {
+	if next.AcceptSteadyStateReconnectWindow, err = parseInt("accept_steady_state_reconnect_window", next.AcceptSteadyStateReconnectWindow); err != nil {
 		return err
 	}
 
-	timeoutSec, err := parseInt("connection_timeout_seconds", int(cfg.ConnectionTimeout/time.Second))
+	timeoutSec, err := parseInt("connection_timeout_seconds", int(next.ConnectionTimeout/time.Second))
 	if err != nil {
 		return err
 	}
-	cfg.ConnectionTimeout = time.Duration(timeoutSec) * time.Second
+	next.ConnectionTimeout = time.Duration(timeoutSec) * time.Second
 
-	if cfg.MinDifficulty, err = parseFloat("min_difficulty", cfg.MinDifficulty); err != nil {
+	if next.MinDifficulty, err = parseFloat("min_difficulty", next.MinDifficulty); err != nil {
 		return err
 	}
-	if cfg.MaxDifficulty, err = parseFloat("max_difficulty", cfg.MaxDifficulty); err != nil {
+	if next.MaxDifficulty, err = parseFloat("max_difficulty", next.MaxDifficulty); err != nil {
 		return err
 	}
-	cfg.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
+	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
 
-	cfg.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
-	if cfg.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", cfg.BanInvalidSubmissionsAfter); err != nil {
+	next.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
+	if next.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", next.BanInvalidSubmissionsAfter); err != nil {
 		return err
 	}
-	windowSec, err := parseInt("ban_invalid_submissions_window_seconds", int(cfg.BanInvalidSubmissionsWindow/time.Second))
+	windowSec, err := parseInt("ban_invalid_submissions_window_seconds", int(next.BanInvalidSubmissionsWindow/time.Second))
 	if err != nil {
 		return err
 	}
-	cfg.BanInvalidSubmissionsWindow = time.Duration(windowSec) * time.Second
-	durSec, err := parseInt("ban_invalid_submissions_duration_seconds", int(cfg.BanInvalidSubmissionsDuration/time.Second))
+	next.BanInvalidSubmissionsWindow = time.Duration(windowSec) * time.Second
+	durSec, err := parseInt("ban_invalid_submissions_duration_seconds", int(next.BanInvalidSubmissionsDuration/time.Second))
 	if err != nil {
 		return err
 	}
-	cfg.BanInvalidSubmissionsDuration = time.Duration(durSec) * time.Second
-	if cfg.ReconnectBanThreshold, err = parseInt("reconnect_ban_threshold", cfg.ReconnectBanThreshold); err != nil {
+	next.BanInvalidSubmissionsDuration = time.Duration(durSec) * time.Second
+	if next.ReconnectBanThreshold, err = parseInt("reconnect_ban_threshold", next.ReconnectBanThreshold); err != nil {
 		return err
 	}
-	if cfg.ReconnectBanWindowSeconds, err = parseInt("reconnect_ban_window_seconds", cfg.ReconnectBanWindowSeconds); err != nil {
+	if next.ReconnectBanWindowSeconds, err = parseInt("reconnect_ban_window_seconds", next.ReconnectBanWindowSeconds); err != nil {
 		return err
 	}
-	if cfg.ReconnectBanDurationSeconds, err = parseInt("reconnect_ban_duration_seconds", cfg.ReconnectBanDurationSeconds); err != nil {
-		return err
-	}
-
-	cfg.PeerCleanupEnabled = getBool("peer_cleanup_enabled")
-	if cfg.PeerCleanupMaxPingMs, err = parseFloat("peer_cleanup_max_ping_ms", cfg.PeerCleanupMaxPingMs); err != nil {
-		return err
-	}
-	if cfg.PeerCleanupMinPeers, err = parseInt("peer_cleanup_min_peers", cfg.PeerCleanupMinPeers); err != nil {
+	if next.ReconnectBanDurationSeconds, err = parseInt("reconnect_ban_duration_seconds", next.ReconnectBanDurationSeconds); err != nil {
 		return err
 	}
 
-	cfg.SoloMode = getBool("solo_mode")
-	cfg.DirectSubmitProcessing = getBool("direct_submit_processing")
-	cfg.CheckDuplicateShares = getBool("check_duplicate_shares")
+	next.PeerCleanupEnabled = getBool("peer_cleanup_enabled")
+	if next.PeerCleanupMaxPingMs, err = parseFloat("peer_cleanup_max_ping_ms", next.PeerCleanupMaxPingMs); err != nil {
+		return err
+	}
+	if next.PeerCleanupMinPeers, err = parseInt("peer_cleanup_min_peers", next.PeerCleanupMinPeers); err != nil {
+		return err
+	}
+
+	next.SoloMode = getBool("solo_mode")
+	next.DirectSubmitProcessing = getBool("direct_submit_processing")
+	next.CheckDuplicateShares = getBool("check_duplicate_shares")
 
 	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
-		cfg.LogLevel = lvl
+		next.LogLevel = lvl
 	}
 
+	if changed := adminSensitiveFieldsChanged(orig, next); len(changed) > 0 {
+		return fmt.Errorf("sensitive settings cannot be changed via the admin panel: %s", strings.Join(changed, ", "))
+	}
+
+	*cfg = next
 	return nil
+}
+
+func adminSensitiveFieldsChanged(orig, next Config) []string {
+	var changed []string
+	if orig.ListenAddr != next.ListenAddr {
+		changed = append(changed, "pool_listen")
+	}
+	if orig.StatusAddr != next.StatusAddr {
+		changed = append(changed, "status_listen")
+	}
+	if orig.StatusTLSAddr != next.StatusTLSAddr {
+		changed = append(changed, "status_tls_listen")
+	}
+	if orig.StratumTLSListen != next.StratumTLSListen {
+		changed = append(changed, "stratum_tls_listen")
+	}
+	if orig.StatusPublicURL != next.StatusPublicURL {
+		changed = append(changed, "status_public_url")
+	}
+	return changed
 }
 
 func rewriteTuningFile(path string, cfg Config) error {

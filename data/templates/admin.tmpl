@@ -1,5 +1,6 @@
 {{/* Admin control panel template */}}
 {{define "restart-required"}}<span class="restart-required" title="Requires restart">↻</span>{{end}}
+{{define "sensitive"}}<span class="sensitive" title="Sensitive setting (edit config.toml)">locked</span>{{end}}
 {{define "admin-nav"}}
 <div class="admin-tabs">
 	<a class="admin-tab {{if eq .AdminSection "settings"}}active{{end}}" href="/admin">Live settings</a>
@@ -96,28 +97,28 @@
 						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}">
 					</div>
 					<div>
-						<div class="label" title="Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.">status_public_url</div>
-						<input name="status_public_url" type="text" class="textfield" value="{{.Settings.StatusPublicURL}}">
+						<div class="label" title="Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.">status_public_url {{template "sensitive" .}}</div>
+						<input name="status_public_url" type="text" class="textfield" value="{{.Settings.StatusPublicURL}}" disabled>
 					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Listeners</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Stratum TCP listener for miners (requires restart to change).">pool_listen {{template "restart-required" .}}</div>
-						<input name="pool_listen" type="text" class="textfield" value="{{.Settings.ListenAddr}}">
+						<div class="label" title="Stratum TCP listener for miners (requires restart to change).">pool_listen {{template "restart-required" .}} {{template "sensitive" .}}</div>
+						<input name="pool_listen" type="text" class="textfield" value="{{.Settings.ListenAddr}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="Status UI HTTP listener. When TLS is enabled, HTTP redirects to HTTPS (requires restart to change).">status_listen (http) {{template "restart-required" .}}</div>
-						<input name="status_listen" type="text" class="textfield" value="{{.Settings.StatusAddr}}">
+						<div class="label" title="Status UI HTTP listener. When TLS is enabled, HTTP redirects to HTTPS (requires restart to change).">status_listen (http) {{template "restart-required" .}} {{template "sensitive" .}}</div>
+						<input name="status_listen" type="text" class="textfield" value="{{.Settings.StatusAddr}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="Status UI HTTPS listener (requires restart to change).">status_tls_listen (https) {{template "restart-required" .}}</div>
-						<input name="status_tls_listen" type="text" class="textfield" value="{{.Settings.StatusTLSAddr}}">
+						<div class="label" title="Status UI HTTPS listener (requires restart to change).">status_tls_listen (https) {{template "restart-required" .}} {{template "sensitive" .}}</div>
+						<input name="status_tls_listen" type="text" class="textfield" value="{{.Settings.StatusTLSAddr}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="Optional Stratum TLS listener for miners that support TLS (requires restart to change).">stratum_tls_listen {{template "restart-required" .}}</div>
-						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}">
+						<div class="label" title="Optional Stratum TLS listener for miners that support TLS (requires restart to change).">stratum_tls_listen {{template "restart-required" .}} {{template "sensitive" .}}</div>
+						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}" disabled>
 					</div>
 				</div>
 
