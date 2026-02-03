@@ -197,6 +197,8 @@ func (n *discordNotifier) resetAllNotificationState(now time.Time) {
 	// Clear queued pings.
 	n.pingMu.Lock()
 	n.pingQueue = nil
+	n.droppedQueuedLines = 0
+	n.lastDropNoticeAt = time.Time{}
 	n.pingMu.Unlock()
 
 	// Apply the same startup delay before resuming checks. When the network is
