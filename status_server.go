@@ -831,6 +831,7 @@ func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) 
 		s.renderAdminPage(w, r, data)
 		return
 	}
+	s.pruneExpiredAdminSessions()
 	http.SetCookie(w, &http.Cookie{
 		Name:     adminSessionCookieName,
 		Value:    token,
@@ -1767,18 +1768,23 @@ func rewriteTuningFile(path string, cfg Config) error {
 func (s *StatusServer) isAdminAuthenticated(r *http.Request) bool {
 	token, ok := s.adminSessionToken(r)
 	if !ok {
+		s.pruneExpiredAdminSessions()
 		return false
 	}
 	s.adminSessionsMu.Lock()
-	defer s.adminSessionsMu.Unlock()
 	expiry, exists := s.adminSessions[token]
 	if !exists {
+		s.adminSessionsMu.Unlock()
+		s.pruneExpiredAdminSessions()
 		return false
 	}
 	if time.Now().After(expiry) {
 		delete(s.adminSessions, token)
+		s.adminSessionsMu.Unlock()
+		s.pruneExpiredAdminSessions()
 		return false
 	}
+	s.adminSessionsMu.Unlock()
 	return true
 }
 
@@ -1809,6 +1815,20 @@ func (s *StatusServer) createAdminSession(duration time.Duration) (string, time.
 	s.adminSessions[token] = expiry
 	s.adminSessionsMu.Unlock()
 	return token, expiry, nil
+}
+
+func (s *StatusServer) pruneExpiredAdminSessions() {
+	if s == nil {
+		return
+	}
+	now := time.Now()
+	s.adminSessionsMu.Lock()
+	for token, expiry := range s.adminSessions {
+		if now.After(expiry) {
+			delete(s.adminSessions, token)
+		}
+	}
+	s.adminSessionsMu.Unlock()
 }
 
 func generateAdminToken() (string, error) {
