@@ -101,9 +101,12 @@ func ensureAdminConfigFile(dataDir string) (string, error) {
 			return "", err
 		}
 		needsRewrite := false
-		if cfg.PasswordSHA256 == "" && cfg.Password != "" {
-			cfg.PasswordSHA256 = adminPasswordHash(cfg.Password)
-			needsRewrite = true
+		if cfg.Password != "" {
+			hash := adminPasswordHash(cfg.Password)
+			if cfg.PasswordSHA256 == "" || !strings.EqualFold(cfg.PasswordSHA256, hash) {
+				cfg.PasswordSHA256 = hash
+				needsRewrite = true
+			}
 		}
 		if cfg.Password == "" && cfg.PasswordSHA256 == "" {
 			password, err := generateAdminPassword()
