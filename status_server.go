@@ -620,14 +620,20 @@ type AdminPageData struct {
 
 type AdminSettingsData struct {
 	// Branding/UI
-	StatusBrandName   string
-	StatusBrandDomain string
-	StatusPublicURL   string
-	StatusTagline     string
-	FiatCurrency      string
-	GitHubURL         string
-	DiscordURL        string
-	ServerLocation    string
+	StatusBrandName              string
+	StatusBrandDomain            string
+	StatusPublicURL              string
+	StatusTagline                string
+	StatusConnectMinerTitleExtra string
+	StatusConnectMinerTitleExtraURL string
+	FiatCurrency                 string
+	GitHubURL                    string
+	DiscordURL                   string
+	ServerLocation               string
+	MempoolAddressURL            string
+	PoolDonationAddress          string
+	OperatorDonationName         string
+	OperatorDonationURL          string
 
 	// Listeners
 	ListenAddr       string
@@ -674,6 +680,12 @@ type AdminSettingsData struct {
 
 	// Logging
 	LogLevel string
+
+	// Tuning / misc
+	DiscordWorkerNotifyThresholdSeconds int
+	HashrateEMATauSeconds               float64
+	HashrateEMAMinShares                int
+	NTimeForwardSlackSeconds            int
 }
 
 type AdminMinerRow struct {
@@ -1390,10 +1402,16 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		StatusBrandDomain:                    cfg.StatusBrandDomain,
 		StatusPublicURL:                      cfg.StatusPublicURL,
 		StatusTagline:                        cfg.StatusTagline,
+		StatusConnectMinerTitleExtra:         cfg.StatusConnectMinerTitleExtra,
+		StatusConnectMinerTitleExtraURL:      cfg.StatusConnectMinerTitleExtraURL,
 		FiatCurrency:                         cfg.FiatCurrency,
 		GitHubURL:                            cfg.GitHubURL,
 		DiscordURL:                           cfg.DiscordURL,
 		ServerLocation:                       cfg.ServerLocation,
+		MempoolAddressURL:                    cfg.MempoolAddressURL,
+		PoolDonationAddress:                  cfg.PoolDonationAddress,
+		OperatorDonationName:                 cfg.OperatorDonationName,
+		OperatorDonationURL:                  cfg.OperatorDonationURL,
 		ListenAddr:                           cfg.ListenAddr,
 		StatusAddr:                           cfg.StatusAddr,
 		StatusTLSAddr:                        cfg.StatusTLSAddr,
@@ -1426,6 +1444,10 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ReconnectBanWindowSeconds:            cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
 		LogLevel:                             cfg.LogLevel,
+		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
+		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
+		HashrateEMAMinShares:                 cfg.HashrateEMAMinShares,
+		NTimeForwardSlackSeconds:             cfg.NTimeForwardSlackSeconds,
 	}
 }
 
@@ -1673,6 +1695,8 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		next.StatusBrandDomain = getTrim("status_brand_domain")
 	}
 	next.StatusTagline = getTrim("status_tagline")
+	next.StatusConnectMinerTitleExtra = getTrim("status_connect_miner_title_extra")
+	next.StatusConnectMinerTitleExtraURL = getTrim("status_connect_miner_title_extra_url")
 	next.FiatCurrency = strings.ToLower(getTrim("fiat_currency"))
 	next.GitHubURL = getTrim("github_url")
 	next.DiscordURL = getTrim("discord_url")
@@ -1680,6 +1704,10 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if fieldProvided("server_location") {
 		next.ServerLocation = getTrim("server_location")
 	}
+	next.MempoolAddressURL = normalizeMempoolAddressURL(getTrim("mempool_address_url"))
+	next.PoolDonationAddress = getTrim("pool_donation_address")
+	next.OperatorDonationName = getTrim("operator_donation_name")
+	next.OperatorDonationURL = getTrim("operator_donation_url")
 	next.StatusPublicURL = orig.StatusPublicURL
 	if fieldProvided("status_public_url") {
 		next.StatusPublicURL = getTrim("status_public_url")
@@ -1796,6 +1824,31 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 
 	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
 		next.LogLevel = lvl
+	}
+
+	if next.DiscordWorkerNotifyThresholdSeconds, err = parseInt("discord_worker_notify_threshold_seconds", next.DiscordWorkerNotifyThresholdSeconds); err != nil {
+		return err
+	}
+	if next.DiscordWorkerNotifyThresholdSeconds < 0 {
+		return fmt.Errorf("discord_worker_notify_threshold_seconds must be >= 0")
+	}
+	if next.HashrateEMATauSeconds, err = parseFloat("hashrate_ema_tau_seconds", next.HashrateEMATauSeconds); err != nil {
+		return err
+	}
+	if next.HashrateEMATauSeconds <= 0 {
+		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0")
+	}
+	if next.HashrateEMAMinShares, err = parseInt("hashrate_ema_min_shares", next.HashrateEMAMinShares); err != nil {
+		return err
+	}
+	if next.HashrateEMAMinShares < minHashrateEMAMinShares {
+		return fmt.Errorf("hashrate_ema_min_shares must be >= %d", minHashrateEMAMinShares)
+	}
+	if next.NTimeForwardSlackSeconds, err = parseInt("ntime_forward_slack_seconds", next.NTimeForwardSlackSeconds); err != nil {
+		return err
+	}
+	if next.NTimeForwardSlackSeconds <= 0 {
+		return fmt.Errorf("ntime_forward_slack_seconds must be > 0")
 	}
 
 	if changed := adminSensitiveFieldsChanged(orig, next); len(changed) > 0 {
