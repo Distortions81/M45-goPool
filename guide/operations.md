@@ -200,6 +200,8 @@ goPool also auto-creates `/app/`, `/stats/`, and `/api/*` handlers plus optional
 
 `data/config/admin.toml` is created automatically the first time goPool runs. The generated file documents the panel, defaults to `enabled = false`, and ships with `username = "admin"` plus a random password (check the file to copy the generated secret). Update the file to enable the UI, pick a unique username/password, and keep it out of version control. The `session_expiration_seconds` value controls how long the admin session remains valid (default 900 seconds).
 
+goPool now stores a `password_sha256` alongside the plaintext password. On startup, if `password` is set, goPool verifies/refreshes `password_sha256` to match it. After the first successful admin login, the plaintext `password` is cleared from `admin.toml` and only the hash remains; subsequent logins use the hash.
+
 When enabled, visit `/admin` (deliberately absent from the main navigation) and log in with the credentials stored in `admin.toml`. The panel exposes:
 
 * **Live settings** – a field-based UI that updates goPool's in-memory configuration immediately. Some settings still require a reboot to fully apply across all subsystems.

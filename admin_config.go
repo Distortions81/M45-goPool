@@ -27,6 +27,8 @@ var adminConfigTemplate = `# Administrative control panel (hidden by default).
 # - The admin UI edits live (in-memory) settings and can request a reboot.
 # - Major actions such as rebooting require re-entering the password and typing REBOOT.
 # - password_sha256 is used for authentication; password can be cleared after first login.
+# - On startup, if password is set, goPool verifies/refreshes password_sha256 to match it.
+# - After a successful admin login, goPool clears password and keeps password_sha256.
 # Keep this file off version control and serve the UI only on trusted networks.
 enabled = %t
 username = %s
