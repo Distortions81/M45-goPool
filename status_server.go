@@ -737,7 +737,7 @@ const (
 var adminPerPageOptions = []int{10, 25, 50, 100}
 
 const (
-	adminMinConnsLimit               = 1
+	adminMinConnsLimit               = 1000
 	adminMaxConnsLimit               = 1_000_000
 	adminMinAcceptsPerSecondLimit    = 10
 	adminMaxAcceptsPerSecondLimit    = 10_000
