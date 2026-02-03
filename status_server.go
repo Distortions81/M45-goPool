@@ -736,6 +736,13 @@ const (
 
 var adminPerPageOptions = []int{10, 25, 50, 100}
 
+const (
+	adminMaxConnsLimit                 = 1_000_000
+	adminMaxAcceptsPerSecondLimit      = 10_000
+	adminMaxAcceptBurstLimit           = 25_000
+	adminMaxConnectionTimeoutSeconds   = 86_400
+)
+
 func (s *StatusServer) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -1695,12 +1702,21 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxConns, err = parseInt("max_conns", next.MaxConns); err != nil {
 		return err
 	}
+	if next.MaxConns < 0 || next.MaxConns > adminMaxConnsLimit {
+		return fmt.Errorf("max_conns must be between 0 and %d", adminMaxConnsLimit)
+	}
 	next.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
 	if next.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", next.MaxAcceptsPerSecond); err != nil {
 		return err
 	}
+	if next.MaxAcceptsPerSecond < 0 || next.MaxAcceptsPerSecond > adminMaxAcceptsPerSecondLimit {
+		return fmt.Errorf("max_accepts_per_second must be between 0 and %d", adminMaxAcceptsPerSecondLimit)
+	}
 	if next.MaxAcceptBurst, err = parseInt("max_accept_burst", next.MaxAcceptBurst); err != nil {
 		return err
+	}
+	if next.MaxAcceptBurst < 0 || next.MaxAcceptBurst > adminMaxAcceptBurstLimit {
+		return fmt.Errorf("max_accept_burst must be between 0 and %d", adminMaxAcceptBurstLimit)
 	}
 	if next.AcceptReconnectWindow, err = parseInt("accept_reconnect_window", next.AcceptReconnectWindow); err != nil {
 		return err
@@ -1724,6 +1740,9 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	timeoutSec, err := parseInt("connection_timeout_seconds", int(next.ConnectionTimeout/time.Second))
 	if err != nil {
 		return err
+	}
+	if timeoutSec < int(minMinerTimeout/time.Second) || timeoutSec > adminMaxConnectionTimeoutSeconds {
+		return fmt.Errorf("connection_timeout_seconds must be between %d and %d", int(minMinerTimeout/time.Second), adminMaxConnectionTimeoutSeconds)
 	}
 	next.ConnectionTimeout = time.Duration(timeoutSec) * time.Second
 
