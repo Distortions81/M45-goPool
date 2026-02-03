@@ -1377,5 +1377,5 @@ func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex st
 		PayoutAddr: mc.cfg.PayoutAddress,
 		Status:     "pending",
 	}
-	appendPendingSubmissionRecord(pendingSubmissionsPath(mc.cfg), rec)
+	appendPendingSubmissionRecord(rec)
 }

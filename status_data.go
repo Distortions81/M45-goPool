@@ -103,9 +103,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 		if lower == "low difficulty share" || lower == "lowdiff" {
 			continue
 		}
-		if lower == "low difficulty share" {
-			reason = "lowDiff"
-		}
 		filteredReasons[reason] = count
 	}
 	var jobCreated, templateTime string

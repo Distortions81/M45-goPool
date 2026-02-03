@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// pendingSubmissionRecord mirrors the JSON structure written to
-// pending_submissions.jsonl. Older entries may omit Status; in that case,
-// they are treated as "pending" unless a newer record for the same hash
-// marks them as "submitted".
+// pendingSubmissionRecord mirrors the pending_submissions SQLite table schema.
+// Older entries may omit Status; in that case, they are treated as "pending"
+// unless a newer record for the same hash marks them as "submitted".
 type pendingSubmissionRecord struct {
 	Timestamp  time.Time `json:"timestamp"`
 	Height     int64     `json:"height"`
@@ -24,24 +22,15 @@ type pendingSubmissionRecord struct {
 	Status     string    `json:"status,omitempty"`
 }
 
-func pendingSubmissionsPath(cfg Config) string {
-	dir := cfg.DataDir
-	if dir == "" {
-		dir = defaultDataDir
-	}
-	return filepath.Join(dir, "pending_submissions.jsonl")
-}
-
-// startPendingSubmissionReplayer periodically scans pending_submissions.jsonl
-// and attempts to resubmit any entries that are still marked as pending.
-// On successful submitblock, it appends a "submitted" record so future scans
-// skip that block. This is best-effort and does not guarantee eventual
-// submission, but provides a recovery path when the node RPC was down.
-func startPendingSubmissionReplayer(ctx context.Context, cfg Config, rpc *RPCClient) {
+// startPendingSubmissionReplayer periodically scans the pending_submissions
+// SQLite table and attempts to resubmit any entries that are still marked as
+// pending. On successful submitblock, it marks the row as "submitted" so
+// future scans skip that block. This is best-effort and does not guarantee
+// eventual submission, but provides a recovery path when the node RPC was down.
+func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) {
 	if rpc == nil {
 		return
 	}
-	path := pendingSubmissionsPath(cfg)
 	// Use a short but modest interval; blocks are rare and we don't want to
 	// hammer the node when it's unhealthy, but we also want to resubmit
 	// quickly once RPC is back.
@@ -52,16 +41,16 @@ func startPendingSubmissionReplayer(ctx context.Context, cfg Config, rpc *RPCCli
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				replayPendingSubmissions(ctx, rpc, path)
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					replayPendingSubmissions(ctx, rpc)
+				}
 			}
-		}
-	}()
-}
+		}()
+	}
 
-func replayPendingSubmissions(ctx context.Context, rpc *RPCClient, path string) {
+func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 	// Use the shared state database connection
 	db := getSharedStateDB()
 	if db == nil {
@@ -168,7 +157,7 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient, path string) 
 	}
 }
 
-func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
+func appendPendingSubmissionRecord(rec pendingSubmissionRecord) {
 	// Use the shared state database connection
 	db := getSharedStateDB()
 	if db == nil {
@@ -211,4 +200,3 @@ func appendPendingSubmissionRecord(path string, rec pendingSubmissionRecord) {
 		logger.Warn("pending block sqlite upsert", "error", err)
 	}
 }
-

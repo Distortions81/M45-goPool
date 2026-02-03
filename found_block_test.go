@@ -477,7 +477,6 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	}
 
 	// Log the pending submission
-	pendingPath := pendingSubmissionsPath(cfg)
 	workerName := "test-worker"
 	hashHex := hex.EncodeToString(headerHash)
 
@@ -492,7 +491,7 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 		PayoutAddr: workerName,
 		Status:     "pending",
 	}
-	appendPendingSubmissionRecord(pendingPath, rec)
+	appendPendingSubmissionRecord(rec)
 
 	// Use the shared DB that was set up earlier
 	var status string

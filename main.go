@@ -293,7 +293,7 @@ func main() {
 	rpcClient.StartCookieWatcher(ctx)
 	// Best-effort replay of any blocks that failed submitblock while the
 	// node RPC was unavailable in previous runs.
-	startPendingSubmissionReplayer(ctx, cfg, rpcClient)
+	startPendingSubmissionReplayer(ctx, rpcClient)
 
 	accounting, err := NewAccountStore(cfg, debugEnabled(), cleanBansOnStartup)
 	if err != nil {

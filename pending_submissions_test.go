@@ -11,7 +11,7 @@ import (
 )
 
 // Test that replayPendingSubmissions successfully resubmits a pending block
-// and appends a "submitted" record to the pending_submissions.jsonl log.
+// and marks it as "submitted" in SQLite.
 func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 	t.Helper()
 
@@ -27,9 +27,6 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 	cleanup := setSharedStateDBForTest(db)
 	defer cleanup()
 
-	cfg := Config{DataDir: tmpDir}
-	path := pendingSubmissionsPath(cfg)
-
 	rec := pendingSubmissionRecord{
 		Timestamp:  time.Now().UTC(),
 		Height:     100,
@@ -41,7 +38,7 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 		PayoutAddr: "bc1qexample",
 		Status:     "pending",
 	}
-	appendPendingSubmissionRecord(path, rec)
+	appendPendingSubmissionRecord(rec)
 
 	var submitCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +67,7 @@ func TestReplayPendingSubmissionsMarksSubmitted(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	replayPendingSubmissions(ctx, rpc, path)
+	replayPendingSubmissions(ctx, rpc)
 
 	if submitCalls == 0 {
 		t.Fatalf("expected submitblock to be called at least once")
