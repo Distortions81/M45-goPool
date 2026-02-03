@@ -1907,6 +1907,12 @@ func adminSensitiveFieldsChanged(orig, next Config) []string {
 	if orig.OperatorDonationPercent != next.OperatorDonationPercent {
 		changed = append(changed, "operator_donation_percent")
 	}
+	if orig.OperatorDonationName != next.OperatorDonationName {
+		changed = append(changed, "operator_donation_name")
+	}
+	if orig.OperatorDonationURL != next.OperatorDonationURL {
+		changed = append(changed, "operator_donation_url")
+	}
 	if orig.PoolEntropy != next.PoolEntropy {
 		changed = append(changed, "pool_entropy")
 	}
