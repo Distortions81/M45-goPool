@@ -109,6 +109,26 @@
 						<input name="pool_donation_address" type="text" class="textfield" value="{{.Settings.PoolDonationAddress}}">
 					</div>
 					<div>
+						<div class="label" title="Pool payout address used for coinbase outputs.">payout_address {{template "sensitive" .}}</div>
+						<input name="payout_address" type="text" class="textfield" value="{{.Settings.PayoutAddress}}" disabled>
+					</div>
+					<div>
+						<div class="label" title="Pool fee percent used when constructing coinbase payouts.">pool_fee_percent {{template "sensitive" .}}</div>
+						<input name="pool_fee_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.PoolFeePercent}}" disabled>
+					</div>
+					<div>
+						<div class="label" title="Operator donation percent used when enabled.">operator_donation_percent {{template "sensitive" .}}</div>
+						<input name="operator_donation_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.OperatorDonationPercent}}" disabled>
+					</div>
+					<div>
+						<div class="label" title="Pool entropy tag (used in coinbase).">pool_entropy {{template "sensitive" .}}</div>
+						<input name="pool_entropy" type="text" class="textfield" value="{{.Settings.PoolEntropy}}" disabled>
+					</div>
+					<div>
+						<div class="label" title="Pool tag prefix for coinbase data.">pool_tag_prefix {{template "sensitive" .}}</div>
+						<input name="pool_tag_prefix" type="text" class="textfield" value="{{.Settings.PoolTagPrefix}}" disabled>
+					</div>
+					<div>
 						<div class="label" title="Donation name shown on the status page when operator donation is enabled.">Operator donation name</div>
 						<input name="operator_donation_name" type="text" class="textfield" value="{{.Settings.OperatorDonationName}}">
 					</div>

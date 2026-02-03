@@ -634,6 +634,11 @@ type AdminSettingsData struct {
 	PoolDonationAddress          string
 	OperatorDonationName         string
 	OperatorDonationURL          string
+	PayoutAddress                string
+	PoolFeePercent               float64
+	OperatorDonationPercent      float64
+	PoolEntropy                  string
+	PoolTagPrefix                string
 
 	// Listeners
 	ListenAddr       string
@@ -1412,6 +1417,11 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		PoolDonationAddress:                  cfg.PoolDonationAddress,
 		OperatorDonationName:                 cfg.OperatorDonationName,
 		OperatorDonationURL:                  cfg.OperatorDonationURL,
+		PayoutAddress:                        cfg.PayoutAddress,
+		PoolFeePercent:                       cfg.PoolFeePercent,
+		OperatorDonationPercent:              cfg.OperatorDonationPercent,
+		PoolEntropy:                          cfg.PoolEntropy,
+		PoolTagPrefix:                        cfg.PoolTagPrefix,
 		ListenAddr:                           cfg.ListenAddr,
 		StatusAddr:                           cfg.StatusAddr,
 		StatusTLSAddr:                        cfg.StatusTLSAddr,
@@ -1884,6 +1894,21 @@ func adminSensitiveFieldsChanged(orig, next Config) []string {
 	}
 	if orig.StatusPublicURL != next.StatusPublicURL {
 		changed = append(changed, "status_public_url")
+	}
+	if orig.PayoutAddress != next.PayoutAddress {
+		changed = append(changed, "payout_address")
+	}
+	if orig.PoolFeePercent != next.PoolFeePercent {
+		changed = append(changed, "pool_fee_percent")
+	}
+	if orig.OperatorDonationPercent != next.OperatorDonationPercent {
+		changed = append(changed, "operator_donation_percent")
+	}
+	if orig.PoolEntropy != next.PoolEntropy {
+		changed = append(changed, "pool_entropy")
+	}
+	if orig.PoolTagPrefix != next.PoolTagPrefix {
+		changed = append(changed, "pool_tag_prefix")
 	}
 	return changed
 }
