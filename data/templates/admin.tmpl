@@ -69,12 +69,12 @@
 				<h3 style="margin:0 0 8px 0;">Branding</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Shown across the status UI as the pool name.">Brand name</div>
-						<input name="status_brand_name" type="text" class="textfield" value="{{.Settings.StatusBrandName}}">
+						<div class="label" title="Shown across the status UI as the pool name.">Brand name {{template "sensitive" .}}</div>
+						<input name="status_brand_name" type="text" class="textfield" value="{{.Settings.StatusBrandName}}" disabled>
 					</div>
 					<div>
-						<div class="label" title="The hostname shown in the UI and used for copy/paste Stratum URLs (usually your public domain).">Brand domain</div>
-						<input name="status_brand_domain" type="text" class="textfield" value="{{.Settings.StatusBrandDomain}}">
+						<div class="label" title="The hostname shown in the UI and used for copy/paste Stratum URLs (usually your public domain).">Brand domain {{template "sensitive" .}}</div>
+						<input name="status_brand_domain" type="text" class="textfield" value="{{.Settings.StatusBrandDomain}}" disabled>
 					</div>
 					<div>
 						<div class="label" title="Short one-line description shown on the overview page.">Tagline</div>
@@ -93,8 +93,8 @@
 						<input name="discord_url" type="text" class="textfield" value="{{.Settings.DiscordURL}}">
 					</div>
 					<div>
-						<div class="label" title="Shown on the status UI (optional).">Server location</div>
-						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}">
+						<div class="label" title="Shown on the status UI (optional).">Server location {{template "sensitive" .}}</div>
+						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}" disabled>
 					</div>
 					<div>
 						<div class="label" title="Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.">status_public_url {{template "sensitive" .}}</div>

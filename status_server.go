@@ -1653,13 +1653,22 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return s
 	}
 
-	next.StatusBrandName = getTrim("status_brand_name")
-	next.StatusBrandDomain = getTrim("status_brand_domain")
+	next.StatusBrandName = orig.StatusBrandName
+	if fieldProvided("status_brand_name") {
+		next.StatusBrandName = getTrim("status_brand_name")
+	}
+	next.StatusBrandDomain = orig.StatusBrandDomain
+	if fieldProvided("status_brand_domain") {
+		next.StatusBrandDomain = getTrim("status_brand_domain")
+	}
 	next.StatusTagline = getTrim("status_tagline")
 	next.FiatCurrency = strings.ToLower(getTrim("fiat_currency"))
 	next.GitHubURL = getTrim("github_url")
 	next.DiscordURL = getTrim("discord_url")
-	next.ServerLocation = getTrim("server_location")
+	next.ServerLocation = orig.ServerLocation
+	if fieldProvided("server_location") {
+		next.ServerLocation = getTrim("server_location")
+	}
 	next.StatusPublicURL = orig.StatusPublicURL
 	if fieldProvided("status_public_url") {
 		next.StatusPublicURL = getTrim("status_public_url")
@@ -1787,6 +1796,15 @@ func adminSensitiveFieldsChanged(orig, next Config) []string {
 	}
 	if orig.StratumTLSListen != next.StratumTLSListen {
 		changed = append(changed, "stratum_tls_listen")
+	}
+	if orig.StatusBrandName != next.StatusBrandName {
+		changed = append(changed, "status_brand_name")
+	}
+	if orig.StatusBrandDomain != next.StatusBrandDomain {
+		changed = append(changed, "status_brand_domain")
+	}
+	if orig.ServerLocation != next.ServerLocation {
+		changed = append(changed, "server_location")
 	}
 	if orig.StatusPublicURL != next.StatusPublicURL {
 		changed = append(changed, "status_public_url")
