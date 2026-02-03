@@ -1167,6 +1167,15 @@ func (mc *MinerConn) minerName(fallback string) string {
 	return mc.id
 }
 
+func (mc *MinerConn) minerClientInfo() (minerType, name, version string) {
+	mc.stateMu.Lock()
+	minerType = mc.minerType
+	name = mc.minerClientName
+	version = mc.minerClientVersion
+	mc.stateMu.Unlock()
+	return minerType, name, version
+}
+
 func (mc *MinerConn) currentWorker() string {
 	mc.statsMu.Lock()
 	defer mc.statsMu.Unlock()

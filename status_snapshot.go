@@ -56,6 +56,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	vardiff := mc.suggestedVardiff(now, snap)
 	banned := mc.isBanned(now)
 	until, reason, _ := mc.banDetails()
+	minerType, minerName, minerVersion := mc.minerClientInfo()
 	return WorkerView{
 		Name:                name,
 		DisplayName:         displayName,
@@ -65,9 +66,9 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		BalanceSats:         0,
 		WalletAddress:       addr,
 		WalletScript:        scriptHex,
-		MinerType:           mc.minerType,
-		MinerName:           mc.minerClientName,
-		MinerVersion:        mc.minerClientVersion,
+		MinerType:           minerType,
+		MinerName:           minerName,
+		MinerVersion:        minerVersion,
 		LastShare:           stats.LastShare,
 		LastShareHash:       lastShareHash,
 		DisplayLastShare:    displayHash,
