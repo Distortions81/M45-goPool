@@ -209,6 +209,31 @@ func TestRPCErrorPropagatesAndLabelsMetrics(t *testing.T) {
 	// propagate rpcError and do not panic when recording metrics.
 }
 
+func TestRPCRetryDelayWithBackoff(t *testing.T) {
+	prevJitter := rpcRetryJitterFrac
+	prevMax := rpcRetryMaxDelay
+	t.Cleanup(func() {
+		rpcRetryJitterFrac = prevJitter
+		rpcRetryMaxDelay = prevMax
+	})
+	rpcRetryJitterFrac = 0
+	rpcRetryMaxDelay = 250 * time.Millisecond
+
+	base := rpcRetryDelay
+	if got := rpcRetryDelayWithBackoff(1); got != base {
+		t.Fatalf("attempt 1: expected %v, got %v", base, got)
+	}
+	if got := rpcRetryDelayWithBackoff(2); got != base*2 {
+		t.Fatalf("attempt 2: expected %v, got %v", base*2, got)
+	}
+	if got := rpcRetryDelayWithBackoff(3); got != rpcRetryMaxDelay {
+		t.Fatalf("attempt 3: expected %v, got %v", rpcRetryMaxDelay, got)
+	}
+	if got := rpcRetryDelayWithBackoff(4); got != rpcRetryMaxDelay {
+		t.Fatalf("attempt 4: expected %v, got %v", rpcRetryMaxDelay, got)
+	}
+}
+
 func TestRPCClientIgnoresDisconnectNodeNotFoundHTTP500(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest

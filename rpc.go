@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,7 +22,9 @@ const (
 	rpcRetryDelay = 100 * time.Millisecond
 )
 
+var rpcRetryMaxDelay = 5 * time.Second
 var rpcCookieWatchInterval = time.Second
+var rpcRetryJitterFrac = 0.2
 
 type rpcRequest struct {
 	Jsonrpc string      `json:"jsonrpc"`
@@ -59,18 +62,18 @@ func (e *httpStatusError) Error() string {
 }
 
 type RPCClient struct {
-	url       string
-	user      string
-	pass      string
-	client    *http.Client
-	lp        *http.Client
-	idMu      sync.Mutex
-	nextID    int
-	metrics   *PoolMetrics
-	connected atomic.Bool
-	unhealthy atomic.Bool
-	disconnects atomic.Uint64
-	reconnects  atomic.Uint64
+	url                string
+	user               string
+	pass               string
+	client             *http.Client
+	lp                 *http.Client
+	idMu               sync.Mutex
+	nextID             int
+	metrics            *PoolMetrics
+	connected          atomic.Bool
+	unhealthy          atomic.Bool
+	disconnects        atomic.Uint64
+	reconnects         atomic.Uint64
 	cookieWatchStarted atomic.Bool
 
 	authMu        sync.RWMutex
@@ -232,6 +235,7 @@ func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params i
 }
 
 func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
+	retryCount := 0
 	for {
 		if ctx.Err() != nil {
 			c.recordLastError(ctx.Err())
@@ -266,8 +270,10 @@ func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, 
 			}
 		}
 		if c.shouldRetry(err) {
+			retryCount++
 			c.reloadCookieIfChanged()
-			if err := sleepContext(ctx, rpcRetryDelay); err != nil {
+			delay := rpcRetryDelayWithBackoff(retryCount)
+			if err := sleepContext(ctx, delay); err != nil {
 				return err
 			}
 			continue
@@ -497,6 +503,30 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func rpcRetryDelayWithBackoff(attempt int) time.Duration {
+	if attempt <= 0 {
+		return rpcRetryDelay
+	}
+	delay := rpcRetryDelay
+	for i := 1; i < attempt; i++ {
+		delay *= 2
+		if rpcRetryMaxDelay > 0 && delay >= rpcRetryMaxDelay {
+			delay = rpcRetryMaxDelay
+			break
+		}
+	}
+	if rpcRetryJitterFrac > 0 {
+		low := 1 - rpcRetryJitterFrac
+		high := 1 + rpcRetryJitterFrac
+		jitter := low + (high-low)*rand.Float64()
+		delay = time.Duration(float64(delay) * jitter)
+		if delay <= 0 {
+			delay = time.Millisecond
+		}
+	}
+	return delay
 }
 
 // BlockHeader represents the subset of Bitcoin block header data we consume.
