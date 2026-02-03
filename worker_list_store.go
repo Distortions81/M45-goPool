@@ -522,9 +522,26 @@ func (s *workerListStore) flushBestDiffPending() {
 	s.bestDiffPending = make(map[string]float64, len(batch))
 	s.bestDiffMu.Unlock()
 
+	mergeBack := func() {
+		s.bestDiffMu.Lock()
+		if s.bestDiffPending == nil {
+			s.bestDiffPending = make(map[string]float64, len(batch))
+		}
+		for hash, diff := range batch {
+			if hash == "" || diff <= 0 {
+				continue
+			}
+			if diff > s.bestDiffPending[hash] {
+				s.bestDiffPending[hash] = diff
+			}
+		}
+		s.bestDiffMu.Unlock()
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		logger.Warn("saved worker best diff flush begin failed", "error", err)
+		mergeBack()
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
@@ -536,6 +553,7 @@ func (s *workerListStore) flushBestDiffPending() {
 	`)
 	if err != nil {
 		logger.Warn("saved worker best diff flush prepare failed", "error", err)
+		mergeBack()
 		return
 	}
 	defer stmt.Close()
@@ -546,11 +564,13 @@ func (s *workerListStore) flushBestDiffPending() {
 		}
 		if _, err := stmt.Exec(diff, hash, diff); err != nil {
 			logger.Warn("saved worker best diff flush update failed", "error", err)
+			mergeBack()
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		logger.Warn("saved worker best diff flush commit failed", "error", err)
+		mergeBack()
 		return
 	}
 }

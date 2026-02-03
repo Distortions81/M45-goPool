@@ -463,18 +463,25 @@ func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) 
 		n.enqueueNotice("Pool has been online for 5+ minutes; Discord notifications are now active.")
 	}
 	const refreshInterval = 30 * time.Second
-	if n.lastLinksRefresh.IsZero() || now.Sub(n.lastLinksRefresh) >= refreshInterval {
+	n.stateMu.Lock()
+	lastLinksRefresh := n.lastLinksRefresh
+	n.stateMu.Unlock()
+	if lastLinksRefresh.IsZero() || now.Sub(lastLinksRefresh) >= refreshInterval {
 		links, err := n.s.workerLists.ListEnabledDiscordLinks()
 		if err != nil || len(links) == 0 {
+			n.stateMu.Lock()
 			n.links = nil
 			n.linkIdx = 0
 			n.lastLinksRefresh = now
+			n.stateMu.Unlock()
 			n.sweep(nil)
 			return
 		}
+		n.stateMu.Lock()
 		n.links = links
 		n.linkIdx = 0
 		n.lastLinksRefresh = now
+		n.stateMu.Unlock()
 		active := make(map[string]struct{}, len(links))
 		for _, link := range links {
 			if link.UserID != "" {
@@ -483,19 +490,31 @@ func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) 
 		}
 		n.sweep(active)
 	}
-	if len(n.links) == 0 {
+	n.stateMu.Lock()
+	hasLinks := len(n.links) > 0
+	n.stateMu.Unlock()
+	if !hasLinks {
 		return
 	}
 
-	perTick := n.usersPerTick(len(n.links), tick, targetFullScan)
+	n.stateMu.Lock()
+	linkCount := len(n.links)
+	n.stateMu.Unlock()
+	perTick := n.usersPerTick(linkCount, tick, targetFullScan)
 	if perTick < 1 {
 		perTick = 1
 	}
 	deadline := time.Now().Add(budget)
 	checked := 0
 	for checked < perTick && time.Now().Before(deadline) {
+		n.stateMu.Lock()
+		if len(n.links) == 0 {
+			n.stateMu.Unlock()
+			return
+		}
 		link := n.links[n.linkIdx%len(n.links)]
 		n.linkIdx++
+		n.stateMu.Unlock()
 		if link.UserID == "" || link.DiscordUserID == "" {
 			continue
 		}
