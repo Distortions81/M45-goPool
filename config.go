@@ -137,6 +137,7 @@ type Config struct {
 	MinDifficulty         float64
 
 	LockSuggestedDifficulty  bool    // keep suggested difficulty instead of vardiff
+	VardiffFine              bool    // use half-step vardiff adjustments (tuning.toml only)
 	HashrateEMATauSeconds    float64 // EMA time constant for hashrate
 	HashrateEMAMinShares     int     // min shares before EMA kicks in
 	NTimeForwardSlackSeconds int     // max seconds ntime can roll forward
@@ -228,6 +229,7 @@ type EffectiveConfig struct {
 	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
 	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
+	VardiffFine                      bool    `json:"vardiff_fine,omitempty"`
 	SoloMode                          bool    `json:"solo_mode"`
 	DirectSubmitProcessing            bool    `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
@@ -405,6 +407,7 @@ type difficultyTuning struct {
 
 type miningTuning struct {
 	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy"`
+	VardiffFine           *bool `toml:"vardiff_fine"`
 }
 
 type hashrateTuning struct {
@@ -553,6 +556,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		},
 		Mining: miningTuning{
 			DisablePoolJobEntropy: boolPtr(false),
+			VardiffFine:           boolPtr(cfg.VardiffFine),
 		},
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
@@ -928,6 +932,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		// Disables coinbase "<pool entropy>-<job entropy>" suffix by bypassing
 		// the suffix builder (which is gated on JobEntropy > 0).
 		cfg.JobEntropy = 0
+	}
+	if fc.Mining.VardiffFine != nil {
+		cfg.VardiffFine = *fc.Mining.VardiffFine
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
@@ -1330,6 +1337,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		MinDifficulty:                     cfg.MinDifficulty,
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
+		VardiffFine:                   cfg.VardiffFine,
 		SoloMode:                      cfg.SoloMode,
 		DirectSubmitProcessing:        cfg.DirectSubmitProcessing,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,

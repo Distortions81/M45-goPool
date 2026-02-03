@@ -115,7 +115,7 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, and whether to auto-calculate throttles from `max_conns`.
 - `[timeouts]`: `connection_timeout_seconds`.
 - `[difficulty]`: `max_difficulty`, `min_difficulty`, and whether to lock miner-suggested difficulty.
-- `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix.
+- `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `vardiff_fine` to enable half-step VarDiff adjustments without power-of-two snapping.
 - `[hashrate]`: `hashrate_ema_tau_seconds`, `hashrate_ema_min_shares`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
 - `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.

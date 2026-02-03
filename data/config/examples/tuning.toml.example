@@ -19,6 +19,9 @@
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 uses defaults/auto (requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 #
+# Mining ([mining])
+# - vardiff_fine: Enable half-step VarDiff adjustments and disable power-of-two snapping (requires restart).
+#
 # Status UI ([status])
 # - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
 #
@@ -61,6 +64,7 @@
 
 [mining]
   disable_pool_job_entropy = false
+  vardiff_fine = false
 
 [peer_cleaning]
   enabled = true

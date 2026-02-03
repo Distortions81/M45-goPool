@@ -560,6 +560,11 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if targetDiff <= 0 || math.IsNaN(targetDiff) || math.IsInf(targetDiff, 0) {
 		return currentDiff
 	}
+
+	if mc.cfg.VardiffFine {
+		return mc.suggestedVardiffFine(currentDiff, targetDiff, windowAccepted)
+	}
+
 	// Aim one step lower than the computed target to reduce timeouts.
 	stepFactor := mc.vardiff.Step
 	if stepFactor <= 1 {
@@ -606,6 +611,61 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		factor = minFactor
 	}
 	newDiff = currentDiff * factor
+
+	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
+		return currentDiff
+	}
+	return mc.clampDifficulty(newDiff)
+}
+
+func (mc *MinerConn) suggestedVardiffFine(currentDiff, targetDiff float64, windowAccepted int) float64 {
+	if currentDiff <= 0 {
+		return currentDiff
+	}
+
+	if targetDiff > mc.vardiff.MaxDiff {
+		targetDiff = mc.vardiff.MaxDiff
+	}
+	if targetDiff < mc.vardiff.MinDiff {
+		targetDiff = mc.vardiff.MinDiff
+	}
+	if mc.cfg.MaxDifficulty > 0 && targetDiff > mc.cfg.MaxDifficulty {
+		targetDiff = mc.cfg.MaxDifficulty
+	}
+
+	step := mc.vardiff.Step
+	if step <= 1 {
+		step = 2
+	}
+	halfStep := math.Sqrt(step)
+	if halfStep <= 1 {
+		halfStep = 1.1
+	}
+
+	ratio := targetDiff / currentDiff
+	band := 0.12
+	if windowAccepted < 20 {
+		band = 0.25
+	}
+	if ratio >= 1-band && ratio <= 1+band {
+		return currentDiff
+	}
+
+	const k = 0.55
+	factor := math.Pow(ratio, k)
+	if math.IsNaN(factor) || math.IsInf(factor, 0) || factor <= 0 {
+		return currentDiff
+	}
+
+	maxFactor := halfStep
+	minFactor := 1 / halfStep
+	if factor > maxFactor {
+		factor = maxFactor
+	}
+	if factor < minFactor {
+		factor = minFactor
+	}
+	newDiff := currentDiff * factor
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return currentDiff
@@ -676,6 +736,9 @@ func (mc *MinerConn) clampDifficulty(diff float64) float64 {
 	}
 	if max > 0 && diff > max {
 		diff = max
+	}
+	if mc.cfg.VardiffFine {
+		return diff
 	}
 	// Snap the final difficulty to a power-of-two level within [min, max].
 	return quantizeDifficultyToPowerOfTwo(diff, min, max)
