@@ -991,12 +991,14 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 		n.pingMu.Unlock()
 		return
 	}
+	queued := append([]queuedDiscordMessage(nil), n.pingQueue...)
+	n.pingMu.Unlock()
 
 	// Outage guard: if we'd ping "too many" subscribed users at once, treat it as a
 	// localized outage (e.g. upstream connectivity) and drop the notification burst.
 	// Threshold: > max(100 users, 10% of subscribed users).
 	uniqueUsers := make(map[string]struct{}, 256)
-	for _, m := range n.pingQueue {
+	for _, m := range queued {
 		for _, id := range m.UserOrder {
 			id = strings.TrimSpace(id)
 			if id != "" {
@@ -1016,7 +1018,6 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 			threshold = pctThreshold
 		}
 		if affected > threshold {
-			n.pingMu.Unlock()
 			logger.Warn("notification burst dropped (possible localized outage)",
 				"affected_users", affected,
 				"subscribed_users", subscribed,
@@ -1032,9 +1033,14 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 	}
 
 	// Peek the next message; only pop it after a successful send.
+	n.pingMu.Lock()
+	if len(n.pingQueue) == 0 {
+		n.pingMu.Unlock()
+		return
+	}
 	next := n.pingQueue[0]
-	msg, mentions := renderQueuedMessage(next)
 	n.pingMu.Unlock()
+	msg, mentions := renderQueuedMessage(next)
 
 	if msg == "" {
 		n.pingMu.Lock()
