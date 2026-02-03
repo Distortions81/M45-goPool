@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +22,89 @@ type pendingSubmissionRecord struct {
 	RPCURL     string    `json:"rpc_url,omitempty"`
 	PayoutAddr string    `json:"payout_addr,omitempty"`
 	Status     string    `json:"status,omitempty"`
+}
+
+var (
+	pendingReplayBaseDelay  = 5 * time.Second
+	pendingReplayMaxDelay   = 5 * time.Minute
+	pendingReplayJitterFrac = 0.2
+	pendingReplayBackoff    = newPendingReplayBackoff()
+)
+
+type pendingReplayState struct {
+	failures    int
+	nextAllowed time.Time
+}
+
+type pendingReplayBackoffState struct {
+	mu    sync.Mutex
+	state map[string]pendingReplayState
+	rng   *rand.Rand
+}
+
+func newPendingReplayBackoff() *pendingReplayBackoffState {
+	return &pendingReplayBackoffState{
+		state: make(map[string]pendingReplayState),
+		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+func (b *pendingReplayBackoffState) allow(key string, now time.Time) bool {
+	if b == nil || key == "" {
+		return true
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	st, ok := b.state[key]
+	if !ok {
+		return true
+	}
+	return !st.nextAllowed.After(now)
+}
+
+func (b *pendingReplayBackoffState) fail(key string, now time.Time) time.Duration {
+	if b == nil || key == "" {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	st := b.state[key]
+	st.failures++
+
+	delay := pendingReplayBaseDelay
+	if delay <= 0 {
+		delay = time.Second
+	}
+	for i := 1; i < st.failures; i++ {
+		delay *= 2
+		if pendingReplayMaxDelay > 0 && delay >= pendingReplayMaxDelay {
+			delay = pendingReplayMaxDelay
+			break
+		}
+	}
+
+	if pendingReplayJitterFrac > 0 && b.rng != nil {
+		low := 1 - pendingReplayJitterFrac
+		high := 1 + pendingReplayJitterFrac
+		jitter := low + (high-low)*b.rng.Float64()
+		delay = time.Duration(float64(delay) * jitter)
+		if delay <= 0 {
+			delay = time.Millisecond
+		}
+	}
+
+	st.nextAllowed = now.Add(delay)
+	b.state[key] = st
+	return delay
+}
+
+func (b *pendingReplayBackoffState) reset(key string) {
+	if b == nil || key == "" {
+		return
+	}
+	b.mu.Lock()
+	delete(b.state, key)
+	b.mu.Unlock()
 }
 
 // startPendingSubmissionReplayer periodically scans the pending_submissions
@@ -41,14 +126,14 @@ func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) {
 		defer ticker.Stop()
 		for {
 			select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					replayPendingSubmissions(ctx, rpc)
-				}
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				replayPendingSubmissions(ctx, rpc)
 			}
-		}()
-	}
+		}
+	}()
+}
 
 func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 	// Use the shared state database connection
@@ -138,6 +223,11 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 		default:
 		}
 
+		now := time.Now()
+		if !pendingReplayBackoff.allow(item.Key, now) {
+			continue
+		}
+
 		var submitRes interface{}
 		// Bound each submitblock call so a slow or unresponsive node
 		// doesn't block shutdown or delay retries for other entries.
@@ -149,10 +239,15 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 		err := rpc.callCtx(callCtx, "submitblock", []interface{}{rec.BlockHex}, &submitRes)
 		cancel()
 		if err != nil {
-			logger.Error("pending submitblock error", "height", rec.Height, "hash", rec.Hash, "error", err)
+			retryIn := pendingReplayBackoff.fail(item.Key, now)
+			logger.Error("pending submitblock error", "height", rec.Height, "hash", rec.Hash, "error", err, "retry_in", retryIn)
+			if rpc.metrics != nil {
+				rpc.metrics.RecordErrorEvent("pending_submit", err.Error(), time.Now())
+			}
 			continue
 		}
 		logger.Info("pending block submitted", "height", rec.Height, "hash", rec.Hash)
+		pendingReplayBackoff.reset(item.Key)
 		_, _ = db.Exec("UPDATE pending_submissions SET status = 'submitted', rpc_error = '' WHERE submission_key = ?", item.Key)
 	}
 }

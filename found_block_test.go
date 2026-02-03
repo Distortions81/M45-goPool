@@ -400,12 +400,9 @@ func TestFoundBlockSubmission_PogoloCompat(t *testing.T) {
 }
 
 // TestFoundBlockSubmission_WithPendingLog verifies that failed submissions
-// are logged to pending_submissions.jsonl for later replay.
+// are logged to SQLite for later replay.
 func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfg := Config{
-		DataDir: tmpDir,
-	}
 
 	// Set up the shared DB for this test
 	dbPath := filepath.Join(tmpDir, "state", "workers.db")
