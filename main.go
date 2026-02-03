@@ -484,8 +484,12 @@ func main() {
 		}
 
 		statusHTTPServer = &http.Server{
-			Addr:    httpAddr,
-			Handler: httpHandler,
+			Addr:              httpAddr,
+			Handler:           httpHandler,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
 			logger.Info(httpLogMsg, httpLogFields...)
@@ -501,9 +505,13 @@ func main() {
 			GetCertificate: certReloader.getCertificate,
 		}
 		statusHTTPSServer = &http.Server{
-			Addr:      httpsAddr,
-			Handler:   mux,
-			TLSConfig: tlsConfig,
+			Addr:              httpsAddr,
+			Handler:           mux,
+			TLSConfig:         tlsConfig,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
 			logger.Info("status page listening (https)", "addr", httpsAddr, "cert", certPath)

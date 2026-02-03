@@ -55,6 +55,7 @@ func (p *PriceService) BTCPrice(fiat string) (float64, error) {
 	url := fmt.Sprintf("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=%s", fiat)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		p.lastFetch = now
 		p.lastErr = err
 		return 0, err
 	}
@@ -62,34 +63,40 @@ func (p *PriceService) BTCPrice(fiat string) (float64, error) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		p.lastFetch = now
 		p.lastErr = err
 		return 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		p.lastFetch = now
 		p.lastErr = fmt.Errorf("price http status %s", resp.Status)
 		return 0, p.lastErr
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
+		p.lastFetch = now
 		p.lastErr = err
 		return 0, err
 	}
 
 	var body map[string]map[string]float64
 	if err := sonic.Unmarshal(data, &body); err != nil {
+		p.lastFetch = now
 		p.lastErr = err
 		return 0, err
 	}
 	btc, ok := body["bitcoin"]
 	if !ok {
+		p.lastFetch = now
 		p.lastErr = fmt.Errorf("price response missing bitcoin key")
 		return 0, p.lastErr
 	}
 	price, ok := btc[fiat]
 	if !ok {
+		p.lastFetch = now
 		p.lastErr = fmt.Errorf("price response missing %s key", fiat)
 		return 0, p.lastErr
 	}
