@@ -333,6 +333,7 @@ func (s *StatusServer) disconnectPeer(addr string) error {
 
 type StatusServer struct {
 	tmpl                *template.Template
+	tmplMu              sync.RWMutex
 	jobMgr              *JobManager
 	metrics             *PoolMetrics
 	registry            *MinerRegistry

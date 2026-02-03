@@ -35,7 +35,7 @@ func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		data := s.baseTemplateData(start)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.tmpl.ExecuteTemplate(w, "overview", data); err != nil {
+		if err := s.executeTemplate(w, "overview", data); err != nil {
 			logger.Error("status template error", "error", err)
 			s.renderErrorPage(w, r, http.StatusInternalServerError,
 				"Status page error",
@@ -1334,7 +1334,7 @@ func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, d
 
 func (s *StatusServer) renderAdminPageTemplate(w http.ResponseWriter, r *http.Request, data AdminPageData, templateName string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, templateName, data); err != nil {
+	if err := s.executeTemplate(w, templateName, data); err != nil {
 		logger.Error("admin template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Admin panel error",

@@ -6,6 +6,7 @@ import (
 	stdjson "encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"math"
 	"net"
 	"os"
@@ -578,6 +579,19 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	return server
 }
 
+func (s *StatusServer) executeTemplate(w io.Writer, name string, data any) error {
+	if s == nil {
+		return fmt.Errorf("status server is nil")
+	}
+	s.tmplMu.RLock()
+	tmpl := s.tmpl
+	s.tmplMu.RUnlock()
+	if tmpl == nil {
+		return fmt.Errorf("templates not initialized")
+	}
+	return tmpl.ExecuteTemplate(w, name, data)
+}
+
 // ReloadTemplates reloads all HTML templates from disk. This allows operators
 // to update templates without restarting the pool server. It's designed to be
 // called in response to SIGUSR1 or other reload triggers.
@@ -592,7 +606,9 @@ func (s *StatusServer) ReloadTemplates() error {
 	}
 
 	// Atomically replace the template
+	s.tmplMu.Lock()
 	s.tmpl = tmpl
+	s.tmplMu.Unlock()
 	logger.Info("templates reloaded successfully")
 	return nil
 }

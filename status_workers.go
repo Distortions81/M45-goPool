@@ -224,7 +224,7 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "worker_login", data); err != nil {
+	if err := s.executeTemplate(w, "worker_login", data); err != nil {
 		logger.Error("worker login template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Worker login page error",
@@ -270,7 +270,7 @@ func (s *StatusServer) handleWorkerWalletSearch(w http.ResponseWriter, r *http.R
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "worker_wallet_search", data); err != nil {
+	if err := s.executeTemplate(w, "worker_wallet_search", data); err != nil {
 		logger.Error("worker wallet search template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Wallet search error",
@@ -402,7 +402,7 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "sign_in", data); err != nil {
+	if err := s.executeTemplate(w, "sign_in", data); err != nil {
 		logger.Error("sign in template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Sign-in page error",
@@ -546,7 +546,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "saved_workers", data); err != nil {
+	if err := s.executeTemplate(w, "saved_workers", data); err != nil {
 		logger.Error("saved workers template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Saved workers page error",
@@ -1268,7 +1268,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	// Render into a buffer so we can cache the HTML on success without
 	// risking partial writes on template errors.
 	var buf bytes.Buffer
-	if err := s.tmpl.ExecuteTemplate(&buf, "worker_status", data); err != nil {
+	if err := s.executeTemplate(&buf, "worker_status", data); err != nil {
 		logger.Error("worker status template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Worker page error",
@@ -1526,7 +1526,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "worker_status", data); err != nil {
+	if err := s.executeTemplate(w, "worker_status", data); err != nil {
 		logger.Error("worker status template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Worker page error",
@@ -1540,7 +1540,7 @@ func (s *StatusServer) handleServerInfoPage(w http.ResponseWriter, r *http.Reque
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "server", data); err != nil {
+	if err := s.executeTemplate(w, "server", data); err != nil {
 		logger.Error("server info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Server info page error",
@@ -1555,7 +1555,7 @@ func (s *StatusServer) handlePoolInfo(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "pool", data); err != nil {
+	if err := s.executeTemplate(w, "pool", data); err != nil {
 		logger.Error("pool info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Pool info error",
@@ -1568,7 +1568,7 @@ func (s *StatusServer) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "about", data); err != nil {
+	if err := s.executeTemplate(w, "about", data); err != nil {
 		logger.Error("about page template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"About page error",
@@ -1581,7 +1581,7 @@ func (s *StatusServer) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	data := s.baseTemplateData(start)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "help", data); err != nil {
+	if err := s.executeTemplate(w, "help", data); err != nil {
 		logger.Error("help page template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Solo mining help page error",
