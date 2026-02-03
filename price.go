@@ -48,8 +48,13 @@ func (p *PriceService) BTCPrice(fiat string) (float64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.lastFiat == fiat && !p.lastFetch.IsZero() && now.Sub(p.lastFetch) < priceCacheTTL && p.lastPrice > 0 && p.lastErr == nil {
-		return p.lastPrice, nil
+	if p.lastFiat == fiat && !p.lastFetch.IsZero() && now.Sub(p.lastFetch) < priceCacheTTL {
+		if p.lastErr != nil {
+			return 0, p.lastErr
+		}
+		if p.lastPrice > 0 {
+			return p.lastPrice, nil
+		}
 	}
 
 	url := fmt.Sprintf("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=%s", fiat)
