@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -1087,6 +1089,13 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 	})
 	if err != nil {
 		logger.Warn("discord notify send failed", "error", err)
+		if isDiscordPermanentError(err) {
+			n.pingMu.Lock()
+			if len(n.pingQueue) > 0 {
+				n.pingQueue = n.pingQueue[1:]
+			}
+			n.pingMu.Unlock()
+		}
 		return
 	}
 
@@ -1153,4 +1162,21 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func isDiscordPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, discordgo.ErrUnauthorized) {
+		return true
+	}
+	var restErr *discordgo.RESTError
+	if errors.As(err, &restErr) && restErr.Response != nil {
+		switch restErr.Response.StatusCode {
+		case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+			return true
+		}
+	}
+	return false
 }
