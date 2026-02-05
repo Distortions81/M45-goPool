@@ -264,7 +264,60 @@ func ensureStateTables(db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
+	if err := ensureWorkerDBChangeTracking(db); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+func ensureWorkerDBChangeTracking(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS db_change_state (
+			key TEXT PRIMARY KEY,
+			version INTEGER NOT NULL
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+		INSERT INTO db_change_state (key, version)
+		VALUES ('worker_db', 1)
+		ON CONFLICT(key) DO NOTHING
+	`); err != nil {
+		return err
+	}
+
+	tables := []string{
+		"bans",
+		"best_shares",
+		"saved_workers",
+		"clerk_users",
+		"discord_links",
+		"discord_worker_state",
+		"one_time_codes",
+		"found_blocks_log",
+		"pending_submissions",
+	}
+	for _, table := range tables {
+		for _, op := range []string{"INSERT", "UPDATE", "DELETE"} {
+			triggerName := "db_change_" + table + "_" + strings.ToLower(op)
+			stmt := `
+				CREATE TRIGGER IF NOT EXISTS ` + triggerName + `
+				AFTER ` + op + ` ON ` + table + `
+				BEGIN
+					UPDATE db_change_state SET version = version + 1 WHERE key = 'worker_db';
+				END
+			`
+			if _, err := db.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

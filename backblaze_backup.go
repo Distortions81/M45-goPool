@@ -41,7 +41,7 @@ type backblazeBackupService struct {
 
 	lastUploadAt      time.Time
 	lastUploadVersion int64
-	snapshotPath    string
+	snapshotPath      string
 
 	lastB2InitLogAt time.Time
 	lastB2InitMsg   string
@@ -109,20 +109,20 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		snapshotPath = filepath.Join(base, snapshotPath)
 	}
 	svc := &backblazeBackupService{
-		dbPath:          dbPath,
-		objectPrefix:    objectPrefix,
-		interval:        interval,
-		b2Enabled:       cfg.BackblazeBackupEnabled,
-		b2BucketName:    strings.TrimSpace(cfg.BackblazeBucket),
-		b2AccountID:     strings.TrimSpace(cfg.BackblazeAccountID),
-		b2AppKey:        strings.TrimSpace(cfg.BackblazeApplicationKey),
-		forceInterval:   cfg.BackblazeForceEveryInterval,
-		lastAttemptAt:         lastAttemptAt,
-		lastSnapshotAt:        lastSnapshotAt,
-		lastSnapshotVersion:   lastSnapshotVersion,
-		lastUploadAt:          lastUploadAt,
-		lastUploadVersion:     lastUploadVersion,
-		snapshotPath:    snapshotPath,
+		dbPath:              dbPath,
+		objectPrefix:        objectPrefix,
+		interval:            interval,
+		b2Enabled:           cfg.BackblazeBackupEnabled,
+		b2BucketName:        strings.TrimSpace(cfg.BackblazeBucket),
+		b2AccountID:         strings.TrimSpace(cfg.BackblazeAccountID),
+		b2AppKey:            strings.TrimSpace(cfg.BackblazeApplicationKey),
+		forceInterval:       cfg.BackblazeForceEveryInterval,
+		lastAttemptAt:       lastAttemptAt,
+		lastSnapshotAt:      lastSnapshotAt,
+		lastSnapshotVersion: lastSnapshotVersion,
+		lastUploadAt:        lastUploadAt,
+		lastUploadVersion:   lastUploadVersion,
+		snapshotPath:        snapshotPath,
 	}
 	svc.bucket = svc.tryInitBucket(ctx)
 	// Enable local backup if explicitly requested, or if B2 was enabled but has not
@@ -259,7 +259,7 @@ func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, f
 		return
 	}
 
-	// Always fetch the current data_version to drive "dirty since last snapshot".
+	// Always fetch the current change version to drive "dirty since last snapshot".
 	dataVersion, dvErr := workerDBDataVersion(ctx, s.dbPath)
 	if dvErr != nil {
 		logger.Warn("backblaze backup data_version check failed, proceeding", "error", dvErr, "reason", reason, "force", force)
@@ -503,7 +503,12 @@ func workerDBDataVersion(ctx context.Context, srcPath string) (int64, error) {
 	defer db.Close()
 
 	var dataVersion int64
-	if err := db.QueryRowContext(ctx, "PRAGMA data_version").Scan(&dataVersion); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT version FROM db_change_state WHERE key = 'worker_db'").Scan(&dataVersion); err != nil {
+		if isMissingChangeStateTableError(err) {
+			// Backward compatibility for databases created before db_change_state
+			// was introduced.
+			return 1, nil
+		}
 		return 0, err
 	}
 	return dataVersion, nil
@@ -553,9 +558,13 @@ func snapshotWorkerDB(ctx context.Context, srcPath string) (string, int64, error
 	}()
 
 	var dataVersion int64
-	if err := conn.QueryRowContext(ctx, "PRAGMA data_version").Scan(&dataVersion); err != nil {
-		_ = os.Remove(tmpPath)
-		return "", 0, err
+	if err := conn.QueryRowContext(ctx, "SELECT version FROM db_change_state WHERE key = 'worker_db'").Scan(&dataVersion); err != nil {
+		if isMissingChangeStateTableError(err) {
+			dataVersion = 1
+		} else {
+			_ = os.Remove(tmpPath)
+			return "", 0, err
+		}
 	}
 
 	if err := conn.Raw(func(driverConn any) error {
@@ -595,4 +604,11 @@ func sanitizeObjectPrefix(raw string) string {
 		return ""
 	}
 	return prefix + "/"
+}
+
+func isMissingChangeStateTableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "no such table: db_change_state")
 }

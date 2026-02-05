@@ -271,6 +271,65 @@ func TestBackups_DefaultSkipsWhenDBUnchanged(t *testing.T) {
 	}
 }
 
+func TestBackups_DefaultRunsWhenDBChanged(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := defaultConfig()
+	cfg.DataDir = tmp
+	cfg.BackblazeBackupEnabled = false
+	cfg.BackblazeKeepLocalCopy = true
+	cfg.BackblazeForceEveryInterval = false
+	cfg.BackupSnapshotPath = ""
+	cfg.BackblazeBackupIntervalSeconds = 1
+
+	dbPath := filepath.Join(cfg.DataDir, "state", "workers.db")
+	createTestWorkerDB(t, dbPath)
+
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+
+	svc, err := newBackblazeBackupService(context.Background(), cfg, dbPath)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if svc == nil {
+		t.Fatalf("expected service")
+	}
+
+	// First backup.
+	svc.RunOnce(context.Background(), "test", true)
+	ts1, dv1, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if ts1.IsZero() || dv1 == 0 {
+		t.Fatalf("expected non-zero stamp and data_version, got ts=%v dv=%d", ts1, dv1)
+	}
+
+	// Update tracked state and expect a non-forced run to snapshot again.
+	if _, err := db.Exec(`INSERT INTO bans(worker, worker_hash, until_unix, reason, updated_at_unix) VALUES (?, ?, ?, ?, ?)`,
+		"worker-1", "hash-1", time.Now().Add(5*time.Minute).Unix(), "test", time.Now().Unix()); err != nil {
+		t.Fatalf("insert ban row: %v", err)
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+	svc.RunOnce(context.Background(), "test", false)
+	ts2, dv2, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
+	if err != nil {
+		t.Fatalf("read sqlite stamp: %v", err)
+	}
+	if dv2 == dv1 {
+		t.Fatalf("expected data_version token to change when DB changed: dv1=%d dv2=%d", dv1, dv2)
+	}
+	if ts2.Before(ts1) {
+		t.Fatalf("expected snapshot stamp to stay same or advance when DB changed: ts1=%v ts2=%v", ts1, ts2)
+	}
+}
+
 func TestSnapshotWorkerDB_CreatesCopy(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "state", "workers.db")
