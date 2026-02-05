@@ -126,6 +126,7 @@ type Config struct {
 	AcceptSteadyStateRate             int     // max accepts/sec in steady state
 	AcceptSteadyStateReconnectPercent float64 // expected % of miners reconnecting at once
 	AcceptSteadyStateReconnectWindow  int     // seconds to spread steady-state reconnects
+	RPCMessagesPerMinute              int     // per-connection RPC messages/min (0 disables)
 
 	MaxRecentJobs         int
 	ConnectionTimeout     time.Duration
@@ -221,6 +222,7 @@ type EffectiveConfig struct {
 	AcceptSteadyStateRate             int     `json:"accept_steady_state_rate,omitempty"`
 	AcceptSteadyStateReconnectPercent float64 `json:"accept_steady_state_reconnect_percent,omitempty"`
 	AcceptSteadyStateReconnectWindow  int     `json:"accept_steady_state_reconnect_window,omitempty"`
+	RPCMessagesPerMinute              int     `json:"rpc_messages_per_minute,omitempty"`
 	MaxRecentJobs                     int     `json:"max_recent_jobs"`
 	ConnectionTimeout                 string  `json:"connection_timeout"`
 	VersionMask                       string  `json:"version_mask,omitempty"`
@@ -393,6 +395,7 @@ type rateLimitTuning struct {
 	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate"`
 	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent"`
 	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window"`
+	RPCMessagesPerMinute              *int     `toml:"rpc_messages_per_minute"`
 }
 
 type timeoutTuning struct {
@@ -545,6 +548,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			AcceptSteadyStateRate:             intPtr(cfg.AcceptSteadyStateRate),
 			AcceptSteadyStateReconnectPercent: float64Ptr(cfg.AcceptSteadyStateReconnectPercent),
 			AcceptSteadyStateReconnectWindow:  intPtr(cfg.AcceptSteadyStateReconnectWindow),
+			RPCMessagesPerMinute:              intPtr(cfg.RPCMessagesPerMinute),
 		},
 		Timeouts: timeoutTuning{
 			ConnectionTimeoutSec: intPtr(int(cfg.ConnectionTimeout / time.Second)),
@@ -940,6 +944,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.RateLimits.AcceptSteadyStateReconnectWindow != nil {
 		cfg.AcceptSteadyStateReconnectWindow = *fc.RateLimits.AcceptSteadyStateReconnectWindow
+	}
+	if fc.RateLimits.RPCMessagesPerMinute != nil {
+		cfg.RPCMessagesPerMinute = *fc.RateLimits.RPCMessagesPerMinute
 	}
 	if fc.Timeouts.ConnectionTimeoutSec != nil {
 		cfg.ConnectionTimeout = time.Duration(*fc.Timeouts.ConnectionTimeoutSec) * time.Second
@@ -1353,6 +1360,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		AcceptSteadyStateRate:             cfg.AcceptSteadyStateRate,
 		AcceptSteadyStateReconnectPercent: cfg.AcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:  cfg.AcceptSteadyStateReconnectWindow,
+		RPCMessagesPerMinute:              cfg.RPCMessagesPerMinute,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
 		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
 		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),

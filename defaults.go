@@ -45,6 +45,7 @@ func defaultConfig() Config {
 		AcceptSteadyStateRate:               defaultAcceptSteadyStateRate,
 		AcceptSteadyStateReconnectPercent:   defaultAcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:    defaultAcceptSteadyStateReconnectWindow,
+		RPCMessagesPerMinute:                defaultRPCMessagesPerMinute,
 		MaxRecentJobs:                       defaultRecentJobs,
 		ConnectionTimeout:                   defaultConnectionTimeout,
 		VersionMask:                         defaultVersionMask,

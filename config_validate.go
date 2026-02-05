@@ -121,5 +121,8 @@ func validateConfig(cfg Config) error {
 	if cfg.ReconnectBanDurationSeconds < 0 {
 		return fmt.Errorf("reconnect_ban_duration_seconds cannot be negative")
 	}
+	if cfg.RPCMessagesPerMinute < 0 {
+		return fmt.Errorf("rpc_messages_per_minute cannot be negative")
+	}
 	return nil
 }

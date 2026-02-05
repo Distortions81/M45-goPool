@@ -12,15 +12,15 @@ const (
 	workerPageCacheLimit = 100
 
 	// Config defaults.
-	defaultListenAddr       = ":3333"
-	defaultStatusAddr       = ":80"
-	defaultStatusTLSAddr    = ":443"
-	defaultStatusTagline    = "Solo Mining Pool"
-	defaultFiatCurrency     = "usd"
-	defaultGitHubURL        = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
+	defaultListenAddr        = ":3333"
+	defaultStatusAddr        = ":80"
+	defaultStatusTLSAddr     = ":443"
+	defaultStatusTagline     = "Solo Mining Pool"
+	defaultFiatCurrency      = "usd"
+	defaultGitHubURL         = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
 	defaultMempoolAddressURL = "https://mempool.space/address/"
-	defaultStratumTLSListen = ":4333"
-	defaultRPCURL           = "http://127.0.0.1:8332"
+	defaultStratumTLSListen  = ":4333"
+	defaultRPCURL            = "http://127.0.0.1:8332"
 
 	defaultExtranonce2Size         = 4
 	defaultTemplateExtraNonce2Size = 8
@@ -37,6 +37,7 @@ const (
 	defaultAcceptSteadyStateRate             = 50
 	defaultAcceptSteadyStateReconnectPercent = 5.0
 	defaultAcceptSteadyStateReconnectWindow  = 60
+	defaultRPCMessagesPerMinute              = 120
 
 	defaultJobEntropy                = 4
 	maxJobEntropy                    = 16

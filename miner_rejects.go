@@ -14,6 +14,19 @@ func (mc *MinerConn) recordActivity(now time.Time) {
 	mc.lastActivity = now
 }
 
+func (mc *MinerConn) rpcRateLimitExceeded(now time.Time) bool {
+	limit := mc.cfg.RPCMessagesPerMinute
+	if limit <= 0 {
+		return false
+	}
+	if mc.rpcMsgWindowStart.IsZero() || now.Sub(mc.rpcMsgWindowStart) >= time.Minute {
+		mc.rpcMsgWindowStart = now
+		mc.rpcMsgCount = 0
+	}
+	mc.rpcMsgCount++
+	return mc.rpcMsgCount > limit
+}
+
 func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
 	timeout := mc.cfg.ConnectionTimeout
 	if timeout <= 0 {
