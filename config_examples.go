@@ -99,6 +99,7 @@ func tuningConfigDocComments() []byte {
 # - accept_steady_state_rate: Accepts/sec once steady-state mode activates (requires restart).
 # - accept_steady_state_reconnect_percent: Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
+# - rpc_messages_per_minute: Per-connection Stratum RPC messages/min before disconnect (0 disables; requires restart).
 #
 # Timeouts ([timeouts])
 # - connection_timeout_seconds: Disconnect idle miner connections (requires restart).

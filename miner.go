@@ -277,6 +277,9 @@ type MinerConn struct {
 	connectedAt time.Time
 	// lastActivity tracks when we last saw a RPC message from this miner.
 	lastActivity time.Time
+	// rpcMsgWindowStart/rpcMsgCount track per-connection RPC message rate.
+	rpcMsgWindowStart time.Time
+	rpcMsgCount       int
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
@@ -911,6 +914,14 @@ func (mc *MinerConn) handle() {
 			continue
 		}
 		mc.recordActivity(now)
+		if mc.rpcRateLimitExceeded(now) {
+			logger.Warn("closing miner for rpc rate limit",
+				"remote", mc.id,
+				"limit_per_min", mc.cfg.RPCMessagesPerMinute,
+			)
+			mc.banFor("rpc rate limit", time.Hour, mc.currentWorker())
+			return
+		}
 
 		if method, id, ok := sniffStratumMethodID(line); ok {
 			switch method {
@@ -1375,4 +1386,21 @@ func (mc *MinerConn) adminBan(reason string, duration time.Duration) {
 	mc.banReason = reason
 	mc.stateMu.Unlock()
 	mc.logBan(reason, mc.currentWorker(), 0)
+}
+
+func (mc *MinerConn) banFor(reason string, duration time.Duration, worker string) {
+	if mc == nil {
+		return
+	}
+	if duration <= 0 {
+		duration = defaultBanInvalidSubmissionsDuration
+	}
+	if reason == "" {
+		reason = "ban"
+	}
+	mc.stateMu.Lock()
+	mc.banUntil = time.Now().Add(duration)
+	mc.banReason = reason
+	mc.stateMu.Unlock()
+	mc.logBan(reason, worker, 0)
 }
