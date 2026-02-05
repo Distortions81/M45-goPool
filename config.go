@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -160,6 +161,7 @@ type Config struct {
 	ReconnectBanThreshold       int
 	ReconnectBanWindowSeconds   int
 	ReconnectBanDurationSeconds int
+	BannedMinerTypes []string
 
 	// High-latency peer cleanup.
 	PeerCleanupEnabled   bool
@@ -246,6 +248,7 @@ type EffectiveConfig struct {
 	ReconnectBanThreshold             int     `json:"reconnect_ban_threshold,omitempty"`
 	ReconnectBanWindowSeconds         int     `json:"reconnect_ban_window_seconds,omitempty"`
 	ReconnectBanDurationSeconds       int     `json:"reconnect_ban_duration_seconds,omitempty"`
+	BannedMinerTypes []string `json:"banned_miner_types,omitempty"`
 	PeerCleanupEnabled                bool    `json:"peer_cleanup_enabled,omitempty"`
 	PeerCleanupMaxPingMs              float64 `json:"peer_cleanup_max_ping_ms,omitempty"`
 	PeerCleanupMinPeers               int     `json:"peer_cleanup_min_peers,omitempty"`
@@ -384,6 +387,44 @@ func filterAlphanumeric(s string) string {
 	return string(buf)
 }
 
+func loadMinerTypeBlacklist(path string) ([]string, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var entries []string
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 type rateLimitTuning struct {
 	MaxConns                          *int     `toml:"max_conns"`
 	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
@@ -437,6 +478,7 @@ type banTuning struct {
 	ReconnectBanThreshold            *int  `toml:"reconnect_ban_threshold"`
 	ReconnectBanWindowSeconds        *int  `toml:"reconnect_ban_window_seconds"`
 	ReconnectBanDurationSeconds      *int  `toml:"reconnect_ban_duration_seconds"`
+	BannedMinerTypes []string `toml:"banned_miner_types"`
 }
 
 type versionTuning struct {
@@ -586,6 +628,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			ReconnectBanThreshold:            intPtr(cfg.ReconnectBanThreshold),
 			ReconnectBanWindowSeconds:        intPtr(cfg.ReconnectBanWindowSeconds),
 			ReconnectBanDurationSeconds:      intPtr(cfg.ReconnectBanDurationSeconds),
+			BannedMinerTypes:                 cfg.BannedMinerTypes,
 		},
 		Version: versionTuning{
 			MinVersionBits:       intPtr(cfg.MinVersionBits),
@@ -640,6 +683,14 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	if cfg.PoolEntropy == "" {
 		cfg.PoolEntropy = generatePoolEntropy()
 		needsRewrite = true
+	}
+
+	blacklistPath := filepath.Join(cfg.DataDir, "config", "miner_blacklist.json")
+	if entries, err := loadMinerTypeBlacklist(blacklistPath); err != nil {
+		logger.Warn("load miner blacklist failed", "path", blacklistPath, "error", err)
+	} else if len(entries) > 0 {
+		cfg.BannedMinerTypes = entries
+		logger.Info("loaded miner blacklist", "path", blacklistPath, "count", len(entries))
 	}
 
 	if needsRewrite && configFileExisted {
@@ -1013,6 +1064,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Bans.ReconnectBanDurationSeconds != nil && *fc.Bans.ReconnectBanDurationSeconds > 0 {
 		cfg.ReconnectBanDurationSeconds = *fc.Bans.ReconnectBanDurationSeconds
 	}
+	if fc.Bans.BannedMinerTypes != nil {
+		cfg.BannedMinerTypes = fc.Bans.BannedMinerTypes
+	}
 	if fc.Version.MinVersionBits != nil {
 		cfg.MinVersionBits = *fc.Version.MinVersionBits
 	}
@@ -1385,6 +1439,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		ReconnectBanThreshold:         cfg.ReconnectBanThreshold,
 		ReconnectBanWindowSeconds:     cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:   cfg.ReconnectBanDurationSeconds,
+		BannedMinerTypes:              cfg.BannedMinerTypes,
 		PeerCleanupEnabled:            cfg.PeerCleanupEnabled,
 		PeerCleanupMaxPingMs:          cfg.PeerCleanupMaxPingMs,
 		PeerCleanupMinPeers:           cfg.PeerCleanupMinPeers,

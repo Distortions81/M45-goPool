@@ -122,6 +122,8 @@ func tuningConfigDocComments() []byte {
 # - reconnect_ban_threshold: Ban a host after N reconnects within the window (0 disables; requires restart).
 # - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
 # - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
+# - banned_miner_types: List of miner client names or full IDs to disconnect on subscribe (requires restart).
+#   Prefer data_dir/config/miner_blacklist.json for managing this list; it overrides this field when present.
 #
 # Peer cleaning ([peer_cleaning])
 # - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
@@ -144,6 +146,7 @@ func exampleConfigBytes() []byte {
 	}
 	return withPrependedTOMLComments(data, exampleHeader("base config"), baseConfigDocComments())
 }
+
 
 func exampleTuningConfigBytes() []byte {
 	cfg := defaultConfig()

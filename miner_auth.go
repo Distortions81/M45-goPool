@@ -12,6 +12,31 @@ import (
 	"time"
 )
 
+func normalizeMinerTypeName(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+func (mc *MinerConn) minerTypeBanned(minerType, minerName string) bool {
+	if mc == nil || len(mc.cfg.BannedMinerTypes) == 0 {
+		return false
+	}
+	typeNorm := normalizeMinerTypeName(minerType)
+	nameNorm := normalizeMinerTypeName(minerName)
+	if typeNorm == "" && nameNorm == "" {
+		return false
+	}
+	for _, banned := range mc.cfg.BannedMinerTypes {
+		bannedNorm := normalizeMinerTypeName(banned)
+		if bannedNorm == "" {
+			continue
+		}
+		if bannedNorm == typeNorm || (nameNorm != "" && bannedNorm == nameNorm) {
+			return true
+		}
+	}
+	return false
+}
+
 // Handle mining.subscribe request.
 // Very minimal: return fake subscription and extranonce1/size per docs/protocols/stratum-v1.mediawiki.
 func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
@@ -53,6 +78,20 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 					mc.minerClientVersion = ver
 				}
 				mc.stateMu.Unlock()
+				if mc.minerTypeBanned(id, name) {
+					logger.Warn("subscribe rejected: banned miner type",
+						"remote", mc.id,
+						"miner_type", id,
+						"miner_name", name,
+					)
+					mc.writeResponse(StratumResponse{
+						ID:     req.ID,
+						Result: nil,
+						Error:  newStratumError(20, "banned miner type"),
+					})
+					mc.Close("banned miner type")
+					return
+				}
 			}
 		}
 	}
