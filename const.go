@@ -50,9 +50,9 @@ const (
 	defaultBanInvalidSubmissionsAfter    = 60
 	defaultBanInvalidSubmissionsWindow   = time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
-	defaultReconnectBanThreshold         = 0
+	defaultReconnectBanThreshold         = 60
 	defaultReconnectBanWindowSeconds     = 60
-	defaultReconnectBanDurationSeconds   = 300
+	defaultReconnectBanDurationSeconds   = 3600
 
 	defaultDiscordWorkerNotifyThresholdSeconds = 300
 
