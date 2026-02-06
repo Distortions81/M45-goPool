@@ -282,7 +282,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		max = min
 	}
 	outOfRange := (min > 0 && diff < min) || (max > 0 && diff > max)
-	if outOfRange {
+	if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
 		worker := mc.currentWorker()
 		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
 		mc.banFor(reason, time.Hour, worker)
@@ -383,7 +383,7 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 		max = min
 	}
 	outOfRange := (min > 0 && diff < min) || (max > 0 && diff > max)
-	if outOfRange {
+	if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
 		worker := mc.currentWorker()
 		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
 		mc.banFor(reason, time.Hour, worker)
@@ -510,6 +510,10 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			// JSON-RPC response. If we send an unsolicited notification before
 			// the response, they may treat configure as failed and reconnect.
 			shouldSendVersionMask = true
+		case "suggest-difficulty", "suggest_difficulty":
+			// Non-standard extension some miners use to confirm support for
+			// mining.suggest_difficulty before sending it.
+			result[name] = true
 		default:
 			// Unknown extension; explicitly deny so miners don't retry forever.
 			result[name] = false

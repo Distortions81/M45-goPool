@@ -35,7 +35,7 @@ func TestSuggestDifficultyOutOfRangeBansAndDisconnects(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-ban-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -70,7 +70,7 @@ func TestSuggestDifficultyInRangeDoesNotBan(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-ok-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -92,11 +92,41 @@ func TestSuggestDifficultyInRangeDoesNotBan(t *testing.T) {
 	}
 }
 
+func TestSuggestDifficultyOutOfRangeDoesNotBanWhenEnforcementDisabled(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-noban-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: false},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_difficulty",
+		Params: []interface{}{0.5},
+	}
+	mc.suggestDifficulty(req)
+
+	if conn.closed {
+		t.Fatalf("did not expect miner connection to be closed")
+	}
+	until, _, _ := mc.banDetails()
+	if !until.IsZero() {
+		t.Fatalf("did not expect ban, got until=%s", until)
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"result\":true") {
+		t.Fatalf("expected result=true response, got: %q", out)
+	}
+}
+
 func TestSuggestDifficultyZeroIsIgnoredAndDoesNotBan(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-zero-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -129,7 +159,7 @@ func TestSuggestDifficultyNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-noparams-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -159,7 +189,7 @@ func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-target-ban-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -190,7 +220,7 @@ func TestSuggestTargetNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-target-noparams-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
@@ -220,7 +250,7 @@ func TestSuggestTargetEmptyIsIgnoredAndDoesNotBan(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
 		id:           "suggest-target-empty-miner",
-		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
 		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
