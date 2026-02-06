@@ -289,23 +289,23 @@ func TestAutoConfigureAcceptRateLimits_LargePool(t *testing.T) {
 
 func TestAutoConfigureAcceptRateLimits_VeryLargePoolCapped(t *testing.T) {
 	cfg := &Config{
-		MaxConns:              150000,
+		MaxConns:              1500000,
 		MaxAcceptsPerSecond:   defaultMaxAcceptsPerSecond,
 		MaxAcceptBurst:        defaultMaxAcceptBurst,
 		AcceptReconnectWindow: 15, // 15 second total window
 		AcceptBurstWindow:     5,  // 5 second burst window
 	}
 	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
-	// For 150000 miners with 15s window:
+	// For 1500000 miners with 15s window:
 	// - Burst fraction: 5/15 = 0.33
-	// - Burst: 150000 * 0.33 = 50000, but capped at 25000
-	// - Remaining: 150000 * 0.67 = 100000
-	// - Rate: 100000 / 10 = 10000 (at cap)
-	if cfg.MaxAcceptsPerSecond != 10000 {
-		t.Fatalf("MaxAcceptsPerSecond = %d, want 10000 (capped)", cfg.MaxAcceptsPerSecond)
+	// - Burst: 1500000 * 0.33 = 500000, at cap
+	// - Remaining: 1500000 * 0.67 = 1000000
+	// - Rate: 1000000 / 10 = 100000 (at cap)
+	if cfg.MaxAcceptsPerSecond != 100000 {
+		t.Fatalf("MaxAcceptsPerSecond = %d, want 100000 (capped)", cfg.MaxAcceptsPerSecond)
 	}
-	if cfg.MaxAcceptBurst != 25000 {
-		t.Fatalf("MaxAcceptBurst = %d, want 25000 (capped)", cfg.MaxAcceptBurst)
+	if cfg.MaxAcceptBurst != 500000 {
+		t.Fatalf("MaxAcceptBurst = %d, want 500000 (capped)", cfg.MaxAcceptBurst)
 	}
 }
 

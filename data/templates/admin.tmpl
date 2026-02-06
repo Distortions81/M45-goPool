@@ -171,7 +171,7 @@
 				<div class="grid admin-grid">
 					<div>
 						<div class="label" title="Maximum simultaneous Stratum connections allowed (checked on accept; requires restart to take effect).">max_conns {{template "restart-required" .}}</div>
-						<input name="max_conns" type="number" min="1" max="1000000" class="textfield" value="{{.Settings.MaxConns}}">
+						<input name="max_conns" type="number" min="0" max="1000000" class="textfield" value="{{.Settings.MaxConns}}">
 					</div>
 					<div>
 						<div class="label" title="When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).">auto_accept_rate_limits {{template "restart-required" .}}</div>
@@ -182,11 +182,11 @@
 					</div>
 					<div>
 						<div class="label" title="Connection accept throttle (accepts/sec) for the initial restart/reconnect window (requires restart).">max_accepts_per_second {{template "restart-required" .}}</div>
-						<input name="max_accepts_per_second" type="number" min="10" max="10000" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
+						<input name="max_accepts_per_second" type="number" min="0" max="100000" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
 					</div>
 					<div>
 						<div class="label" title="Burst size for accept limiter (token bucket). Allows short spikes (requires restart).">max_accept_burst {{template "restart-required" .}}</div>
-						<input name="max_accept_burst" type="number" min="20" max="25000" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
+						<input name="max_accept_burst" type="number" min="0" max="500000" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
 					</div>
 					<div>
 						<div class="label" title="Target seconds for all miners to reconnect after a restart (used for auto_accept_rate_limits).">accept_reconnect_window {{template "restart-required" .}}</div>

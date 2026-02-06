@@ -177,9 +177,9 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		if burstCapacity < 20 {
 			burstCapacity = 20 // minimum burst of 20
 		}
-		// Cap at reasonable maximum to avoid memory issues in token bucket
-		if burstCapacity > 25000 {
-			burstCapacity = 25000
+		// Cap at a reasonable maximum to avoid runaway values.
+		if burstCapacity > 500000 {
+			burstCapacity = 500000
 		}
 		cfg.MaxAcceptBurst = burstCapacity
 		logger.Info("auto-configured max_accept_burst for initial reconnection",
@@ -204,8 +204,8 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		if sustainedRate < 10 {
 			sustainedRate = 10
 		}
-		if sustainedRate > 10000 {
-			sustainedRate = 10000
+		if sustainedRate > 100000 {
+			sustainedRate = 100000
 		}
 		cfg.MaxAcceptsPerSecond = sustainedRate
 		logger.Info("auto-configured max_accepts_per_second for sustained reconnection",

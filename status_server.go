@@ -754,12 +754,12 @@ const (
 var adminPerPageOptions = []int{10, 25, 50, 100}
 
 const (
-	adminMinConnsLimit               = 1000
+	adminMinConnsLimit               = 0
 	adminMaxConnsLimit               = 1_000_000
-	adminMinAcceptsPerSecondLimit    = 10
-	adminMaxAcceptsPerSecondLimit    = 10_000
-	adminMinAcceptBurstLimit         = 20
-	adminMaxAcceptBurstLimit         = 25_000
+	adminMinAcceptsPerSecondLimit    = 0
+	adminMaxAcceptsPerSecondLimit    = 100_000
+	adminMinAcceptBurstLimit         = 0
+	adminMaxAcceptBurstLimit         = 500_000
 	adminMinConnectionTimeoutSeconds = 30
 	adminMaxConnectionTimeoutSeconds = 86_400
 )
