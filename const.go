@@ -72,6 +72,7 @@ const (
 	defaultZMQReconnectMax       = 10 * time.Second
 	defaultZMQRecreateBackoffMin = 500 * time.Millisecond
 	defaultZMQRecreateBackoffMax = 10 * time.Second
+	defaultInitialDifficultyDelay = 250 * time.Millisecond
 	defaultZMQHashBlockAddr      = "tcp://127.0.0.1:28334"
 	defaultZMQRawBlockAddr       = "tcp://127.0.0.1:28332"
 

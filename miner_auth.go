@@ -245,22 +245,9 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	}
 
 	// Now that the worker is authorized and its wallet-style ID is known
-	// to be valid, send initial difficulty and a job so hashing can start.
-	// First job always has clean_jobs=true so the miner starts fresh.
-	if job := mc.jobMgr.CurrentJob(); job != nil {
-		// Respect suggested difficulty if already processed. Otherwise, fall back
-		// to a sane default/minimum so miners have a starting target.
-		if !mc.suggestDiffProcessed {
-			diff := mc.cfg.DefaultDifficulty
-			if diff <= 0 {
-				diff = mc.vardiff.MinDiff
-			}
-			if diff > 0 {
-				mc.setDifficulty(diff)
-			}
-		}
-		mc.sendNotifyFor(job, true)
-	}
+	// to be valid, schedule initial difficulty and a job so hashing can start.
+	// We delay very briefly to give miners a chance to send suggest_* first.
+	mc.scheduleInitialWork()
 }
 
 func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
@@ -330,6 +317,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		mc.lockDifficulty = true
 	}
 	mc.setDifficulty(diff)
+	mc.maybeSendInitialWork()
 }
 
 func parseSuggestedDifficulty(value interface{}) (float64, bool) {
@@ -425,6 +413,7 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 		mc.lockDifficulty = true
 	}
 	mc.setDifficulty(diff)
+	mc.maybeSendInitialWork()
 }
 
 // difficultyFromTargetHex converts a target hex string to difficulty.

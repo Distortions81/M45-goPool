@@ -215,6 +215,7 @@ type MinerConn struct {
 	listenerOn           bool
 	stats                MinerStats
 	statsMu              sync.Mutex
+	initWorkMu           sync.Mutex
 	statsUpdates         chan statsUpdate // Buffered channel for async stats updates
 	statsWg              sync.WaitGroup   // Wait for stats worker to finish
 	vardiff              VarDiffConfig
@@ -302,6 +303,8 @@ type MinerConn struct {
 	// during the initialization phase. Subsequent suggests will be ignored to prevent
 	// repeated keepalive messages from disrupting vardiff adjustments.
 	suggestDiffProcessed bool
+	initialWorkScheduled bool
+	initialWorkSent      bool
 }
 
 type rpcCaller interface {
@@ -1020,6 +1023,62 @@ func (mc *MinerConn) handle() {
 			}
 		}
 
+	}
+}
+
+func (mc *MinerConn) scheduleInitialWork() {
+	mc.initWorkMu.Lock()
+	if mc.initialWorkScheduled || mc.initialWorkSent {
+		mc.initWorkMu.Unlock()
+		return
+	}
+	mc.initialWorkScheduled = true
+	mc.initWorkMu.Unlock()
+
+	go func() {
+		time.Sleep(defaultInitialDifficultyDelay)
+		mc.sendInitialWork()
+	}()
+}
+
+func (mc *MinerConn) maybeSendInitialWork() {
+	mc.initWorkMu.Lock()
+	alreadySent := mc.initialWorkSent
+	mc.initWorkMu.Unlock()
+	if alreadySent {
+		return
+	}
+	mc.sendInitialWork()
+}
+
+func (mc *MinerConn) sendInitialWork() {
+	mc.initWorkMu.Lock()
+	if mc.initialWorkSent {
+		mc.initWorkMu.Unlock()
+		return
+	}
+	mc.initialWorkSent = true
+	mc.initWorkMu.Unlock()
+
+	if !mc.authorized || !mc.listenerOn {
+		return
+	}
+
+	// Respect suggested difficulty if already processed. Otherwise, fall back
+	// to a sane default/minimum so miners have a starting target.
+	if !mc.suggestDiffProcessed && !mc.restoredRecentDiff {
+		diff := mc.cfg.DefaultDifficulty
+		if diff <= 0 {
+			diff = mc.vardiff.MinDiff
+		}
+		if diff > 0 {
+			mc.setDifficulty(diff)
+		}
+	}
+
+	// First job always has clean_jobs=true so the miner starts fresh.
+	if job := mc.jobMgr.CurrentJob(); job != nil {
+		mc.sendNotifyFor(job, true)
 	}
 }
 
