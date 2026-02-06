@@ -256,14 +256,22 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	resp := StratumResponse{ID: req.ID}
 	if len(req.Params) == 0 {
-		resp.Error = newStratumError(20, "invalid params")
+		// Some miners send suggest_difficulty with no params to indicate they
+		// have no preference. Acknowledge and ignore.
+		resp.Result = true
 		mc.writeResponse(resp)
 		return
 	}
 
 	diff, ok := parseSuggestedDifficulty(req.Params[0])
-	if !ok || diff <= 0 {
+	if !ok || diff < 0 {
 		resp.Error = newStratumError(20, "invalid params")
+		mc.writeResponse(resp)
+		return
+	}
+	if diff == 0 {
+		// Treat 0 as "no preference" (do not lock/adjust, do not ban).
+		resp.Result = true
 		mc.writeResponse(resp)
 		return
 	}
@@ -341,21 +349,30 @@ func parseSuggestedDifficulty(value interface{}) (float64, bool) {
 func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 	resp := StratumResponse{ID: req.ID}
 	if len(req.Params) == 0 {
-		resp.Error = newStratumError(20, "invalid params")
+		// Some miners send suggest_target with no params to indicate they have
+		// no preference. Acknowledge and ignore.
+		resp.Result = true
 		mc.writeResponse(resp)
 		return
 	}
 
 	targetHex, ok := req.Params[0].(string)
 	if !ok || targetHex == "" {
-		resp.Error = newStratumError(20, "invalid params")
+		// Treat empty/unspecified target as "no preference".
+		resp.Result = true
 		mc.writeResponse(resp)
 		return
 	}
 
 	diff, ok := difficultyFromTargetHex(targetHex)
-	if !ok || diff <= 0 {
+	if !ok || diff < 0 {
 		resp.Error = newStratumError(20, "invalid target")
+		mc.writeResponse(resp)
+		return
+	}
+	if diff == 0 {
+		// Treat 0 as "no preference" (do not lock/adjust, do not ban).
+		resp.Result = true
 		mc.writeResponse(resp)
 		return
 	}

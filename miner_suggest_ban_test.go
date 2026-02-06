@@ -92,6 +92,69 @@ func TestSuggestDifficultyInRangeDoesNotBan(t *testing.T) {
 	}
 }
 
+func TestSuggestDifficultyZeroIsIgnoredAndDoesNotBan(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-zero-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_difficulty",
+		Params: []interface{}{0.0},
+	}
+	mc.suggestDifficulty(req)
+
+	if conn.closed {
+		t.Fatalf("did not expect miner connection to be closed")
+	}
+	until, _, _ := mc.banDetails()
+	if !until.IsZero() {
+		t.Fatalf("did not expect ban, got until=%s", until)
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"result\":true") {
+		t.Fatalf("expected result=true response, got: %q", out)
+	}
+	if strings.Contains(out, "\"error\"") && strings.Contains(out, "invalid params") {
+		t.Fatalf("expected no invalid params error, got: %q", out)
+	}
+}
+
+func TestSuggestDifficultyNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-noparams-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_difficulty",
+		Params: nil,
+	}
+	mc.suggestDifficulty(req)
+
+	if conn.closed {
+		t.Fatalf("did not expect miner connection to be closed")
+	}
+	until, _, _ := mc.banDetails()
+	if !until.IsZero() {
+		t.Fatalf("did not expect ban, got until=%s", until)
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"result\":true") {
+		t.Fatalf("expected result=true response, got: %q", out)
+	}
+}
+
 func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
@@ -120,5 +183,65 @@ func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 	}
 	if until.Before(time.Now().Add(55 * time.Minute)) {
 		t.Fatalf("expected ~1h ban, got until=%s", until)
+	}
+}
+
+func TestSuggestTargetNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-target-noparams-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_target",
+		Params: nil,
+	}
+	mc.suggestTarget(req)
+
+	if conn.closed {
+		t.Fatalf("did not expect miner connection to be closed")
+	}
+	until, _, _ := mc.banDetails()
+	if !until.IsZero() {
+		t.Fatalf("did not expect ban, got until=%s", until)
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"result\":true") {
+		t.Fatalf("expected result=true response, got: %q", out)
+	}
+}
+
+func TestSuggestTargetEmptyIsIgnoredAndDoesNotBan(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-target-empty-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_target",
+		Params: []interface{}{""},
+	}
+	mc.suggestTarget(req)
+
+	if conn.closed {
+		t.Fatalf("did not expect miner connection to be closed")
+	}
+	until, _, _ := mc.banDetails()
+	if !until.IsZero() {
+		t.Fatalf("did not expect ban, got until=%s", until)
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"result\":true") {
+		t.Fatalf("expected result=true response, got: %q", out)
 	}
 }
