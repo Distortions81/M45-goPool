@@ -23,4 +23,3 @@ func TestFormatDiff_SmallValues(t *testing.T) {
 		}
 	}
 }
-

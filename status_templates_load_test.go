@@ -9,4 +9,3 @@ func TestLoadTemplates_Parse(t *testing.T) {
 		t.Fatalf("loadTemplates(data) error: %v", err)
 	}
 }
-

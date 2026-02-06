@@ -23,4 +23,3 @@ func TestDisplayPoolTagFromCoinbaseMessage(t *testing.T) {
 		}
 	}
 }
-
