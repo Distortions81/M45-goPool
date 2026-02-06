@@ -36,3 +36,28 @@ func TestApplyAdminSettingsForm_IgnoresDisabledOperatorDonationFields(t *testing
 		t.Fatalf("expected operator_donation_url to be preserved, got %q", cfg.OperatorDonationURL)
 	}
 }
+
+func TestApplyAdminSettingsForm_DefaultDifficultyZeroFallsBackToMinDifficulty(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.DefaultDifficulty = 0
+	cfg.MinDifficulty = 256
+
+	form := url.Values{}
+	form.Set("status_tagline", cfg.StatusTagline) // required field (present in UI)
+	form.Set("min_difficulty", "1024")
+	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
+	}
+	if cfg.MinDifficulty != 1024 {
+		t.Fatalf("expected min_difficulty=1024, got %v", cfg.MinDifficulty)
+	}
+	if cfg.DefaultDifficulty != 0 {
+		t.Fatalf("expected default_difficulty to remain unset (0) when not provided, got %v", cfg.DefaultDifficulty)
+	}
+}

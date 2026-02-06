@@ -56,7 +56,7 @@
   reconnect_ban_window_seconds = 60
 
 [difficulty]
-  default_difficulty = 256.0
+  default_difficulty = 0.0
   enforce_suggested_difficulty_limits = false
   lock_suggested_difficulty = false
   max_difficulty = 0.0

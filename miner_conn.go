@@ -397,7 +397,12 @@ func (mc *MinerConn) sendInitialWork() {
 	if !mc.suggestDiffProcessed && !mc.restoredRecentDiff {
 		diff := mc.cfg.DefaultDifficulty
 		if diff <= 0 {
-			diff = mc.vardiff.MinDiff
+			// Default difficulty of 0 means "unset": treat it as the minimum
+			// difficulty (config min when set; otherwise the compiled-in minimum).
+			diff = mc.cfg.MinDifficulty
+			if diff <= 0 {
+				diff = defaultMinDifficulty
+			}
 		}
 		if diff > 0 {
 			mc.setDifficulty(diff)
