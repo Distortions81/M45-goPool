@@ -57,7 +57,7 @@ const (
 	defaultDiscordWorkerNotifyThresholdSeconds = 300
 
 	defaultMaxDifficulty = 0
-	defaultMinDifficulty = 0.125
+	defaultMinDifficulty = 512
 
 	defaultMinVersionBits    = 1
 	defaultRefreshInterval   = 10 * time.Second

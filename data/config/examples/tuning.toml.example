@@ -58,7 +58,7 @@
   enforce_suggested_difficulty_limits = false
   lock_suggested_difficulty = false
   max_difficulty = 0.0
-  min_difficulty = 0.125
+  min_difficulty = 512
 
 [discord]
   worker_notify_threshold_seconds = 300
