@@ -1,0 +1,223 @@
+package main
+
+import "time"
+
+// statsWorker processes stats updates asynchronously from a buffered channel.
+// This eliminates lock contention on the hot path (share submission).
+func (mc *MinerConn) statsWorker() {
+	defer mc.statsWg.Done()
+
+	for update := range mc.statsUpdates {
+		mc.statsMu.Lock()
+		mc.ensureWindowLocked(update.timestamp)
+
+		if update.worker != "" {
+			if mc.stats.Worker != update.worker {
+				mc.stats.Worker = update.worker
+				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+			} else if mc.stats.WorkerSHA256 == "" {
+				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+			}
+		}
+
+		mc.stats.WindowSubmissions++
+		if update.accepted {
+			mc.stats.Accepted++
+			mc.stats.WindowAccepted++
+			if update.creditedDiff >= 0 {
+				mc.stats.TotalDifficulty += update.creditedDiff
+				mc.stats.WindowDifficulty += update.creditedDiff
+				mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
+			}
+		} else {
+			mc.stats.Rejected++
+		}
+		mc.stats.LastShare = update.timestamp
+
+		mc.lastShareHash = update.shareHash
+		mc.lastShareAccepted = update.accepted
+		mc.lastShareDifficulty = update.shareDiff
+		mc.lastShareDetail = update.detail
+		if !update.accepted && update.reason != "" {
+			mc.lastRejectReason = update.reason
+		}
+		mc.statsMu.Unlock()
+	}
+}
+
+func (mc *MinerConn) minerName(fallback string) string {
+	mc.statsMu.Lock()
+	worker := mc.stats.Worker
+	mc.statsMu.Unlock()
+	if worker != "" {
+		return worker
+	}
+	if fallback != "" {
+		return fallback
+	}
+	return mc.id
+}
+
+func (mc *MinerConn) minerClientInfo() (minerType, name, version string) {
+	mc.stateMu.Lock()
+	minerType = mc.minerType
+	name = mc.minerClientName
+	version = mc.minerClientVersion
+	mc.stateMu.Unlock()
+	return minerType, name, version
+}
+
+func (mc *MinerConn) currentWorker() string {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	return mc.stats.Worker
+}
+
+func (mc *MinerConn) updateWorker(worker string) string {
+	if worker == "" {
+		return mc.minerName("")
+	}
+	mc.statsMu.Lock()
+	if mc.stats.Worker != worker {
+		mc.stats.Worker = worker
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
+	} else if mc.stats.WorkerSHA256 == "" {
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
+	}
+	mc.statsMu.Unlock()
+	return worker
+}
+
+func (mc *MinerConn) ensureWindowLocked(now time.Time) {
+	if mc.stats.WindowStart.IsZero() {
+		mc.stats.WindowStart = now
+		mc.stats.WindowDifficulty = 0
+		return
+	}
+	if now.Sub(mc.stats.WindowStart) > mc.vardiff.AdjustmentWindow*2 {
+		mc.stats.WindowStart = now
+		mc.stats.WindowAccepted = 0
+		mc.stats.WindowSubmissions = 0
+		mc.stats.WindowDifficulty = 0
+	}
+}
+
+// recordShare updates accounting for a submitted share. creditedDiff is the
+// target difficulty we assigned for this share (used for hashrate), while
+// shareDiff is the difficulty implied by the submitted hash (used for
+// display/detail). They may differ when vardiff changed between notify and
+// submit; we always want hashrate to use the assigned target.
+func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff float64, shareDiff float64, reason string, shareHash string, detail *ShareDetail, now time.Time) {
+	// Send update to async stats worker instead of blocking on mutex
+	update := statsUpdate{
+		worker:       worker,
+		accepted:     accepted,
+		creditedDiff: creditedDiff,
+		shareDiff:    shareDiff,
+		reason:       reason,
+		shareHash:    shareHash,
+		detail:       detail,
+		timestamp:    now,
+	}
+
+	select {
+	case mc.statsUpdates <- update:
+		// Successfully queued for async processing
+	default:
+		// Channel full, process synchronously as fallback
+		mc.recordShareSync(update)
+	}
+
+	if mc.metrics != nil {
+		mc.metrics.RecordShare(accepted, reason)
+	}
+}
+
+// recordShareSync is the fallback synchronous stats update (only when channel is full)
+func (mc *MinerConn) recordShareSync(update statsUpdate) {
+	mc.statsMu.Lock()
+	mc.ensureWindowLocked(update.timestamp)
+	if update.worker != "" {
+		if mc.stats.Worker != update.worker {
+			mc.stats.Worker = update.worker
+			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+		} else if mc.stats.WorkerSHA256 == "" {
+			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
+		}
+	}
+	mc.stats.WindowSubmissions++
+	if update.accepted {
+		mc.stats.Accepted++
+		mc.stats.WindowAccepted++
+		if update.creditedDiff >= 0 {
+			mc.stats.TotalDifficulty += update.creditedDiff
+			mc.stats.WindowDifficulty += update.creditedDiff
+			mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
+		}
+	} else {
+		mc.stats.Rejected++
+	}
+	mc.stats.LastShare = update.timestamp
+
+	mc.lastShareHash = update.shareHash
+	mc.lastShareAccepted = update.accepted
+	mc.lastShareDifficulty = update.shareDiff
+	mc.lastShareDetail = update.detail
+	if !update.accepted && update.reason != "" {
+		mc.lastRejectReason = update.reason
+	}
+	mc.statsMu.Unlock()
+}
+
+func (mc *MinerConn) trackBestShare(worker, hash string, difficulty float64, now time.Time) {
+	if mc.metrics == nil {
+		return
+	}
+	mc.metrics.TrackBestShare(worker, hash, difficulty, now)
+}
+
+func (mc *MinerConn) snapshotStats() MinerStats {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	return mc.stats
+}
+
+func (mc *MinerConn) snapshotStatsWithRates(now time.Time) (stats MinerStats, acceptRatePerMin float64, submitRatePerMin float64) {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	stats = mc.stats
+	if stats.WindowStart.IsZero() {
+		return stats, 0, 0
+	}
+	window := now.Sub(stats.WindowStart)
+	if window <= 0 {
+		return stats, 0, 0
+	}
+	acceptRatePerMin = float64(stats.WindowAccepted) / window.Minutes()
+	submitRatePerMin = float64(stats.WindowSubmissions) / window.Minutes()
+	return stats, acceptRatePerMin, submitRatePerMin
+}
+
+type minerShareSnapshot struct {
+	Stats               MinerStats
+	RollingHashrate     float64
+	LastShareHash       string
+	LastShareAccepted   bool
+	LastShareDifficulty float64
+	LastShareDetail     *ShareDetail
+	LastReject          string
+}
+
+func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	return minerShareSnapshot{
+		Stats:               mc.stats,
+		RollingHashrate:     mc.rollingHashrateValue,
+		LastShareHash:       mc.lastShareHash,
+		LastShareAccepted:   mc.lastShareAccepted,
+		LastShareDifficulty: mc.lastShareDifficulty,
+		LastShareDetail:     mc.lastShareDetail,
+		LastReject:          mc.lastRejectReason,
+	}
+}
