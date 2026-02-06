@@ -318,6 +318,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	}
 	mc.setDifficulty(diff)
 	mc.maybeSendInitialWork()
+	mc.maybeSendCleanJobAfterSuggest()
 }
 
 func parseSuggestedDifficulty(value interface{}) (float64, bool) {
@@ -414,6 +415,24 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 	}
 	mc.setDifficulty(diff)
 	mc.maybeSendInitialWork()
+	mc.maybeSendCleanJobAfterSuggest()
+}
+
+// maybeSendCleanJobAfterSuggest sends a clean notify if initial work was already sent.
+// This ensures a fresh job immediately follows a difficulty suggestion.
+func (mc *MinerConn) maybeSendCleanJobAfterSuggest() {
+	mc.initWorkMu.Lock()
+	alreadySent := mc.initialWorkSent
+	mc.initWorkMu.Unlock()
+	if !alreadySent {
+		return
+	}
+	if !mc.authorized || !mc.listenerOn {
+		return
+	}
+	if job := mc.jobMgr.CurrentJob(); job != nil {
+		mc.sendNotifyFor(job, true)
+	}
 }
 
 // difficultyFromTargetHex converts a target hex string to difficulty.
