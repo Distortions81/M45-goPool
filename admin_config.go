@@ -29,6 +29,7 @@ var adminConfigTemplate = `# Administrative control panel (hidden by default).
 # - password_sha256 is used for authentication; password can be cleared after first login.
 # - On startup, if password is set, goPool verifies/refreshes password_sha256 to match it.
 # - After a successful admin login, goPool clears password and keeps password_sha256.
+# - Minimum password length is 16 characters (shorter passwords are replaced on startup).
 # Keep this file off version control and serve the UI only on trusted networks.
 enabled = %t
 username = %s
