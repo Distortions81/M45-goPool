@@ -114,13 +114,13 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, `stratum_messages_per_minute` (messages/min before disconnect + 1h ban), and whether to auto-calculate throttles from `max_conns`.
 - `[timeouts]`: `connection_timeout_seconds`.
-- `[difficulty]`: `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits).
+- `[difficulty]`: `default_difficulty` fallback when no suggestion arrives, `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits). The first `mining.suggest_*` is honored once per connection, triggers a clean notify, and subsequent suggests are ignored.
 - `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `vardiff_fine` to enable half-step VarDiff adjustments without power-of-two snapping.
 - `[hashrate]`: `hashrate_ema_tau_seconds`, `hashrate_ema_min_shares`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
 - `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.
 - `[peer_cleaning]`: Enable/disable peer cleanup and tune thresholds.
-- `[bans]`: Ban thresholds/durations, `banned_miner_types` (disconnect miners by client ID on subscribe), and `clean_expired_on_startup` (defaults to `true`). Set it to `false` if you want to keep expired bans for inspection.
+- `[bans]`: Ban thresholds/durations, `banned_miner_types` (disconnect miners by client ID on subscribe), and `clean_expired_on_startup` (defaults to `true`). Prefer `data/config/miner_blacklist.json` for client ID blacklist management; it overrides `banned_miner_types` when present. Set `clean_expired_on_startup = false` if you want to keep expired bans for inspection.
 - `[version]`: `min_version_bits` and `ignore_min_version_bits`.
 
 Delete `tuning.toml` to revert to built-in defaults. The first run creates `data/config/examples/tuning.toml.example`.

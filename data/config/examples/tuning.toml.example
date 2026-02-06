@@ -17,8 +17,9 @@
 # - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
 #
 # Difficulty ([difficulty])
+# - default_difficulty: Fallback difficulty if no suggest_* arrives during the startup delay (requires restart).
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
-# - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
+# - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart). Subsequent suggests are ignored.
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
