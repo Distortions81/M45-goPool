@@ -53,6 +53,7 @@ func defaultConfig() Config {
 		IgnoreMinVersionBits:                true,
 		MaxDifficulty:                       defaultMaxDifficulty,
 		MinDifficulty:                       defaultMinDifficulty,
+		DefaultDifficulty:                   defaultMinDifficulty,
 		EnforceSuggestedDifficultyLimits:    false,
 		HashrateEMATauSeconds:               defaultHashrateEMATauSeconds,
 		HashrateEMAMinShares:                defaultHashrateEMAMinShares,

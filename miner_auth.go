@@ -249,10 +249,14 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	// First job always has clean_jobs=true so the miner starts fresh.
 	if job := mc.jobMgr.CurrentJob(); job != nil {
 		// Respect suggested difficulty if already processed. Otherwise, fall back
-		// to a sane minimum (when configured) so miners have a starting target.
+		// to a sane default/minimum so miners have a starting target.
 		if !mc.suggestDiffProcessed {
-			if mc.vardiff.MinDiff > 0 {
-				mc.setDifficulty(mc.vardiff.MinDiff)
+			diff := mc.cfg.DefaultDifficulty
+			if diff <= 0 {
+				diff = mc.vardiff.MinDiff
+			}
+			if diff > 0 {
+				mc.setDifficulty(diff)
 			}
 		}
 		mc.sendNotifyFor(job, true)
