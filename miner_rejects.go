@@ -14,17 +14,17 @@ func (mc *MinerConn) recordActivity(now time.Time) {
 	mc.lastActivity = now
 }
 
-func (mc *MinerConn) rpcRateLimitExceeded(now time.Time) bool {
-	limit := mc.cfg.RPCMessagesPerMinute
+func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time) bool {
+	limit := mc.cfg.StratumMessagesPerMinute
 	if limit <= 0 {
 		return false
 	}
-	if mc.rpcMsgWindowStart.IsZero() || now.Sub(mc.rpcMsgWindowStart) >= time.Minute {
-		mc.rpcMsgWindowStart = now
-		mc.rpcMsgCount = 0
+	if mc.stratumMsgWindowStart.IsZero() || now.Sub(mc.stratumMsgWindowStart) >= time.Minute {
+		mc.stratumMsgWindowStart = now
+		mc.stratumMsgCount = 0
 	}
-	mc.rpcMsgCount++
-	return mc.rpcMsgCount > limit
+	mc.stratumMsgCount++
+	return mc.stratumMsgCount > limit
 }
 
 func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
@@ -228,7 +228,14 @@ func (mc *MinerConn) shareTargetOrDefault() *big.Int {
 		return target
 	}
 	// Fall back to the pool minimum difficulty.
-	fallback := targetFromDifficulty(mc.cfg.MinDifficulty)
+	fallbackDiff := mc.cfg.MinDifficulty
+	if fallbackDiff <= 0 {
+		fallbackDiff = defaultMinDifficulty
+	}
+	if fallbackDiff <= 0 {
+		fallbackDiff = 1.0
+	}
+	fallback := targetFromDifficulty(fallbackDiff)
 	oldTarget := mc.shareTarget.Load()
 	if oldTarget == nil || oldTarget.Sign() <= 0 {
 		mc.shareTarget.CompareAndSwap(oldTarget, new(big.Int).Set(fallback))
@@ -584,7 +591,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		stepFactor = 2
 	}
 	targetDiff = targetDiff / stepFactor
-	if targetDiff > mc.vardiff.MaxDiff {
+	if mc.vardiff.MaxDiff > 0 && targetDiff > mc.vardiff.MaxDiff {
 		targetDiff = mc.vardiff.MaxDiff
 	}
 	if targetDiff < mc.vardiff.MinDiff {
@@ -636,7 +643,7 @@ func (mc *MinerConn) suggestedVardiffFine(currentDiff, targetDiff float64, windo
 		return currentDiff
 	}
 
-	if targetDiff > mc.vardiff.MaxDiff {
+	if mc.vardiff.MaxDiff > 0 && targetDiff > mc.vardiff.MaxDiff {
 		targetDiff = mc.vardiff.MaxDiff
 	}
 	if targetDiff < mc.vardiff.MinDiff {
@@ -727,16 +734,18 @@ func quantizeDifficultyToPowerOfTwo(diff, min, max float64) float64 {
 func (mc *MinerConn) clampDifficulty(diff float64) float64 {
 	// Determine the tightest enforceable bounds from both pool config and vardiff.
 	min := mc.cfg.MinDifficulty
-	if min <= 0 {
-		min = mc.vardiff.MinDiff
-	} else if mc.vardiff.MinDiff > min {
+	if min < 0 {
+		min = 0
+	}
+	if min > 0 && mc.vardiff.MinDiff > min {
 		min = mc.vardiff.MinDiff
 	}
 
 	max := mc.cfg.MaxDifficulty
-	if max <= 0 {
-		max = mc.vardiff.MaxDiff
-	} else if mc.vardiff.MaxDiff < max {
+	if max < 0 {
+		max = 0
+	}
+	if max > 0 && mc.vardiff.MaxDiff > 0 && mc.vardiff.MaxDiff < max {
 		max = mc.vardiff.MaxDiff
 	}
 

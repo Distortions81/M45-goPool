@@ -11,12 +11,13 @@
 # - accept_steady_state_rate: Accepts/sec once steady-state mode activates (requires restart).
 # - accept_steady_state_reconnect_percent: Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
+# - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect + 1h ban (0 disables; requires restart).
 #
 # Timeouts ([timeouts])
 # - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
 #
 # Difficulty ([difficulty])
-# - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 uses defaults/auto (requires restart).
+# - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 #
 # Mining ([mining])
@@ -33,6 +34,7 @@
 # - reconnect_ban_threshold: Ban a host after N reconnects within the window (0 disables; requires restart).
 # - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
 # - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
+# - banned_miner_types: List of miner client names or full IDs to disconnect on subscribe (requires restart).
 #
 # Peer cleaning ([peer_cleaning])
 # - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
@@ -48,11 +50,12 @@
   reconnect_ban_duration_seconds = 300
   reconnect_ban_threshold = 0
   reconnect_ban_window_seconds = 60
+  banned_miner_types = []
 
 [difficulty]
   lock_suggested_difficulty = false
-  max_difficulty = 65536.0
-  min_difficulty = 256.0
+  max_difficulty = 0.0
+  min_difficulty = 0.125
 
 [discord]
   worker_notify_threshold_seconds = 300
@@ -82,6 +85,7 @@
   max_accept_burst = 1000
   max_accepts_per_second = 500
   max_conns = 50000
+  stratum_messages_per_minute = 120
 
 [status]
   mempool_address_url = "https://mempool.space/address/"

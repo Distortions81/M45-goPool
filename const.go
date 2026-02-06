@@ -37,7 +37,7 @@ const (
 	defaultAcceptSteadyStateRate             = 50
 	defaultAcceptSteadyStateReconnectPercent = 5.0
 	defaultAcceptSteadyStateReconnectWindow  = 60
-	defaultRPCMessagesPerMinute              = 120
+	defaultStratumMessagesPerMinute          = 120
 
 	defaultJobEntropy                = 4
 	maxJobEntropy                    = 16
@@ -56,8 +56,8 @@ const (
 
 	defaultDiscordWorkerNotifyThresholdSeconds = 300
 
-	defaultMaxDifficulty = 65536
-	defaultMinDifficulty = 256
+	defaultMaxDifficulty = 0
+	defaultMinDifficulty = 0.125
 
 	defaultMinVersionBits    = 1
 	defaultRefreshInterval   = 10 * time.Second

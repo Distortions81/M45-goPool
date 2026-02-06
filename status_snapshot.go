@@ -243,6 +243,9 @@ func buildTemplateFuncs() template.FuncMap {
 			// Shorten IDs / hashes to a stable, display-safe form.
 			return shortDisplayID(s, hashPrefix, hashSuffix)
 		},
+		"join": func(ss []string, sep string) string {
+			return strings.Join(ss, sep)
+		},
 		"formatHashrate": formatHashrateValue,
 		"formatDiff": func(d float64) string {
 			if d <= 0 {

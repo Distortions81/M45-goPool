@@ -134,6 +134,13 @@ Types referenced:
   - `accepted` (integer)
   - `connection_id` (string)
 
+- `WorkerView` (used for `banned_workers`; values are censored/truncated)
+  - `name` (string; censored)
+  - `display_name` (string; censored)
+  - `banned` (boolean)
+  - `banned_until` (string; RFC3339; optional)
+  - `ban_reason` (string; optional; brief)
+
 - `BestShare`
   - `worker` (string; censored)
   - `difficulty` (number)

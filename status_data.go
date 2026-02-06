@@ -483,8 +483,8 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if strings.EqualFold(nodeNetwork, "mainnet") && s.Config().MinDifficulty < 1 {
-		warnings = append(warnings, "Minimum difficulty is configured below 1 on mainnet. This can flood the pool and node with tiny shares; verify you really need CPU-style difficulties on mainnet.")
+	if strings.EqualFold(nodeNetwork, "mainnet") && s.Config().MinDifficulty > 0 && s.Config().MinDifficulty < defaultMinDifficulty {
+		warnings = append(warnings, "Minimum difficulty is configured below the default on mainnet. Very low difficulties can flood the pool and node with tiny shares; verify this is intentional.")
 	}
 	if nodeNetwork != "" && !strings.EqualFold(nodeNetwork, "mainnet") {
 		warnings = append(warnings, "Pool is connected to a non-mainnet Bitcoin network ("+nodeNetwork+"). Verify you intend to mine on this network.")
@@ -497,6 +497,38 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 
 	workerLookup := buildWorkerLookupByHash(allWorkers, bannedWorkers)
+
+	bannedMinerTypes := make([]string, 0, len(s.Config().BannedMinerTypes))
+	seenBannedMinerTypes := make(map[string]struct{}, len(s.Config().BannedMinerTypes))
+	for _, banned := range s.Config().BannedMinerTypes {
+		trimmed := strings.TrimSpace(banned)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seenBannedMinerTypes[key]; ok {
+			continue
+		}
+		seenBannedMinerTypes[key] = struct{}{}
+		bannedMinerTypes = append(bannedMinerTypes, trimmed)
+	}
+	sort.Strings(bannedMinerTypes)
+
+	targetSharesPerMin := defaultVarDiff.TargetSharesPerMin
+	if targetSharesPerMin <= 0 {
+		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
+	}
+	if targetSharesPerMin <= 0 {
+		targetSharesPerMin = 5
+	}
+	minHashrateForTarget := 0.0
+	maxHashrateForTarget := 0.0
+	if s.Config().MinDifficulty > 0 {
+		minHashrateForTarget = (s.Config().MinDifficulty * hashPerShare * targetSharesPerMin) / 60.0
+	}
+	if s.Config().MaxDifficulty > 0 {
+		maxHashrateForTarget = (s.Config().MaxDifficulty * hashPerShare * targetSharesPerMin) / 60.0
+	}
 	return StatusData{
 		ListenAddr:                     s.Config().ListenAddr,
 		StratumTLSListen:               s.Config().StratumTLSListen,
@@ -611,6 +643,10 @@ func (s *StatusServer) buildStatusData() StatusData {
 		MinDifficulty:                  s.Config().MinDifficulty,
 		MaxDifficulty:                  s.Config().MaxDifficulty,
 		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		BannedMinerTypes:               bannedMinerTypes,
+		TargetSharesPerMin:             targetSharesPerMin,
+		MinHashrateForTarget:           minHashrateForTarget,
+		MaxHashrateForTarget:           maxHashrateForTarget,
 		Warnings:                       warnings,
 	}
 }
@@ -663,6 +699,38 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 
+	bannedMinerTypes := make([]string, 0, len(s.Config().BannedMinerTypes))
+	seenBannedMinerTypes := make(map[string]struct{}, len(s.Config().BannedMinerTypes))
+	for _, banned := range s.Config().BannedMinerTypes {
+		trimmed := strings.TrimSpace(banned)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seenBannedMinerTypes[key]; ok {
+			continue
+		}
+		seenBannedMinerTypes[key] = struct{}{}
+		bannedMinerTypes = append(bannedMinerTypes, trimmed)
+	}
+	sort.Strings(bannedMinerTypes)
+
+	targetSharesPerMin := defaultVarDiff.TargetSharesPerMin
+	if targetSharesPerMin <= 0 {
+		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
+	}
+	if targetSharesPerMin <= 0 {
+		targetSharesPerMin = 5
+	}
+	minHashrateForTarget := 0.0
+	maxHashrateForTarget := 0.0
+	if s.Config().MinDifficulty > 0 {
+		minHashrateForTarget = (s.Config().MinDifficulty * hashPerShare * targetSharesPerMin) / 60.0
+	}
+	if s.Config().MaxDifficulty > 0 {
+		maxHashrateForTarget = (s.Config().MaxDifficulty * hashPerShare * targetSharesPerMin) / 60.0
+	}
+
 	return StatusData{
 		ListenAddr:                     s.Config().ListenAddr,
 		StratumTLSListen:               s.Config().StratumTLSListen,
@@ -704,6 +772,10 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinDifficulty:                  s.Config().MinDifficulty,
 		MaxDifficulty:                  s.Config().MaxDifficulty,
 		LockSuggestedDifficulty:        s.Config().LockSuggestedDifficulty,
+		BannedMinerTypes:               bannedMinerTypes,
+		TargetSharesPerMin:             targetSharesPerMin,
+		MinHashrateForTarget:           minHashrateForTarget,
+		MaxHashrateForTarget:           maxHashrateForTarget,
 		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
 		HashrateEMAMinShares:           s.Config().HashrateEMAMinShares,
 		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,

@@ -711,6 +711,10 @@ type StatusData struct {
 	MinDifficulty           float64  `json:"min_difficulty"`
 	MaxDifficulty           float64  `json:"max_difficulty"`
 	LockSuggestedDifficulty bool     `json:"lock_suggested_difficulty"`
+	BannedMinerTypes        []string `json:"banned_miner_types,omitempty"`
+	TargetSharesPerMin      float64  `json:"target_shares_per_min,omitempty"`
+	MinHashrateForTarget    float64  `json:"min_hashrate_for_target,omitempty"`
+	MaxHashrateForTarget    float64  `json:"max_hashrate_for_target,omitempty"`
 	HashrateEMATauSeconds   float64  `json:"hashrate_ema_tau_seconds"`
 	HashrateEMAMinShares    int      `json:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSec    int      `json:"ntime_forward_slack_seconds"`

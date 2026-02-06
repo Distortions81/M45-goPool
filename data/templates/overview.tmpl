@@ -83,10 +83,28 @@
 					</div>
 				</div>
 
-				<p class="text-sm connect-note">
-					By connecting you confirm that you accept the <a href="/terms">Terms of Use</a> and should review our <a href="/privacy">Privacy Policy</a> before mining.
-				</p>
-			</div>
+					{{if gt .MinDifficulty 0.0}}
+					<p class="text-sm connect-note" style="margin-top:2px;">
+						Min hashrate: <span class="mono">{{formatHashrate .MinHashrateForTarget}}</span>
+						<span style="opacity:0.85;">(diff <span class="mono">{{formatDiff .MinDifficulty}}</span>, ~{{printf "%.0f" .TargetSharesPerMin}} shares/min)</span>
+					</p>
+					{{end}}
+					{{if gt .MaxDifficulty 0.0}}
+					<p class="text-sm connect-note" style="margin-top:2px;">
+						Max hashrate: <span class="mono">{{formatHashrate .MaxHashrateForTarget}}</span>
+						<span style="opacity:0.85;">(diff <span class="mono">{{formatDiff .MaxDifficulty}}</span>, ~{{printf "%.0f" .TargetSharesPerMin}} shares/min)</span>
+					</p>
+					{{end}}
+					{{if .BannedMinerTypes}}
+					<p class="text-sm connect-note" style="margin-top:2px;">
+						Blocked miner clients: <span class="mono">{{join .BannedMinerTypes ", "}}</span>
+					</p>
+					{{end}}
+
+					<p class="text-sm connect-note">
+						By connecting you confirm that you accept the <a href="/terms">Terms of Use</a> and should review our <a href="/privacy">Privacy Policy</a> before mining.
+					</p>
+				</div>
 		</div>
 		{{template "status_boxes" .}}
 

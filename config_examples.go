@@ -99,13 +99,13 @@ func tuningConfigDocComments() []byte {
 # - accept_steady_state_rate: Accepts/sec once steady-state mode activates (requires restart).
 # - accept_steady_state_reconnect_percent: Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
-# - rpc_messages_per_minute: Per-connection Stratum RPC messages/min before disconnect (0 disables; requires restart).
+# - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect (0 disables; requires restart).
 #
 # Timeouts ([timeouts])
 # - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
 #
 # Difficulty ([difficulty])
-# - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 uses defaults/auto (requires restart).
+# - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 #
 # Mining ([mining])
@@ -146,7 +146,6 @@ func exampleConfigBytes() []byte {
 	}
 	return withPrependedTOMLComments(data, exampleHeader("base config"), baseConfigDocComments())
 }
-
 
 func exampleTuningConfigBytes() []byte {
 	cfg := defaultConfig()

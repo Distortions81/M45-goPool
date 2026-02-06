@@ -268,6 +268,25 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		return
 	}
 
+	min := mc.cfg.MinDifficulty
+	max := mc.cfg.MaxDifficulty
+	if min > 0 && max > 0 && max < min {
+		max = min
+	}
+	outOfRange := (min > 0 && diff < min) || (max > 0 && diff > max)
+	if outOfRange {
+		worker := mc.currentWorker()
+		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
+		mc.banFor(reason, time.Hour, worker)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(24, "banned"),
+		})
+		mc.Close(reason)
+		return
+	}
+
 	// Always acknowledge the request
 	resp.Result = true
 	mc.writeResponse(resp)
@@ -338,6 +357,25 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 	if !ok || diff <= 0 {
 		resp.Error = newStratumError(20, "invalid target")
 		mc.writeResponse(resp)
+		return
+	}
+
+	min := mc.cfg.MinDifficulty
+	max := mc.cfg.MaxDifficulty
+	if min > 0 && max > 0 && max < min {
+		max = min
+	}
+	outOfRange := (min > 0 && diff < min) || (max > 0 && diff > max)
+	if outOfRange {
+		worker := mc.currentWorker()
+		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
+		mc.banFor(reason, time.Hour, worker)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(24, "banned"),
+		})
+		mc.Close(reason)
 		return
 	}
 

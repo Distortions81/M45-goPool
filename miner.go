@@ -277,9 +277,9 @@ type MinerConn struct {
 	connectedAt time.Time
 	// lastActivity tracks when we last saw a RPC message from this miner.
 	lastActivity time.Time
-	// rpcMsgWindowStart/rpcMsgCount track per-connection RPC message rate.
-	rpcMsgWindowStart time.Time
-	rpcMsgCount       int
+	// stratumMsgWindowStart/stratumMsgCount track per-connection Stratum message rate.
+	stratumMsgWindowStart time.Time
+	stratumMsgCount       int
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
@@ -786,17 +786,33 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	}
 
 	vdiff := defaultVarDiff
-	if cfg.MinDifficulty > 0 {
+	// Difficulty clamps:
+	// - cfg.MinDifficulty == 0 disables the minimum clamp (no lower bound).
+	// - cfg.MaxDifficulty == 0 disables the maximum clamp (no upper bound).
+	// - values > 0 enable a clamp at that value.
+	if cfg.MinDifficulty == 0 {
+		vdiff.MinDiff = 0
+	} else if cfg.MinDifficulty > 0 {
 		vdiff.MinDiff = cfg.MinDifficulty
 	}
-	if cfg.MaxDifficulty > 0 && cfg.MaxDifficulty < vdiff.MaxDiff {
-		vdiff.MaxDiff = cfg.MaxDifficulty
+	if cfg.MaxDifficulty == 0 {
+		vdiff.MaxDiff = 0
+	} else if cfg.MaxDifficulty > 0 {
+		// If the defaults ever include a max clamp, use the tighter one.
+		if vdiff.MaxDiff <= 0 || cfg.MaxDifficulty < vdiff.MaxDiff {
+			vdiff.MaxDiff = cfg.MaxDifficulty
+		}
 	}
-	if vdiff.MinDiff > vdiff.MaxDiff {
+	if vdiff.MaxDiff > 0 && vdiff.MinDiff > vdiff.MaxDiff {
 		vdiff.MinDiff = vdiff.MaxDiff
 	}
 
-	initialDiff := 1.0
+	// Start connections at the configured minimum when present; otherwise use a
+	// conservative low starting point and let VarDiff adjust.
+	initialDiff := defaultMinDifficulty
+	if initialDiff <= 0 {
+		initialDiff = 1.0
+	}
 	if cfg.MinDifficulty > 0 {
 		initialDiff = cfg.MinDifficulty
 	}
@@ -914,12 +930,12 @@ func (mc *MinerConn) handle() {
 			continue
 		}
 		mc.recordActivity(now)
-		if mc.rpcRateLimitExceeded(now) {
-			logger.Warn("closing miner for rpc rate limit",
+		if mc.stratumMsgRateLimitExceeded(now) {
+			logger.Warn("closing miner for stratum message rate limit",
 				"remote", mc.id,
-				"limit_per_min", mc.cfg.RPCMessagesPerMinute,
+				"limit_per_min", mc.cfg.StratumMessagesPerMinute,
 			)
-			mc.banFor("rpc rate limit", time.Hour, mc.currentWorker())
+			mc.banFor("stratum message rate limit", time.Hour, mc.currentWorker())
 			return
 		}
 

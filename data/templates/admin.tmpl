@@ -217,11 +217,11 @@
 				<h3 style="margin:18px 0 8px 0;">Difficulty</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Minimum VarDiff target difficulty for miner connections (0 uses defaults/auto; requires restart).">min_difficulty {{template "restart-required" .}}</div>
+						<div class="label" title="Minimum VarDiff target difficulty for miner connections (0 disables the minimum clamp; requires restart).">min_difficulty {{template "restart-required" .}}</div>
 						<input name="min_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MinDifficulty}}">
 					</div>
 					<div>
-						<div class="label" title="Maximum VarDiff target difficulty for miner connections (0 uses defaults/auto; requires restart).">max_difficulty {{template "restart-required" .}}</div>
+						<div class="label" title="Maximum VarDiff target difficulty for miner connections (0 disables the maximum clamp; requires restart).">max_difficulty {{template "restart-required" .}}</div>
 						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>

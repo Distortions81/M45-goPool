@@ -127,7 +127,7 @@ type Config struct {
 	AcceptSteadyStateRate             int     // max accepts/sec in steady state
 	AcceptSteadyStateReconnectPercent float64 // expected % of miners reconnecting at once
 	AcceptSteadyStateReconnectWindow  int     // seconds to spread steady-state reconnects
-	RPCMessagesPerMinute              int     // per-connection RPC messages/min (0 disables)
+	StratumMessagesPerMinute          int     // per-connection Stratum messages/min (0 disables)
 
 	MaxRecentJobs         int
 	ConnectionTimeout     time.Duration
@@ -161,7 +161,7 @@ type Config struct {
 	ReconnectBanThreshold       int
 	ReconnectBanWindowSeconds   int
 	ReconnectBanDurationSeconds int
-	BannedMinerTypes []string
+	BannedMinerTypes            []string
 
 	// High-latency peer cleanup.
 	PeerCleanupEnabled   bool
@@ -170,88 +170,88 @@ type Config struct {
 }
 
 type EffectiveConfig struct {
-	ListenAddr                        string  `json:"listen_addr"`
-	StatusAddr                        string  `json:"status_addr"`
-	StatusTLSAddr                     string  `json:"status_tls_listen,omitempty"`
-	StatusBrandName                   string  `json:"status_brand_name,omitempty"`
-	StatusBrandDomain                 string  `json:"status_brand_domain,omitempty"`
-	StatusTagline                     string  `json:"status_tagline,omitempty"`
-	StatusConnectMinerTitleExtra      string  `json:"status_connect_miner_title_extra,omitempty"`
-	StatusConnectMinerTitleExtraURL   string  `json:"status_connect_miner_title_extra_url,omitempty"`
-	FiatCurrency                      string  `json:"fiat_currency,omitempty"`
-	PoolDonationAddress               string  `json:"pool_donation_address,omitempty"`
-	DiscordURL                        string  `json:"discord_url,omitempty"`
-	DiscordWorkerNotifyThresholdSec   int     `json:"discord_worker_notify_threshold_seconds,omitempty"`
-	GitHubURL                         string  `json:"github_url,omitempty"`
-	ServerLocation                    string  `json:"server_location,omitempty"`
-	StratumTLSListen                  string  `json:"stratum_tls_listen,omitempty"`
-	ClerkIssuerURL                    string  `json:"clerk_issuer_url,omitempty"`
-	ClerkJWKSURL                      string  `json:"clerk_jwks_url,omitempty"`
-	ClerkSignInURL                    string  `json:"clerk_signin_url,omitempty"`
-	ClerkCallbackPath                 string  `json:"clerk_callback_path,omitempty"`
-	ClerkFrontendAPIURL               string  `json:"clerk_frontend_api_url,omitempty"`
-	ClerkSessionCookieName            string  `json:"clerk_session_cookie_name,omitempty"`
-	RPCURL                            string  `json:"rpc_url"`
-	RPCUser                           string  `json:"rpc_user"`
-	RPCPassSet                        bool    `json:"rpc_pass_set"`
-	PayoutAddress                     string  `json:"payout_address"`
-	PoolFeePercent                    float64 `json:"pool_fee_percent,omitempty"`
-	OperatorDonationPercent           float64 `json:"operator_donation_percent,omitempty"`
-	OperatorDonationAddress           string  `json:"operator_donation_address,omitempty"`
-	OperatorDonationName              string  `json:"operator_donation_name,omitempty"`
-	OperatorDonationURL               string  `json:"operator_donation_url,omitempty"`
-	Extranonce2Size                   int     `json:"extranonce2_size"`
-	TemplateExtraNonce2Size           int     `json:"template_extranonce2_size,omitempty"`
-	JobEntropy                        int     `json:"job_entropy"`
-	PoolID                            string  `json:"pool_id,omitempty"`
-	CoinbaseScriptSigMaxBytes         int     `json:"coinbase_scriptsig_max_bytes"`
-	ZMQHashBlockAddr                  string  `json:"zmq_hashblock_addr,omitempty"`
-	ZMQRawBlockAddr                   string  `json:"zmq_rawblock_addr,omitempty"`
-	BackblazeBackupEnabled            bool    `json:"backblaze_backup_enabled,omitempty"`
-	BackblazeBucket                   string  `json:"backblaze_bucket,omitempty"`
-	BackblazePrefix                   string  `json:"backblaze_prefix,omitempty"`
-	BackblazeBackupInterval           string  `json:"backblaze_backup_interval,omitempty"`
-	BackblazeKeepLocalCopy            bool    `json:"backblaze_keep_local_copy,omitempty"`
-	BackblazeForceEveryInterval       bool    `json:"backblaze_force_every_interval,omitempty"`
-	BackupSnapshotPath                string  `json:"backup_snapshot_path,omitempty"`
-	MaxConns                          int     `json:"max_conns,omitempty"`
-	MaxAcceptsPerSecond               int     `json:"max_accepts_per_second,omitempty"`
-	MaxAcceptBurst                    int     `json:"max_accept_burst,omitempty"`
-	AutoAcceptRateLimits              bool    `json:"auto_accept_rate_limits,omitempty"`
-	AcceptReconnectWindow             int     `json:"accept_reconnect_window,omitempty"`
-	AcceptBurstWindow                 int     `json:"accept_burst_window,omitempty"`
-	AcceptSteadyStateWindow           int     `json:"accept_steady_state_window,omitempty"`
-	AcceptSteadyStateRate             int     `json:"accept_steady_state_rate,omitempty"`
-	AcceptSteadyStateReconnectPercent float64 `json:"accept_steady_state_reconnect_percent,omitempty"`
-	AcceptSteadyStateReconnectWindow  int     `json:"accept_steady_state_reconnect_window,omitempty"`
-	RPCMessagesPerMinute              int     `json:"rpc_messages_per_minute,omitempty"`
-	MaxRecentJobs                     int     `json:"max_recent_jobs"`
-	ConnectionTimeout                 string  `json:"connection_timeout"`
-	VersionMask                       string  `json:"version_mask,omitempty"`
-	MinVersionBits                    int     `json:"min_version_bits,omitempty"`
-	IgnoreMinVersionBits              bool    `json:"ignore_min_version_bits,omitempty"`
-	MaxDifficulty                     float64 `json:"max_difficulty,omitempty"`
-	MinDifficulty                     float64 `json:"min_difficulty,omitempty"`
-	LockSuggestedDifficulty           bool    `json:"lock_suggested_difficulty,omitempty"`
-	VardiffFine                       bool    `json:"vardiff_fine,omitempty"`
-	SoloMode                          bool    `json:"solo_mode"`
-	DirectSubmitProcessing            bool    `json:"direct_submit_processing"`
-	HashrateEMATauSeconds             float64 `json:"hashrate_ema_tau_seconds,omitempty"`
-	HashrateEMAMinShares              int     `json:"hashrate_ema_min_shares,omitempty"`
-	NTimeForwardSlackSec              int     `json:"ntime_forward_slack_seconds,omitempty"`
-	CheckDuplicateShares              bool    `json:"check_duplicate_shares,omitempty"`
-	LogLevel                          string  `json:"log_level,omitempty"`
-	CleanExpiredBansOnStartup         bool    `json:"clean_expired_bans_on_startup,omitempty"`
-	BanInvalidSubmissionsAfter        int     `json:"ban_invalid_submissions_after,omitempty"`
-	BanInvalidSubmissionsWindow       string  `json:"ban_invalid_submissions_window,omitempty"`
-	BanInvalidSubmissionsDuration     string  `json:"ban_invalid_submissions_duration,omitempty"`
-	ReconnectBanThreshold             int     `json:"reconnect_ban_threshold,omitempty"`
-	ReconnectBanWindowSeconds         int     `json:"reconnect_ban_window_seconds,omitempty"`
-	ReconnectBanDurationSeconds       int     `json:"reconnect_ban_duration_seconds,omitempty"`
-	BannedMinerTypes []string `json:"banned_miner_types,omitempty"`
-	PeerCleanupEnabled                bool    `json:"peer_cleanup_enabled,omitempty"`
-	PeerCleanupMaxPingMs              float64 `json:"peer_cleanup_max_ping_ms,omitempty"`
-	PeerCleanupMinPeers               int     `json:"peer_cleanup_min_peers,omitempty"`
+	ListenAddr                        string   `json:"listen_addr"`
+	StatusAddr                        string   `json:"status_addr"`
+	StatusTLSAddr                     string   `json:"status_tls_listen,omitempty"`
+	StatusBrandName                   string   `json:"status_brand_name,omitempty"`
+	StatusBrandDomain                 string   `json:"status_brand_domain,omitempty"`
+	StatusTagline                     string   `json:"status_tagline,omitempty"`
+	StatusConnectMinerTitleExtra      string   `json:"status_connect_miner_title_extra,omitempty"`
+	StatusConnectMinerTitleExtraURL   string   `json:"status_connect_miner_title_extra_url,omitempty"`
+	FiatCurrency                      string   `json:"fiat_currency,omitempty"`
+	PoolDonationAddress               string   `json:"pool_donation_address,omitempty"`
+	DiscordURL                        string   `json:"discord_url,omitempty"`
+	DiscordWorkerNotifyThresholdSec   int      `json:"discord_worker_notify_threshold_seconds,omitempty"`
+	GitHubURL                         string   `json:"github_url,omitempty"`
+	ServerLocation                    string   `json:"server_location,omitempty"`
+	StratumTLSListen                  string   `json:"stratum_tls_listen,omitempty"`
+	ClerkIssuerURL                    string   `json:"clerk_issuer_url,omitempty"`
+	ClerkJWKSURL                      string   `json:"clerk_jwks_url,omitempty"`
+	ClerkSignInURL                    string   `json:"clerk_signin_url,omitempty"`
+	ClerkCallbackPath                 string   `json:"clerk_callback_path,omitempty"`
+	ClerkFrontendAPIURL               string   `json:"clerk_frontend_api_url,omitempty"`
+	ClerkSessionCookieName            string   `json:"clerk_session_cookie_name,omitempty"`
+	RPCURL                            string   `json:"rpc_url"`
+	RPCUser                           string   `json:"rpc_user"`
+	RPCPassSet                        bool     `json:"rpc_pass_set"`
+	PayoutAddress                     string   `json:"payout_address"`
+	PoolFeePercent                    float64  `json:"pool_fee_percent,omitempty"`
+	OperatorDonationPercent           float64  `json:"operator_donation_percent,omitempty"`
+	OperatorDonationAddress           string   `json:"operator_donation_address,omitempty"`
+	OperatorDonationName              string   `json:"operator_donation_name,omitempty"`
+	OperatorDonationURL               string   `json:"operator_donation_url,omitempty"`
+	Extranonce2Size                   int      `json:"extranonce2_size"`
+	TemplateExtraNonce2Size           int      `json:"template_extranonce2_size,omitempty"`
+	JobEntropy                        int      `json:"job_entropy"`
+	PoolID                            string   `json:"pool_id,omitempty"`
+	CoinbaseScriptSigMaxBytes         int      `json:"coinbase_scriptsig_max_bytes"`
+	ZMQHashBlockAddr                  string   `json:"zmq_hashblock_addr,omitempty"`
+	ZMQRawBlockAddr                   string   `json:"zmq_rawblock_addr,omitempty"`
+	BackblazeBackupEnabled            bool     `json:"backblaze_backup_enabled,omitempty"`
+	BackblazeBucket                   string   `json:"backblaze_bucket,omitempty"`
+	BackblazePrefix                   string   `json:"backblaze_prefix,omitempty"`
+	BackblazeBackupInterval           string   `json:"backblaze_backup_interval,omitempty"`
+	BackblazeKeepLocalCopy            bool     `json:"backblaze_keep_local_copy,omitempty"`
+	BackblazeForceEveryInterval       bool     `json:"backblaze_force_every_interval,omitempty"`
+	BackupSnapshotPath                string   `json:"backup_snapshot_path,omitempty"`
+	MaxConns                          int      `json:"max_conns,omitempty"`
+	MaxAcceptsPerSecond               int      `json:"max_accepts_per_second,omitempty"`
+	MaxAcceptBurst                    int      `json:"max_accept_burst,omitempty"`
+	AutoAcceptRateLimits              bool     `json:"auto_accept_rate_limits,omitempty"`
+	AcceptReconnectWindow             int      `json:"accept_reconnect_window,omitempty"`
+	AcceptBurstWindow                 int      `json:"accept_burst_window,omitempty"`
+	AcceptSteadyStateWindow           int      `json:"accept_steady_state_window,omitempty"`
+	AcceptSteadyStateRate             int      `json:"accept_steady_state_rate,omitempty"`
+	AcceptSteadyStateReconnectPercent float64  `json:"accept_steady_state_reconnect_percent,omitempty"`
+	AcceptSteadyStateReconnectWindow  int      `json:"accept_steady_state_reconnect_window,omitempty"`
+	StratumMessagesPerMinute          int      `json:"stratum_messages_per_minute,omitempty"`
+	MaxRecentJobs                     int      `json:"max_recent_jobs"`
+	ConnectionTimeout                 string   `json:"connection_timeout"`
+	VersionMask                       string   `json:"version_mask,omitempty"`
+	MinVersionBits                    int      `json:"min_version_bits,omitempty"`
+	IgnoreMinVersionBits              bool     `json:"ignore_min_version_bits,omitempty"`
+	MaxDifficulty                     float64  `json:"max_difficulty,omitempty"`
+	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
+	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
+	VardiffFine                       bool     `json:"vardiff_fine,omitempty"`
+	SoloMode                          bool     `json:"solo_mode"`
+	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
+	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
+	HashrateEMAMinShares              int      `json:"hashrate_ema_min_shares,omitempty"`
+	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
+	CheckDuplicateShares              bool     `json:"check_duplicate_shares,omitempty"`
+	LogLevel                          string   `json:"log_level,omitempty"`
+	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`
+	BanInvalidSubmissionsAfter        int      `json:"ban_invalid_submissions_after,omitempty"`
+	BanInvalidSubmissionsWindow       string   `json:"ban_invalid_submissions_window,omitempty"`
+	BanInvalidSubmissionsDuration     string   `json:"ban_invalid_submissions_duration,omitempty"`
+	ReconnectBanThreshold             int      `json:"reconnect_ban_threshold,omitempty"`
+	ReconnectBanWindowSeconds         int      `json:"reconnect_ban_window_seconds,omitempty"`
+	ReconnectBanDurationSeconds       int      `json:"reconnect_ban_duration_seconds,omitempty"`
+	BannedMinerTypes                  []string `json:"banned_miner_types,omitempty"`
+	PeerCleanupEnabled                bool     `json:"peer_cleanup_enabled,omitempty"`
+	PeerCleanupMaxPingMs              float64  `json:"peer_cleanup_max_ping_ms,omitempty"`
+	PeerCleanupMinPeers               int      `json:"peer_cleanup_min_peers,omitempty"`
 }
 
 type serverConfig struct {
@@ -436,7 +436,7 @@ type rateLimitTuning struct {
 	AcceptSteadyStateRate             *int     `toml:"accept_steady_state_rate"`
 	AcceptSteadyStateReconnectPercent *float64 `toml:"accept_steady_state_reconnect_percent"`
 	AcceptSteadyStateReconnectWindow  *int     `toml:"accept_steady_state_reconnect_window"`
-	RPCMessagesPerMinute              *int     `toml:"rpc_messages_per_minute"`
+	StratumMessagesPerMinute          *int     `toml:"stratum_messages_per_minute"`
 }
 
 type timeoutTuning struct {
@@ -471,14 +471,14 @@ type peerCleaningTuning struct {
 }
 
 type banTuning struct {
-	CleanExpiredOnStartup            *bool `toml:"clean_expired_on_startup"`
-	BanInvalidSubmissionsAfter       *int  `toml:"ban_invalid_submissions_after"`
-	BanInvalidSubmissionsWindowSec   *int  `toml:"ban_invalid_submissions_window_seconds"`
-	BanInvalidSubmissionsDurationSec *int  `toml:"ban_invalid_submissions_duration_seconds"`
-	ReconnectBanThreshold            *int  `toml:"reconnect_ban_threshold"`
-	ReconnectBanWindowSeconds        *int  `toml:"reconnect_ban_window_seconds"`
-	ReconnectBanDurationSeconds      *int  `toml:"reconnect_ban_duration_seconds"`
-	BannedMinerTypes []string `toml:"banned_miner_types"`
+	CleanExpiredOnStartup            *bool    `toml:"clean_expired_on_startup"`
+	BanInvalidSubmissionsAfter       *int     `toml:"ban_invalid_submissions_after"`
+	BanInvalidSubmissionsWindowSec   *int     `toml:"ban_invalid_submissions_window_seconds"`
+	BanInvalidSubmissionsDurationSec *int     `toml:"ban_invalid_submissions_duration_seconds"`
+	ReconnectBanThreshold            *int     `toml:"reconnect_ban_threshold"`
+	ReconnectBanWindowSeconds        *int     `toml:"reconnect_ban_window_seconds"`
+	ReconnectBanDurationSeconds      *int     `toml:"reconnect_ban_duration_seconds"`
+	BannedMinerTypes                 []string `toml:"banned_miner_types"`
 }
 
 type versionTuning struct {
@@ -590,7 +590,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			AcceptSteadyStateRate:             intPtr(cfg.AcceptSteadyStateRate),
 			AcceptSteadyStateReconnectPercent: float64Ptr(cfg.AcceptSteadyStateReconnectPercent),
 			AcceptSteadyStateReconnectWindow:  intPtr(cfg.AcceptSteadyStateReconnectWindow),
-			RPCMessagesPerMinute:              intPtr(cfg.RPCMessagesPerMinute),
+			StratumMessagesPerMinute:          intPtr(cfg.StratumMessagesPerMinute),
 		},
 		Timeouts: timeoutTuning{
 			ConnectionTimeoutSec: intPtr(int(cfg.ConnectionTimeout / time.Second)),
@@ -996,8 +996,8 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.RateLimits.AcceptSteadyStateReconnectWindow != nil {
 		cfg.AcceptSteadyStateReconnectWindow = *fc.RateLimits.AcceptSteadyStateReconnectWindow
 	}
-	if fc.RateLimits.RPCMessagesPerMinute != nil {
-		cfg.RPCMessagesPerMinute = *fc.RateLimits.RPCMessagesPerMinute
+	if fc.RateLimits.StratumMessagesPerMinute != nil {
+		cfg.StratumMessagesPerMinute = *fc.RateLimits.StratumMessagesPerMinute
 	}
 	if fc.Timeouts.ConnectionTimeoutSec != nil {
 		cfg.ConnectionTimeout = time.Duration(*fc.Timeouts.ConnectionTimeoutSec) * time.Second
@@ -1414,7 +1414,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		AcceptSteadyStateRate:             cfg.AcceptSteadyStateRate,
 		AcceptSteadyStateReconnectPercent: cfg.AcceptSteadyStateReconnectPercent,
 		AcceptSteadyStateReconnectWindow:  cfg.AcceptSteadyStateReconnectWindow,
-		RPCMessagesPerMinute:              cfg.RPCMessagesPerMinute,
+		StratumMessagesPerMinute:          cfg.StratumMessagesPerMinute,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
 		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
 		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
