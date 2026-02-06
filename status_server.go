@@ -1751,8 +1751,17 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	}
 	next.MempoolAddressURL = normalizeMempoolAddressURL(getTrim("mempool_address_url"))
 	next.PoolDonationAddress = getTrim("pool_donation_address")
-	next.OperatorDonationName = getTrim("operator_donation_name")
-	next.OperatorDonationURL = getTrim("operator_donation_url")
+	// operator_donation_* are sensitive and intentionally disabled in the admin
+	// UI. If the fields are absent (as disabled inputs are), keep the original
+	// values so Apply doesn't fail with a sensitive-settings error.
+	next.OperatorDonationName = orig.OperatorDonationName
+	if fieldProvided("operator_donation_name") {
+		next.OperatorDonationName = getTrim("operator_donation_name")
+	}
+	next.OperatorDonationURL = orig.OperatorDonationURL
+	if fieldProvided("operator_donation_url") {
+		next.OperatorDonationURL = getTrim("operator_donation_url")
+	}
 	next.StatusPublicURL = orig.StatusPublicURL
 	if fieldProvided("status_public_url") {
 		next.StatusPublicURL = getTrim("status_public_url")
