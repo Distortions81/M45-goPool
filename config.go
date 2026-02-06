@@ -137,6 +137,7 @@ type Config struct {
 	VersionMaskConfigured bool
 	MaxDifficulty         float64
 	MinDifficulty         float64
+	DefaultDifficulty     float64
 
 	LockSuggestedDifficulty  bool    // keep suggested difficulty instead of vardiff
 	EnforceSuggestedDifficultyLimits bool // ban/disconnect when suggest_* outside min/max
@@ -447,6 +448,7 @@ type timeoutTuning struct {
 type difficultyTuning struct {
 	MaxDifficulty                   *float64 `toml:"max_difficulty"`
 	MinDifficulty                   *float64 `toml:"min_difficulty"`
+	DefaultDifficulty               *float64 `toml:"default_difficulty"`
 	LockSuggestedDifficulty         *bool    `toml:"lock_suggested_difficulty"`
 	EnforceSuggestedDifficultyLimits *bool   `toml:"enforce_suggested_difficulty_limits"`
 }
@@ -600,6 +602,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		Difficulty: difficultyTuning{
 			MaxDifficulty:                    float64Ptr(cfg.MaxDifficulty),
 			MinDifficulty:                    float64Ptr(cfg.MinDifficulty),
+			DefaultDifficulty:                float64Ptr(cfg.DefaultDifficulty),
 			LockSuggestedDifficulty:          boolPtr(cfg.LockSuggestedDifficulty),
 			EnforceSuggestedDifficultyLimits: boolPtr(cfg.EnforceSuggestedDifficultyLimits),
 		},
@@ -1010,6 +1013,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Difficulty.MinDifficulty != nil {
 		cfg.MinDifficulty = *fc.Difficulty.MinDifficulty
+	}
+	if fc.Difficulty.DefaultDifficulty != nil {
+		cfg.DefaultDifficulty = *fc.Difficulty.DefaultDifficulty
 	}
 	if fc.Difficulty.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty

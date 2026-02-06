@@ -807,14 +807,16 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		vdiff.MinDiff = vdiff.MaxDiff
 	}
 
-	// Start connections at the configured minimum when present; otherwise use a
-	// conservative low starting point and let VarDiff adjust.
+	// Start connections at the configured default difficulty when set; otherwise
+	// use the minimum clamp or a conservative fallback and let VarDiff adjust.
 	initialDiff := defaultMinDifficulty
+	if cfg.DefaultDifficulty > 0 {
+		initialDiff = cfg.DefaultDifficulty
+	} else if cfg.MinDifficulty > 0 {
+		initialDiff = cfg.MinDifficulty
+	}
 	if initialDiff <= 0 {
 		initialDiff = 1.0
-	}
-	if cfg.MinDifficulty > 0 {
-		initialDiff = cfg.MinDifficulty
 	}
 
 	var shareCache map[string]*duplicateShareSet

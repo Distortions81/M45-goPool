@@ -43,6 +43,9 @@ func validateConfig(cfg Config) error {
 	if cfg.MaxAcceptBurst < 0 {
 		return fmt.Errorf("max_accept_burst cannot be negative")
 	}
+	if cfg.DefaultDifficulty < 0 {
+		return fmt.Errorf("default_difficulty cannot be negative")
+	}
 	if cfg.MaxRecentJobs <= 0 {
 		return fmt.Errorf("max_recent_jobs must be > 0, got %d", cfg.MaxRecentJobs)
 	}
