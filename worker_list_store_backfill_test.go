@@ -50,4 +50,3 @@ func TestWorkerListStore_ListAllSavedWorkers_DoesNotDeadlockOnHashBackfill(t *te
 		t.Fatalf("worker_hash not backfilled: got %q want %q", backfilled, expectedHash)
 	}
 }
-
