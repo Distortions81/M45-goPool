@@ -92,7 +92,7 @@ const (
 
 	defaultHashrateEMATauSeconds = 600.0
 	defaultHashrateEMAMinShares  = 10
-	minHashrateEMAMinShares      = 10
+	minHashrateEMAMinShares      = 1
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second
