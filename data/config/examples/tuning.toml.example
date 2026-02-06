@@ -11,7 +11,7 @@
 # - accept_steady_state_rate: Accepts/sec once steady-state mode activates (requires restart).
 # - accept_steady_state_reconnect_percent: Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
-# - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect + 1h ban (0 disables; requires restart).
+# - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect (0 disables; requires restart).
 #
 # Timeouts ([timeouts])
 # - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
@@ -35,6 +35,7 @@
 # - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
 # - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
 # - banned_miner_types: List of miner client names or full IDs to disconnect on subscribe (requires restart).
+#   Prefer data_dir/config/miner_blacklist.json for managing this list; it overrides this field when present.
 #
 # Peer cleaning ([peer_cleaning])
 # - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
@@ -46,11 +47,11 @@
   ban_invalid_submissions_after = 60
   ban_invalid_submissions_duration_seconds = 900
   ban_invalid_submissions_window_seconds = 60
-  clean_expired_on_startup = true
-  reconnect_ban_duration_seconds = 300
-  reconnect_ban_threshold = 0
-  reconnect_ban_window_seconds = 60
   banned_miner_types = []
+  clean_expired_on_startup = true
+  reconnect_ban_duration_seconds = 3600
+  reconnect_ban_threshold = 60
+  reconnect_ban_window_seconds = 60
 
 [difficulty]
   lock_suggested_difficulty = false
