@@ -46,6 +46,9 @@
 			<p class="text-sm" style="margin:4px 0 10px 0;">
 				Select the connections you want to touch, then choose an action.
 			</p>
+			{{if .AdminApplyError}}
+			<p class="text-sm" style="color:#f88d8d;margin:0 0 10px 0;">{{.AdminApplyError}}</p>
+			{{end}}
 			{{if .AdminMinerRows}}
 			<div class="admin-toolbar">
 				<div class="toolbar-left">
@@ -57,7 +60,7 @@
 					<button class="btn btn-danger" type="button" id="miner-toolbar-ban" disabled>Ban selected</button>
 				</div>
 			</div>
-			<form id="minerActionsForm" style="display:none;">
+			<form id="minerActionsForm" method="post" style="display:none;">
 				<input type="hidden" name="password" id="minerToolbarPasswordField">
 				<div id="minerToolbarConnections"></div>
 			</form>

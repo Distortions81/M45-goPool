@@ -620,25 +620,25 @@ type AdminPageData struct {
 
 type AdminSettingsData struct {
 	// Branding/UI
-	StatusBrandName              string
-	StatusBrandDomain            string
-	StatusPublicURL              string
-	StatusTagline                string
-	StatusConnectMinerTitleExtra string
+	StatusBrandName                 string
+	StatusBrandDomain               string
+	StatusPublicURL                 string
+	StatusTagline                   string
+	StatusConnectMinerTitleExtra    string
 	StatusConnectMinerTitleExtraURL string
-	FiatCurrency                 string
-	GitHubURL                    string
-	DiscordURL                   string
-	ServerLocation               string
-	MempoolAddressURL            string
-	PoolDonationAddress          string
-	OperatorDonationName         string
-	OperatorDonationURL          string
-	PayoutAddress                string
-	PoolFeePercent               float64
-	OperatorDonationPercent      float64
-	PoolEntropy                  string
-	PoolTagPrefix                string
+	FiatCurrency                    string
+	GitHubURL                       string
+	DiscordURL                      string
+	ServerLocation                  string
+	MempoolAddressURL               string
+	PoolDonationAddress             string
+	OperatorDonationName            string
+	OperatorDonationURL             string
+	PayoutAddress                   string
+	PoolFeePercent                  float64
+	OperatorDonationPercent         float64
+	PoolEntropy                     string
+	PoolTagPrefix                   string
 
 	// Listeners
 	ListenAddr       string
@@ -1084,14 +1084,30 @@ func (s *StatusServer) handleAdminMinerDisconnect(w http.ResponseWriter, r *http
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
 		return
 	}
-	seq, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("connection_seq")), 10, 64)
-	if err != nil || seq == 0 || s.workerRegistry == nil {
+	rawSeqs := r.Form["connection_seq"]
+	if len(rawSeqs) == 0 || s.workerRegistry == nil {
 		data.AdminApplyError = "Connection not found."
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
 		return
 	}
-	if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
-		mc.Close("admin disconnect")
+
+	seen := make(map[uint64]struct{})
+	disconnected := 0
+	for _, raw := range rawSeqs {
+		seq, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+		if err != nil || seq == 0 {
+			continue
+		}
+		if _, ok := seen[seq]; ok {
+			continue
+		}
+		seen[seq] = struct{}{}
+		if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
+			disconnected++
+			mc.Close("admin disconnect")
+		}
+	}
+	if disconnected > 0 {
 		http.Redirect(w, r, "/admin/miners?notice=miner_disconnected", http.StatusSeeOther)
 		return
 	}
@@ -1128,16 +1144,32 @@ func (s *StatusServer) handleAdminMinerBan(w http.ResponseWriter, r *http.Reques
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
 		return
 	}
-	seq, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("connection_seq")), 10, 64)
-	if err != nil || seq == 0 || s.workerRegistry == nil {
+	rawSeqs := r.Form["connection_seq"]
+	if len(rawSeqs) == 0 || s.workerRegistry == nil {
 		data.AdminApplyError = "Connection not found."
 		s.renderAdminPageTemplate(w, r, data, "admin_miners")
 		return
 	}
-	if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
-		duration := s.Config().BanInvalidSubmissionsDuration
-		mc.adminBan("admin ban", duration)
-		mc.Close("admin ban")
+
+	seen := make(map[uint64]struct{})
+	banned := 0
+	duration := s.Config().BanInvalidSubmissionsDuration
+	for _, raw := range rawSeqs {
+		seq, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+		if err != nil || seq == 0 {
+			continue
+		}
+		if _, ok := seen[seq]; ok {
+			continue
+		}
+		seen[seq] = struct{}{}
+		if mc := s.workerRegistry.connectionBySeq(seq); mc != nil {
+			banned++
+			mc.adminBan("admin ban", duration)
+			mc.Close("admin ban")
+		}
+	}
+	if banned > 0 {
 		http.Redirect(w, r, "/admin/miners?notice=miner_banned", http.StatusSeeOther)
 		return
 	}
