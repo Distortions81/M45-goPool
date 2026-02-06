@@ -114,7 +114,7 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, `stratum_messages_per_minute` (messages/min before disconnect + 1h ban), and whether to auto-calculate throttles from `max_conns`.
 - `[timeouts]`: `connection_timeout_seconds`.
-- `[difficulty]`: `max_difficulty`/`min_difficulty` clamps (0 disables a clamp) and whether to lock miner-suggested difficulty. If a miner suggests a difficulty outside your configured limits, goPool disconnects and bans them for 1 hour.
+- `[difficulty]`: `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits).
 - `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `vardiff_fine` to enable half-step VarDiff adjustments without power-of-two snapping.
 - `[hashrate]`: `hashrate_ema_tau_seconds`, `hashrate_ema_min_shares`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
@@ -283,7 +283,7 @@ Key tuning knobs:
 - `hashrate_ema_tau_seconds` / `hashrate_ema_min_shares` – adjust EMA smoothing for per-worker hashrate.
 - `ntime_forward_slack_seconds` – tolerated future timestamps on shares (default 7000 seconds).
 - `peer_cleaning` – enable/disable and tune thresholds for cleaning stalled miners.
-- `difficulty` – clamp advertised difficulty and optionally lock miner suggestions.
+- `difficulty` – clamp advertised difficulty, optionally enforce min/max on miner-suggested difficulty, and optionally lock miner suggestions.
 
 Each tuning value logs when set, so goPool operators can audit what changed via `pool.log`.
 

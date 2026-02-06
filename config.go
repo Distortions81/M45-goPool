@@ -139,6 +139,7 @@ type Config struct {
 	MinDifficulty         float64
 
 	LockSuggestedDifficulty  bool    // keep suggested difficulty instead of vardiff
+	EnforceSuggestedDifficultyLimits bool // ban/disconnect when suggest_* outside min/max
 	VardiffFine              bool    // use half-step vardiff adjustments (tuning.toml only)
 	HashrateEMATauSeconds    float64 // EMA time constant for hashrate
 	HashrateEMAMinShares     int     // min shares before EMA kicks in
@@ -444,9 +445,10 @@ type timeoutTuning struct {
 }
 
 type difficultyTuning struct {
-	MaxDifficulty           *float64 `toml:"max_difficulty"`
-	MinDifficulty           *float64 `toml:"min_difficulty"`
-	LockSuggestedDifficulty *bool    `toml:"lock_suggested_difficulty"`
+	MaxDifficulty                   *float64 `toml:"max_difficulty"`
+	MinDifficulty                   *float64 `toml:"min_difficulty"`
+	LockSuggestedDifficulty         *bool    `toml:"lock_suggested_difficulty"`
+	EnforceSuggestedDifficultyLimits *bool   `toml:"enforce_suggested_difficulty_limits"`
 }
 
 type miningTuning struct {
@@ -596,9 +598,10 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			ConnectionTimeoutSec: intPtr(int(cfg.ConnectionTimeout / time.Second)),
 		},
 		Difficulty: difficultyTuning{
-			MaxDifficulty:           float64Ptr(cfg.MaxDifficulty),
-			MinDifficulty:           float64Ptr(cfg.MinDifficulty),
-			LockSuggestedDifficulty: boolPtr(cfg.LockSuggestedDifficulty),
+			MaxDifficulty:                    float64Ptr(cfg.MaxDifficulty),
+			MinDifficulty:                    float64Ptr(cfg.MinDifficulty),
+			LockSuggestedDifficulty:          boolPtr(cfg.LockSuggestedDifficulty),
+			EnforceSuggestedDifficultyLimits: boolPtr(cfg.EnforceSuggestedDifficultyLimits),
 		},
 		Mining: miningTuning{
 			DisablePoolJobEntropy: boolPtr(false),
@@ -1010,6 +1013,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Difficulty.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty
+	}
+	if fc.Difficulty.EnforceSuggestedDifficultyLimits != nil {
+		cfg.EnforceSuggestedDifficultyLimits = *fc.Difficulty.EnforceSuggestedDifficultyLimits
 	}
 	if fc.Mining.DisablePoolJobEntropy != nil && *fc.Mining.DisablePoolJobEntropy {
 		// Disables coinbase "<pool entropy>-<job entropy>" suffix by bypassing

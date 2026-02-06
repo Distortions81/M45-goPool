@@ -107,6 +107,7 @@ func tuningConfigDocComments() []byte {
 # Difficulty ([difficulty])
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
+# - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
 # - vardiff_fine: Enable half-step VarDiff adjustments and disable power-of-two snapping (requires restart).
