@@ -30,4 +30,3 @@ func displayPoolTagFromCoinbaseMessage(msg string) string {
 	}
 	return "/" + msg + "/"
 }
-
