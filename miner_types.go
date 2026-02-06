@@ -1,0 +1,199 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"math/big"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type StratumRequest struct {
+	ID     interface{}   `json:"id"`
+	Method string        `json:"method"`
+	Params []interface{} `json:"params"`
+}
+
+type StratumResponse struct {
+	ID     interface{} `json:"id"`
+	Result interface{} `json:"result"`
+	Error  interface{} `json:"error"`
+}
+
+func newStratumError(code int, msg string) []interface{} {
+	return []interface{}{code, msg, nil}
+}
+
+type VarDiffConfig struct {
+	MinDiff            float64
+	MaxDiff            float64
+	TargetSharesPerMin float64
+	AdjustmentWindow   time.Duration
+	Step               float64
+	MaxBurstShares     int
+	BurstWindow        time.Duration
+	// DampingFactor controls how aggressively vardiff moves toward target.
+	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
+	// Lower values reduce overshoot. Typical range: 0.5-0.85.
+	DampingFactor float64
+}
+
+type MinerStats struct {
+	Worker            string
+	WorkerSHA256      string
+	Accepted          int64
+	Rejected          int64
+	TotalDifficulty   float64
+	WindowDifficulty  float64
+	LastShare         time.Time
+	WindowStart       time.Time
+	WindowAccepted    int
+	WindowSubmissions int
+}
+
+// statsUpdate represents a stats modification to be processed asynchronously
+type statsUpdate struct {
+	worker       string
+	accepted     bool
+	creditedDiff float64
+	shareDiff    float64
+	reason       string
+	shareHash    string
+	detail       *ShareDetail
+	timestamp    time.Time
+}
+
+type workerWalletState struct {
+	address   string
+	script    []byte
+	validated bool
+}
+
+var defaultVarDiff = VarDiffConfig{
+	MinDiff:            defaultMinDifficulty,
+	MaxDiff:            defaultMaxDifficulty,
+	TargetSharesPerMin: defaultVarDiffTargetSharesPerMin, // aim for roughly one share every 12s
+	AdjustmentWindow:   defaultVarDiffAdjustmentWindow,
+	Step:               defaultVarDiffStep,
+	MaxBurstShares:     defaultVarDiffMaxBurstShares, // throttle spammy submitters
+	BurstWindow:        defaultVarDiffBurstWindow,
+	DampingFactor:      defaultVarDiffDampingFactor, // move 50% toward target to reduce overshoot
+}
+
+type MinerConn struct {
+	id                   string
+	ctx                  context.Context
+	conn                 net.Conn
+	writer               *bufio.Writer
+	writeMu              sync.Mutex
+	reader               *bufio.Reader
+	jobMgr               *JobManager
+	rpc                  rpcCaller
+	cfg                  Config
+	extranonce1          []byte
+	jobCh                chan *Job
+	difficulty           atomic.Uint64 // float64 stored as bits
+	previousDifficulty   atomic.Uint64 // float64 stored as bits
+	shareTarget          atomic.Pointer[big.Int]
+	lastDiffChange       atomic.Int64 // Unix nanos
+	stateMu              sync.Mutex
+	listenerOn           bool
+	stats                MinerStats
+	statsMu              sync.Mutex
+	initWorkMu           sync.Mutex
+	statsUpdates         chan statsUpdate // Buffered channel for async stats updates
+	statsWg              sync.WaitGroup   // Wait for stats worker to finish
+	vardiff              VarDiffConfig
+	metrics              *PoolMetrics
+	accounting           *AccountStore
+	workerRegistry       *workerConnectionRegistry
+	savedWorkerStore     *workerListStore
+	discordNotifier      *discordNotifier
+	savedWorkerTracked   bool
+	savedWorkerBestDiff  float64
+	registeredWorker     string
+	registeredWorkerHash string
+	jobMu                sync.Mutex
+	activeJobs           map[string]*Job
+	jobOrder             []string
+	maxRecentJobs        int
+	shareCache           map[string]*duplicateShareSet
+	evictedShareCache    map[string]*evictedCacheEntry
+	lastJob              *Job
+	lastClean            bool
+	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
+	jobScriptTime        map[string]int64
+	banUntil             time.Time
+	banReason            string
+	lastPenalty          time.Time
+	invalidSubs          int
+	lastProtoViolation   time.Time
+	protoViolations      int
+	versionRoll          bool
+	versionMask          uint32
+	poolMask             uint32
+	minerMask            uint32
+	minVerBits           int
+	lastShareHash        string
+	lastShareAccepted    bool
+	lastShareDifficulty  float64
+	lastShareDetail      *ShareDetail
+	lastRejectReason     string
+	walletMu             sync.Mutex
+	workerWallets        map[string]workerWalletState
+	subscribed           bool
+	authorized           bool
+	cleanupOnce          sync.Once
+	// If true, VarDiff adjustments are disabled for this miner and the
+	// current difficulty is treated as fixed (typically from suggest_difficulty).
+	lockDifficulty bool
+	// bootstrapDone tracks whether we've already performed the initial
+	// "bootstrap" vardiff move for this connection.
+	bootstrapDone bool
+	// restoredRecentDiff is set when we restore a worker's persisted
+	// difficulty after a short disconnect so we can skip bootstrap and
+	// suggested-difficulty overrides on reconnect.
+	restoredRecentDiff   bool
+	minerType            string
+	minerClientName      string
+	minerClientVersion   string
+	extranonceSubscribed bool
+	// connectedAt is the time this miner connection was established,
+	// used as the zero point for per-share timing in detail logs.
+	connectedAt time.Time
+	// lastActivity tracks when we last saw a RPC message from this miner.
+	lastActivity time.Time
+	// stratumMsgWindowStart/stratumMsgCount track per-connection Stratum message rate.
+	stratumMsgWindowStart time.Time
+	stratumMsgCount       int
+	// lastHashrateUpdate tracks the last time we updated the per-connection
+	// hashrate EMA so we can apply a time-based decay between shares.
+	lastHashrateUpdate time.Time
+	// hashrateSampleCount counts how many shares have been recorded since the
+	// last EMA update so we can ensure the window spans enough work.
+	hashrateSampleCount int
+	// hashrateAccumulatedDiff accumulates credited difficulties between samples.
+	hashrateAccumulatedDiff float64
+	// jobDifficulty records the difficulty in effect when each job notify
+	// was sent to this miner so we can credit shares with the assigned
+	// target even if vardiff changes before the share arrives.
+	jobDifficulty map[string]float64
+	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
+	// for this connection, derived from accepted work over time.
+	rollingHashrateValue float64
+	// isTLSConnection tracks whether this miner connected over the TLS listener.
+	isTLSConnection bool
+	connectionSeq   uint64
+	// suggestDiffProcessed tracks whether we've already processed mining.suggest_difficulty
+	// during the initialization phase. Subsequent suggests will be ignored to prevent
+	// repeated keepalive messages from disrupting vardiff adjustments.
+	suggestDiffProcessed bool
+	initialWorkScheduled bool
+	initialWorkSent      bool
+}
+
+type rpcCaller interface {
+	callCtx(ctx context.Context, method string, params interface{}, out interface{}) error
+}
