@@ -18,7 +18,6 @@
 #
 # Difficulty ([difficulty])
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
-# - default_difficulty: Starting difficulty for miners that do not send a suggestion (0 uses min_difficulty/default).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
@@ -56,11 +55,11 @@
   reconnect_ban_window_seconds = 60
 
 [difficulty]
+  default_difficulty = 256.0
   enforce_suggested_difficulty_limits = false
   lock_suggested_difficulty = false
   max_difficulty = 0.0
-  default_difficulty = 256
-  min_difficulty = 256
+  min_difficulty = 256.0
 
 [discord]
   worker_notify_threshold_seconds = 300
