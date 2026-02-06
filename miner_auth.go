@@ -248,7 +248,13 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	// to be valid, send initial difficulty and a job so hashing can start.
 	// First job always has clean_jobs=true so the miner starts fresh.
 	if job := mc.jobMgr.CurrentJob(); job != nil {
-		mc.setDifficulty(mc.vardiff.MinDiff)
+		// Respect suggested difficulty if already processed. Otherwise, fall back
+		// to a sane minimum (when configured) so miners have a starting target.
+		if !mc.suggestDiffProcessed {
+			if mc.vardiff.MinDiff > 0 {
+				mc.setDifficulty(mc.vardiff.MinDiff)
+			}
+		}
 		mc.sendNotifyFor(job, true)
 	}
 }
