@@ -1,0 +1,185 @@
+{{/* Admin bans page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Bans</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<main class="page admin-page" id="content">
+		<noscript>
+			<div class="card">
+				<p class="text-sm" style="color:#f88d8d;margin:0;">
+					JavaScript is required for bulk actions on this page.
+				</p>
+			</div>
+		</noscript>
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			Review worker bans stored in the accounting database and remove them when needed. Select the workers to unban, enter the admin password once, and apply the action below.
+		</p>
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin panel is disabled. Enable it by editing <span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<p class="text-sm">
+				Sign in on the <a href="/admin">main admin page</a> to manage bans.
+			</p>
+		</div>
+		{{else}}
+		{{template "admin-nav" .}}
+		<div class="card">
+			<div class="label">Banned workers</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				Removing a ban allows new connections from the worker. This does not reopen already closed connections.
+			</p>
+			{{if .AdminApplyError}}
+			<p class="text-sm" style="color:#f88d8d;margin:0 0 10px 0;">{{.AdminApplyError}}</p>
+			{{end}}
+			{{if .AdminBansLoadError}}
+			<p class="text-sm" style="color:#f88d8d;margin:0 0 10px 0;">{{.AdminBansLoadError}}</p>
+			{{end}}
+			{{if .AdminBannedWorkers}}
+			<div class="admin-toolbar">
+				<div class="toolbar-left">
+					<label class="label" for="bans-toolbar-password">Admin password</label>
+					<input id="bans-toolbar-password" class="textfield toolbar-password" type="password" placeholder="Admin password">
+				</div>
+				<div class="toolbar-actions">
+					<button class="btn btn-secondary" type="button" id="bans-toolbar-remove" disabled>Remove selected</button>
+				</div>
+			</div>
+			<form id="bansActionsForm" method="post" style="display:none;">
+				<input type="hidden" name="password" id="bansToolbarPasswordField">
+				<div id="bansToolbarWorkers"></div>
+			</form>
+			<div class="admin-pagination">
+				<div class="admin-pagination-summary text-sm">
+					{{if gt .AdminBansPagination.TotalItems 0}}
+					Showing {{.AdminBansPagination.RangeStart}} – {{.AdminBansPagination.RangeEnd}} of {{.AdminBansPagination.TotalItems}}
+					{{else}}
+					Showing 0 entries
+					{{end}}
+				</div>
+				<form class="pagination-form" method="get" action="/admin/bans">
+					<label for="bans-per-page">Items per page</label>
+					<select id="bans-per-page" name="per_page" onchange="this.form.submit()">
+						{{range $opt := .AdminPerPageOptions}}
+						<option value="{{$opt}}" {{if eq $opt $.AdminBansPagination.PerPage}}selected{{end}}>{{$opt}}</option>
+						{{end}}
+					</select>
+					<input type="hidden" name="page" value="1">
+				</form>
+				<div class="pagination-links">
+					{{if .AdminBansPagination.HasPrevPage}}
+					<a href="/admin/bans?page={{.AdminBansPagination.PrevPage}}&per_page={{.AdminBansPagination.PerPage}}">Previous</a>
+					{{end}}
+					{{if .AdminBansPagination.HasNextPage}}
+					<a href="/admin/bans?page={{.AdminBansPagination.NextPage}}&per_page={{.AdminBansPagination.PerPage}}">Next</a>
+					{{end}}
+				</div>
+			</div>
+			<div class="table-responsive">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Worker</th>
+							<th>Hash</th>
+							<th>Ban reason</th>
+							<th>Banned until</th>
+							<th>Select</th>
+						</tr>
+					</thead>
+					<tbody>
+						{{range .AdminBannedWorkers}}
+						<tr>
+							<td>
+								<div>{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}</div>
+								{{if .Name}}<div class="mono" style="font-size:12px;">{{.Name}}</div>{{end}}
+							</td>
+							<td>{{if .WorkerSHA256}}<span class="mono">{{shortID .WorkerSHA256}}</span>{{else}}—{{end}}</td>
+							<td>{{if .BanReason}}{{.BanReason}}{{else}}—{{end}}</td>
+							<td>
+								{{if .BannedUntil.IsZero}}
+									Permanent
+								{{else}}
+									{{formatTimeUTC .BannedUntil}}
+								{{end}}
+							</td>
+							<td>
+								<input type="checkbox" class="admin-ban-checkbox" data-worker="{{.Name}}">
+							</td>
+						</tr>
+						{{end}}
+					</tbody>
+				</table>
+			</div>
+			{{else}}
+			<p class="text-sm">
+				No banned workers are recorded.
+			</p>
+			{{end}}
+		</div>
+		{{end}}
+	{{template "footer" .}}
+	</main>
+	<script>
+	(function() {
+		const form = document.getElementById('bansActionsForm');
+		const passwordInput = document.getElementById('bans-toolbar-password');
+		const passwordField = document.getElementById('bansToolbarPasswordField');
+		const workerContainer = document.getElementById('bansToolbarWorkers');
+		const checkboxes = Array.from(document.querySelectorAll('.admin-ban-checkbox'));
+		const removeBtn = document.getElementById('bans-toolbar-remove');
+
+		function updateButtons() {
+			const selected = checkboxes.filter(cb => cb.checked);
+			removeBtn.disabled = selected.length === 0;
+			return selected;
+		}
+
+		function submitAction(action) {
+			const selected = updateButtons();
+			if (!selected.length) {
+				return;
+			}
+			workerContainer.innerHTML = '';
+			const workers = new Set();
+			selected.forEach(cb => {
+				const worker = cb.dataset.worker || '';
+				if (!worker || workers.has(worker)) {
+					return;
+				}
+				workers.add(worker);
+				const input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'worker_name';
+				input.value = worker;
+				workerContainer.appendChild(input);
+			});
+			passwordField.value = passwordInput.value;
+			form.action = action;
+			form.submit();
+		}
+
+		checkboxes.forEach(cb => cb.addEventListener('change', updateButtons));
+		if (removeBtn) {
+			removeBtn.addEventListener('click', () => submitAction('/admin/bans/remove'));
+		}
+	})();
+	</script>
+</body>
+</html>
