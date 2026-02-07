@@ -11,6 +11,7 @@ type AdminPageData struct {
 	LoggedIn             bool
 	AdminLoginError      string
 	AdminApplyError      string
+	AdminReloadError     string
 	AdminPersistError    string
 	AdminRebootError     string
 	AdminNotice          string

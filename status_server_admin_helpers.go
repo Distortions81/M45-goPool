@@ -130,6 +130,8 @@ func adminNoticeMessage(key string) string {
 		return "Saved current in-memory settings to config.toml and tuning.toml."
 	case "reboot_requested":
 		return "Reboot requested. goPool is shutting down now."
+	case "ui_reloaded":
+		return "UI templates and static assets reloaded."
 	case "logged_in":
 		return "Admin session unlocked."
 	case "logged_out":

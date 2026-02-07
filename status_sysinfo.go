@@ -506,6 +506,12 @@ func (s *StatusServer) renderErrorPage(w http.ResponseWriter, r *http.Request, s
 // from the www directory. This is used for legal pages like privacy.html and terms.html.
 func (s *StatusServer) handleStaticFile(filename string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s != nil && s.staticFiles != nil {
+			cleanPath := filepath.Clean(filename)
+			if s.staticFiles.ServeCached(w, r, cleanPath) {
+				return
+			}
+		}
 		cfg := s.Config()
 		wwwDir := filepath.Join(cfg.DataDir, "www")
 		filePath := filepath.Join(wwwDir, filename)

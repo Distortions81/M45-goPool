@@ -369,6 +369,23 @@
 		</div>
 
 		<div class="card">
+			<div class="label">Reload UI assets</div>
+			<p class="text-sm" style="margin:4px 0 10px 0;">
+				Reloads HTML templates and cached static files from disk without restarting the pool.
+			</p>
+			{{if .AdminReloadError}}
+			<p class="text-sm" style="color:#f88d8d;">{{.AdminReloadError}}</p>
+			{{end}}
+			<form method="post" action="/admin/reload-ui">
+				<label class="label" for="reload-password">Admin password (required)</label>
+				<input id="reload-password" name="password" type="password" class="textfield" autocomplete="current-password" placeholder="Enter admin.toml password" required>
+				<label class="label" for="reload-confirm">Confirmation</label>
+				<input id="reload-confirm" name="confirm" type="text" class="textfield" placeholder="Type RELOAD" required>
+				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Reload UI assets</button>
+			</form>
+		</div>
+
+		<div class="card">
 			<div class="label">Reboot the pool</div>
 			<p class="text-sm" style="margin:4px 0 10px 0;">This sends SIGTERM to goPool. Make sure your supervisor restarts it.</p>
 			{{if .AdminRebootError}}

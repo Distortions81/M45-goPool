@@ -336,9 +336,12 @@ func main() {
 			case sig := <-reloadChan:
 				switch sig {
 				case syscall.SIGUSR1:
-					logger.Info("SIGUSR1 received, reloading templates")
+					logger.Info("SIGUSR1 received, reloading templates and static cache")
 					if err := statusServer.ReloadTemplates(); err != nil {
 						logger.Error("template reload failed", "error", err)
+					}
+					if err := statusServer.ReloadStaticFiles(); err != nil {
+						logger.Error("static cache reload failed", "error", err)
 					}
 				case syscall.SIGUSR2:
 					logger.Info("SIGUSR2 received, reloading config")
@@ -398,6 +401,7 @@ func main() {
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
 	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)
+	mux.HandleFunc("/admin/reload-ui", statusServer.handleAdminReloadUI)
 	mux.HandleFunc("/admin/persist", statusServer.handleAdminPersist)
 	mux.HandleFunc("/admin/reboot", statusServer.handleAdminReboot)
 	mux.HandleFunc("/worker", statusServer.withClerkUser(statusServer.handleWorkerStatus))
@@ -439,11 +443,19 @@ func main() {
 		// Fall back to status server only if we can't open the www directory
 		mux.Handle("/", statusServer)
 	} else {
-		mux.Handle("/", &fileServerWithFallback{
+		staticFiles := &fileServerWithFallback{
 			fileServer: http.FileServer(http.Dir(wwwDir)),
 			fallback:   statusServer,
 			wwwRoot:    wwwRoot,
-		})
+			wwwDir:     wwwDir,
+		}
+		if err := staticFiles.PreloadCache(); err != nil {
+			logger.Warn("preload static cache failed", "error", err)
+		} else {
+			logger.Info("static cache preloaded", "path", wwwDir)
+		}
+		statusServer.SetStaticFileServer(staticFiles)
+		mux.Handle("/", staticFiles)
 	}
 	// Prepare shared TLS certificate paths for both HTTPS status UI and
 	// optional Stratum TLS. A self-signed cert is generated on demand.

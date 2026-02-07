@@ -62,6 +62,7 @@ type StatusServer struct {
 	adminLoginMu    sync.Mutex
 	adminLoginNext  time.Time
 	requestShutdown func()
+	staticFiles     *fileServerWithFallback
 }
 
 type cachedJSONResponse struct {
@@ -97,4 +98,18 @@ func (s *StatusServer) UpdateConfig(cfg Config) {
 	s.cfg.Store(cfg)
 	s.storeStatusPublicURL(cfg.StatusPublicURL)
 	s.clearPageCache()
+}
+
+func (s *StatusServer) SetStaticFileServer(staticFiles *fileServerWithFallback) {
+	if s == nil {
+		return
+	}
+	s.staticFiles = staticFiles
+}
+
+func (s *StatusServer) ReloadStaticFiles() error {
+	if s == nil || s.staticFiles == nil {
+		return nil
+	}
+	return s.staticFiles.ReloadCache()
 }

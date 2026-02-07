@@ -229,6 +229,54 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
 }
 
+func (s *StatusServer) handleAdminReloadUI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin reload ui form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, err := s.buildAdminPageData(r, "")
+	if err != nil {
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !adminCfg.Enabled {
+		data.AdminReloadError = "Admin control panel is disabled."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	password := r.FormValue("password")
+	if password == "" || !s.adminPasswordMatches(adminCfg, password) {
+		data.AdminReloadError = "Password is required to reload UI assets."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm")), "RELOAD") {
+		data.AdminReloadError = "Please type RELOAD to confirm."
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := s.ReloadTemplates(); err != nil {
+		data.AdminReloadError = fmt.Sprintf("Failed to reload templates: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := s.ReloadStaticFiles(); err != nil {
+		data.AdminReloadError = fmt.Sprintf("Failed to reload static assets: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	http.Redirect(w, r, "/admin?notice=ui_reloaded", http.StatusSeeOther)
+}
+
 func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
