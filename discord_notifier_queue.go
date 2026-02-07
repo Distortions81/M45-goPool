@@ -45,7 +45,7 @@ func (n *discordNotifier) enqueueNotice(msg string) {
 	if msg == "" {
 		return
 	}
-	n.enqueueQueuedLine("", n.noticePrefix()+msg)
+	n.enqueueQueuedLine("", n.noticePrefix()+msg, false)
 }
 
 func (n *discordNotifier) enqueuePing(discordUserID, line string) {
@@ -57,10 +57,21 @@ func (n *discordNotifier) enqueuePing(discordUserID, line string) {
 	if discordUserID == "" || line == "" {
 		return
 	}
-	n.enqueueQueuedLine(discordUserID, line)
+	n.enqueueQueuedLine(discordUserID, line, false)
 }
 
-func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string) {
+func (n *discordNotifier) enqueueEveryoneNotice(line string) {
+	if n == nil {
+		return
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	n.enqueueQueuedLine("", line, true)
+}
+
+func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string, mentionEveryone bool) {
 	if n == nil {
 		return
 	}
@@ -87,6 +98,9 @@ func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string) {
 	if len(n.pingQueue) > 0 {
 		lastIdx := len(n.pingQueue) - 1
 		last := n.pingQueue[lastIdx]
+		if last.MentionEveryone != mentionEveryone {
+			goto startNew
+		}
 
 		if mentionUserID == "" {
 			last.Notices = append(last.Notices, line)
@@ -100,18 +114,20 @@ func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string) {
 			last.LinesByUser[mentionUserID] = append(last.LinesByUser[mentionUserID], line)
 		}
 
-		if rendered, _ := renderQueuedMessage(last); len(rendered) <= maxChars {
+		if rendered, _, _ := renderQueuedMessage(last); len(rendered) <= maxChars {
 			n.pingQueue[lastIdx] = last
 			return
 		}
 	}
 
+startNew:
 	// Start a new message if we still have capacity; otherwise drop.
 	if len(n.pingQueue) >= maxMessagesQueued {
 		n.droppedQueuedLines++
 		return
 	}
 	msg := queuedDiscordMessage{}
+	msg.MentionEveryone = mentionEveryone
 	if mentionUserID == "" {
 		msg.Notices = []string{line}
 	} else {
@@ -121,7 +137,7 @@ func (n *discordNotifier) enqueueQueuedLine(mentionUserID, line string) {
 	n.pingQueue = append(n.pingQueue, msg)
 }
 
-func renderQueuedMessage(m queuedDiscordMessage) (content string, mentions []string) {
+func renderQueuedMessage(m queuedDiscordMessage) (content string, mentions []string, allowEveryone bool) {
 	lines := make([]string, 0, len(m.Notices)+len(m.UserOrder))
 	for _, n := range m.Notices {
 		n = strings.TrimSpace(n)
@@ -148,6 +164,14 @@ func renderQueuedMessage(m queuedDiscordMessage) (content string, mentions []str
 			}
 			lines = append(lines, fmt.Sprintf("<@%s> %s", uid, strings.Join(clean, " | ")))
 			mentions = append(mentions, uid)
+		}
+	}
+	allowEveryone = m.MentionEveryone
+	if allowEveryone {
+		if len(lines) == 0 {
+			lines = append(lines, "@everyone")
+		} else {
+			lines[0] = "@everyone " + lines[0]
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")), mentions
@@ -252,7 +276,7 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 	}
 	next := n.pingQueue[0]
 	n.pingMu.Unlock()
-	msg, mentions := renderQueuedMessage(next)
+	msg, mentions, allowEveryone := renderQueuedMessage(next)
 
 	if msg == "" {
 		n.pingMu.Lock()
@@ -270,11 +294,16 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 		}
 	}
 
+	allowed := &discordgo.MessageAllowedMentions{
+		Users: mentions,
+	}
+	if allowEveryone {
+		allowed.Parse = []string{"everyone"}
+	}
+
 	_, err := n.dg.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
-		Content: msg,
-		AllowedMentions: &discordgo.MessageAllowedMentions{
-			Users: mentions,
-		},
+		Content:         msg,
+		AllowedMentions: allowed,
 	})
 	if err != nil {
 		logger.Warn("discord notify send failed", "error", err)

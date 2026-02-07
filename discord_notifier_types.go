@@ -38,7 +38,8 @@ type discordNotifier struct {
 }
 
 type queuedDiscordMessage struct {
-	Notices     []string
-	UserOrder   []string
-	LinesByUser map[string][]string
+	Notices         []string
+	UserOrder       []string
+	LinesByUser     map[string][]string
+	MentionEveryone bool
 }

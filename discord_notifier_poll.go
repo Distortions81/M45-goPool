@@ -198,10 +198,8 @@ func (n *discordNotifier) NotifyFoundBlock(worker string, height int64, hashHex 
 	if worker == "" || hashHex == "" || height <= 0 {
 		return
 	}
-
-	subscribers, err := n.s.workerLists.ListNotifiedUsersForWorker(worker)
-	if err != nil || len(subscribers) == 0 {
-		return
+	if now.IsZero() {
+		now = time.Now()
 	}
 
 	workerLabel := shortWorkerName(worker, workerNamePrefix, workerNameSuffix)
@@ -214,8 +212,14 @@ func (n *discordNotifier) NotifyFoundBlock(worker string, height int64, hashHex 
 	}
 
 	// Keep the message short; it's posted in a shared channel.
-	line := fmt.Sprintf("Block found: height %d by %s (hash %s)", height, workerLabel, hashLabel)
-	_ = now // reserved for future time-based de-dupe/persistence
+	ts := now.Unix()
+	line := fmt.Sprintf("Block found: height %d by %s (hash %s) at <t:%d:F>", height, workerLabel, hashLabel, ts)
+	n.enqueueEveryoneNotice(line)
+
+	subscribers, err := n.s.workerLists.ListNotifiedUsersForWorker(worker)
+	if err != nil || len(subscribers) == 0 {
+		return
+	}
 
 	seenDiscord := make(map[string]struct{}, 8)
 	for _, sub := range subscribers {
