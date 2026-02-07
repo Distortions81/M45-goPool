@@ -282,6 +282,11 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
 		worker := mc.currentWorker()
 		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
+		if min > 0 && diff < min {
+			reason = "Miner too slow"
+		} else if max > 0 && diff > max {
+			reason = "Miner too fast"
+		}
 		mc.banFor(reason, time.Hour, worker)
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
@@ -385,6 +390,11 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 	if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
 		worker := mc.currentWorker()
 		reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", diff)
+		if min > 0 && diff < min {
+			reason = "Miner too slow"
+		} else if max > 0 && diff > max {
+			reason = "Miner too fast"
+		}
 		mc.banFor(reason, time.Hour, worker)
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,

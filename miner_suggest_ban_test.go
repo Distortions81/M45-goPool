@@ -53,8 +53,43 @@ func TestSuggestDifficultyOutOfRangeBansAndDisconnects(t *testing.T) {
 	}
 
 	until, reason, _ := mc.banDetails()
-	if reason == "" || !strings.Contains(reason, "outside pool limits") {
-		t.Fatalf("expected ban reason to mention pool limits, got: %q", reason)
+	if reason != "Miner too slow" {
+		t.Fatalf("expected ban reason to be %q, got: %q", "Miner too slow", reason)
+	}
+	if until.Before(time.Now().Add(55 * time.Minute)) {
+		t.Fatalf("expected ~1h ban, got until=%s", until)
+	}
+
+	out := conn.String()
+	if !strings.Contains(out, "\"error\"") || !strings.Contains(out, "\"banned\"") {
+		t.Fatalf("expected banned error response, got: %q", out)
+	}
+}
+
+func TestSuggestDifficultyAboveMaxBansAndDisconnects(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-ban-fast-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_difficulty",
+		Params: []interface{}{3.0},
+	}
+	mc.suggestDifficulty(req)
+
+	if !conn.closed {
+		t.Fatalf("expected miner connection to be closed")
+	}
+
+	until, reason, _ := mc.banDetails()
+	if reason != "Miner too fast" {
+		t.Fatalf("expected ban reason to be %q, got: %q", "Miner too fast", reason)
 	}
 	if until.Before(time.Now().Add(55 * time.Minute)) {
 		t.Fatalf("expected ~1h ban, got until=%s", until)
@@ -208,8 +243,39 @@ func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 		t.Fatalf("expected miner connection to be closed")
 	}
 	until, reason, _ := mc.banDetails()
-	if reason == "" || !strings.Contains(reason, "outside pool limits") {
-		t.Fatalf("expected ban reason to mention pool limits, got: %q", reason)
+	if reason != "Miner too slow" {
+		t.Fatalf("expected ban reason to be %q, got: %q", "Miner too slow", reason)
+	}
+	if until.Before(time.Now().Add(55 * time.Minute)) {
+		t.Fatalf("expected ~1h ban, got until=%s", until)
+	}
+}
+
+func TestSuggestTargetAboveMaxBansAndDisconnects(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:           "suggest-target-ban-fast-miner",
+		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
+		conn:         conn,
+		writer:       bufio.NewWriterSize(conn, 4096),
+		statsUpdates: make(chan statsUpdate),
+	}
+
+	// diff=3.0 is above the configured max=2.0
+	target := targetFromDifficulty(3.0)
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.suggest_target",
+		Params: []interface{}{fmt.Sprintf("%064x", target)},
+	}
+	mc.suggestTarget(req)
+
+	if !conn.closed {
+		t.Fatalf("expected miner connection to be closed")
+	}
+	until, reason, _ := mc.banDetails()
+	if reason != "Miner too fast" {
+		t.Fatalf("expected ban reason to be %q, got: %q", "Miner too fast", reason)
 	}
 	if until.Before(time.Now().Add(55 * time.Minute)) {
 		t.Fatalf("expected ~1h ban, got until=%s", until)
