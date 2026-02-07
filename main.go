@@ -744,6 +744,8 @@ func main() {
 			logger.Error("flush accounting", "error", err)
 		}
 	}
+	// Best-effort checkpoint to flush WAL into the main DB on shutdown.
+	checkpointSharedStateDB()
 	// Best-effort sync of log files on shutdown so buffered OS writes are
 	// forced to disk.
 	logger.Info("shutdown complete", "uptime", time.Since(startTime))

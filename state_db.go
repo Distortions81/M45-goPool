@@ -90,6 +90,19 @@ func closeSharedStateDB() {
 	}
 }
 
+// checkpointSharedStateDB forces a WAL checkpoint to reduce the chance of
+// losing committed data if the process stops immediately after shutdown.
+// Best-effort only.
+func checkpointSharedStateDB() {
+	db := getSharedStateDB()
+	if db == nil {
+		return
+	}
+	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		logger.Warn("state db checkpoint failed", "error", err)
+	}
+}
+
 func ensureStateTables(db *sql.DB) error {
 	if db == nil {
 		return nil
