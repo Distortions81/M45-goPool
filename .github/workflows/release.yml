@@ -79,8 +79,8 @@ jobs:
           # Copy templates
           cp data/templates/*.tmpl "$PACKAGE_NAME/data/templates/"
 
-          # Copy www files
-          cp data/www/* "$PACKAGE_NAME/data/www/"
+          # Copy www files (including directories like icons/)
+          cp -a data/www/. "$PACKAGE_NAME/data/www/"
 
           # Copy config examples
           cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
@@ -226,7 +226,7 @@ jobs:
           mkdir -p "$PACKAGE_NAME/data/config/examples"
 
           cp data/templates/*.tmpl "$PACKAGE_NAME/data/templates/"
-          cp data/www/* "$PACKAGE_NAME/data/www/"
+          cp -a data/www/. "$PACKAGE_NAME/data/www/"
           cp data/config/examples/*.example "$PACKAGE_NAME/data/config/examples/"
           cp data/config/examples/autogen.md "$PACKAGE_NAME/data/config/examples/"
 
