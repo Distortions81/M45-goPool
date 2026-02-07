@@ -215,6 +215,7 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	} else {
 		cfg.StratumPassword = ""
 	}
+	cfg.StratumPasswordPublic = fc.Stratum.StratumPasswordPublic
 	if fc.Auth.ClerkIssuerURL != "" {
 		cfg.ClerkIssuerURL = strings.TrimSpace(fc.Auth.ClerkIssuerURL)
 	}

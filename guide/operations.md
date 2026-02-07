@@ -99,7 +99,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 
 - `[server]`: `pool_listen`, `status_listen`, `status_tls_listen`, and `status_public_url`. Set `status_tls_listen = ""` to disable HTTPS and rely on `status_listen` only. Leaving `status_listen` empty disables HTTP entirely (e.g., TLS-only deployments). `status_public_url` feeds redirects and Clerk cookie domains. When both HTTP and HTTPS are enabled, the HTTP listener now issues a temporary (307) redirect to the HTTPS endpoint so the public UI and JSON APIs stay behind TLS.
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, GitHub link, location string).
-- `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`.
+- `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel.
 - `[auth]`: Clerk URLs and session cookies used for the status UI.
 - `[node]`: `rpc_url`, `rpc_cookie_path`, ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`), and `allow_public_rpc`.
 - `[mining]`: Pool fee, donation settings, `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `pooltag_prefix`, and flags that control solo-mode shortcuts.

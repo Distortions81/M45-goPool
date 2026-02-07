@@ -71,6 +71,19 @@
 						</div>
 					</div>
 
+					{{if .StratumPasswordEnabled}}
+						{{if .StratumPasswordPublic}}
+						<div class="connect-step">
+							<div class="connect-step-head">
+								<div class="connect-step-number">3</div>
+								<div class="connect-step-label">Password</div>
+							</div>
+							<div class="connect-step-body">
+								<div class="connect-value mono">{{.StratumPassword}}</div>
+							</div>
+						</div>
+						{{end}}
+					{{else}}
 					<div class="connect-step">
 						<div class="connect-step-head">
 							<div class="connect-step-number">3</div>
@@ -81,6 +94,7 @@
 							<p class="text-sm connect-hint">Most miners use <span class="mono">x</span> by default, but any password will work.</p>
 						</div>
 					</div>
+					{{end}}
 				</div>
 
 					{{if gt .MinDifficulty 0.0}}

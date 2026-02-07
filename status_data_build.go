@@ -511,9 +511,17 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if s.Config().MaxDifficulty > 0 {
 		maxHashrateForTarget = (s.Config().MaxDifficulty * hashPerShare * targetSharesPerMin) / 60.0
 	}
+	stratumPassword := ""
+	if s.Config().StratumPasswordEnabled && s.Config().StratumPasswordPublic {
+		stratumPassword = s.Config().StratumPassword
+	}
+
 	return StatusData{
 		ListenAddr:                     s.Config().ListenAddr,
 		StratumTLSListen:               s.Config().StratumTLSListen,
+		StratumPasswordEnabled:         s.Config().StratumPasswordEnabled,
+		StratumPasswordPublic:          s.Config().StratumPasswordPublic,
+		StratumPassword:                stratumPassword,
 		BrandName:                      brandName,
 		BrandDomain:                    brandDomain,
 		Tagline:                        s.Config().StatusTagline,

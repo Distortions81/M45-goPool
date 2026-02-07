@@ -18,6 +18,9 @@ type SavedWorkerRecord struct {
 type StatusData struct {
 	ListenAddr                      string                `json:"listen_addr"`
 	StratumTLSListen                string                `json:"stratum_tls_listen,omitempty"`
+	StratumPasswordEnabled          bool                  `json:"-"`
+	StratumPasswordPublic           bool                  `json:"-"`
+	StratumPassword                 string                `json:"-"`
 	ClerkEnabled                    bool                  `json:"clerk_enabled"`
 	ClerkLoginURL                   string                `json:"clerk_login_url,omitempty"`
 	ClerkUser                       *ClerkUser            `json:"clerk_user,omitempty"`

@@ -32,6 +32,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumTLSListen:       cfg.StratumTLSListen,
 			StratumPasswordEnabled: cfg.StratumPasswordEnabled,
 			StratumPassword:        cfg.StratumPassword,
+			StratumPasswordPublic:  cfg.StratumPasswordPublic,
 		},
 		Node: nodeConfig{
 			RPCURL:           cfg.RPCURL,

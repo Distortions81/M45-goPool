@@ -54,6 +54,7 @@ type Config struct {
 	// Stratum auth (optional; when enabled, require miners to send the password in mining.authorize).
 	StratumPasswordEnabled bool
 	StratumPassword        string
+	StratumPasswordPublic  bool // show password in public connect panel when enabled
 
 	// Clerk authentication.
 	ClerkIssuerURL         string

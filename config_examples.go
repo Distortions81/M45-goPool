@@ -75,6 +75,7 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_tls_listen: Optional Stratum-over-TLS listener (requires restart).
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
+# - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
 # Mining behavior
 # - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).

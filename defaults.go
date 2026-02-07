@@ -17,6 +17,7 @@ func defaultConfig() Config {
 		StratumTLSListen:                    defaultStratumTLSListen,
 		StratumPasswordEnabled:              false,
 		StratumPassword:                     "",
+		StratumPasswordPublic:               false,
 		ClerkIssuerURL:                      defaultClerkIssuerURL,
 		ClerkJWKSURL:                        defaultClerkJWKSURL,
 		ClerkSignInURL:                      defaultClerkSignInURL,
