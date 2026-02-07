@@ -47,3 +47,45 @@ func (s *StatusServer) serveCachedJSON(w http.ResponseWriter, key string, ttl ti
 		logger.Error("write cached json response", "key", key, "error", err)
 	}
 }
+
+func (s *StatusServer) serveCachedHTML(w http.ResponseWriter, key string, build func() ([]byte, error)) error {
+	now := time.Now()
+	s.pageCacheMu.RLock()
+	entry, ok := s.pageCache[key]
+	if ok && len(entry.payload) > 0 {
+		payload := entry.payload
+		s.pageCacheMu.RUnlock()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-HTML-Updated-At", entry.updatedAt.UTC().Format(time.RFC3339))
+		_, err := w.Write(payload)
+		return err
+	}
+	s.pageCacheMu.RUnlock()
+
+	payload, err := build()
+	if err != nil {
+		return err
+	}
+
+	s.pageCacheMu.Lock()
+	if s.pageCache == nil {
+		s.pageCache = make(map[string]cachedHTMLPage)
+	}
+	updatedAt := now
+	s.pageCache[key] = cachedHTMLPage{
+		payload:   payload,
+		updatedAt: updatedAt,
+	}
+	s.pageCacheMu.Unlock()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-HTML-Updated-At", updatedAt.UTC().Format(time.RFC3339))
+	_, err = w.Write(payload)
+	return err
+}
+
+func (s *StatusServer) clearPageCache() {
+	s.pageCacheMu.Lock()
+	s.pageCache = make(map[string]cachedHTMLPage)
+	s.pageCacheMu.Unlock()
+}

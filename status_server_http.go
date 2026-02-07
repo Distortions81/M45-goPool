@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"time"
 )
@@ -17,10 +18,15 @@ func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "logo.png")
 
 	case r.URL.Path == "/" || r.URL.Path == "":
-		start := time.Now()
-		data := s.baseTemplateData(start)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := s.executeTemplate(w, "overview", data); err != nil {
+		if err := s.serveCachedHTML(w, "page_overview", func() ([]byte, error) {
+			start := time.Now()
+			data := s.baseTemplateData(start)
+			var buf bytes.Buffer
+			if err := s.executeTemplate(&buf, "overview", data); err != nil {
+				return nil, err
+			}
+			return buf.Bytes(), nil
+		}); err != nil {
 			logger.Error("status template error", "error", err)
 			s.renderErrorPage(w, r, http.StatusInternalServerError,
 				"Status page error",

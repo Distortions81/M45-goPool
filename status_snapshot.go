@@ -621,6 +621,7 @@ func (s *StatusServer) ReloadTemplates() error {
 	s.tmplMu.Lock()
 	s.tmpl = tmpl
 	s.tmplMu.Unlock()
+	s.clearPageCache()
 	logger.Info("templates reloaded successfully")
 	return nil
 }

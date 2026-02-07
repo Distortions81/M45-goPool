@@ -48,6 +48,9 @@ type StatusServer struct {
 	jsonCacheMu sync.RWMutex
 	jsonCache   map[string]cachedJSONResponse
 
+	pageCacheMu sync.RWMutex
+	pageCache   map[string]cachedHTMLPage
+
 	workerPageMu    sync.RWMutex
 	workerPageCache map[string]cachedWorkerPage
 
@@ -65,6 +68,11 @@ type cachedJSONResponse struct {
 	payload   []byte
 	updatedAt time.Time
 	expiresAt time.Time
+}
+
+type cachedHTMLPage struct {
+	payload   []byte
+	updatedAt time.Time
 }
 
 type cachedWorkerPage struct {
@@ -88,4 +96,5 @@ func (s *StatusServer) Config() Config {
 func (s *StatusServer) UpdateConfig(cfg Config) {
 	s.cfg.Store(cfg)
 	s.storeStatusPublicURL(cfg.StatusPublicURL)
+	s.clearPageCache()
 }

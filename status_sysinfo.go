@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -217,10 +218,15 @@ func (s *StatusServer) rpcCallCtx(method string, params interface{}, out interfa
 // handleNodeInfo renders a simple node accountability page showing which
 // Bitcoin node the pool is connected to, its network, and basic sync info.
 func (s *StatusServer) handleNodeInfo(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	data := s.baseTemplateData(start)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.executeTemplate(w, "node", data); err != nil {
+	if err := s.serveCachedHTML(w, "page_node", func() ([]byte, error) {
+		start := time.Now()
+		data := s.baseTemplateData(start)
+		var buf bytes.Buffer
+		if err := s.executeTemplate(&buf, "node", data); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}); err != nil {
 		logger.Error("node info template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Node info error",
