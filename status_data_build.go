@@ -527,6 +527,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		Tagline:                        s.Config().StatusTagline,
 		ConnectMinerTitleExtra:         strings.TrimSpace(s.Config().StatusConnectMinerTitleExtra),
 		ConnectMinerTitleExtraURL:      strings.TrimSpace(s.Config().StatusConnectMinerTitleExtraURL),
+		ServerLocation:                 s.Config().ServerLocation,
 		FiatCurrency:                   s.Config().FiatCurrency,
 		BTCPriceFiat:                   btcPrice,
 		BTCPriceUpdatedAt:              btcPriceUpdated,
