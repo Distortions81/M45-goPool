@@ -393,6 +393,8 @@ func main() {
 	mux.HandleFunc("/admin/logins", statusServer.handleAdminLoginsPage)
 	mux.HandleFunc("/admin/logins/delete", statusServer.handleAdminLoginDelete)
 	mux.HandleFunc("/admin/logins/ban", statusServer.handleAdminLoginBan)
+	mux.HandleFunc("/admin/bans", statusServer.handleAdminBansPage)
+	mux.HandleFunc("/admin/bans/remove", statusServer.handleAdminBanRemove)
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
 	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)

@@ -142,6 +142,8 @@ func adminNoticeMessage(key string) string {
 		return "Saved worker entry deleted."
 	case "saved_worker_banned":
 		return "Worker was banned from saved accounts."
+	case "bans_removed":
+		return "Selected bans were removed."
 	default:
 		return ""
 	}
@@ -394,6 +396,37 @@ func (s *StatusServer) buildAdminLoginRows() ([]AdminSavedWorkerRow, string) {
 		}
 	})
 	return rows, loadErr
+}
+
+func (s *StatusServer) buildAdminBannedWorkers() ([]WorkerView, string) {
+	if s == nil || s.accounting == nil {
+		return nil, "Accounting store is not available."
+	}
+	if !s.accounting.Ready() {
+		return nil, "Accounting store is still initializing."
+	}
+	workers := s.accounting.WorkersSnapshot()
+	if len(workers) == 0 {
+		return nil, ""
+	}
+	sort.Slice(workers, func(i, j int) bool {
+		a := workers[i]
+		b := workers[j]
+		if a.BannedUntil.IsZero() != b.BannedUntil.IsZero() {
+			return b.BannedUntil.IsZero()
+		}
+		if !a.BannedUntil.Equal(b.BannedUntil) {
+			if a.BannedUntil.IsZero() {
+				return false
+			}
+			if b.BannedUntil.IsZero() {
+				return true
+			}
+			return a.BannedUntil.Before(b.BannedUntil)
+		}
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+	})
+	return workers, ""
 }
 
 func applyAdminSettingsForm(cfg *Config, r *http.Request) error {

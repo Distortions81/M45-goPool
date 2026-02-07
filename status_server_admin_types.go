@@ -15,12 +15,15 @@ type AdminPageData struct {
 	AdminRebootError     string
 	AdminNotice          string
 	AdminLoginsLoadError string
+	AdminBansLoadError   string
 	Settings             AdminSettingsData
 	AdminSection         string
 	AdminMinerRows       []AdminMinerRow
 	AdminSavedWorkerRows []AdminSavedWorkerRow
+	AdminBannedWorkers   []WorkerView
 	AdminMinerPagination AdminPagination
 	AdminLoginPagination AdminPagination
+	AdminBansPagination  AdminPagination
 	AdminPerPageOptions  []int
 }
 

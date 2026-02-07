@@ -60,6 +60,28 @@ func (s *StatusServer) handleAdminLoginsPage(w http.ResponseWriter, r *http.Requ
 	s.renderAdminPageTemplate(w, r, data, "admin_logins")
 }
 
+func (s *StatusServer) handleAdminBansPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin/bans", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	if !data.AdminEnabled {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !data.LoggedIn {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data.AdminSection = "bans"
+	page, perPage := adminPaginationFromRequest(r)
+	allRows, loadErr := s.buildAdminBannedWorkers()
+	data.AdminBansLoadError = loadErr
+	data.AdminBannedWorkers, data.AdminBansPagination = paginateAdminSlice(allRows, page, perPage)
+	s.renderAdminPageTemplate(w, r, data, "admin_bans")
+}
+
 func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -541,4 +563,68 @@ func (s *StatusServer) handleAdminLoginBan(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, "/admin/logins?notice=saved_worker_banned", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleAdminBanRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin/bans", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		logger.Warn("parse admin ban remove form", "error", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	data, adminCfg, _ := s.buildAdminPageData(r, "")
+	data.AdminSection = "bans"
+	page, perPage := adminPaginationFromRequest(r)
+	allRows, loadErr := s.buildAdminBannedWorkers()
+	data.AdminBansLoadError = loadErr
+	data.AdminBannedWorkers, data.AdminBansPagination = paginateAdminSlice(allRows, page, perPage)
+	if !adminCfg.Enabled {
+		data.AdminApplyError = "Admin control panel is disabled."
+		s.renderAdminPageTemplate(w, r, data, "admin_bans")
+		return
+	}
+	if !s.isAdminAuthenticated(r) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if r.FormValue("password") == "" || !s.adminPasswordMatches(adminCfg, r.FormValue("password")) {
+		data.AdminApplyError = "Password is required to remove bans."
+		s.renderAdminPageTemplate(w, r, data, "admin_bans")
+		return
+	}
+	if s.accounting == nil || !s.accounting.Ready() {
+		data.AdminApplyError = "Accounting store is not available."
+		s.renderAdminPageTemplate(w, r, data, "admin_bans")
+		return
+	}
+	names := r.Form["worker_name"]
+	if len(names) == 0 {
+		data.AdminApplyError = "No banned workers selected."
+		s.renderAdminPageTemplate(w, r, data, "admin_bans")
+		return
+	}
+	seen := make(map[string]struct{})
+	removed := 0
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		s.accounting.MarkBan(name, time.Time{}, "")
+		removed++
+	}
+	if removed > 0 {
+		http.Redirect(w, r, "/admin/bans?notice=bans_removed", http.StatusSeeOther)
+		return
+	}
+	data.AdminApplyError = "No banned workers selected."
+	s.renderAdminPageTemplate(w, r, data, "admin_bans")
 }
