@@ -24,29 +24,29 @@
 			</div>
 		</div>
 		<nav class="header-links">
-			<a class="header-link home-link" href="/"><span class="nav-icon" aria-hidden="true">🏠</span><span class="nav-text">Overview</span></a>
+			<a class="header-link home-link" href="/"><span class="nav-icon" aria-hidden="true"><img src="/icons/dark/icon-overview.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-overview.png"></span><span class="nav-text">Overview</span></a>
 			<div class="header-dropdown">
 				<button class="header-link more-info-toggle" id="moreInfoMenuButton" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="moreInfoMenu">
-					<span class="nav-icon" aria-hidden="true">☰</span><span class="nav-text">Menu</span> ▼
+					<span class="nav-icon" aria-hidden="true"><img src="/icons/dark/icon-menu.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-menu.png"></span><span class="nav-text">Menu</span> ▼
 				</button>
 				<div class="header-dropdown-menu" id="moreInfoMenu" role="menu" aria-labelledby="moreInfoMenuButton">
-					<a class="header-dropdown-link" role="menuitem" href="/about">ℹ️ About Us</a>
-					<a class="header-dropdown-link" role="menuitem" href="/pool">💎 Pool Stats</a>
-					<a class="header-dropdown-link" role="menuitem" href="/help">📘 Solo Mining 101</a>
-					<a class="header-dropdown-link" role="menuitem" href="/node">🔗 Bitcoin Node Info</a>
-					<a class="header-dropdown-link" role="menuitem" href="/server">🖥️ Server Stats</a>
-					<a class="header-dropdown-link" role="menuitem" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer">🔍 PoolCensus</a>
+					<a class="header-dropdown-link" role="menuitem" href="/about"><img src="/icons/dark/icon-about.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-about.png">About Us</a>
+					<a class="header-dropdown-link" role="menuitem" href="/pool"><img src="/icons/dark/icon-pool-stats.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-pool-stats.png">Pool Stats</a>
+					<a class="header-dropdown-link" role="menuitem" href="/help"><img src="/icons/dark/icon-solo-mining-101.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-solo-mining-101.png">Solo Mining 101</a>
+					<a class="header-dropdown-link" role="menuitem" href="/node"><img src="/icons/dark/icon-node-info.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-node-info.png">Bitcoin Node Info</a>
+					<a class="header-dropdown-link" role="menuitem" href="/server"><img src="/icons/dark/icon-server-stats.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-server-stats.png">Server Stats</a>
+					<a class="header-dropdown-link" role="menuitem" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer"><img src="/icons/dark/icon-poolcensus.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-poolcensus.png">PoolCensus</a>
 					{{if .GitHubURL}}
-					<a class="header-dropdown-link" role="menuitem" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer">GitHub</a>
+					<a class="header-dropdown-link" role="menuitem" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer"><img src="/icons/dark/icon-github.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-github.png">GitHub</a>
 					{{end}}
 					{{if .DiscordURL}}
-					<a class="header-dropdown-link" role="menuitem" href="{{.DiscordURL}}" target="_blank" rel="noopener noreferrer">Discord</a>
+					<a class="header-dropdown-link" role="menuitem" href="{{.DiscordURL}}" target="_blank" rel="noopener noreferrer"><img src="/icons/dark/icon-discord.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-discord.png">Discord</a>
 					{{end}}
 				</div>
 			</div>
-			<a class="header-link worker-login-link" href="/worker">👤 Workers</a>
+			<a class="header-link worker-login-link" href="/worker"><span class="nav-icon" aria-hidden="true"><img src="/icons/dark/icon-workers.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-workers.png"></span><span class="nav-text">Workers</span></a>
 			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
-				<span class="theme-toggle-icon">🌙</span>
+				<span class="theme-toggle-icon"><img src="/icons/dark/icon-theme-dark.png" alt="" class="theme-toggle-img themed-icon" id="themeToggleIcon" data-icon-dark="icon-theme-dark.png" data-icon-light="icon-theme-light.png"></span>
 			</button>
 		</nav>
 	</div>
@@ -80,7 +80,8 @@
 // Theme switcher - maintains theme preference across page loads
 (function() {
 	const themeToggle = document.getElementById('themeToggle');
-	const themeIcon = document.querySelector('.theme-toggle-icon');
+	const themeIcon = document.getElementById('themeToggleIcon');
+	const themedIcons = document.querySelectorAll('.themed-icon');
 
 	// Get saved theme or default to dark
 	const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -89,11 +90,19 @@
 	function applyTheme(theme) {
 		if (theme === 'light') {
 			document.documentElement.setAttribute('data-theme', 'light');
-			if (themeIcon) themeIcon.textContent = '☀️';
 		} else {
 			document.documentElement.removeAttribute('data-theme');
-			if (themeIcon) themeIcon.textContent = '🌙';
 		}
+		const mode = theme === 'light' ? 'light' : 'dark';
+		themedIcons.forEach(function(icon) {
+			if (icon.dataset.icon) {
+				icon.src = `/icons/${mode}/${icon.dataset.icon}`;
+				return;
+			}
+			if (icon.dataset.iconLight && icon.dataset.iconDark) {
+				icon.src = theme === 'light' ? `/icons/light/${icon.dataset.iconLight}` : `/icons/dark/${icon.dataset.iconDark}`;
+			}
+		});
 	}
 
 	// Initialize theme

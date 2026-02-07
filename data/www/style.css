@@ -684,6 +684,27 @@ header {
 	flex-wrap: wrap;
 }
 
+.nav-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 6px;
+}
+
+.nav-icon-img {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+.menu-icon-img {
+	width: 18px;
+	height: 18px;
+	display: inline-block;
+	margin-right: 8px;
+	vertical-align: text-bottom;
+}
+
 .header-sep {
 	width: 1px;
 	height: 22px;
@@ -1759,6 +1780,12 @@ a:hover {
 .theme-toggle-icon {
 	display: inline-block;
 	transition: transform 0.3s ease;
+}
+
+.theme-toggle-img {
+	width: 18px;
+	height: 18px;
+	display: block;
 }
 
 .theme-toggle:active .theme-toggle-icon {
