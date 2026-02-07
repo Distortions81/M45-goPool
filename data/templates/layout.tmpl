@@ -44,7 +44,7 @@
 					{{end}}
 				</div>
 			</div>
-			<a class="header-link worker-login-link" href="/worker"><span class="nav-icon" aria-hidden="true"><img src="/icons/dark/icon-workers.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-workers.png"></span><span class="nav-text">Workers</span></a>
+			<a class="header-link worker-login-link" href="/worker"><span class="nav-icon" aria-hidden="true"><img src="/icons/light/icon-workers.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-workers.png" data-icon-mode="light"></span><span class="nav-text">Workers</span></a>
 			<button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
 				<span class="theme-toggle-icon"><img src="/icons/dark/icon-theme-dark.png" alt="" class="theme-toggle-img themed-icon" id="themeToggleIcon" data-icon-dark="icon-theme-dark.png" data-icon-light="icon-theme-light.png"></span>
 			</button>
@@ -95,8 +95,9 @@
 		}
 		const mode = theme === 'light' ? 'light' : 'dark';
 		themedIcons.forEach(function(icon) {
+			const iconMode = icon.dataset.iconMode || mode;
 			if (icon.dataset.icon) {
-				icon.src = `/icons/${mode}/${icon.dataset.icon}`;
+				icon.src = `/icons/${iconMode}/${icon.dataset.icon}`;
 				return;
 			}
 			if (icon.dataset.iconLight && icon.dataset.iconDark) {
