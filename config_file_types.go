@@ -23,7 +23,9 @@ type brandingConfig struct {
 }
 
 type stratumConfig struct {
-	StratumTLSListen string `toml:"stratum_tls_listen"`
+	StratumTLSListen       string `toml:"stratum_tls_listen"`
+	StratumPasswordEnabled bool   `toml:"stratum_password_enabled"`
+	StratumPassword        string `toml:"stratum_password"`
 }
 
 type authConfig struct {

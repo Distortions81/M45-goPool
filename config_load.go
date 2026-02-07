@@ -209,6 +209,12 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 		}
 		cfg.StratumTLSListen = addr
 	}
+	cfg.StratumPasswordEnabled = fc.Stratum.StratumPasswordEnabled
+	if fc.Stratum.StratumPassword != "" {
+		cfg.StratumPassword = strings.TrimSpace(fc.Stratum.StratumPassword)
+	} else {
+		cfg.StratumPassword = ""
+	}
 	if fc.Auth.ClerkIssuerURL != "" {
 		cfg.ClerkIssuerURL = strings.TrimSpace(fc.Auth.ClerkIssuerURL)
 	}

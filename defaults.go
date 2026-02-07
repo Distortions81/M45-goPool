@@ -15,6 +15,8 @@ func defaultConfig() Config {
 		GitHubURL:                           defaultGitHubURL,
 		MempoolAddressURL:                   defaultMempoolAddressURL,
 		StratumTLSListen:                    defaultStratumTLSListen,
+		StratumPasswordEnabled:              false,
+		StratumPassword:                     "",
 		ClerkIssuerURL:                      defaultClerkIssuerURL,
 		ClerkJWKSURL:                        defaultClerkJWKSURL,
 		ClerkSignInURL:                      defaultClerkSignInURL,

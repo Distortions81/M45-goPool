@@ -189,6 +189,25 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 		return
 	}
 
+	if mc.cfg.StratumPasswordEnabled {
+		pass := ""
+		if len(req.Params) > 1 {
+			if p, ok := req.Params[1].(string); ok {
+				pass = p
+			}
+		}
+		if strings.TrimSpace(pass) != mc.cfg.StratumPassword {
+			logger.Warn("authorize rejected: invalid stratum password", "remote", mc.id)
+			mc.writeResponse(StratumResponse{
+				ID:     req.ID,
+				Result: false,
+				Error:  newStratumError(24, "invalid password"),
+			})
+			mc.Close("invalid stratum password")
+			return
+		}
+	}
+
 	workerName := mc.updateWorker(worker)
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style

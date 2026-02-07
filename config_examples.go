@@ -73,6 +73,8 @@ func baseConfigDocComments() []byte {
 # - [server].status_tls_listen: HTTPS listener; "" disables TLS (requires restart).
 # - [server].status_public_url: Canonical public URL for redirects/cookies; empty = auto-detect.
 # - [stratum].stratum_tls_listen: Optional Stratum-over-TLS listener (requires restart).
+# - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
+# - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 #
 # Mining behavior
 # - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).

@@ -51,6 +51,9 @@ type Config struct {
 
 	// Stratum TLS (empty to disable).
 	StratumTLSListen string
+	// Stratum auth (optional; when enabled, require miners to send the password in mining.authorize).
+	StratumPasswordEnabled bool
+	StratumPassword        string
 
 	// Clerk authentication.
 	ClerkIssuerURL         string

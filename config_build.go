@@ -29,7 +29,9 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			ServerLocation:                  cfg.ServerLocation,
 		},
 		Stratum: stratumConfig{
-			StratumTLSListen: cfg.StratumTLSListen,
+			StratumTLSListen:       cfg.StratumTLSListen,
+			StratumPasswordEnabled: cfg.StratumPasswordEnabled,
+			StratumPassword:        cfg.StratumPassword,
 		},
 		Node: nodeConfig{
 			RPCURL:           cfg.RPCURL,
