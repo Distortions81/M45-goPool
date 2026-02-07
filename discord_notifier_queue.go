@@ -174,7 +174,7 @@ func renderQueuedMessage(m queuedDiscordMessage) (content string, mentions []str
 			lines[0] = "@everyone " + lines[0]
 		}
 	}
-	return strings.TrimSpace(strings.Join(lines, "\n")), mentions
+	return strings.TrimSpace(strings.Join(lines, "\n")), mentions, allowEveryone
 }
 
 func (n *discordNotifier) subscribedUserCount() int {
@@ -298,7 +298,7 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 		Users: mentions,
 	}
 	if allowEveryone {
-		allowed.Parse = []string{"everyone"}
+		allowed.Parse = []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeEveryone}
 	}
 
 	_, err := n.dg.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{

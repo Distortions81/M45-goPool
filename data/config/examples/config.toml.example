@@ -85,6 +85,6 @@
   status_tls_listen = ":443"
 
 [stratum]
-  stratum_tls_listen = ":4333"
-  stratum_password_enabled = false
   stratum_password = ""
+  stratum_password_enabled = false
+  stratum_tls_listen = ":4333"
