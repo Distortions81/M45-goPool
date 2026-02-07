@@ -323,6 +323,7 @@ Response object: `PoolStatsData`
 - `api_version` (string)
 - `brand_name` (string)
 - `brand_domain` (string)
+- `server_location` (string; optional)
 - `listen_addr` (string)
 - `stratum_tls_listen` (string; optional)
 - `pool_software` (string)
