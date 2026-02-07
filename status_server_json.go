@@ -20,6 +20,7 @@ func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Reques
 			APIVersion:              apiVersion,
 			BrandName:               view.BrandName,
 			BrandDomain:             view.BrandDomain,
+			ServerLocation:          view.ServerLocation,
 			ListenAddr:              view.ListenAddr,
 			StratumTLSListen:        view.StratumTLSListen,
 			PoolSoftware:            view.PoolSoftware,

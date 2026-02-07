@@ -7,6 +7,7 @@ type PoolStatsData struct {
 	APIVersion              string            `json:"api_version"`
 	BrandName               string            `json:"brand_name"`
 	BrandDomain             string            `json:"brand_domain"`
+	ServerLocation          string            `json:"server_location,omitempty"`
 	ListenAddr              string            `json:"listen_addr"`
 	StratumTLSListen        string            `json:"stratum_tls_listen,omitempty"`
 	PoolSoftware            string            `json:"pool_software"`
