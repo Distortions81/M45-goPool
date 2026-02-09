@@ -84,7 +84,7 @@ const (
 	defaultPeerCleanupMinPeers  = 20
 
 	// VarDiff defaults.
-	defaultVarDiffTargetSharesPerMin = 6
+	defaultVarDiffTargetSharesPerMin = 7
 	defaultVarDiffAdjustmentWindow   = 60 * time.Second
 	defaultVarDiffStep               = 2
 	defaultVarDiffDampingFactor      = 0.4
