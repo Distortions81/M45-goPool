@@ -104,6 +104,7 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			MaxDifficulty:                    float64Ptr(cfg.MaxDifficulty),
 			MinDifficulty:                    float64Ptr(cfg.MinDifficulty),
 			DefaultDifficulty:                float64Ptr(cfg.DefaultDifficulty),
+			TargetSharesPerMin:               float64Ptr(cfg.TargetSharesPerMin),
 			LockSuggestedDifficulty:          boolPtr(cfg.LockSuggestedDifficulty),
 			EnforceSuggestedDifficultyLimits: boolPtr(cfg.EnforceSuggestedDifficultyLimits),
 		},
@@ -113,7 +114,6 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 		},
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
-			HashrateEMAMinShares:     intPtr(cfg.HashrateEMAMinShares),
 			NTimeForwardSlackSeconds: intPtr(cfg.NTimeForwardSlackSeconds),
 		},
 		Discord: discordTuning{
@@ -211,13 +211,13 @@ func (cfg Config) Effective() EffectiveConfig {
 		IgnoreMinVersionBits:              cfg.IgnoreMinVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,
 		MinDifficulty:                     cfg.MinDifficulty,
+		TargetSharesPerMin:                cfg.TargetSharesPerMin,
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
 		VardiffFine:                   cfg.VardiffFine,
 		SoloMode:                      cfg.SoloMode,
 		DirectSubmitProcessing:        cfg.DirectSubmitProcessing,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
-		HashrateEMAMinShares:          cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,
 		CheckDuplicateShares:          cfg.CheckDuplicateShares,
 		LogLevel:                      cfg.LogLevel,

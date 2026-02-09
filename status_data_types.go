@@ -152,7 +152,6 @@ type StatusData struct {
 	MinHashrateForTarget    float64  `json:"min_hashrate_for_target,omitempty"`
 	MaxHashrateForTarget    float64  `json:"max_hashrate_for_target,omitempty"`
 	HashrateEMATauSeconds   float64  `json:"hashrate_ema_tau_seconds"`
-	HashrateEMAMinShares    int      `json:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSec    int      `json:"ntime_forward_slack_seconds"`
 	Warnings                []string `json:"warnings,omitempty"`
 }

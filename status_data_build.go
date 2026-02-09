@@ -496,12 +496,12 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 	sort.Strings(bannedMinerTypes)
 
-	targetSharesPerMin := defaultVarDiff.TargetSharesPerMin
+	targetSharesPerMin := s.Config().TargetSharesPerMin
 	if targetSharesPerMin <= 0 {
 		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
 	}
 	if targetSharesPerMin <= 0 {
-		targetSharesPerMin = 5
+		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
 	}
 	minHashrateForTarget := 0.0
 	maxHashrateForTarget := 0.0

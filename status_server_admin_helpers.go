@@ -193,6 +193,7 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ConnectionTimeoutSeconds:             timeoutSec,
 		MinDifficulty:                        cfg.MinDifficulty,
 		MaxDifficulty:                        cfg.MaxDifficulty,
+		TargetSharesPerMin:                   cfg.TargetSharesPerMin,
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
 		SoloMode:                             cfg.SoloMode,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
@@ -210,7 +211,6 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		LogLevel:                             cfg.LogLevel,
 		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
 		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
-		HashrateEMAMinShares:                 cfg.HashrateEMAMinShares,
 		NTimeForwardSlackSeconds:             cfg.NTimeForwardSlackSeconds,
 	}
 }
@@ -588,6 +588,12 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxDifficulty, err = parseFloat("max_difficulty", next.MaxDifficulty); err != nil {
 		return err
 	}
+	if next.TargetSharesPerMin, err = parseFloat("target_shares_per_min", next.TargetSharesPerMin); err != nil {
+		return err
+	}
+	if next.TargetSharesPerMin <= 0 {
+		return fmt.Errorf("target_shares_per_min must be > 0")
+	}
 	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
 
 	next.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
@@ -641,12 +647,6 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	}
 	if next.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0")
-	}
-	if next.HashrateEMAMinShares, err = parseInt("hashrate_ema_min_shares", next.HashrateEMAMinShares); err != nil {
-		return err
-	}
-	if next.HashrateEMAMinShares < minHashrateEMAMinShares {
-		return fmt.Errorf("hashrate_ema_min_shares must be >= %d", minHashrateEMAMinShares)
 	}
 	if next.NTimeForwardSlackSeconds, err = parseInt("ntime_forward_slack_seconds", next.NTimeForwardSlackSeconds); err != nil {
 		return err

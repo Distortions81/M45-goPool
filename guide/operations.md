@@ -116,7 +116,7 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 - `[timeouts]`: `connection_timeout_seconds`.
 - `[difficulty]`: `default_difficulty` fallback when no suggestion arrives, `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits). The first `mining.suggest_*` is honored once per connection, triggers a clean notify, and subsequent suggests are ignored.
 - `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `vardiff_fine` to enable half-step VarDiff adjustments without power-of-two snapping.
-- `[hashrate]`: `hashrate_ema_tau_seconds`, `hashrate_ema_min_shares`, `ntime_forward_slack_seconds`.
+- `[hashrate]`: `hashrate_ema_tau_seconds`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
 - `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.
 - `[peer_cleaning]`: Enable/disable peer cleanup and tune thresholds.
@@ -280,7 +280,7 @@ Auto-configured accept rate limits calculate `max_accept_burst`/`max_accepts_per
 Key tuning knobs:
 
 - `accept_burst_window` / `accept_reconnect_window` / `accept_steady_state_*` – windows that shape burst vs sustained behavior.
-- `hashrate_ema_tau_seconds` / `hashrate_ema_min_shares` – adjust EMA smoothing for per-worker hashrate.
+- `hashrate_ema_tau_seconds` – tune EMA smoothing for per-worker hashrate.
 - `ntime_forward_slack_seconds` – tolerated future timestamps on shares (default 7000 seconds).
 - `peer_cleaning` – enable/disable and tune thresholds for cleaning stalled miners.
 - `difficulty` – clamp advertised difficulty, optionally enforce min/max on miner-suggested difficulty, and optionally lock miner suggestions.

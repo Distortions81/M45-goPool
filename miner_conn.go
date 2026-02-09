@@ -122,6 +122,9 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	}
 
 	vdiff := defaultVarDiff
+	if cfg.TargetSharesPerMin > 0 {
+		vdiff.TargetSharesPerMin = cfg.TargetSharesPerMin
+	}
 	// Difficulty clamps:
 	// - cfg.MinDifficulty == 0 disables the minimum clamp (no lower bound).
 	// - cfg.MaxDifficulty == 0 disables the maximum clamp (no upper bound).

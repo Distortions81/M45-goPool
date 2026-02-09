@@ -109,6 +109,7 @@ func tuningConfigDocComments() []byte {
 #
 # Difficulty ([difficulty])
 # - default_difficulty: Fallback difficulty if no suggest_* arrives during the startup delay; 0 means "use min_difficulty" (or the built-in minimum if min_difficulty=0).
+# - target_shares_per_min: VarDiff target share cadence used for difficulty adjustment and hashrate EMA sample window sizing.
 # - min_difficulty / max_difficulty: VarDiff clamp for miner connections; 0 disables that clamp (no limit; requires restart).
 # - lock_suggested_difficulty: If true, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.

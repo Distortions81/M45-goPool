@@ -379,6 +379,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Difficulty.DefaultDifficulty != nil {
 		cfg.DefaultDifficulty = *fc.Difficulty.DefaultDifficulty
 	}
+	if fc.Difficulty.TargetSharesPerMin != nil && *fc.Difficulty.TargetSharesPerMin > 0 {
+		cfg.TargetSharesPerMin = *fc.Difficulty.TargetSharesPerMin
+	}
 	if fc.Difficulty.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty
 	}
@@ -395,9 +398,6 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
-	}
-	if fc.Hashrate.HashrateEMAMinShares != nil && *fc.Hashrate.HashrateEMAMinShares >= minHashrateEMAMinShares {
-		cfg.HashrateEMAMinShares = *fc.Hashrate.HashrateEMAMinShares
 	}
 	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
 		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds

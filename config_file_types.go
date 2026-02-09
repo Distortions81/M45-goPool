@@ -133,6 +133,7 @@ type difficultyTuning struct {
 	MaxDifficulty                    *float64 `toml:"max_difficulty"`
 	MinDifficulty                    *float64 `toml:"min_difficulty"`
 	DefaultDifficulty                *float64 `toml:"default_difficulty"`
+	TargetSharesPerMin               *float64 `toml:"target_shares_per_min"`
 	LockSuggestedDifficulty          *bool    `toml:"lock_suggested_difficulty"`
 	EnforceSuggestedDifficultyLimits *bool    `toml:"enforce_suggested_difficulty_limits"`
 }
@@ -144,7 +145,6 @@ type miningTuning struct {
 
 type hashrateTuning struct {
 	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
-	HashrateEMAMinShares     *int     `toml:"hashrate_ema_min_shares"`
 	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
 }
 

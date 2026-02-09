@@ -70,12 +70,12 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	}
 	sort.Strings(bannedMinerTypes)
 
-	targetSharesPerMin := defaultVarDiff.TargetSharesPerMin
+	targetSharesPerMin := s.Config().TargetSharesPerMin
 	if targetSharesPerMin <= 0 {
 		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
 	}
 	if targetSharesPerMin <= 0 {
-		targetSharesPerMin = 5
+		targetSharesPerMin = defaultVarDiffTargetSharesPerMin
 	}
 	minHashrateForTarget := 0.0
 	maxHashrateForTarget := 0.0
@@ -140,7 +140,6 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinHashrateForTarget:           minHashrateForTarget,
 		MaxHashrateForTarget:           maxHashrateForTarget,
 		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
-		HashrateEMAMinShares:           s.Config().HashrateEMAMinShares,
 		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,

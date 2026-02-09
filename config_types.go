@@ -131,12 +131,12 @@ type Config struct {
 	MaxDifficulty         float64
 	MinDifficulty         float64
 	DefaultDifficulty     float64
+	TargetSharesPerMin    float64 // vardiff target share rate
 
 	LockSuggestedDifficulty          bool    // keep suggested difficulty instead of vardiff
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
 	VardiffFine                      bool    // use half-step vardiff adjustments (tuning.toml only)
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
-	HashrateEMAMinShares             int     // min shares before EMA kicks in
 	NTimeForwardSlackSeconds         int     // max seconds ntime can roll forward
 	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
 
@@ -227,12 +227,12 @@ type EffectiveConfig struct {
 	IgnoreMinVersionBits              bool     `json:"ignore_min_version_bits,omitempty"`
 	MaxDifficulty                     float64  `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
+	TargetSharesPerMin                float64  `json:"target_shares_per_min,omitempty"`
 	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
 	VardiffFine                       bool     `json:"vardiff_fine,omitempty"`
 	SoloMode                          bool     `json:"solo_mode"`
 	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
-	HashrateEMAMinShares              int      `json:"hashrate_ema_min_shares,omitempty"`
 	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
 	CheckDuplicateShares              bool     `json:"check_duplicate_shares,omitempty"`
 	LogLevel                          string   `json:"log_level,omitempty"`
