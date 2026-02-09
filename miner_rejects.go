@@ -259,6 +259,9 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	mc.rollingHashrateValue = 0
 	mc.hashrateSampleCount = 0
 	mc.hashrateAccumulatedDiff = 0
+	// Restart EMA bootstrap after a vardiff change so tau/window are rebuilt
+	// from fresh post-change shares.
+	mc.initialEMAWindowDone.Store(false)
 	mc.statsMu.Unlock()
 
 	if mc.metrics != nil && connSeq != 0 {

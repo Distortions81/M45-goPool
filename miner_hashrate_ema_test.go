@@ -56,3 +56,33 @@ func TestUpdateHashrateLocked_UsesBootstrapWindowThenUpdatesIncrementally(t *tes
 	}
 	mc.statsMu.Unlock()
 }
+
+func TestResetShareWindow_ResetsEMATauState(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	mc := &MinerConn{}
+	mc.initialEMAWindowDone.Store(true)
+	mc.stats.WindowStart = now.Add(-time.Minute)
+	mc.stats.WindowAccepted = 12
+	mc.stats.WindowSubmissions = 15
+	mc.stats.WindowDifficulty = 42
+	mc.lastHashrateUpdate = now.Add(-10 * time.Second)
+	mc.rollingHashrateValue = 12345
+	mc.hashrateSampleCount = 7
+	mc.hashrateAccumulatedDiff = 9.5
+
+	mc.resetShareWindow(now)
+
+	if mc.initialEMAWindowDone.Load() {
+		t.Fatalf("initialEMAWindowDone=true, want false after resetShareWindow")
+	}
+	if !mc.stats.WindowStart.Equal(now) {
+		t.Fatalf("WindowStart=%v want %v", mc.stats.WindowStart, now)
+	}
+	if mc.stats.WindowAccepted != 0 || mc.stats.WindowSubmissions != 0 || mc.stats.WindowDifficulty != 0 {
+		t.Fatalf("window counters not cleared: accepted=%d submissions=%d difficulty=%v",
+			mc.stats.WindowAccepted, mc.stats.WindowSubmissions, mc.stats.WindowDifficulty)
+	}
+	if !mc.lastHashrateUpdate.IsZero() || mc.rollingHashrateValue != 0 || mc.hashrateSampleCount != 0 || mc.hashrateAccumulatedDiff != 0 {
+		t.Fatalf("hashrate state not cleared")
+	}
+}
