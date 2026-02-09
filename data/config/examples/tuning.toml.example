@@ -90,7 +90,7 @@
   max_accept_burst = 1000
   max_accepts_per_second = 500
   max_conns = 50000
-  stratum_messages_per_minute = 120
+  stratum_messages_per_minute = 240
 
 [status]
   mempool_address_url = "https://mempool.space/address/"

@@ -14,17 +14,29 @@ func (mc *MinerConn) recordActivity(now time.Time) {
 	mc.lastActivity = now
 }
 
-func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time) bool {
+func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time, method string) bool {
 	limit := mc.cfg.StratumMessagesPerMinute
 	if limit <= 0 {
 		return false
 	}
+	effectiveLimit := limit * stratumFloodLimitMultiplier
+	if effectiveLimit <= 0 {
+		return false
+	}
+	maxUnits := effectiveLimit * 2 // count in half-message units
+
 	if mc.stratumMsgWindowStart.IsZero() || now.Sub(mc.stratumMsgWindowStart) >= time.Minute {
 		mc.stratumMsgWindowStart = now
 		mc.stratumMsgCount = 0
 	}
-	mc.stratumMsgCount++
-	return mc.stratumMsgCount > limit
+
+	weightUnits := 2 // one full message
+	if method == "mining.submit" && !mc.connectedAt.IsZero() && now.Sub(mc.connectedAt) < earlySubmitHalfWeightWindow {
+		weightUnits = 1 // startup submit spam counts half until vardiff stabilizes
+	}
+
+	mc.stratumMsgCount += weightUnits
+	return mc.stratumMsgCount > maxUnits
 }
 
 func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
