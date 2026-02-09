@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 func (mc *MinerConn) isBanned(now time.Time) bool {
 	mc.stateMu.Lock()
@@ -63,4 +66,24 @@ func (mc *MinerConn) banFor(reason string, duration time.Duration, worker string
 	mc.banReason = reason
 	mc.stateMu.Unlock()
 	mc.logBan(reason, worker, 0)
+}
+
+func (mc *MinerConn) lookupPersistedBan(worker string) (WorkerView, bool) {
+	if mc == nil || mc.accounting == nil {
+		return WorkerView{}, false
+	}
+	worker = strings.TrimSpace(worker)
+	if worker == "" {
+		return WorkerView{}, false
+	}
+	if view, ok := mc.accounting.WorkerViewByName(worker); ok && view.Banned {
+		return view, true
+	}
+	wallet := workerBaseAddress(worker)
+	if wallet != "" && wallet != worker {
+		if view, ok := mc.accounting.WorkerViewByName(wallet); ok && view.Banned {
+			return view, true
+		}
+	}
+	return WorkerView{}, false
 }

@@ -37,7 +37,7 @@ const (
 	defaultAcceptSteadyStateRate             = 50
 	defaultAcceptSteadyStateReconnectPercent = 5.0
 	defaultAcceptSteadyStateReconnectWindow  = 60
-	defaultStratumMessagesPerMinute          = 120
+	defaultStratumMessagesPerMinute          = 240
 
 	defaultJobEntropy                = 4
 	maxJobEntropy                    = 16
@@ -48,7 +48,7 @@ const (
 	// Ban thresholds.
 	defaultNTimeForwardSlackSeconds      = 7000
 	defaultBanInvalidSubmissionsAfter    = 60
-	defaultBanInvalidSubmissionsWindow   = time.Minute
+	defaultBanInvalidSubmissionsWindow   = 5 * time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
 	defaultReconnectBanThreshold         = 60
 	defaultReconnectBanWindowSeconds     = 60
@@ -65,16 +65,16 @@ const (
 	defaultZMQConnectTimeout = 5 * time.Second
 
 	// ZMQ tuning: heartbeats detect dead peers faster than TCP; backoff avoids spamming during restarts.
-	defaultZMQHeartbeatInterval  = 5 * time.Second
-	defaultZMQHeartbeatTimeout   = 15 * time.Second
-	defaultZMQHeartbeatTTL       = 30 * time.Second
-	defaultZMQReconnectInterval  = 1 * time.Second
-	defaultZMQReconnectMax       = 10 * time.Second
-	defaultZMQRecreateBackoffMin = 500 * time.Millisecond
-	defaultZMQRecreateBackoffMax = 10 * time.Second
+	defaultZMQHeartbeatInterval   = 5 * time.Second
+	defaultZMQHeartbeatTimeout    = 15 * time.Second
+	defaultZMQHeartbeatTTL        = 30 * time.Second
+	defaultZMQReconnectInterval   = 1 * time.Second
+	defaultZMQReconnectMax        = 10 * time.Second
+	defaultZMQRecreateBackoffMin  = 500 * time.Millisecond
+	defaultZMQRecreateBackoffMax  = 10 * time.Second
 	defaultInitialDifficultyDelay = 250 * time.Millisecond
-	defaultZMQHashBlockAddr      = "tcp://127.0.0.1:28334"
-	defaultZMQRawBlockAddr       = "tcp://127.0.0.1:28332"
+	defaultZMQHashBlockAddr       = "tcp://127.0.0.1:28334"
+	defaultZMQRawBlockAddr        = "tcp://127.0.0.1:28332"
 
 	defaultAutoAcceptRateLimits    = true
 	defaultOperatorDonationPercent = 0.0
@@ -101,9 +101,11 @@ const (
 	minMinerTimeout       = 30 * time.Second
 
 	// Grace periods for new/changing connections.
-	initialReadTimeout      = 90 * time.Second // kick idle connections that never submit valid shares
-	minDiffChangeInterval   = 60 * time.Second // throttle vardiff changes so in-flight shares stay valid
-	previousDiffGracePeriod = time.Minute      // accept shares at old difficulty briefly after a change
+	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
+	minDiffChangeInterval       = 60 * time.Second // throttle vardiff changes so in-flight shares stay valid
+	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
+	earlySubmitHalfWeightWindow = 2 * time.Minute
+	stratumFloodLimitMultiplier = 2
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
 

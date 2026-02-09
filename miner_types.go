@@ -172,6 +172,7 @@ type MinerConn struct {
 	// lastActivity tracks when we last saw a RPC message from this miner.
 	lastActivity time.Time
 	// stratumMsgWindowStart/stratumMsgCount track per-connection Stratum message rate.
+	// stratumMsgCount stores weighted half-message units (2 = full message).
 	stratumMsgWindowStart time.Time
 	stratumMsgCount       int
 	// lastHashrateUpdate tracks the last time we updated the per-connection

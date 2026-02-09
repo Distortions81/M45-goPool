@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/bits"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -267,38 +268,42 @@ func (mc *MinerConn) handle() {
 			continue
 		}
 		mc.recordActivity(now)
-		if mc.stratumMsgRateLimitExceeded(now) {
+		sniffedMethod, sniffedID, sniffedOK := sniffStratumMethodID(line)
+		if mc.stratumMsgRateLimitExceeded(now, sniffedMethod) {
+			banWorker := mc.workerForRateLimitBan(sniffedMethod, line)
 			logger.Warn("closing miner for stratum message rate limit",
 				"remote", mc.id,
-				"limit_per_min", mc.cfg.StratumMessagesPerMinute,
+				"worker", banWorker,
+				"configured_limit_per_min", mc.cfg.StratumMessagesPerMinute,
+				"effective_limit_per_min", mc.cfg.StratumMessagesPerMinute*stratumFloodLimitMultiplier,
 			)
-			mc.banFor("stratum message rate limit", time.Hour, mc.currentWorker())
+			mc.banFor("stratum message rate limit", time.Hour, banWorker)
 			return
 		}
 
-		if method, id, ok := sniffStratumMethodID(line); ok {
-			switch method {
+		if sniffedOK {
+			switch sniffedMethod {
 			case "mining.ping":
-				mc.writePongResponse(id)
+				mc.writePongResponse(sniffedID)
 				continue
 			case "mining.get_transactions":
-				mc.writeEmptySliceResponse(id)
+				mc.writeEmptySliceResponse(sniffedID)
 				continue
 			case "mining.capabilities":
-				mc.writeTrueResponse(id)
+				mc.writeTrueResponse(sniffedID)
 				continue
 			case "mining.extranonce.subscribe":
-				mc.handleExtranonceSubscribe(&StratumRequest{ID: id})
+				mc.handleExtranonceSubscribe(&StratumRequest{ID: sniffedID})
 				continue
 			case "mining.subscribe":
 				if params, ok := sniffStratumStringParams(line, 1); ok {
-					req := buildStringRequest(id, method, params)
+					req := buildStringRequest(sniffedID, sniffedMethod, params)
 					mc.handleSubscribe(&req)
 					continue
 				}
 			case "mining.authorize":
 				if params, ok := sniffStratumStringParams(line, 2); ok {
-					req := buildStringRequest(id, method, params)
+					req := buildStringRequest(sniffedID, sniffedMethod, params)
 					mc.handleAuthorize(&req)
 					continue
 				}
@@ -307,7 +312,7 @@ func (mc *MinerConn) handle() {
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
 				// allocations and tail latency under load.
 				if params, ok := sniffStratumStringParams(line, 6); ok && (len(params) == 5 || len(params) == 6) {
-					mc.handleSubmitStringParams(id, params)
+					mc.handleSubmitStringParams(sniffedID, params)
 					continue
 				}
 			}
@@ -356,6 +361,23 @@ func (mc *MinerConn) handle() {
 		}
 
 	}
+}
+
+func (mc *MinerConn) workerForRateLimitBan(method string, line []byte) string {
+	if mc == nil {
+		return ""
+	}
+	if worker := strings.TrimSpace(mc.currentWorker()); worker != "" {
+		return worker
+	}
+	if method != "mining.authorize" {
+		return ""
+	}
+	params, ok := sniffStratumStringParams(line, 1)
+	if !ok || len(params) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(params[0])
 }
 
 func (mc *MinerConn) scheduleInitialWork() {

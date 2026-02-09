@@ -208,6 +208,30 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 		}
 	}
 
+	if bannedView, banned := mc.lookupPersistedBan(worker); banned {
+		reason := strings.TrimSpace(bannedView.BanReason)
+		if reason == "" {
+			reason = "banned"
+		}
+		mc.stateMu.Lock()
+		mc.banUntil = bannedView.BannedUntil
+		mc.banReason = reason
+		mc.stateMu.Unlock()
+		logger.Warn("authorize rejected: worker banned",
+			"remote", mc.id,
+			"worker", worker,
+			"reason", reason,
+			"ban_until", bannedView.BannedUntil,
+		)
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(24, "banned"),
+		})
+		mc.Close("banned worker")
+		return
+	}
+
 	workerName := mc.updateWorker(worker)
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style
