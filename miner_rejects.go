@@ -270,15 +270,9 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 		return
 	}
 
-	// Only gate the very first EMA window to avoid long "no hashrate yet"
-	// gaps for low-share-rate miners. After the first EMA sample, update on
-	// every share.
-	samplesNeeded := 1
-	if mc.rollingHashrateValue <= 0 {
-		samplesNeeded = mc.cfg.HashrateEMAMinShares
-		if samplesNeeded < minHashrateEMAMinShares {
-			samplesNeeded = minHashrateEMAMinShares
-		}
+	samplesNeeded := mc.cfg.HashrateEMAMinShares
+	if samplesNeeded < minHashrateEMAMinShares {
+		samplesNeeded = minHashrateEMAMinShares
 	}
 
 	if mc.lastHashrateUpdate.IsZero() {
