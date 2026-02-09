@@ -86,7 +86,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 		// Fallback to single-output block build if dual-payout params are
 		// unavailable or any step fails. This reuses the existing helper that
 		// constructs a canonical block for submission.
-		blockHex, _, _, _, err = buildBlockWithScriptTime(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion), scriptTime)
+		blockHex, _, _, _, err = buildBlockWithScriptTime(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion), mc.singlePayoutScript(job, workerName), scriptTime)
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")

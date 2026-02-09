@@ -187,6 +187,24 @@ func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
 	mc.savedWorkerBestDiff = diff
 }
 
+// singlePayoutScript selects the output script for single-output coinbase
+// paths. When pool_fee_percent is 0 (or negative), the full coinbase must go
+// to the resolved worker wallet script; if no validated script is available,
+// nil is returned so callers can fail fast.
+func (mc *MinerConn) singlePayoutScript(job *Job, worker string) []byte {
+	if job == nil || len(job.PayoutScript) == 0 {
+		return nil
+	}
+	if mc == nil || mc.cfg.PoolFeePercent > 0 {
+		return job.PayoutScript
+	}
+	_, script, ok := mc.workerWalletDataRef(worker)
+	if !ok || len(script) == 0 {
+		return nil
+	}
+	return script
+}
+
 // dualPayoutParams returns the pool and worker payout scripts and fee
 // parameters for a job, if all required pieces are available. It does not
 // mutate the Job; callers use the returned values with

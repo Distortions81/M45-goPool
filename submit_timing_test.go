@@ -49,6 +49,8 @@ func (nopConn) SetWriteDeadline(time.Time) error { return nil }
 // handleBlockShare to the point where submitblock is invoked. It uses a
 // minimal Job and a timingRPC so the test does not depend on network I/O.
 func TestHandleBlockShareSubmitLatency(t *testing.T) {
+	workerName, workerWallet, workerScript := generateTestWorker(t)
+
 	// Minimal job mirroring the single-coinbase case from block_test.go.
 	job := &Job{
 		JobID: "timing-test-job",
@@ -80,6 +82,7 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 		cfg:         Config{PoolFeePercent: 0},
 		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 	}
+	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 	// Ensure handleBlockShare uses the scriptTime that matches what was notified.
 	mc.jobScriptTime = map[string]int64{job.JobID: job.ScriptTime}
 	// Provide a no-op conn/writer so handleBlockShare can emit responses
@@ -97,7 +100,7 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	req := &StratumRequest{ID: 1}
 
 	trpc.start = time.Now()
-	mc.handleBlockShare(req.ID, job, "worker1", en2, ntimeHex, nonceHex, useVersion, "dummyhash", 1.0, now)
+	mc.handleBlockShare(req.ID, job, workerName, en2, ntimeHex, nonceHex, useVersion, "dummyhash", 1.0, now)
 
 	if trpc.method != "submitblock" {
 		t.Fatalf("expected submitblock RPC, got %q", trpc.method)

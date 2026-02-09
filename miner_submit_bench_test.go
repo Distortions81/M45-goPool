@@ -57,6 +57,7 @@ func benchmarkSubmitJob(b *testing.B) *Job {
 }
 
 func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
+	benchWorker, benchWallet, benchScript := generateBenchmarkWorker()
 	cfg := Config{
 		PoolFeePercent: 0, // keep dual-payout path disabled in this benchmark
 	}
@@ -71,8 +72,8 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 		authorized:     true,
 		subscribed:     true,
 		stats: MinerStats{
-			Worker:       "worker1",
-			WorkerSHA256: workerNameHash("worker1"),
+			Worker:       benchWorker,
+			WorkerSHA256: workerNameHash(benchWorker),
 		},
 		jobDifficulty: make(map[string]float64, 1),
 		maxRecentJobs: 1,
@@ -82,6 +83,7 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
 	mc.shareTarget.Store(targetFromDifficulty(1))
+	mc.setWorkerWallet(benchWorker, benchWallet, benchScript)
 
 	mc.conn = nopConn{}
 	mc.writer = bufio.NewWriterSize(mc.conn, 256)

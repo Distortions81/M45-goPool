@@ -599,6 +599,16 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	mc.jobMu.Unlock()
 
 	worker := mc.currentWorker()
+	if worker == "" {
+		logger.Warn("notify aborted: missing authorized worker", "remote", mc.id)
+		mc.Close("missing authorized worker")
+		return
+	}
+	if _, _, ok := mc.ensureWorkerWallet(worker); !ok {
+		logger.Warn("notify aborted: unable to resolve worker wallet", "remote", mc.id, "worker", worker)
+		mc.Close("wallet resolution failed")
+		return
+	}
 	var (
 		coinb1 string
 		coinb2 string
@@ -654,7 +664,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 			mc.extranonce1,
 			job.Extranonce2Size,
 			job.TemplateExtraNonce2Size,
-			job.PayoutScript,
+			mc.singlePayoutScript(job, worker),
 			job.CoinbaseValue,
 			job.WitnessCommitment,
 			job.Template.CoinbaseAux.Flags,
@@ -666,6 +676,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		logger.Error("notify coinbase parts", "error", err)
 		return
 	}
+	mc.jobMu.Lock()
+	if mc.jobNotifyCoinbase == nil {
+		mc.jobNotifyCoinbase = make(map[string]notifiedCoinbaseParts, mc.maxRecentJobs)
+	}
+	mc.jobNotifyCoinbase[job.JobID] = notifiedCoinbaseParts{coinb1: coinb1, coinb2: coinb2}
+	mc.jobMu.Unlock()
 
 	prevhashLE := hexToLEHex(job.PrevHash)
 	shareTarget := mc.shareTargetOrDefault()

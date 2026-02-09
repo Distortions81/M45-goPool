@@ -360,6 +360,9 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		if mc.jobScriptTime != nil {
 			delete(mc.jobScriptTime, oldest)
 		}
+		if mc.jobNotifyCoinbase != nil {
+			delete(mc.jobNotifyCoinbase, oldest)
+		}
 		if dupEnabled {
 			if cache := mc.shareCache[oldest]; cache != nil {
 				if now.IsZero() {

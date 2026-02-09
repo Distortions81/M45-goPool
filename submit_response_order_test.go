@@ -40,6 +40,7 @@ func (c *recordConn) String() string {
 }
 
 func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
+	workerName, workerWallet, workerScript := generateTestWorker(t)
 	job := &Job{
 		JobID: "submit-order-job",
 		Template: GetBlockTemplateResult{
@@ -68,6 +69,10 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 		vardiff:     defaultVarDiff,
 		authorized:  true,
 		subscribed:  true,
+		stats: MinerStats{
+			Worker:       workerName,
+			WorkerSHA256: workerNameHash(workerName),
+		},
 		// Keep stats updates synchronous in this test.
 		statsUpdates: nil,
 		activeJobs:   make(map[string]*Job, 1),
@@ -78,6 +83,7 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
 	mc.shareTarget.Store(targetFromDifficulty(1))
+	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 
 	// Prime stats so VarDiff can move difficulty, which also triggers writes
 	// of mining.set_difficulty and mining.notify.
@@ -93,7 +99,7 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 		reqID:            1,
 		job:              job,
 		jobID:            job.JobID,
-		workerName:       "worker1",
+		workerName:       workerName,
 		extranonce2:      "00000000",
 		extranonce2Bytes: []byte{0, 0, 0, 0},
 		ntime:            "6553f100",

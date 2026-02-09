@@ -195,10 +195,10 @@
 					</p>
 					{{$root := .}}
 					{{$explorer := $root.MempoolAddressURL}}
-					{{with .CurrentJobCoinbase}}
-						<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
-							This coinbase is constructed directly from the current stratum job (coinb1/coinb2) for this worker. Extranonce values are zeroed for display; coinbase outputs are identical to what miners receive.
-						</p>
+						{{with .CurrentJobCoinbase}}
+							<p class="text-sm" style="margin-top:4px;color:#b3bbd4;">
+								This uses the exact coinb1/coinb2 sent in mining.notify for this worker and job. Extranonce2 is shown as zeros for display because miners choose extranonce2 per share.
+							</p>
 						{{if .Coinbase}}
 							<p class="text-sm">
 								<span class="mono">
@@ -300,7 +300,7 @@
 						{{end}}
 					{{end}}
 				{{else}}
-					<p class="text-sm" style="margin-top:8px;">No active job available.</p>
+					<p class="text-sm" style="margin-top:8px;">No live worker connection data available for current job.</p>
 				{{end}}
 			</div>
 		{{else}}

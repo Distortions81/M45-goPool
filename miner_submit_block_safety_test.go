@@ -62,7 +62,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 		reqID:            1,
 		job:              job,
 		jobID:            jobID,
-		workerName:       "worker1",
+		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
 		extranonce2Bytes: []byte{0, 0, 0, 0},
 		ntime:            ntimeHex,
@@ -121,6 +121,10 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 	// Find a nonce such that the block condition is true for notifiedScriptTime,
 	// but false for the fallback job.ScriptTime. This ensures we submit the block
 	// only if we rebuild with the notified coinbase.
+	payoutScript := mc.singlePayoutScript(job, mc.currentWorker())
+	if len(payoutScript) == 0 {
+		t.Fatalf("missing payout script for current worker")
+	}
 	var chosenNonce string
 	for i := uint32(0); i < 500000; i++ {
 		nonceHex := fmt.Sprintf("%08x", i)
@@ -130,7 +134,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 			mc.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
-			job.PayoutScript,
+				payoutScript,
 			job.CoinbaseValue,
 			job.witnessCommitScript,
 			job.coinbaseFlagsBytes,
@@ -159,7 +163,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 			mc.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
-			job.PayoutScript,
+				payoutScript,
 			job.CoinbaseValue,
 			job.witnessCommitScript,
 			job.coinbaseFlagsBytes,
@@ -198,7 +202,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		reqID:            1,
 		job:              job,
 		jobID:            jobID,
-		workerName:       "worker1",
+		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
 		extranonce2Bytes: ex2,
 		ntime:            ntimeHex,
@@ -241,7 +245,7 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		reqID:            1,
 		job:              job,
 		jobID:            jobID,
-		workerName:       "worker1",
+		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
 		extranonce2Bytes: []byte{0, 0, 0, 0},
 		ntime:            "6553f100",

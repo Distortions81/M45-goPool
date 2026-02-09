@@ -24,9 +24,13 @@ func (mc *MinerConn) cleanup() {
 		}
 		mc.unregisterRegisteredWorker()
 
-		// Close stats channel and wait for worker to finish processing
-		close(mc.statsUpdates)
-		mc.statsWg.Wait()
+		// Close stats channel and wait for worker to finish processing.
+		// Some tests build lightweight MinerConn instances without a stats
+		// worker/channel; guard those cases.
+		if mc.statsUpdates != nil {
+			close(mc.statsUpdates)
+			mc.statsWg.Wait()
+		}
 
 		mc.statsMu.Lock()
 		mc.stats.WindowStart = time.Time{}

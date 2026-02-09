@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/hex"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,101 +14,43 @@ func (s *StatusServer) setWorkerCurrentJobCoinbase(data *WorkerStatusData, job *
 	data.CurrentJobHeight = job.Template.Height
 	data.CurrentJobPrevHash = strings.TrimSpace(job.PrevHash)
 
-	coinbase, ok := buildWorkerCoinbaseForJob(job, wv, s.Config())
-	if ok {
-		data.CurrentJobCoinbase = coinbase
+	// Only show current-job coinbase data when we can derive it from the live
+	// miner connection state for this worker.
+	if mc := s.connectionForWorkerView(wv); mc != nil {
+		data.CurrentJobCoinbase = mc.buildCurrentJobCoinbaseDetail(job)
 	}
 }
 
-func buildWorkerCoinbaseForJob(job *Job, wv WorkerView, cfg Config) (*ShareDetail, bool) {
-	if job == nil || job.CoinbaseValue <= 0 {
-		return nil, false
+func (s *StatusServer) connectionForWorkerView(wv WorkerView) *MinerConn {
+	if s == nil || s.workerRegistry == nil {
+		return nil
 	}
-	if len(job.PayoutScript) == 0 {
-		return nil, false
-	}
-
-	extranonce1 := make([]byte, coinbaseExtranonce1Size)
-	scriptTime := job.ScriptTime
-
-	var workerScript []byte
-	if ws := strings.TrimSpace(wv.WalletScript); ws != "" {
-		if b, err := hex.DecodeString(ws); err == nil && len(b) > 0 {
-			workerScript = b
+	if wv.ConnectionSeq > 0 {
+		if mc := s.workerRegistry.connectionBySeq(wv.ConnectionSeq); mc != nil {
+			return mc
 		}
 	}
-
-	var (
-		coinb1 string
-		coinb2 string
-		err    error
-	)
-	workerAddr := strings.TrimSpace(wv.WalletAddress)
-	poolAddr := strings.TrimSpace(cfg.PayoutAddress)
-	useDual := cfg.PoolFeePercent > 0 && len(workerScript) > 0 && !strings.EqualFold(workerAddr, poolAddr)
-	if useDual {
-		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
-			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
-				job.Template.Height,
-				extranonce1,
-				job.Extranonce2Size,
-				job.TemplateExtraNonce2Size,
-				job.PayoutScript,
-				job.DonationScript,
-				workerScript,
-				job.CoinbaseValue,
-				cfg.PoolFeePercent,
-				job.OperatorDonationPercent,
-				job.WitnessCommitment,
-				job.Template.CoinbaseAux.Flags,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
-		} else {
-			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
-				job.Template.Height,
-				extranonce1,
-				job.Extranonce2Size,
-				job.TemplateExtraNonce2Size,
-				job.PayoutScript,
-				workerScript,
-				job.CoinbaseValue,
-				cfg.PoolFeePercent,
-				job.WitnessCommitment,
-				job.Template.CoinbaseAux.Flags,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
+	hash := strings.TrimSpace(wv.WorkerSHA256)
+	if hash == "" {
+		return nil
+	}
+	conns := s.workerRegistry.getConnectionsByHash(hash)
+	if len(conns) == 0 {
+		return nil
+	}
+	var best *MinerConn
+	var bestSeq uint64
+	for _, mc := range conns {
+		if mc == nil {
+			continue
+		}
+		seq := atomic.LoadUint64(&mc.connectionSeq)
+		if seq >= bestSeq {
+			best = mc
+			bestSeq = seq
 		}
 	}
-	if coinb1 == "" || coinb2 == "" || err != nil {
-		coinb1, coinb2, err = buildCoinbaseParts(
-			job.Template.Height,
-			extranonce1,
-			job.Extranonce2Size,
-			job.TemplateExtraNonce2Size,
-			job.PayoutScript,
-			job.CoinbaseValue,
-			job.WitnessCommitment,
-			job.Template.CoinbaseAux.Flags,
-			job.CoinbaseMsg,
-			scriptTime,
-		)
-	}
-	if err != nil || coinb1 == "" || coinb2 == "" {
-		return nil, false
-	}
-
-	extranonce2Size := job.Extranonce2Size
-	if extranonce2Size < 0 {
-		extranonce2Size = 0
-	}
-	extranonce2 := make([]byte, extranonce2Size)
-	coinbaseHex := coinb1 + hex.EncodeToString(extranonce1) + hex.EncodeToString(extranonce2) + coinb2
-
-	detail := &ShareDetail{Coinbase: coinbaseHex}
-	detail.DecodeCoinbaseFields()
-	return detail, true
+	return best
 }
 
 // cacheWorkerPage stores a rendered worker-status HTML payload in the

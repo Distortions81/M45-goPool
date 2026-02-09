@@ -71,6 +71,11 @@ type workerWalletState struct {
 	validated bool
 }
 
+type notifiedCoinbaseParts struct {
+	coinb1 string
+	coinb2 string
+}
+
 var defaultVarDiff = VarDiffConfig{
 	MinDiff:            defaultMinDifficulty,
 	MaxDiff:            defaultMaxDifficulty,
@@ -125,6 +130,7 @@ type MinerConn struct {
 	lastClean            bool
 	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
 	jobScriptTime        map[string]int64
+	jobNotifyCoinbase    map[string]notifiedCoinbaseParts
 	banUntil             time.Time
 	banReason            string
 	lastPenalty          time.Time
