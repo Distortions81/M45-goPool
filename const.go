@@ -84,16 +84,13 @@ const (
 	defaultPeerCleanupMinPeers  = 20
 
 	// VarDiff defaults.
-	defaultVarDiffTargetSharesPerMin = 5
-	defaultVarDiffAdjustmentWindow   = 90 * time.Second
+	defaultVarDiffTargetSharesPerMin = 6
+	defaultVarDiffAdjustmentWindow   = 60 * time.Second
 	defaultVarDiffStep               = 2
-	defaultVarDiffMaxBurstShares     = 600
-	defaultVarDiffBurstWindow        = 60 * time.Second
 	defaultVarDiffDampingFactor      = 0.4
 
-	defaultHashrateEMATauSeconds = 600.0
-	defaultHashrateEMAMinShares  = 10
-	minHashrateEMAMinShares      = 1
+	defaultHashrateEMATauSeconds = 300.0
+	initialHashrateEMATau        = 30 * time.Second
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second
@@ -102,9 +99,8 @@ const (
 
 	// Grace periods for new/changing connections.
 	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
-	minDiffChangeInterval       = 60 * time.Second // throttle vardiff changes so in-flight shares stay valid
 	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
-	earlySubmitHalfWeightWindow = 2 * time.Minute
+	earlySubmitHalfWeightWindow = 5 * time.Minute
 	stratumFloodLimitMultiplier = 2
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60

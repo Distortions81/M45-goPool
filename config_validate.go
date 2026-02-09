@@ -88,6 +88,9 @@ func validateConfig(cfg Config) error {
 	if cfg.MinDifficulty < 0 {
 		return fmt.Errorf("min_difficulty cannot be negative")
 	}
+	if cfg.TargetSharesPerMin <= 0 {
+		return fmt.Errorf("target_shares_per_min must be > 0, got %v", cfg.TargetSharesPerMin)
+	}
 	if cfg.PoolFeePercent < 0 || cfg.PoolFeePercent >= 100 {
 		return fmt.Errorf("pool_fee_percent must be >= 0 and < 100, got %v", cfg.PoolFeePercent)
 	}
@@ -102,9 +105,6 @@ func validateConfig(cfg Config) error {
 	}
 	if cfg.StratumPasswordEnabled && strings.TrimSpace(cfg.StratumPassword) == "" {
 		return fmt.Errorf("stratum_password_enabled is true but stratum_password is empty")
-	}
-	if cfg.HashrateEMAMinShares < minHashrateEMAMinShares {
-		return fmt.Errorf("hashrate_ema_min_shares must be >= %d, got %d", minHashrateEMAMinShares, cfg.HashrateEMAMinShares)
 	}
 	if cfg.NTimeForwardSlackSeconds <= 0 {
 		return fmt.Errorf("ntime_forward_slack_seconds must be > 0, got %v", cfg.NTimeForwardSlackSeconds)

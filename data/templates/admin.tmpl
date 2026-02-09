@@ -332,10 +332,6 @@
 						<input name="hashrate_ema_tau_seconds" type="number" min="1" step="1" class="textfield" value="{{printf "%.0f" .Settings.HashrateEMATauSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Minimum shares before hashrate EMA kicks in (requires restart).">hashrate_ema_min_shares {{template "restart-required" .}}</div>
-						<input name="hashrate_ema_min_shares" type="number" min="1" class="textfield" value="{{.Settings.HashrateEMAMinShares}}">
-					</div>
-					<div>
 						<div class="label" title="Maximum seconds a miner can roll nTime forward (requires restart).">ntime_forward_slack_seconds {{template "restart-required" .}}</div>
 						<input name="ntime_forward_slack_seconds" type="number" min="1" class="textfield" value="{{.Settings.NTimeForwardSlackSeconds}}">
 					</div>

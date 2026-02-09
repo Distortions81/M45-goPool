@@ -32,8 +32,6 @@ type VarDiffConfig struct {
 	TargetSharesPerMin float64
 	AdjustmentWindow   time.Duration
 	Step               float64
-	MaxBurstShares     int
-	BurstWindow        time.Duration
 	// DampingFactor controls how aggressively vardiff moves toward target.
 	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
 	// Lower values reduce overshoot. Typical range: 0.5-0.85.
@@ -82,8 +80,6 @@ var defaultVarDiff = VarDiffConfig{
 	TargetSharesPerMin: defaultVarDiffTargetSharesPerMin, // aim for roughly one share every 12s
 	AdjustmentWindow:   defaultVarDiffAdjustmentWindow,
 	Step:               defaultVarDiffStep,
-	MaxBurstShares:     defaultVarDiffMaxBurstShares, // throttle spammy submitters
-	BurstWindow:        defaultVarDiffBurstWindow,
 	DampingFactor:      defaultVarDiffDampingFactor, // move 50% toward target to reduce overshoot
 }
 
@@ -155,6 +151,9 @@ type MinerConn struct {
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
 	lockDifficulty bool
+	// vardiffAdjustments counts applied VarDiff difficulty changes for this
+	// connection so startup can use larger initial correction steps.
+	vardiffAdjustments atomic.Int32
 	// bootstrapDone tracks whether we've already performed the initial
 	// "bootstrap" vardiff move for this connection.
 	bootstrapDone bool
@@ -190,6 +189,9 @@ type MinerConn struct {
 	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
 	// for this connection, derived from accepted work over time.
 	rollingHashrateValue float64
+	// initialEMAWindowDone marks that the first (bootstrap) EMA window has
+	// completed; after this, configured tau is used.
+	initialEMAWindowDone atomic.Bool
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64

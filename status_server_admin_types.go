@@ -74,6 +74,7 @@ type AdminSettingsData struct {
 	// Difficulty / mining toggles
 	MinDifficulty           float64
 	MaxDifficulty           float64
+	TargetSharesPerMin      float64
 	LockSuggestedDifficulty bool
 	SoloMode                bool
 	DirectSubmitProcessing  bool
@@ -99,7 +100,6 @@ type AdminSettingsData struct {
 	// Tuning / misc
 	DiscordWorkerNotifyThresholdSeconds int
 	HashrateEMATauSeconds               float64
-	HashrateEMAMinShares                int
 	NTimeForwardSlackSeconds            int
 }
 

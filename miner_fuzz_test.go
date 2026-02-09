@@ -31,10 +31,6 @@ func FuzzNoteInvalidSubmitThresholds(f *testing.F) {
 		}
 		mc := &MinerConn{
 			cfg: cfg,
-			vardiff: VarDiffConfig{
-				MaxBurstShares: 60,
-				BurstWindow:    60 * time.Second,
-			},
 		}
 
 		// Send a burst of invalid submissions spaced evenly across the
@@ -75,10 +71,7 @@ func FuzzNoteInvalidSubmitThresholds(f *testing.F) {
 		// this configuration so we can assert bans never occur "too early".
 		effectiveThreshold := cfg.BanInvalidSubmissionsAfter
 		if effectiveThreshold <= 0 {
-			effectiveThreshold = mc.vardiff.MaxBurstShares
-			if effectiveThreshold <= 0 {
-				effectiveThreshold = 60
-			}
+			effectiveThreshold = defaultBanInvalidSubmissionsAfter
 		}
 
 		if bannedCount > 0 && lastInvalids < effectiveThreshold {

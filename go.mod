@@ -5,6 +5,7 @@ go 1.24.13
 require (
 	github.com/Backblaze/blazer v0.7.2
 	github.com/btcsuite/btcd v0.25.0
+	github.com/btcsuite/btcd/btcec/v2 v2.3.6
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/bwmarrin/discordgo v0.29.0
@@ -21,7 +22,6 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd/btcec/v2 v2.3.6 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect

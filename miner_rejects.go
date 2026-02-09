@@ -105,15 +105,10 @@ func (r submitRejectReason) String() string {
 func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason) (bool, int) {
 	mc.stateMu.Lock()
 	defer mc.stateMu.Unlock()
-	// Determine the window for counting invalid submissions. Prefer the
-	// explicit ban window from config when set, otherwise fall back to the
-	// VarDiff burst window, and finally a 60s default.
+	// Determine the window for counting invalid submissions.
 	window := mc.cfg.BanInvalidSubmissionsWindow
 	if window <= 0 {
-		window = mc.vardiff.BurstWindow
-		if window <= 0 {
-			window = time.Minute
-		}
+		window = defaultBanInvalidSubmissionsWindow
 	}
 	if now.Sub(mc.lastPenalty) > window {
 		mc.invalidSubs = 0
@@ -141,15 +136,12 @@ func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason)
 	// Require a burst of bad submissions in a short window before banning.
 	threshold := mc.cfg.BanInvalidSubmissionsAfter
 	if threshold <= 0 {
-		threshold = mc.vardiff.MaxBurstShares
-		if threshold <= 0 {
-			threshold = 300
-		}
+		threshold = defaultBanInvalidSubmissionsAfter
 	}
 	if mc.invalidSubs >= threshold {
 		banDuration := mc.cfg.BanInvalidSubmissionsDuration
 		if banDuration <= 0 {
-			banDuration = 15 * time.Minute
+			banDuration = defaultBanInvalidSubmissionsDuration
 		}
 		mc.banUntil = now.Add(banDuration)
 		if mc.banReason == "" {
@@ -274,6 +266,36 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	}
 }
 
+func (mc *MinerConn) hashrateEMATau() time.Duration {
+	if !mc.initialEMAWindowDone.Load() {
+		return initialHashrateEMATau
+	}
+
+	tauSeconds := mc.cfg.HashrateEMATauSeconds
+	if tauSeconds <= 0 {
+		tauSeconds = defaultHashrateEMATauSeconds
+	}
+	if tauSeconds <= 0 {
+		return time.Minute
+	}
+	return time.Duration(tauSeconds * float64(time.Second))
+}
+
+func (mc *MinerConn) vardiffRetargetInterval() time.Duration {
+	if !mc.initialEMAWindowDone.Load() {
+		return initialHashrateEMATau
+	}
+
+	interval := mc.vardiff.AdjustmentWindow
+	if interval <= 0 {
+		interval = defaultVarDiffAdjustmentWindow
+	}
+	if interval <= 0 {
+		return time.Minute
+	}
+	return interval
+}
+
 // updateHashrateLocked updates the per-connection hashrate using a simple
 // exponential moving average (EMA) over time. It expects statsMu to be held
 // by the caller.
@@ -282,10 +304,8 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 		return
 	}
 
-	samplesNeeded := mc.cfg.HashrateEMAMinShares
-	if samplesNeeded < minHashrateEMAMinShares {
-		samplesNeeded = minHashrateEMAMinShares
-	}
+	// Update once we've reached the EMA time window.
+	tauSeconds := mc.hashrateEMATau().Seconds()
 
 	if mc.lastHashrateUpdate.IsZero() {
 		mc.lastHashrateUpdate = shareTime
@@ -296,15 +316,14 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 
 	mc.hashrateSampleCount++
 	mc.hashrateAccumulatedDiff += targetDiff
-	if mc.hashrateSampleCount < samplesNeeded {
+	elapsed := shareTime.Sub(mc.lastHashrateUpdate).Seconds()
+	if elapsed <= 0 {
 		return
 	}
 
-	elapsed := shareTime.Sub(mc.lastHashrateUpdate).Seconds()
-	if elapsed <= 0 {
-		mc.lastHashrateUpdate = shareTime
-		mc.hashrateSampleCount = 1
-		mc.hashrateAccumulatedDiff = targetDiff
+	// Bootstrap: wait for the initial EMA window so startup doesn't jump on
+	// one or two early shares. After bootstrap, update incrementally.
+	if !mc.initialEMAWindowDone.Load() && elapsed < tauSeconds {
 		return
 	}
 
@@ -312,10 +331,6 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 
 	// Apply an EMA with a configurable time constant so that hashrate responds
 	// quickly to changes but decays smoothly when shares slow down.
-	tauSeconds := mc.cfg.HashrateEMATauSeconds
-	if tauSeconds <= 0 {
-		tauSeconds = defaultHashrateEMATauSeconds
-	}
 	alpha := 1 - math.Exp(-elapsed/tauSeconds)
 	if alpha < 0 {
 		alpha = 0
@@ -329,6 +344,7 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 	} else {
 		mc.rollingHashrateValue = mc.rollingHashrateValue + alpha*(sample-mc.rollingHashrateValue)
 	}
+	mc.initialEMAWindowDone.Store(true)
 	mc.lastHashrateUpdate = shareTime
 	mc.hashrateSampleCount = 0
 	mc.hashrateAccumulatedDiff = 0
@@ -553,6 +569,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 		mc.metrics.RecordVardiffMove(dir)
 	}
 	mc.setDifficulty(newDiff)
+	mc.vardiffAdjustments.Add(1)
 	return true
 }
 
@@ -572,7 +589,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if windowSubmissions == 0 || windowStart.IsZero() {
 		return currentDiff
 	}
-	if !lastChange.IsZero() && now.Sub(lastChange) < minDiffChangeInterval {
+	if !lastChange.IsZero() && now.Sub(lastChange) < mc.vardiffRetargetInterval() {
 		return currentDiff
 	}
 	if windowAccepted == 0 {
@@ -637,8 +654,8 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if step <= 1 {
 		step = 2
 	}
-	maxFactor := step
-	minFactor := 1 / step
+	maxFactor := mc.vardiffAdjustmentCap(step)
+	minFactor := 1 / maxFactor
 	if factor > maxFactor {
 		factor = maxFactor
 	}
@@ -692,8 +709,8 @@ func (mc *MinerConn) suggestedVardiffFine(currentDiff, targetDiff float64, windo
 		return currentDiff
 	}
 
-	maxFactor := halfStep
-	minFactor := 1 / halfStep
+	maxFactor := mc.vardiffAdjustmentCap(halfStep)
+	minFactor := 1 / maxFactor
 	if factor > maxFactor {
 		factor = maxFactor
 	}
@@ -706,6 +723,16 @@ func (mc *MinerConn) suggestedVardiffFine(currentDiff, targetDiff float64, windo
 		return currentDiff
 	}
 	return mc.clampDifficulty(newDiff)
+}
+
+func (mc *MinerConn) vardiffAdjustmentCap(baseStep float64) float64 {
+	if baseStep <= 1 {
+		return 1
+	}
+	if mc.vardiffAdjustments.Load() < 2 {
+		return baseStep * baseStep
+	}
+	return baseStep
 }
 
 // quantizeDifficultyToPowerOfTwo snaps a difficulty value to a power-of-two
