@@ -191,9 +191,7 @@ func (s *StatusServer) clerkUIEnabled() bool {
 	if s == nil || s.clerk == nil {
 		return false
 	}
-	// The worker login page's embedded sign-in experience requires a publishable
-	// key from secrets.toml; when it's missing, hide the sign-in box.
-	return strings.TrimSpace(s.Config().ClerkPublishableKey) != ""
+	return clerkConfigured(s.Config())
 }
 
 func (s *StatusServer) enrichStatusDataWithClerk(r *http.Request, data *StatusData) {

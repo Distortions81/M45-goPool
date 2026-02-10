@@ -87,6 +87,10 @@ func (s *StatusServer) handleClerkLogin(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
+	if !clerkConfigured(s.Config()) || s.clerk == nil {
+		http.Redirect(w, r, "/worker", http.StatusSeeOther)
+		return
+	}
 	redirect := safeRedirectPath(r.URL.Query().Get("redirect"))
 	if redirect == "" {
 		redirect = "/saved-workers"
@@ -146,11 +150,11 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	base := s.baseTemplateData(start)
 
 	pk := strings.TrimSpace(s.Config().ClerkPublishableKey)
-	if pk == "" {
+	if pk == "" || !clerkConfigured(s.Config()) || s.clerk == nil {
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Sign-in misconfigured",
 			"Sign-in is not configured on this server.",
-			"Missing secrets.toml value clerk_publishable_key (expected pk_live_... or pk_test_...).")
+			"clerk_secret_key, clerk_publishable_key, and auth.clerk_frontend_api_url are required.")
 		return
 	}
 

@@ -123,7 +123,7 @@ func TestBackups_SnapshotPathOverride_RelativeToDataDir(t *testing.T) {
 	}
 }
 
-func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testing.T) {
+func TestBackups_CloudEnabledWithoutCredentials_DoesNotStartServiceWhenNoLocalBackupConfigured(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := defaultConfig()
 	cfg.DataDir = tmp
@@ -131,7 +131,7 @@ func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testin
 	cfg.BackblazeKeepLocalCopy = false
 	cfg.BackupSnapshotPath = ""
 	cfg.BackblazeBackupIntervalSeconds = 1
-	// Deliberately omit credentials so B2 init fails; local snapshot should still be written.
+	// Deliberately omit credentials so cloud backup is considered unconfigured.
 	cfg.BackblazeBucket = ""
 	cfg.BackblazeAccountID = ""
 	cfg.BackblazeApplicationKey = ""
@@ -151,17 +151,8 @@ func TestBackups_EnabledForcesLocalSnapshot_EvenWhenKeepLocalCopyFalse(t *testin
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
-	if svc == nil {
-		t.Fatalf("expected service")
-	}
-	svc.RunOnce(context.Background(), "test", true)
-
-	wantSnapshot := filepath.Join(cfg.DataDir, "state", "workers.db.bak")
-	if svc.snapshotPath != wantSnapshot {
-		t.Fatalf("snapshotPath mismatch: got %q want %q", svc.snapshotPath, wantSnapshot)
-	}
-	if _, err := os.Stat(wantSnapshot); err != nil {
-		t.Fatalf("snapshot file missing: %v", err)
+	if svc != nil {
+		t.Fatalf("expected nil service when cloud backup is incomplete and local backup is disabled")
 	}
 }
 

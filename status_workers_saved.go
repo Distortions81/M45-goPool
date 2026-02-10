@@ -193,10 +193,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 	now := time.Now()
 	discordRegistered := false
 	discordUserEnabled := false
-	if s.workerLists != nil &&
-		strings.TrimSpace(s.Config().DiscordServerID) != "" &&
-		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
-		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != "" {
+	if s.workerLists != nil && discordConfigured(s.Config()) {
 		if _, enabled, ok, err := s.workerLists.GetDiscordLink(user.UserID); err == nil {
 			discordRegistered = ok
 			discordUserEnabled = ok && enabled
@@ -318,7 +315,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *h
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+	if !discordConfigured(s.Config()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -359,7 +356,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" {
+	if !discordConfigured(s.Config()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -494,7 +491,7 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
 		return
 	}
-	if strings.TrimSpace(s.Config().DiscordServerID) == "" || strings.TrimSpace(s.Config().DiscordBotToken) == "" || strings.TrimSpace(s.Config().DiscordNotifyChannelID) == "" {
+	if !discordConfigured(s.Config()) {
 		http.NotFound(w, r)
 		return
 	}

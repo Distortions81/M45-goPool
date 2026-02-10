@@ -29,9 +29,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	displayPayout := shortDisplayID(s.Config().PayoutAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayDonation := shortDisplayID(s.Config().OperatorDonationAddress, payoutAddrPrefix, payoutAddrSuffix)
 	displayCoinbase := shortDisplayID(s.Config().CoinbaseMsg, coinbaseMsgPrefix, coinbaseMsgSuffix)
-	discordNotificationsEnabled := strings.TrimSpace(s.Config().DiscordServerID) != "" &&
-		strings.TrimSpace(s.Config().DiscordBotToken) != "" &&
-		strings.TrimSpace(s.Config().DiscordNotifyChannelID) != ""
+	discordNotificationsEnabled := discordConfigured(s.Config())
 
 	clerkPK := strings.TrimSpace(s.Config().ClerkPublishableKey)
 	clerkJSURL := ""

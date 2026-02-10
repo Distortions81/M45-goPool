@@ -59,7 +59,11 @@ const (
 )
 
 func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (*backblazeBackupService, error) {
-	if !cfg.BackblazeBackupEnabled && !cfg.BackblazeKeepLocalCopy && strings.TrimSpace(cfg.BackupSnapshotPath) == "" {
+	b2Enabled := backblazeCloudConfigured(cfg)
+	if cfg.BackblazeBackupEnabled && !b2Enabled {
+		logger.Info("backblaze cloud backups disabled", "reason", "backblaze_backup.bucket, backblaze_account_id, and backblaze_application_key are required")
+	}
+	if !b2Enabled && !cfg.BackblazeKeepLocalCopy && strings.TrimSpace(cfg.BackupSnapshotPath) == "" {
 		return nil, nil
 	}
 	if dbPath == "" {
@@ -112,7 +116,7 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		dbPath:              dbPath,
 		objectPrefix:        objectPrefix,
 		interval:            interval,
-		b2Enabled:           cfg.BackblazeBackupEnabled,
+		b2Enabled:           b2Enabled,
 		b2BucketName:        strings.TrimSpace(cfg.BackblazeBucket),
 		b2AccountID:         strings.TrimSpace(cfg.BackblazeAccountID),
 		b2AppKey:            strings.TrimSpace(cfg.BackblazeApplicationKey),
@@ -131,7 +135,7 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	// Additionally, when B2 is enabled, always write a local snapshot by default
 	// even if keep_local_copy is disabled. This guarantees operators have a local
 	// "safe to copy while running" snapshot regardless of B2 health.
-	if svc.snapshotPath == "" && (cfg.BackblazeKeepLocalCopy || cfg.BackblazeBackupEnabled) {
+	if svc.snapshotPath == "" && (cfg.BackblazeKeepLocalCopy || b2Enabled) {
 		svc.snapshotPath = filepath.Join(stateDir, filepath.Base(dbPath)+backupLocalCopySuffix)
 	}
 	return svc, nil

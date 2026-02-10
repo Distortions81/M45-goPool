@@ -29,10 +29,7 @@ func (n *discordNotifier) enabled() bool {
 	if n == nil || n.s == nil {
 		return false
 	}
-	cfg := n.s.Config()
-	return strings.TrimSpace(cfg.DiscordServerID) != "" &&
-		strings.TrimSpace(cfg.DiscordBotToken) != "" &&
-		strings.TrimSpace(cfg.DiscordNotifyChannelID) != ""
+	return discordConfigured(n.s.Config())
 }
 
 func (n *discordNotifier) start(ctx context.Context) error {

@@ -242,9 +242,15 @@ func main() {
 	metrics := NewPoolMetrics()
 	metrics.SetStartTime(startTime)
 	metrics.SetBestSharesDB(cfg.DataDir)
-	clerkVerifier, clerkErr := NewClerkVerifier(cfg)
-	if clerkErr != nil {
-		logger.Warn("initialize clerk verifier", "error", clerkErr)
+	clerkVerifier := (*ClerkVerifier)(nil)
+	if clerkConfigured(cfg) {
+		var clerkErr error
+		clerkVerifier, clerkErr = NewClerkVerifier(cfg)
+		if clerkErr != nil {
+			logger.Warn("initialize clerk verifier", "error", clerkErr)
+		}
+	} else {
+		logger.Info("clerk auth disabled", "reason", "clerk_secret_key, clerk_publishable_key, and clerk_frontend_api_url are required")
 	}
 	workerListDBPath := filepath.Join(cfg.DataDir, "state", "workers.db")
 	workerLists, workerListErr := newWorkerListStore(workerListDBPath)
@@ -256,7 +262,7 @@ func main() {
 	if svc, err := newBackblazeBackupService(ctx, cfg, workerListDBPath); err != nil {
 		logger.Warn("initialize backblaze backup service", "error", err)
 	} else if svc != nil {
-		if cfg.BackblazeBackupEnabled {
+		if svc.b2Enabled {
 			if svc.bucket == nil {
 				logger.Warn("backblaze backups enabled but bucket is not reachable; using local snapshots only",
 					"bucket", cfg.BackblazeBucket,
