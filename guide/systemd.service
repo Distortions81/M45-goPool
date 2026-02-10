@@ -1,0 +1,21 @@
+[Unit]
+Description=goPool
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+Nice=-10
+User=dist
+WorkingDirectory=/home/user/goPool/
+ExecStart=/home/user/goPool/goPool
+
+KillSignal=SIGTERM
+TimeoutStopSec=300s
+KillMode=process
+SendSIGKILL=no
+
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
