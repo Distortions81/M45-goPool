@@ -44,7 +44,7 @@ func TestStratumRateLimit_SubmitAfterWarmupCountsFull(t *testing.T) {
 	now := time.Now()
 	mc := &MinerConn{
 		cfg:         Config{StratumMessagesPerMinute: 10},
-		connectedAt: now.Add(-3 * time.Minute),
+		connectedAt: now.Add(-6 * time.Minute),
 	}
 
 	for i := 0; i < 20; i++ {
