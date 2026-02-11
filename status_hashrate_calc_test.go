@@ -35,3 +35,18 @@ func TestWorkerHashrateEstimate_UsesDifficultyTimesShareRateAsLastFallback(t *te
 		t.Fatalf("hashrate=%.6f want %.6f", got, want)
 	}
 }
+
+func TestWorkerHashrateEstimate_DoesNotReportBeforeBootstrapWindow(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	view := WorkerView{
+		RollingHashrate:  0,
+		WindowStart:      now.Add(-(initialHashrateEMATau - time.Second)),
+		WindowDifficulty: 120,
+		ShareRate:        6,
+		Difficulty:       2,
+	}
+
+	if got := workerHashrateEstimate(view, now); got != 0 {
+		t.Fatalf("hashrate=%.6f want 0 before bootstrap window", got)
+	}
+}

@@ -91,6 +91,9 @@ const (
 
 	defaultHashrateEMATauSeconds = 300.0
 	initialHashrateEMATau        = 45 * time.Second
+	// When anchoring a fresh sampling window after reset, place WindowStart at
+	// this percent of the elapsed time from reset to first share (0-100).
+	windowStartLagPercent = 55
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second

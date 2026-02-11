@@ -192,6 +192,10 @@ type MinerConn struct {
 	// initialEMAWindowDone marks that the first (bootstrap) EMA window has
 	// completed; after this, configured tau is used.
 	initialEMAWindowDone atomic.Bool
+	// windowResetAnchor stores when the current sampling window was reset so
+	// the first post-reset share can anchor WindowStart midway between reset
+	// time and first-share time.
+	windowResetAnchor time.Time
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64

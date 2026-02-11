@@ -90,12 +90,26 @@ func (mc *MinerConn) updateWorker(worker string) string {
 
 func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 	if mc.stats.WindowStart.IsZero() {
-		mc.stats.WindowStart = now
+		start := now
+		if !mc.windowResetAnchor.IsZero() && now.After(mc.windowResetAnchor) {
+			lagPct := windowStartLagPercent
+			if lagPct < 0 {
+				lagPct = 0
+			}
+			if lagPct > 100 {
+				lagPct = 100
+			}
+			elapsed := now.Sub(mc.windowResetAnchor)
+			start = mc.windowResetAnchor.Add(time.Duration((int64(elapsed) * int64(lagPct)) / 100))
+		}
+		mc.stats.WindowStart = start
+		mc.windowResetAnchor = time.Time{}
 		mc.stats.WindowDifficulty = 0
 		return
 	}
 	if now.Sub(mc.stats.WindowStart) > mc.vardiff.AdjustmentWindow*2 {
 		mc.stats.WindowStart = now
+		mc.windowResetAnchor = time.Time{}
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
