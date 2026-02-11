@@ -168,6 +168,35 @@ func TestSuggestedVardiff_UsesBootstrap30SecondIntervalFirst(t *testing.T) {
 	}
 }
 
+func TestSuggestedVardiff_UsesWindowDifficultyWhenRollingIsZero(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	mc := &MinerConn{
+		cfg: Config{},
+		vardiff: VarDiffConfig{
+			MinDiff:            1,
+			MaxDiff:            1024,
+			TargetSharesPerMin: 1,
+			Step:               2,
+			DampingFactor:      1,
+		},
+	}
+	atomicStoreFloat64(&mc.difficulty, 1)
+
+	snap := minerShareSnapshot{
+		Stats: MinerStats{
+			WindowStart:       now.Add(-time.Minute),
+			WindowAccepted:    10,
+			WindowSubmissions: 10,
+			WindowDifficulty:  60,
+		},
+		RollingHashrate: 0,
+	}
+
+	if got := mc.suggestedVardiff(now, snap); got != 4 {
+		t.Fatalf("got %.8g want %.8g when rolling hashrate is zero but window difficulty is available", got, 4.0)
+	}
+}
+
 func almostEqualFloat64(a, b, eps float64) bool {
 	if a > b {
 		return a-b <= eps

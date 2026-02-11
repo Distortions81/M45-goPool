@@ -62,7 +62,7 @@
   lock_suggested_difficulty = false
   max_difficulty = 0.0
   min_difficulty = 256.0
-  target_shares_per_min = 6.0
+  target_shares_per_min = 7.0
 
 [discord]
   worker_notify_threshold_seconds = 300
