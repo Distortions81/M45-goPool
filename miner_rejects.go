@@ -248,10 +248,11 @@ func (mc *MinerConn) shareTargetOrDefault() *big.Int {
 }
 
 func (mc *MinerConn) resetShareWindow(now time.Time) {
-	connSeq := atomic.LoadUint64(&mc.connectionSeq)
-
 	mc.statsMu.Lock()
-	mc.stats.WindowStart = now
+	// Start a fresh window at the first post-reset share so elapsed time only
+	// counts while we are actually sampling shares.
+	mc.stats.WindowStart = time.Time{}
+	mc.windowResetAnchor = now
 	mc.stats.WindowAccepted = 0
 	mc.stats.WindowSubmissions = 0
 	mc.stats.WindowDifficulty = 0
@@ -263,10 +264,6 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	// from fresh post-change shares.
 	mc.initialEMAWindowDone.Store(false)
 	mc.statsMu.Unlock()
-
-	if mc.metrics != nil && connSeq != 0 {
-		mc.metrics.UpdateConnectionHashrate(connSeq, 0)
-	}
 }
 
 func (mc *MinerConn) hashrateEMATau() time.Duration {
@@ -285,16 +282,18 @@ func (mc *MinerConn) hashrateEMATau() time.Duration {
 }
 
 func (mc *MinerConn) vardiffRetargetInterval() time.Duration {
-	if !mc.initialEMAWindowDone.Load() {
-		return initialHashrateEMATau
-	}
-
 	interval := mc.vardiff.AdjustmentWindow
 	if interval <= 0 {
 		interval = defaultVarDiffAdjustmentWindow
 	}
 	if interval <= 0 {
-		return time.Minute
+		interval = time.Minute
+	}
+
+	// During bootstrap, enforce both the EMA warmup horizon and the vardiff
+	// adjustment window by waiting for whichever is longer.
+	if !mc.initialEMAWindowDone.Load() && interval < initialHashrateEMATau {
+		interval = initialHashrateEMATau
 	}
 	return interval
 }
@@ -592,7 +591,11 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if windowSubmissions == 0 || windowStart.IsZero() {
 		return currentDiff
 	}
-	if !lastChange.IsZero() && now.Sub(lastChange) < mc.vardiffRetargetInterval() {
+	guardStart := lastChange
+	if !mc.initialEMAWindowDone.Load() && windowStart.After(guardStart) {
+		guardStart = windowStart
+	}
+	if !guardStart.IsZero() && now.Sub(guardStart) < mc.vardiffRetargetInterval() {
 		return currentDiff
 	}
 	if windowAccepted == 0 {

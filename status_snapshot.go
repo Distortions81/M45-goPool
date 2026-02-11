@@ -35,10 +35,17 @@ func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
 	if view.RollingHashrate > 0 {
 		return view.RollingHashrate
 	}
-	if view.WindowDifficulty > 0 && !view.WindowStart.IsZero() {
-		windowSeconds := now.Sub(view.WindowStart).Seconds()
-		if windowSeconds > 0 {
-			return (view.WindowDifficulty * hashPerShare) / windowSeconds
+	if !view.WindowStart.IsZero() {
+		window := now.Sub(view.WindowStart)
+		if window <= 0 {
+			return 0
+		}
+		// Keep startup behavior aligned with the EMA bootstrap horizon.
+		if window < initialHashrateEMATau {
+			return 0
+		}
+		if view.WindowDifficulty > 0 {
+			return (view.WindowDifficulty * hashPerShare) / window.Seconds()
 		}
 	}
 	if view.ShareRate > 0 && view.Difficulty > 0 {
@@ -56,15 +63,15 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	}
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
 	workerHash := strings.TrimSpace(stats.WorkerSHA256)
-	hashRate := snap.RollingHashrate
-	if hashRate <= 0 && stats.WindowDifficulty > 0 && !stats.WindowStart.IsZero() {
-		windowSeconds := now.Sub(stats.WindowStart).Seconds()
-		if windowSeconds > 0 {
-			hashRate = (stats.WindowDifficulty * hashPerShare) / windowSeconds
-		}
-	}
 	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
+	hashRate := workerHashrateEstimate(WorkerView{
+		RollingHashrate:  snap.RollingHashrate,
+		WindowStart:      stats.WindowStart,
+		WindowDifficulty: stats.WindowDifficulty,
+		ShareRate:        accRate,
+		Difficulty:       diff,
+	}, now)
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
 	if len(script) > 0 {

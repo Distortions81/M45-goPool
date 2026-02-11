@@ -75,8 +75,8 @@ func TestResetShareWindow_ResetsEMATauState(t *testing.T) {
 	if mc.initialEMAWindowDone.Load() {
 		t.Fatalf("initialEMAWindowDone=true, want false after resetShareWindow")
 	}
-	if !mc.stats.WindowStart.Equal(now) {
-		t.Fatalf("WindowStart=%v want %v", mc.stats.WindowStart, now)
+	if !mc.stats.WindowStart.IsZero() {
+		t.Fatalf("WindowStart=%v want zero time so first share starts the window", mc.stats.WindowStart)
 	}
 	if mc.stats.WindowAccepted != 0 || mc.stats.WindowSubmissions != 0 || mc.stats.WindowDifficulty != 0 {
 		t.Fatalf("window counters not cleared: accepted=%d submissions=%d difficulty=%v",
@@ -84,5 +84,23 @@ func TestResetShareWindow_ResetsEMATauState(t *testing.T) {
 	}
 	if !mc.lastHashrateUpdate.IsZero() || mc.rollingHashrateValue != 0 || mc.hashrateSampleCount != 0 || mc.hashrateAccumulatedDiff != 0 {
 		t.Fatalf("hashrate state not cleared")
+	}
+}
+
+func TestResetShareWindow_FirstShareAnchorsWindowByLagPercent(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	firstShare := now.Add(20 * time.Second)
+	mc := &MinerConn{}
+
+	mc.resetShareWindow(now)
+
+	mc.statsMu.Lock()
+	mc.ensureWindowLocked(firstShare)
+	got := mc.stats.WindowStart
+	mc.statsMu.Unlock()
+
+	want := now.Add((20 * time.Second * windowStartLagPercent) / 100)
+	if !got.Equal(want) {
+		t.Fatalf("WindowStart=%v want %v with %d%% lag between reset and first share", got, want, windowStartLagPercent)
 	}
 }
