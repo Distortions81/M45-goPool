@@ -103,7 +103,7 @@ const (
 	// Grace periods for new/changing connections.
 	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
 	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
-	earlySubmitHalfWeightWindow = 5 * time.Minute
+	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 2
 	stratumFloodLimitMultiplier = 2
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
