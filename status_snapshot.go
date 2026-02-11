@@ -31,6 +31,22 @@ func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
 	return float64(stats.WindowAccepted) / window.Minutes()
 }
 
+func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
+	if view.RollingHashrate > 0 {
+		return view.RollingHashrate
+	}
+	if view.WindowDifficulty > 0 && !view.WindowStart.IsZero() {
+		windowSeconds := now.Sub(view.WindowStart).Seconds()
+		if windowSeconds > 0 {
+			return (view.WindowDifficulty * hashPerShare) / windowSeconds
+		}
+	}
+	if view.ShareRate > 0 && view.Difficulty > 0 {
+		return (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
+	}
+	return 0
+}
+
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	snap := mc.snapshotShareInfo()
 	stats := snap.Stats
@@ -41,6 +57,12 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
 	workerHash := strings.TrimSpace(stats.WorkerSHA256)
 	hashRate := snap.RollingHashrate
+	if hashRate <= 0 && stats.WindowDifficulty > 0 && !stats.WindowStart.IsZero() {
+		windowSeconds := now.Sub(stats.WindowStart).Seconds()
+		if windowSeconds > 0 {
+			hashRate = (stats.WindowDifficulty * hashPerShare) / windowSeconds
+		}
+	}
 	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
 	addr, script, valid := mc.workerWalletData(stats.Worker)
@@ -85,6 +107,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		WindowStart:         stats.WindowStart,
 		WindowAccepted:      stats.WindowAccepted,
 		WindowSubmissions:   stats.WindowSubmissions,
+		WindowDifficulty:    stats.WindowDifficulty,
 		ShareRate:           accRate,
 		ConnectionID:        mc.connectionIDString(),
 		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
@@ -132,6 +155,7 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 		current.RollingHashrate += w.RollingHashrate
 		current.WindowAccepted += w.WindowAccepted
 		current.WindowSubmissions += w.WindowSubmissions
+		current.WindowDifficulty += w.WindowDifficulty
 		current.ShareRate += w.ShareRate
 		if w.LastShare.After(current.LastShare) {
 			current.LastShare = w.LastShare

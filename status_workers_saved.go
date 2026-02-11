@@ -76,10 +76,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 					break
 				}
-				hashrate := view.RollingHashrate
-				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
-					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
-				}
+				hashrate := workerHashrateEstimate(view, now)
 				duration := now.Sub(view.ConnectedAt)
 				if duration < 0 {
 					duration = 0
@@ -256,10 +253,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 				if perNameRowsShown[lookupHash] >= maxSavedWorkersPerNameDisplay {
 					break
 				}
-				hashrate := view.RollingHashrate
-				if hashrate <= 0 && view.ShareRate > 0 && view.Difficulty > 0 {
-					hashrate = (view.Difficulty * hashPerShare * view.ShareRate) / 60.0
-				}
+				hashrate := workerHashrateEstimate(view, now)
 				connectionDurationSeconds := 0.0
 				if !view.ConnectedAt.IsZero() {
 					connectionDurationSeconds = now.Sub(view.ConnectedAt).Seconds()

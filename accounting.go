@@ -51,6 +51,7 @@ type WorkerView struct {
 	WindowStart         time.Time    `json:"window_start"`
 	WindowAccepted      int          `json:"window_accepted"`
 	WindowSubmissions   int          `json:"window_submissions"`
+	WindowDifficulty    float64      `json:"window_difficulty"`
 	ShareRate           float64      `json:"share_rate"`
 	ConnectionID        string       `json:"connection_id,omitempty"`
 	ConnectionSeq       uint64       `json:"connection_seq,omitempty"`

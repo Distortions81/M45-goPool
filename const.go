@@ -85,12 +85,12 @@ const (
 
 	// VarDiff defaults.
 	defaultVarDiffTargetSharesPerMin = 7
-	defaultVarDiffAdjustmentWindow   = 60 * time.Second
+	defaultVarDiffAdjustmentWindow   = 120 * time.Second
 	defaultVarDiffStep               = 2
 	defaultVarDiffDampingFactor      = 0.4
 
 	defaultHashrateEMATauSeconds = 300.0
-	initialHashrateEMATau        = 30 * time.Second
+	initialHashrateEMATau        = 45 * time.Second
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second
