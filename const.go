@@ -37,7 +37,7 @@ const (
 	defaultAcceptSteadyStateRate             = 50
 	defaultAcceptSteadyStateReconnectPercent = 5.0
 	defaultAcceptSteadyStateReconnectWindow  = 60
-	defaultStratumMessagesPerMinute          = 240
+	defaultStratumMessagesPerMinute          = 0
 
 	defaultJobEntropy                = 4
 	maxJobEntropy                    = 16
