@@ -362,6 +362,56 @@ header {
 	gap: 16px;
 }
 
+.connect-panel-fold {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 6px 12px;
+	border-radius: 999px;
+	border: 1px solid rgba(44, 241, 194, 0.4);
+	background: rgba(44, 241, 194, 0.12);
+	color: #eafff7;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.connect-panel-fold:hover {
+	border-color: rgba(44, 241, 194, 0.62);
+	background: rgba(44, 241, 194, 0.2);
+	transform: translateY(-1px);
+}
+
+.connect-panel-fold:focus-visible {
+	outline: 1px dashed rgba(196, 255, 225, 0.9);
+	outline-offset: 2px;
+}
+
+[data-theme="light"] .connect-panel-fold {
+	border-color: rgba(46, 92, 138, 0.36);
+	background: rgba(46, 92, 138, 0.12);
+	color: var(--text-primary);
+}
+
+[data-theme="light"] .connect-panel-fold:hover {
+	border-color: rgba(46, 92, 138, 0.55);
+	background: rgba(46, 92, 138, 0.18);
+}
+
+.connect-panel-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.connect-panel[data-folded="true"] .connect-panel-body {
+	display: none;
+}
+
 .connect-panel-title {
 	margin: 0;
 	font-size: 18px;

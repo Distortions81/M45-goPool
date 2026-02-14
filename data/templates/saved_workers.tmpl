@@ -114,7 +114,7 @@
 					Note: For workers sharing the same wallet and name, only the first 16 are displayed here.
 				</p>
 				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Reconnect button: force-resets active sessions by banning for 30s, then disconnecting so the miner reconnects cleanly.
+					Force reset button: bans for 30s, then disconnects active sessions so the miner reconnects cleanly.
 				</p>
 				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
 					Hashrate markers: <span class="mono">~?</span> warming up (low confidence), <span class="mono">≈</span> settling, no marker = stable.
@@ -170,10 +170,10 @@
 											{{end}}
 											<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="{{.Name}}">
 												<input type="hidden" name="hash" value="{{.Hash}}">
-												<button class="btn btn-secondary" type="submit" aria-label="Force reconnect worker" title="Force reconnect (30s reset)">
-													Reconnect
-												</button>
-											</form>
+											<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">
+												Force reset
+											</button>
+										</form>
 											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
 												<input type="hidden" name="worker" value="{{.Name}}">
 												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
@@ -910,7 +910,7 @@
 				form.__reconnectConfirmAttached = true;
 				form.addEventListener('submit', (e) => {
 					const name = form.getAttribute('data-reconnect-worker') || 'this worker';
-					if (!confirm(`Force reconnect ${name}? This applies a 30s reset ban.`)) {
+					if (!confirm(`Force reset ${name}? This applies a 30s ban, then disconnects active sessions.`)) {
 						e.preventDefault();
 					}
 				});
@@ -1024,10 +1024,10 @@
 					<td style="text-align:right;">
 						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 							${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
-							<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="${escapeAttr(w.name || '')}">
-								<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-								<button class="btn btn-secondary" type="submit" aria-label="Force reconnect worker" title="Force reconnect (30s reset)">Reconnect</button>
-							</form>
+								<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="${escapeAttr(w.name || '')}">
+									<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+									<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">Force reset</button>
+								</form>
 							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
 								<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
 								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
