@@ -632,6 +632,27 @@ func formatHashrateValue(h float64) string {
 	return fmt.Sprintf("%.3f %s", val, unit)
 }
 
+func formatLatencyMS(ms float64) string {
+	if ms <= 0 || math.IsNaN(ms) || math.IsInf(ms, 0) {
+		return "—"
+	}
+	if ms < 1 {
+		us := math.Round(ms * 1000)
+		if us < 1 {
+			us = 1
+		}
+		return fmt.Sprintf("%.0fus", us)
+	}
+	if ms < 1000 {
+		return fmt.Sprintf("%.0fms", math.Round(ms))
+	}
+	sec := ms / 1000
+	if sec < 60 {
+		return fmt.Sprintf("%.1fs", sec)
+	}
+	return fmt.Sprintf("%.1fm", sec/60)
+}
+
 // buildTemplateFuncs returns the template.FuncMap used for all HTML templates.
 func buildTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
@@ -649,6 +670,27 @@ func buildTemplateFuncs() template.FuncMap {
 			return strings.Join(ss, sep)
 		},
 		"formatHashrate": formatHashrateValue,
+		"formatWorkerHashrate": func(h float64, accuracy string) string {
+			if h <= 0 {
+				return "—"
+			}
+			base := formatHashrateValue(h)
+			marker := strings.TrimSpace(accuracy)
+			if marker == "" {
+				return base
+			}
+			return marker + " " + base
+		},
+		"formatLatencyMS": formatLatencyMS,
+		"formatWorkStartLatencyMS": func(minMS, p50MS, lastMS float64) string {
+			if minMS > 0 {
+				return formatLatencyMS(minMS)
+			}
+			if p50MS > 0 {
+				return formatLatencyMS(p50MS)
+			}
+			return formatLatencyMS(lastMS)
+		},
 		"formatDiff": func(d float64) string {
 			if d <= 0 {
 				return "0"

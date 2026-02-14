@@ -1539,10 +1539,12 @@
 	})();
 	</script>
 	<script>
-	(function() {
-		const REFRESH_INTERVAL = 5000;
-		const FIAT_CURRENCY = '{{.FiatCurrency}}';
-		const poolTagEl = document.getElementById('status-pool-tag');
+		(function() {
+			const REFRESH_INTERVAL = 5000;
+			const FIAT_CURRENCY = '{{.FiatCurrency}}';
+			const OVERVIEW_CACHE_KEY = 'savedWorkers.overview.v1';
+			const HASHRATE_CACHE_KEY = 'savedWorkers.hashrate.v1';
+			const poolTagEl = document.getElementById('status-pool-tag');
 		const valueEl = document.getElementById('status-pool-hashrate');
 		const blockHeightEl = document.getElementById('status-block-height');
 		const blockHeightContextEl = document.getElementById('status-block-height-context');
@@ -1559,8 +1561,32 @@
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
-		let templateUpdatedAtMillis = null;
-		let templateTxFeesSats = null;
+			let templateUpdatedAtMillis = null;
+			let templateTxFeesSats = null;
+
+			function readRecentJSONCache(key, maxAgeMs) {
+				try {
+					const raw = sessionStorage.getItem(key);
+					if (!raw) return null;
+					const parsed = JSON.parse(raw);
+					if (!parsed || typeof parsed !== 'object') return null;
+					const at = Number(parsed.at || 0);
+					if (!Number.isFinite(at) || at <= 0) return null;
+					if ((Date.now() - at) > maxAgeMs) return null;
+					return parsed.payload ?? null;
+				} catch (_) {
+					return null;
+				}
+			}
+
+			function writeJSONCache(key, payload) {
+				try {
+					sessionStorage.setItem(key, JSON.stringify({
+						at: Date.now(),
+						payload: payload,
+					}));
+				} catch (_) {}
+			}
 
 		// Used by the saved workers table (hashrate cells render from data-hashrate attributes).
 		// This script block runs separately from the main saved-workers dashboard script above,
@@ -1952,12 +1978,13 @@
 		}
 
 		function fetchOverview() {
-			fetch('/api/overview')
+			fetch('/api/overview', { credentials: 'same-origin' })
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					return response.json();
 				})
 				.then(data => {
+					writeJSONCache(OVERVIEW_CACHE_KEY, data);
 					updateOverviewDOM(data);
 				})
 				.catch(err => {
@@ -1966,13 +1993,14 @@
 		}
 
 		function fetchHashrate() {
-			fetch('/api/pool-hashrate')
+			fetch('/api/pool-hashrate', { credentials: 'same-origin' })
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					return response.json().then(data => ({ data, updatedAt }));
 				})
 				.then(({ data, updatedAt }) => {
+					writeJSONCache(HASHRATE_CACHE_KEY, { data, updatedAt });
 					if (data && typeof data.pool_hashrate === 'number') {
 						updateHashrateDisplay(data.pool_hashrate);
 					}
@@ -2075,11 +2103,38 @@
 				});
 		}
 
-		fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
-		fetchOverview();
-		renderStoredHashrates();
-		renderStoredLatencies();
-		fetchHashrate();
+			fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
+			const cachedOverview = readRecentJSONCache(OVERVIEW_CACHE_KEY, REFRESH_INTERVAL);
+			if (cachedOverview) {
+				updateOverviewDOM(cachedOverview);
+			}
+			const cachedHashrate = readRecentJSONCache(HASHRATE_CACHE_KEY, REFRESH_INTERVAL);
+			if (cachedHashrate && cachedHashrate.data) {
+				const data = cachedHashrate.data;
+				const updatedAt = cachedHashrate.updatedAt;
+				if (typeof data.pool_hashrate === 'number') {
+					updateHashrateDisplay(data.pool_hashrate);
+				}
+				if (typeof data.template_tx_fees_sats === 'number') {
+					templateTxFeesSats = data.template_tx_fees_sats;
+				} else {
+					templateTxFeesSats = null;
+				}
+				templateUpdatedAtMillis = getUpdatedAtMillis(data?.template_updated_at) ?? getUpdatedAtMillis(updatedAt || data?.updated_at);
+				renderTemplateTxFees();
+				if (blockHeightEl && typeof data.block_height === 'number' && data.block_height > 0) {
+					blockHeightEl.textContent = data.block_height.toLocaleString();
+				}
+				if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
+					blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);
+				}
+				if (data.recent_block_times) {
+					renderBlockHistory(data.recent_block_times);
+				}
+			}
+			fetchOverview();
+			renderStoredHashrates();
+			fetchHashrate();
 		setInterval(fetchOverview, REFRESH_INTERVAL);
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
 		setInterval(() => {
