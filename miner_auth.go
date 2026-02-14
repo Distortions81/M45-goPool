@@ -1049,11 +1049,15 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		)
 	}
 
-	_ = mc.writeJSON(map[string]interface{}{
+	if err := mc.writeJSON(map[string]interface{}{
 		"id":     nil,
 		"method": "mining.notify",
 		"params": params,
-	})
+	}); err != nil {
+		logger.Error("notify write error", "remote", mc.id, "error", err)
+		return
+	}
+	mc.recordNotifySent(time.Now())
 }
 
 // computeMerkleRootBE rebuilds the merkle root (big-endian) from coinb1/coinb2 and branches.

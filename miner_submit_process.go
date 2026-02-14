@@ -1,8 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func (mc *MinerConn) processSubmissionTask(task submissionTask) {
+	start := task.receivedAt
+	if start.IsZero() {
+		start = time.Now()
+	}
+	defer mc.recordSubmitRTT(time.Since(start))
+
 	workerName := task.workerName
 	jobID := task.jobID
 	extranonce2 := task.extranonce2

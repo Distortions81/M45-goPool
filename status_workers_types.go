@@ -14,6 +14,11 @@ type savedWorkerEntry struct {
 	Accepted          uint64
 	Rejected          uint64
 	Difficulty        float64
+	EstimatedPingP50MS float64
+	EstimatedPingP95MS float64
+	NotifyToFirstShareMS float64
+	NotifyToFirstShareP50MS float64
+	NotifyToFirstShareP95MS float64
 	LastShare         time.Time
 	ConnectedDuration time.Duration
 	ConnectionID      string

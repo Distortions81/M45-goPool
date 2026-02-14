@@ -53,6 +53,13 @@ type WorkerView struct {
 	WindowSubmissions   int          `json:"window_submissions"`
 	WindowDifficulty    float64      `json:"window_difficulty"`
 	ShareRate           float64      `json:"share_rate"`
+	SubmitRTTP50MS      float64      `json:"submit_rtt_p50_ms,omitempty"`
+	SubmitRTTP95MS      float64      `json:"submit_rtt_p95_ms,omitempty"`
+	NotifyToFirstShareMS float64     `json:"notify_to_first_share_ms,omitempty"`
+	NotifyToFirstShareP50MS float64  `json:"notify_to_first_share_p50_ms,omitempty"`
+	NotifyToFirstShareP95MS float64  `json:"notify_to_first_share_p95_ms,omitempty"`
+	EstimatedPingP50MS  float64      `json:"estimated_ping_p50_ms,omitempty"`
+	EstimatedPingP95MS  float64      `json:"estimated_ping_p95_ms,omitempty"`
 	ConnectionID        string       `json:"connection_id,omitempty"`
 	ConnectionSeq       uint64       `json:"connection_seq,omitempty"`
 	ConnectedAt         time.Time    `json:"connected_at,omitempty"`

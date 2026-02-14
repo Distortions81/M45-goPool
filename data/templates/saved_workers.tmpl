@@ -128,6 +128,8 @@
 							<th>Last share</th>
 							<th>Accepted</th>
 							<th>Rejected</th>
+							<th>Ping (RTT) p50/p95</th>
+							<th>Work Start p50/p95</th>
 							<th>Connected</th>
 							<th></th>
 						</tr>
@@ -144,6 +146,8 @@
 						<td>{{formatTime .LastShare}}</td>
 						<td>{{.Accepted}}</td>
 						<td>{{.Rejected}}</td>
+						<td class="latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</td>
+						<td class="latency-pair-work" data-work-p50-ms="{{printf "%.6f" .NotifyToFirstShareP50MS}}" data-work-p95-ms="{{printf "%.6f" .NotifyToFirstShareP95MS}}" data-work-last-ms="{{printf "%.6f" .NotifyToFirstShareMS}}">—</td>
 						<td>{{humanDuration .ConnectedDuration}}</td>
 						<td style="text-align:right;">
 										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
@@ -169,7 +173,7 @@
 								</tr>
 								{{end}}
 							{{else}}
-								<tr><td colspan="9" class="text-sm">No saved workers online right now.</td></tr>
+								<tr><td colspan="12" class="text-sm">No saved workers online right now.</td></tr>
 							{{end}}
 						</tbody>
 					</table>
@@ -718,7 +722,7 @@
 				return formatTimeAgo(seconds);
 			}
 
-			function formatDuration(seconds) {
+		function formatDuration(seconds) {
 			const total = Math.max(0, Math.floor(seconds || 0));
 			const hours = Math.floor(total / 3600);
 			const minutes = Math.floor((total % 3600) / 60);
@@ -726,6 +730,24 @@
 			if (hours > 0) return `${hours}h ${minutes}m`;
 			if (minutes > 0) return `${minutes}m ${secs}s`;
 			return `${secs}s`;
+		}
+
+		function formatLatency(ms) {
+			const v = Number(ms || 0);
+			if (!isFinite(v) || v <= 0) return '—';
+			if (v < 1) return `${Math.max(1, Math.round(v * 1000))} us`;
+			if (v < 1000) return `${v < 10 ? v.toFixed(1) : Math.round(v)} ms`;
+			const sec = v / 1000;
+			if (sec < 60) return `${sec < 10 ? sec.toFixed(1) : Math.round(sec)} s`;
+			const min = sec / 60;
+			return `${min.toFixed(1)} min`;
+		}
+
+		function formatLatencyPair(p50, p95) {
+			const a = Number(p50 || 0);
+			const b = Number(p95 || 0);
+			if (!isFinite(a) || !isFinite(b) || b <= 0) return '—';
+			return `${formatLatency(a)} / ${formatLatency(b)}`;
 		}
 
 		function formatTimeAgo(seconds) {
@@ -747,6 +769,28 @@
 					return;
 				}
 				el.textContent = formatHashrate(value);
+			});
+		}
+
+		function renderStoredLatencies() {
+			const pairCells = document.querySelectorAll('.latency-pair[data-rtt-p95-ms]');
+			pairCells.forEach((el) => {
+				el.textContent = formatLatencyPair(el.getAttribute('data-rtt-p50-ms'), el.getAttribute('data-rtt-p95-ms'));
+			});
+			const singleCells = document.querySelectorAll('.latency-single[data-latency-ms]');
+			singleCells.forEach((el) => {
+				el.textContent = formatLatency(el.getAttribute('data-latency-ms'));
+			});
+			const workPairCells = document.querySelectorAll('.latency-pair-work[data-work-p95-ms]');
+			workPairCells.forEach((el) => {
+				const p50 = Number(el.getAttribute('data-work-p50-ms') || 0);
+				const p95 = Number(el.getAttribute('data-work-p95-ms') || 0);
+				const last = Number(el.getAttribute('data-work-last-ms') || 0);
+				if (p95 > 0) {
+					el.textContent = formatLatencyPair(p50, p95);
+					return;
+				}
+				el.textContent = formatLatency(last);
 			});
 		}
 
@@ -898,7 +942,7 @@
 
 			if (data.length === 0) {
 				if (onlineWorkersCard) onlineWorkersCard.style.display = 'none';
-				onlineWorkersBody.innerHTML = '<tr><td colspan="7" class="text-sm">No saved workers online right now.</td></tr>';
+				onlineWorkersBody.innerHTML = '<tr><td colspan="12" class="text-sm">No saved workers online right now.</td></tr>';
 				return;
 			}
 			if (onlineWorkersCard) onlineWorkersCard.style.display = '';
@@ -912,6 +956,8 @@
 					<td>${formatLastShare(w.last_share)}</td>
 					<td>${Number(w.accepted || 0).toLocaleString()}</td>
 					<td>${Number(w.rejected || 0).toLocaleString()}</td>
+					<td>${formatLatencyPair(w.estimated_ping_p50_ms, w.estimated_ping_p95_ms)}</td>
+					<td>${formatLatencyPair((w.notify_to_first_share_p50_ms || w.notify_to_first_share_ms), (w.notify_to_first_share_p95_ms || w.notify_to_first_share_ms))}</td>
 					<td>${formatDuration(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
 						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
@@ -1840,6 +1886,7 @@
 		fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
 		fetchOverview();
 		renderStoredHashrates();
+		renderStoredLatencies();
 		fetchHashrate();
 		setInterval(fetchOverview, REFRESH_INTERVAL);
 		setInterval(fetchHashrate, REFRESH_INTERVAL);

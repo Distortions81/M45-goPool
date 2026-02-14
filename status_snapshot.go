@@ -55,6 +55,10 @@ func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
 }
 
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
+	estimatedRTT := estimateConnRTTMS(mc.conn)
+	if estimatedRTT > 0 {
+		mc.recordPingRTT(estimatedRTT)
+	}
 	snap := mc.snapshotShareInfo()
 	stats := snap.Stats
 	name := stats.Worker
@@ -86,6 +90,12 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	banned := mc.isBanned(now)
 	until, reason, _ := mc.banDetails()
 	minerType, minerName, minerVersion := mc.minerClientInfo()
+	estPingP50 := snap.PingRTTP50MS
+	estPingP95 := snap.PingRTTP95MS
+	if estPingP95 <= 0 {
+		estPingP50 = snap.SubmitRTTP50MS
+		estPingP95 = snap.SubmitRTTP95MS
+	}
 	return WorkerView{
 		Name:                name,
 		DisplayName:         displayName,
@@ -116,6 +126,13 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		WindowSubmissions:   stats.WindowSubmissions,
 		WindowDifficulty:    stats.WindowDifficulty,
 		ShareRate:           accRate,
+		SubmitRTTP50MS:      snap.SubmitRTTP50MS,
+		SubmitRTTP95MS:      snap.SubmitRTTP95MS,
+		NotifyToFirstShareMS: snap.NotifyToFirstShareMS,
+		NotifyToFirstShareP50MS: snap.NotifyToFirstShareP50MS,
+		NotifyToFirstShareP95MS: snap.NotifyToFirstShareP95MS,
+		EstimatedPingP50MS:  estPingP50,
+		EstimatedPingP95MS:  estPingP95,
 		ConnectionID:        mc.connectionIDString(),
 		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
 		ConnectedAt:         mc.connectedAt,
@@ -164,6 +181,27 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 		current.WindowSubmissions += w.WindowSubmissions
 		current.WindowDifficulty += w.WindowDifficulty
 		current.ShareRate += w.ShareRate
+		if w.SubmitRTTP50MS > current.SubmitRTTP50MS {
+			current.SubmitRTTP50MS = w.SubmitRTTP50MS
+		}
+		if w.SubmitRTTP95MS > current.SubmitRTTP95MS {
+			current.SubmitRTTP95MS = w.SubmitRTTP95MS
+		}
+		if w.NotifyToFirstShareMS > current.NotifyToFirstShareMS {
+			current.NotifyToFirstShareMS = w.NotifyToFirstShareMS
+		}
+		if w.NotifyToFirstShareP50MS > current.NotifyToFirstShareP50MS {
+			current.NotifyToFirstShareP50MS = w.NotifyToFirstShareP50MS
+		}
+		if w.NotifyToFirstShareP95MS > current.NotifyToFirstShareP95MS {
+			current.NotifyToFirstShareP95MS = w.NotifyToFirstShareP95MS
+		}
+		if w.EstimatedPingP50MS > current.EstimatedPingP50MS {
+			current.EstimatedPingP50MS = w.EstimatedPingP50MS
+		}
+		if w.EstimatedPingP95MS > current.EstimatedPingP95MS {
+			current.EstimatedPingP95MS = w.EstimatedPingP95MS
+		}
 		if w.LastShare.After(current.LastShare) {
 			current.LastShare = w.LastShare
 			current.LastShareHash = w.LastShareHash

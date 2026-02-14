@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // statsWorker processes stats updates asynchronously from a buffered channel.
 // This eliminates lock contention on the hot path (share submission).
@@ -38,6 +41,7 @@ func (mc *MinerConn) statsWorker() {
 		mc.lastShareAccepted = update.accepted
 		mc.lastShareDifficulty = update.shareDiff
 		mc.lastShareDetail = update.detail
+		mc.observeNotifyFirstShareLocked(update.timestamp)
 		if !update.accepted && update.reason != "" {
 			mc.lastRejectReason = update.reason
 		}
@@ -177,6 +181,7 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 	mc.lastShareAccepted = update.accepted
 	mc.lastShareDifficulty = update.shareDiff
 	mc.lastShareDetail = update.detail
+	mc.observeNotifyFirstShareLocked(update.timestamp)
 	if !update.accepted && update.reason != "" {
 		mc.lastRejectReason = update.reason
 	}
@@ -215,6 +220,13 @@ func (mc *MinerConn) snapshotStatsWithRates(now time.Time) (stats MinerStats, ac
 type minerShareSnapshot struct {
 	Stats               MinerStats
 	RollingHashrate     float64
+	SubmitRTTP50MS      float64
+	SubmitRTTP95MS      float64
+	PingRTTP50MS        float64
+	PingRTTP95MS        float64
+	NotifyToFirstShareMS float64
+	NotifyToFirstShareP50MS float64
+	NotifyToFirstShareP95MS float64
 	LastShareHash       string
 	LastShareAccepted   bool
 	LastShareDifficulty float64
@@ -225,13 +237,104 @@ type minerShareSnapshot struct {
 func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 	mc.statsMu.Lock()
 	defer mc.statsMu.Unlock()
+	p50, p95 := submitRTTPercentilesLocked(mc.submitRTTSamplesMs, mc.submitRTTCount)
+	pingP50, pingP95 := submitRTTPercentilesLocked(mc.pingRTTSamplesMs, mc.pingRTTCount)
+	warmP50, warmP95 := submitRTTPercentilesLocked(mc.notifyToFirstSamplesMs, mc.notifyToFirstCount)
 	return minerShareSnapshot{
 		Stats:               mc.stats,
 		RollingHashrate:     mc.rollingHashrateValue,
+		SubmitRTTP50MS:      p50,
+		SubmitRTTP95MS:      p95,
+		PingRTTP50MS:        pingP50,
+		PingRTTP95MS:        pingP95,
+		NotifyToFirstShareMS: mc.lastNotifyToFirstShareMs,
+		NotifyToFirstShareP50MS: warmP50,
+		NotifyToFirstShareP95MS: warmP95,
 		LastShareHash:       mc.lastShareHash,
 		LastShareAccepted:   mc.lastShareAccepted,
 		LastShareDifficulty: mc.lastShareDifficulty,
 		LastShareDetail:     mc.lastShareDetail,
 		LastReject:          mc.lastRejectReason,
 	}
+}
+
+func (mc *MinerConn) recordSubmitRTT(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	ms := d.Seconds() * 1000.0
+	if ms <= 0 {
+		return
+	}
+	mc.statsMu.Lock()
+	mc.submitRTTSamplesMs[mc.submitRTTIndex] = ms
+	mc.submitRTTIndex = (mc.submitRTTIndex + 1) % len(mc.submitRTTSamplesMs)
+	if mc.submitRTTCount < len(mc.submitRTTSamplesMs) {
+		mc.submitRTTCount++
+	}
+	mc.statsMu.Unlock()
+}
+
+func (mc *MinerConn) recordNotifySent(at time.Time) {
+	if at.IsZero() {
+		return
+	}
+	mc.statsMu.Lock()
+	mc.notifySentAt = at
+	mc.notifyAwaitingFirstShare = true
+	mc.statsMu.Unlock()
+}
+
+func (mc *MinerConn) recordPingRTT(ms float64) {
+	if ms <= 0 {
+		return
+	}
+	mc.statsMu.Lock()
+	mc.pingRTTSamplesMs[mc.pingRTTIndex] = ms
+	mc.pingRTTIndex = (mc.pingRTTIndex + 1) % len(mc.pingRTTSamplesMs)
+	if mc.pingRTTCount < len(mc.pingRTTSamplesMs) {
+		mc.pingRTTCount++
+	}
+	mc.statsMu.Unlock()
+}
+
+func (mc *MinerConn) observeNotifyFirstShareLocked(shareAt time.Time) {
+	if !mc.notifyAwaitingFirstShare || mc.notifySentAt.IsZero() || shareAt.IsZero() {
+		return
+	}
+	if shareAt.Before(mc.notifySentAt) {
+		return
+	}
+	mc.lastNotifyToFirstShareMs = shareAt.Sub(mc.notifySentAt).Seconds() * 1000.0
+	if mc.lastNotifyToFirstShareMs > 0 {
+		mc.notifyToFirstSamplesMs[mc.notifyToFirstIndex] = mc.lastNotifyToFirstShareMs
+		mc.notifyToFirstIndex = (mc.notifyToFirstIndex + 1) % len(mc.notifyToFirstSamplesMs)
+		if mc.notifyToFirstCount < len(mc.notifyToFirstSamplesMs) {
+			mc.notifyToFirstCount++
+		}
+	}
+	mc.notifyAwaitingFirstShare = false
+}
+
+func submitRTTPercentilesLocked(samples [64]float64, count int) (p50, p95 float64) {
+	if count <= 0 {
+		return 0, 0
+	}
+	if count > len(samples) {
+		count = len(samples)
+	}
+	vals := make([]float64, 0, count)
+	for i := 0; i < count; i++ {
+		v := samples[i]
+		if v > 0 {
+			vals = append(vals, v)
+		}
+	}
+	if len(vals) == 0 {
+		return 0, 0
+	}
+	sort.Float64s(vals)
+	idx50 := (len(vals) - 1) * 50 / 100
+	idx95 := (len(vals) - 1) * 95 / 100
+	return vals[idx50], vals[idx95]
 }
