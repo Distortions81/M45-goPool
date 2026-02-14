@@ -21,6 +21,25 @@ func (jm *JobManager) zmqAnyHealthy() bool {
 	return jm.zmqHashblockHealthy.Load() || jm.zmqRawblockHealthy.Load()
 }
 
+func (jm *JobManager) zmqTopicsHealthy(topics []string) bool {
+	if len(topics) == 0 {
+		return false
+	}
+	for _, topic := range topics {
+		switch topic {
+		case "hashblock":
+			if !jm.zmqHashblockHealthy.Load() {
+				return false
+			}
+		case "rawblock":
+			if !jm.zmqRawblockHealthy.Load() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (jm *JobManager) markZMQHealthy(topics []string, addr string) {
 	if !jm.zmqEnabled() {
 		return
@@ -117,7 +136,16 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		tpl, err := jm.fetchTemplateCtx(ctx, params, true)
 		if err != nil {
 			jm.recordJobError(err)
-			logger.Error("longpoll gbt error", "error", err)
+			if errors.Is(err, context.Canceled) {
+				// bitcoind can cancel longpoll waits during template churn; treat
+				// this as a transient condition unless our own context is done.
+				if ctx.Err() != nil {
+					return
+				}
+				logger.Warn("longpoll gbt canceled; retrying", "error", err)
+			} else {
+				logger.Error("longpoll gbt error", "error", err)
+			}
 			if err := jm.sleepRetry(ctx); err != nil {
 				return
 			}
@@ -202,14 +230,23 @@ func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket, rem
 
 			switch ev {
 			case zmq4.EVENT_CONNECTED:
+				wasTopicsHealthy := jm.zmqTopicsHealthy(topics)
 				jm.markZMQHealthy(topics, remoteAddr)
-				if err := jm.refreshJobCtxForce(ctx); err != nil {
-					logger.Warn("refresh after zmq monitor connect failed", "error", err)
+				// Only force a template refresh when the watched topics actually
+				// transition from unhealthy to healthy.
+				if !wasTopicsHealthy {
+					if err := jm.refreshJobCtxForce(ctx); err != nil {
+						logger.Warn("refresh after zmq monitor connect failed", "error", err)
+					}
 				}
 			case zmq4.EVENT_DISCONNECTED, zmq4.EVENT_CLOSED, zmq4.EVENT_MONITOR_STOPPED:
 				jm.markZMQUnhealthy(topics, remoteAddr, "monitor_"+ev.String(), nil)
 			case zmq4.EVENT_CONNECT_DELAYED, zmq4.EVENT_CONNECT_RETRIED:
-				jm.markZMQUnhealthy(topics, remoteAddr, "monitor_"+ev.String(), nil)
+				// CONNECT_DELAYED/RETRIED can appear transiently while a socket is
+				// still healthy; don't downgrade health on those events alone.
+				if debugLogging {
+					logger.Debug("zmq monitor reconnect in progress", "event", ev.String(), "addr", remoteAddr, "topics", topics)
+				}
 			default:
 				_ = evAddr
 			}
