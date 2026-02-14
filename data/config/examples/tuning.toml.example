@@ -24,7 +24,7 @@
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
-# - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter; requires restart).
+# - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
 # Status UI ([status])
 # - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
@@ -72,8 +72,8 @@
   ntime_forward_slack_seconds = 7000
 
 [mining]
-  disable_pool_job_entropy = false
   difficulty_step_granularity = 4
+  disable_pool_job_entropy = false
 
 [peer_cleaning]
   enabled = true
