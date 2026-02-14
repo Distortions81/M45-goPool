@@ -406,7 +406,6 @@ func main() {
 		mux.HandleFunc("/api/saved-workers/one-time-code/clear", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCodeClear))
 
 		// Other endpoints
-		mux.HandleFunc("/api/pool", statusServer.handlePoolStatsJSON)
 		mux.HandleFunc("/api/blocks", statusServer.handleBlocksListJSON)
 	}
 	// HTML endpoints
