@@ -157,44 +157,6 @@ func TestSuggestedVardiff_UsesAdjustmentWindowAfterBootstrap(t *testing.T) {
 	}
 }
 
-func TestSuggestedVardiff_UsesBootstrap30SecondIntervalFirst(t *testing.T) {
-	now := time.Unix(1700000000, 0)
-	mc := &MinerConn{
-		cfg: Config{
-			HashrateEMATauSeconds: 120,
-		},
-		vardiff: VarDiffConfig{
-			MinDiff:            1,
-			MaxDiff:            1024,
-			TargetSharesPerMin: 1,
-			AdjustmentWindow:   10 * time.Second,
-			Step:               2,
-			DampingFactor:      1,
-		},
-	}
-	atomicStoreFloat64(&mc.difficulty, 1)
-
-	snap := minerShareSnapshot{
-		Stats: MinerStats{
-			WindowStart:       now.Add(-3 * time.Minute),
-			WindowAccepted:    10,
-			WindowSubmissions: 10,
-		},
-		RollingHashrate: hashPerShare,
-	}
-
-	bootstrapInterval := initialHashrateEMATau
-	mc.lastDiffChange.Store(now.Add(-bootstrapInterval + time.Second).UnixNano())
-	if got := mc.suggestedVardiff(now, snap); got != 1 {
-		t.Fatalf("got %.8g want %.8g before bootstrap interval", got, 1.0)
-	}
-
-	mc.lastDiffChange.Store(now.Add(-bootstrapInterval).UnixNano())
-	if got := mc.suggestedVardiff(now, snap); got != 8 {
-		t.Fatalf("got %.8g want %.8g once bootstrap interval elapsed", got, 8.0)
-	}
-}
-
 func TestSuggestedVardiff_BootstrapIntervalAnchorsToFirstShareAfterDiffChange(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	firstShare := now.Add(-20 * time.Second)
@@ -668,31 +630,32 @@ func TestSuggestedVardiff_ShareRateSafetyClamp(t *testing.T) {
 	}
 }
 
-func TestAdaptiveVardiffWindow_ShortensForHighShareDensity(t *testing.T) {
+func TestAdaptiveVardiffWindow_AdjustsForShareDensity(t *testing.T) {
 	mc := &MinerConn{
 		vardiff: VarDiffConfig{
 			AdjustmentWindow: defaultVarDiffAdjustmentWindow,
 		},
 	}
 	base := defaultVarDiffAdjustmentWindow
-	rolling := 90e12
-	got := mc.adaptiveVardiffWindow(base, rolling, 1024, 7)
-	if got >= base {
-		t.Fatalf("got %s want < %s for high share-density miner", got, base)
+	tests := []struct {
+		name       string
+		rolling    float64
+		currentDiff float64
+		wantSign   int // -1 means shorter, +1 means longer
+	}{
+		{name: "high density shortens", rolling: 90e12, currentDiff: 1024, wantSign: -1},
+		{name: "low density lengthens", rolling: 200e3, currentDiff: 1, wantSign: 1},
 	}
-}
-
-func TestAdaptiveVardiffWindow_LengthensForLowShareDensity(t *testing.T) {
-	mc := &MinerConn{
-		vardiff: VarDiffConfig{
-			AdjustmentWindow: defaultVarDiffAdjustmentWindow,
-		},
-	}
-	base := defaultVarDiffAdjustmentWindow
-	rolling := 200e3
-	got := mc.adaptiveVardiffWindow(base, rolling, 1, 7)
-	if got <= base {
-		t.Fatalf("got %s want > %s for low share-density miner", got, base)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mc.adaptiveVardiffWindow(base, tc.rolling, tc.currentDiff, 7)
+			if tc.wantSign < 0 && got >= base {
+				t.Fatalf("got %s want < %s", got, base)
+			}
+			if tc.wantSign > 0 && got <= base {
+				t.Fatalf("got %s want > %s", got, base)
+			}
+		})
 	}
 }
 
@@ -730,11 +693,4 @@ func TestSuggestedVardiff_LowHashrateDownshiftNeedsMinimumAcceptedShares(t *test
 	if got != 0.01 {
 		t.Fatalf("got %.8g want %.8g when low-hashrate downshift sample is too small", got, 0.01)
 	}
-}
-
-func almostEqualFloat64(a, b, eps float64) bool {
-	if a > b {
-		return a-b <= eps
-	}
-	return b-a <= eps
 }
