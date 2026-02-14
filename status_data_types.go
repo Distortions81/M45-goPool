@@ -187,7 +187,6 @@ type OverviewPageData struct {
 	Workers         []RecentWorkView `json:"workers"`
 	BannedWorkers   []WorkerView     `json:"banned_workers"`
 	BestShares      []BestShare      `json:"best_shares"`
-	FoundBlocks     []FoundBlockView `json:"found_blocks,omitempty"`
 	MinerTypes      []MinerTypeView  `json:"miner_types,omitempty"`
 }
 

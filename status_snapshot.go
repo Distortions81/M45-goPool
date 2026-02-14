@@ -679,20 +679,6 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			return port
 		},
-		"formatBytes": func(b uint64) string {
-			const unit = 1024.0
-			if b == 0 {
-				return "0 B"
-			}
-			val := float64(b)
-			units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-			u := units[0]
-			for i := 0; i < len(units)-1 && val >= unit; i++ {
-				val /= unit
-				u = units[i+1]
-			}
-			return fmt.Sprintf("%.2f %s", val, u)
-		},
 		"formatShareRate": func(r float64) string {
 			if r < 0 {
 				r = 0
@@ -709,13 +695,6 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.2f %s", val, unit)
 		},
-		"formatBTC": func(sats int64) string {
-			if sats == 0 {
-				return "0 BTC"
-			}
-			btc := float64(sats) / 1e8
-			return fmt.Sprintf("%.8f BTC", btc)
-		},
 		"formatBTCShort": func(sats int64) string {
 			btc := float64(sats) / 1e8
 			return fmt.Sprintf("%.8f BTC", btc)
@@ -731,16 +710,6 @@ func buildTemplateFuncs() template.FuncMap {
 				cur = "USD"
 			}
 			return fmt.Sprintf("≈ %.2f %s", amt, cur)
-		},
-		"formatRenderDuration": func(d time.Duration) string {
-			if d <= 0 {
-				return "0s"
-			}
-			if d < time.Millisecond {
-				return "<1ms"
-			}
-			ms := float64(d) / float64(time.Millisecond)
-			return fmt.Sprintf("%.0fms", ms)
 		},
 	}
 }

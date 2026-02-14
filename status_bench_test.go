@@ -130,11 +130,6 @@ func buildOverviewPagePayloadForBench(s *StatusServer) ([]byte, error) {
 		bestShares = append(bestShares, censorBestShare(bs))
 	}
 
-	foundBlocks := make([]FoundBlockView, 0, len(view.FoundBlocks))
-	for _, fb := range view.FoundBlocks {
-		foundBlocks = append(foundBlocks, censorFoundBlock(fb))
-	}
-
 	const maxBannedOnOverview = 200
 	bannedWorkers := view.BannedWorkers
 	if len(bannedWorkers) > maxBannedOnOverview {
@@ -158,7 +153,6 @@ func buildOverviewPagePayloadForBench(s *StatusServer) ([]byte, error) {
 		Workers:         recentWork,
 		BannedWorkers:   censoredBanned,
 		BestShares:      bestShares,
-		FoundBlocks:     foundBlocks,
 		MinerTypes:      view.MinerTypes,
 	}
 	return sonic.Marshal(data)
