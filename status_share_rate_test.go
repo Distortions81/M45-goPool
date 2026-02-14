@@ -37,3 +37,31 @@ func TestBlendedShareRatePerMinute_PrefersRawAtHighSamples(t *testing.T) {
 		t.Fatalf("got %.4f want close to raw rate with high sample count", got)
 	}
 }
+
+func TestBlendDisplayHashrate_LongLivedConnectionFavorsCumulative(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	connectedAt := now.Add(-30 * time.Minute)
+	stats := MinerStats{
+		Accepted: 1,
+	}
+	ema := 100.0
+	cumulative := 200.0
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative)
+	if got < 190.0 || got > 200.0 {
+		t.Fatalf("got %.4f want close to cumulative for long-lived connection", got)
+	}
+}
+
+func TestBlendDisplayHashrate_YoungConnectionStaysNearEMA(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	connectedAt := now.Add(-time.Minute)
+	stats := MinerStats{
+		Accepted: 1,
+	}
+	ema := 100.0
+	cumulative := 200.0
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative)
+	if got <= 100.0 || got >= 120.0 {
+		t.Fatalf("got %.4f want near EMA for newly connected worker", got)
+	}
+}

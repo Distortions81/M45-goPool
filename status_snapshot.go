@@ -65,10 +65,25 @@ func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cum
 	if w > 1 {
 		w = 1
 	}
+	// Time-based floor: even with noisy/low accepted-share counts, long-lived
+	// steady-state connections should converge toward cumulative hashrate.
+	//
+	// We ramp this floor up gradually to avoid over-weighting cumulative too
+	// early after connect/reconnect.
+	const ageToFullCumulative = 20 * time.Minute
 	if !connectedAt.IsZero() {
 		age := now.Sub(connectedAt)
-		if age > 0 && age < 4*time.Minute {
-			w *= age.Seconds() / (4 * 60)
+		if age > 0 {
+			ageWeight := age.Seconds() / ageToFullCumulative.Seconds()
+			if ageWeight < 0 {
+				ageWeight = 0
+			}
+			if ageWeight > 1 {
+				ageWeight = 1
+			}
+			if ageWeight > w {
+				w = ageWeight
+			}
 		}
 	}
 	if w < 0 {
@@ -232,14 +247,14 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 				evidence := float64(stats.WindowAccepted)
 				if expected < evidence {
 					evidence = expected
+				}
+				if evidence >= highEvidence {
+					if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+						hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+						return 2
 					}
-					if evidence >= highEvidence {
-						if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
-							hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
-							return 2
-						}
-						return 1
-					}
+					return 1
+				}
 			}
 		}
 	}
@@ -359,12 +374,6 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	modeledRate := modeledShareRatePerMinute(hashRate, diff)
 	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
 	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)
-	if conf == 0 {
-		// Keep showing the latest estimate (EMA/cumulative blend) so UI can
-		// display recent hashrate instead of an empty placeholder while the
-		// estimate is still settling.
-		accRate = 0
-	}
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
 	if len(script) > 0 {
