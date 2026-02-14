@@ -83,9 +83,9 @@ const (
 	defaultAutoAcceptRateLimits    = true
 	defaultOperatorDonationPercent = 0.0
 
-	defaultPeerCleanupEnabled   = true
-	defaultPeerCleanupMaxPingMs = 150
-	defaultPeerCleanupMinPeers  = 20
+	defaultPeerCleanupEnabled   = false
+	defaultPeerCleanupMaxPingMs = 250
+	defaultPeerCleanupMinPeers  = 30
 
 	// VarDiff defaults.
 	defaultVarDiffTargetSharesPerMin = 10
