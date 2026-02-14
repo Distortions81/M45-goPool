@@ -38,6 +38,11 @@ func (mc *MinerConn) cleanup() {
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
+		mc.vardiffWindowStart = time.Time{}
+		mc.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffWindowAccepted = 0
+		mc.vardiffWindowSubmissions = 0
+		mc.vardiffWindowDifficulty = 0
 		mc.lastHashrateUpdate = time.Time{}
 		mc.rollingHashrateValue = 0
 		mc.statsMu.Unlock()

@@ -39,7 +39,7 @@ const stableHashrateMaxRelativeError = 0.10
 const stableHashrateMinExpectedShares = 16.0
 const settlingHashrateCumulativeMaxRelativeError = 0.20
 const stableHashrateCumulativeMaxRelativeError = 0.10
-const hashrateCumulativeAgreementMinAccepted = 24
+const hashrateCumulativeAgreementMinAccepted = 16
 const hashrateCumulativeAgreementMinConnected = 6 * time.Minute
 
 // apiVersion is a short, human-readable version identifier included in all

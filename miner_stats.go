@@ -15,6 +15,7 @@ func (mc *MinerConn) statsWorker() {
 	for update := range mc.statsUpdates {
 		mc.statsMu.Lock()
 		mc.ensureWindowLocked(update.timestamp)
+		mc.ensureVardiffWindowLocked(update.timestamp)
 
 		if update.worker != "" {
 			if mc.stats.Worker != update.worker {
@@ -26,12 +27,15 @@ func (mc *MinerConn) statsWorker() {
 		}
 
 		mc.stats.WindowSubmissions++
+		mc.vardiffWindowSubmissions++
 		if update.accepted {
 			mc.stats.Accepted++
 			mc.stats.WindowAccepted++
+			mc.vardiffWindowAccepted++
 			if update.creditedDiff >= 0 {
 				mc.stats.TotalDifficulty += update.creditedDiff
 				mc.stats.WindowDifficulty += update.creditedDiff
+				mc.vardiffWindowDifficulty += update.creditedDiff
 				mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
 			}
 		} else {
@@ -114,6 +118,30 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
+	}
+}
+
+func (mc *MinerConn) ensureVardiffWindowLocked(now time.Time) {
+	if mc.vardiffWindowStart.IsZero() {
+		start := now
+		if !mc.vardiffWindowResetAnchor.IsZero() && now.After(mc.vardiffWindowResetAnchor) {
+			start = mc.vardiffWindowResetAnchor
+		}
+		mc.vardiffWindowStart = start
+		mc.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffWindowDifficulty = 0
+		return
+	}
+	maxAge := mc.vardiff.AdjustmentWindow * 2
+	if maxAge <= 0 {
+		maxAge = defaultVarDiffAdjustmentWindow * 2
+	}
+	if now.Sub(mc.vardiffWindowStart) > maxAge {
+		mc.vardiffWindowStart = now
+		mc.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffWindowAccepted = 0
+		mc.vardiffWindowSubmissions = 0
+		mc.vardiffWindowDifficulty = 0
 	}
 }
 
@@ -202,6 +230,7 @@ func (mc *MinerConn) recordShare(worker string, accepted bool, creditedDiff floa
 func (mc *MinerConn) recordShareSync(update statsUpdate) {
 	mc.statsMu.Lock()
 	mc.ensureWindowLocked(update.timestamp)
+	mc.ensureVardiffWindowLocked(update.timestamp)
 	if update.worker != "" {
 		if mc.stats.Worker != update.worker {
 			mc.stats.Worker = update.worker
@@ -211,12 +240,15 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 		}
 	}
 	mc.stats.WindowSubmissions++
+	mc.vardiffWindowSubmissions++
 	if update.accepted {
 		mc.stats.Accepted++
 		mc.stats.WindowAccepted++
+		mc.vardiffWindowAccepted++
 		if update.creditedDiff >= 0 {
 			mc.stats.TotalDifficulty += update.creditedDiff
 			mc.stats.WindowDifficulty += update.creditedDiff
+			mc.vardiffWindowDifficulty += update.creditedDiff
 			mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
 		}
 	} else {
@@ -267,6 +299,10 @@ func (mc *MinerConn) snapshotStatsWithRates(now time.Time) (stats MinerStats, ac
 
 type minerShareSnapshot struct {
 	Stats                     MinerStats
+	RetargetWindowStart       time.Time
+	RetargetWindowAccepted    int
+	RetargetWindowSubmissions int
+	RetargetWindowDifficulty  float64
 	RollingHashrate           float64
 	RollingHashrateDisplay    float64
 	SubmitRTTP50MS            float64
@@ -304,6 +340,10 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 	}
 	return minerShareSnapshot{
 		Stats:                     mc.stats,
+		RetargetWindowStart:       mc.vardiffWindowStart,
+		RetargetWindowAccepted:    mc.vardiffWindowAccepted,
+		RetargetWindowSubmissions: mc.vardiffWindowSubmissions,
+		RetargetWindowDifficulty:  mc.vardiffWindowDifficulty,
 		RollingHashrate:           controlHashrate,
 		RollingHashrateDisplay:    displayHashrate,
 		SubmitRTTP50MS:            p50,

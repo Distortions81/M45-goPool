@@ -543,19 +543,3 @@ func BenchmarkMerkleBranchComputation(b *testing.B) {
 		})
 	}
 }
-
-// TestPogoloMinerSimulation simulates a miner connection as pogolo would see it
-func TestPogoloMinerSimulation(t *testing.T) {
-	// This test would simulate the full Stratum handshake and share submission
-	// as a pogolo-compatible miner would perform it
-
-	t.Skip("Requires running goPool server instance - integration test")
-
-	// 1. Connect to pool
-	// 2. Send mining.subscribe
-	// 3. Send mining.configure (if using version rolling)
-	// 4. Send mining.authorize
-	// 5. Receive mining.notify
-	// 6. Submit share
-	// 7. Verify response matches expected format
-}

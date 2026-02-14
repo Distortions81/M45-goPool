@@ -65,6 +65,10 @@ func TestResetShareWindow_PreservesRollingHashrateState(t *testing.T) {
 	mc.stats.WindowAccepted = 12
 	mc.stats.WindowSubmissions = 15
 	mc.stats.WindowDifficulty = 42
+	mc.vardiffWindowStart = now.Add(-time.Minute)
+	mc.vardiffWindowAccepted = 12
+	mc.vardiffWindowSubmissions = 15
+	mc.vardiffWindowDifficulty = 42
 	mc.lastHashrateUpdate = now.Add(-10 * time.Second)
 	mc.rollingHashrateValue = 12345
 	mc.rollingHashrateControl = 23456
@@ -76,15 +80,22 @@ func TestResetShareWindow_PreservesRollingHashrateState(t *testing.T) {
 	if !mc.initialEMAWindowDone.Load() {
 		t.Fatalf("initialEMAWindowDone=false, want true preserved after resetShareWindow")
 	}
-	if !mc.stats.WindowStart.IsZero() {
-		t.Fatalf("WindowStart=%v want zero time so first share starts the window", mc.stats.WindowStart)
+	if mc.stats.WindowStart.IsZero() {
+		t.Fatalf("WindowStart unexpectedly zero; status window should be preserved across vardiff reset")
 	}
-	if mc.stats.WindowAccepted != 0 || mc.stats.WindowSubmissions != 0 || mc.stats.WindowDifficulty != 0 {
-		t.Fatalf("window counters not cleared: accepted=%d submissions=%d difficulty=%v",
+	if mc.stats.WindowAccepted != 12 || mc.stats.WindowSubmissions != 15 || mc.stats.WindowDifficulty != 42 {
+		t.Fatalf("status window counters changed: accepted=%d submissions=%d difficulty=%v",
 			mc.stats.WindowAccepted, mc.stats.WindowSubmissions, mc.stats.WindowDifficulty)
 	}
-	if !mc.lastHashrateUpdate.IsZero() || mc.hashrateSampleCount != 0 || mc.hashrateAccumulatedDiff != 0 {
-		t.Fatalf("hashrate accumulator state not cleared")
+	if !mc.vardiffWindowStart.IsZero() {
+		t.Fatalf("vardiffWindowStart=%v want zero time so first share starts the vardiff window", mc.vardiffWindowStart)
+	}
+	if mc.vardiffWindowAccepted != 0 || mc.vardiffWindowSubmissions != 0 || mc.vardiffWindowDifficulty != 0 {
+		t.Fatalf("vardiff window counters not cleared: accepted=%d submissions=%d difficulty=%v",
+			mc.vardiffWindowAccepted, mc.vardiffWindowSubmissions, mc.vardiffWindowDifficulty)
+	}
+	if mc.lastHashrateUpdate.IsZero() || mc.hashrateSampleCount == 0 || mc.hashrateAccumulatedDiff == 0 {
+		t.Fatalf("hashrate accumulator state should be preserved")
 	}
 	if mc.rollingHashrateValue != 12345 || mc.rollingHashrateControl != 23456 {
 		t.Fatalf("rolling hashrates should be preserved across reset: display=%v control=%v", mc.rollingHashrateValue, mc.rollingHashrateControl)
@@ -144,7 +155,7 @@ func TestDecayedHashratesLocked_DecaysDuringIdle(t *testing.T) {
 	}
 }
 
-func TestResetShareWindow_FirstShareAnchorsWindowByLagPercent(t *testing.T) {
+func TestResetShareWindow_AnchorsVardiffWindowAtResetTime(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	firstShare := now.Add(20 * time.Second)
 	mc := &MinerConn{}
@@ -152,32 +163,12 @@ func TestResetShareWindow_FirstShareAnchorsWindowByLagPercent(t *testing.T) {
 	mc.resetShareWindow(now)
 
 	mc.statsMu.Lock()
-	mc.ensureWindowLocked(firstShare)
-	got := mc.stats.WindowStart
+	mc.ensureVardiffWindowLocked(firstShare)
+	got := mc.vardiffWindowStart
 	mc.statsMu.Unlock()
 
-	want := now.Add((20 * time.Second * windowStartLagPercent) / 100)
+	want := now
 	if !got.Equal(want) {
-		t.Fatalf("WindowStart=%v want %v with %d%% lag between reset and first share", got, want, windowStartLagPercent)
-	}
-}
-
-func TestResetShareWindow_FirstShareAnchorUsesMinerResponseRTT(t *testing.T) {
-	now := time.Unix(1700000000, 0)
-	firstShare := now.Add(20 * time.Second)
-	mc := &MinerConn{}
-	mc.pingRTTSamplesMs[0] = 2500 // 2.5s RTT => setup ~5s
-	mc.pingRTTCount = 1
-
-	mc.resetShareWindow(now)
-
-	mc.statsMu.Lock()
-	mc.ensureWindowLocked(firstShare)
-	got := mc.stats.WindowStart
-	mc.statsMu.Unlock()
-
-	defaultStart := now.Add((20 * time.Second * windowStartLagPercent) / 100)
-	if !got.Before(defaultStart) {
-		t.Fatalf("WindowStart=%v want earlier than default %v when RTT-based setup is modest", got, defaultStart)
+		t.Fatalf("vardiffWindowStart=%v want %v anchored at reset time", got, want)
 	}
 }

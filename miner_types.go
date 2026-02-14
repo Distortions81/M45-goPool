@@ -235,6 +235,13 @@ type MinerConn struct {
 	// the first post-reset share can anchor WindowStart midway between reset
 	// time and first-share time.
 	windowResetAnchor time.Time
+	// vardiffWindow* tracks a short-horizon retarget window used only for
+	// difficulty control; status/confidence windows are kept separate.
+	vardiffWindowStart       time.Time
+	vardiffWindowResetAnchor time.Time
+	vardiffWindowAccepted    int
+	vardiffWindowSubmissions int
+	vardiffWindowDifficulty  float64
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64

@@ -47,18 +47,6 @@ func TestReliabilityThresholdsAreBoundedAndAdaptive(t *testing.T) {
 	}
 }
 
-func TestHashrateAccuracySymbol(t *testing.T) {
-	if got := hashrateAccuracySymbol(0); got != "" {
-		t.Fatalf("level0 got %q want empty", got)
-	}
-	if got := hashrateAccuracySymbol(1); got != "≈" {
-		t.Fatalf("level1 got %q want %q", got, "≈")
-	}
-	if got := hashrateAccuracySymbol(2); got != "" {
-		t.Fatalf("level2 got %q want empty", got)
-	}
-}
-
 func TestHashrateConfidenceLevel_DemotesLargeMismatch(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	modeledRate := 10.0 // shares/min
@@ -108,5 +96,22 @@ func TestHashrateConfidenceLevel_DemotesWhenCumulativeDisagrees(t *testing.T) {
 
 	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 0 {
 		t.Fatalf("confidence=%d want 0 when cumulative disagrees by settling threshold", got)
+	}
+}
+
+func TestHashrateConfidenceLevel_AllowsCumulativeSettlingWhenWindowTooShort(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	connectedAt := now.Add(-8 * time.Minute)
+	modeledRate := 2.0 // shares/min
+	estimatedHashrate := (modeledRate * hashPerShare) / 60.0
+	stats := MinerStats{
+		WindowStart:     now.Add(-30 * time.Second),
+		WindowAccepted:  1, // expected shares too low for settling window threshold
+		Accepted:        16,
+		TotalDifficulty: modeledRate * now.Sub(connectedAt).Minutes(),
+	}
+
+	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 1 {
+		t.Fatalf("confidence=%d want 1 when cumulative evidence settles a short window", got)
 	}
 }

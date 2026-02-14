@@ -181,11 +181,18 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 	if !hasReliableRateEstimate(stats, now, modeledRate, connectedAt) {
 		return 0
 	}
-	if !hashrateAgreementWithinTolerance(stats, now, modeledRate, settlingHashrateMaxRelativeError, settlingHashrateMinExpectedShares) {
-		return 0
-	}
+	settlingWindowAgreement := hashrateAgreementWithinTolerance(stats, now, modeledRate, settlingHashrateMaxRelativeError, settlingHashrateMinExpectedShares)
 	settlingCumulativeAgreement := hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, settlingHashrateCumulativeMaxRelativeError)
-	if hashrateHasCumulativeEvidence(stats, now, connectedAt) && !settlingCumulativeAgreement {
+	hasCumulativeEvidence := hashrateHasCumulativeEvidence(stats, now, connectedAt)
+	if !settlingWindowAgreement {
+		// Frequent vardiff resets can keep the current window too short for
+		// window-based agreement checks; allow cumulative agreement to settle
+		// confidence once enough long-horizon evidence exists.
+		if !(hasCumulativeEvidence && settlingCumulativeAgreement) {
+			return 0
+		}
+	}
+	if hasCumulativeEvidence && !settlingCumulativeAgreement {
 		return 0
 	}
 	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
@@ -353,7 +360,9 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
 	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)
 	if conf == 0 {
-		hashRate = 0
+		// Keep showing the latest estimate (EMA/cumulative blend) so UI can
+		// display recent hashrate instead of an empty placeholder while the
+		// estimate is still settling.
 		accRate = 0
 	}
 	addr, script, valid := mc.workerWalletData(stats.Worker)

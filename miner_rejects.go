@@ -299,19 +299,13 @@ func (mc *MinerConn) shareTargetOrDefault() *big.Int {
 
 func (mc *MinerConn) resetShareWindow(now time.Time) {
 	mc.statsMu.Lock()
-	// Start a fresh window at the first post-reset share so elapsed time only
-	// counts while we are actually sampling shares.
-	mc.stats.WindowStart = time.Time{}
-	mc.windowResetAnchor = now
-	mc.stats.WindowAccepted = 0
-	mc.stats.WindowSubmissions = 0
-	mc.stats.WindowDifficulty = 0
-	// Keep rolling hashrate EMAs across vardiff changes to avoid repeatedly
-	// re-learning hashrate from zero and degrading multi-minute accuracy.
-	// Only reset the pending sample accumulator.
-	mc.lastHashrateUpdate = time.Time{}
-	mc.hashrateSampleCount = 0
-	mc.hashrateAccumulatedDiff = 0
+	// Reset only the VarDiff retarget window. Status/confidence windows and
+	// hashrate EMAs continue accumulating across difficulty adjustments.
+	mc.vardiffWindowStart = time.Time{}
+	mc.vardiffWindowResetAnchor = now
+	mc.vardiffWindowAccepted = 0
+	mc.vardiffWindowSubmissions = 0
+	mc.vardiffWindowDifficulty = 0
 	mc.statsMu.Unlock()
 }
 
@@ -755,9 +749,24 @@ func (mc *MinerConn) noteVardiffUpwardMove(now time.Time, oldDiff, newDiff float
 // suggestedVardiff returns the difficulty VarDiff would select based on the
 // current stats, without applying any changes.
 func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) float64 {
-	windowStart := snap.Stats.WindowStart
-	windowAccepted := snap.Stats.WindowAccepted
-	windowSubmissions := snap.Stats.WindowSubmissions
+	windowStart := snap.RetargetWindowStart
+	windowAccepted := snap.RetargetWindowAccepted
+	windowSubmissions := snap.RetargetWindowSubmissions
+	windowDifficulty := snap.RetargetWindowDifficulty
+	// Backward-compatibility for tests/paths that construct snapshots with only
+	// Stats populated.
+	if windowStart.IsZero() && !snap.Stats.WindowStart.IsZero() {
+		windowStart = snap.Stats.WindowStart
+	}
+	if windowAccepted == 0 && snap.Stats.WindowAccepted > 0 {
+		windowAccepted = snap.Stats.WindowAccepted
+	}
+	if windowSubmissions == 0 && snap.Stats.WindowSubmissions > 0 {
+		windowSubmissions = snap.Stats.WindowSubmissions
+	}
+	if windowDifficulty <= 0 && snap.Stats.WindowDifficulty > 0 {
+		windowDifficulty = snap.Stats.WindowDifficulty
+	}
 
 	lastChange := time.Unix(0, mc.lastDiffChange.Load())
 	currentDiff := atomicLoadFloat64(&mc.difficulty)
@@ -784,14 +793,14 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 
 	rollingHashrate := snap.RollingHashrate
 	if rollingHashrate <= 0 {
-		if windowStart.IsZero() || !now.After(windowStart) || snap.Stats.WindowDifficulty <= 0 {
+		if windowStart.IsZero() || !now.After(windowStart) || windowDifficulty <= 0 {
 			return currentDiff
 		}
 		windowSeconds := now.Sub(windowStart).Seconds()
 		if windowSeconds <= 0 {
 			return currentDiff
 		}
-		rollingHashrate = (snap.Stats.WindowDifficulty * hashPerShare) / windowSeconds
+		rollingHashrate = (windowDifficulty * hashPerShare) / windowSeconds
 		if rollingHashrate <= 0 {
 			return currentDiff
 		}
