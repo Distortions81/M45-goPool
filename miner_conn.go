@@ -289,27 +289,6 @@ func (mc *MinerConn) handle() {
 			case "mining.ping":
 				mc.writePongResponse(sniffedID)
 				continue
-			case "mining.get_transactions":
-				mc.writeEmptySliceResponse(sniffedID)
-				continue
-			case "mining.capabilities":
-				mc.writeTrueResponse(sniffedID)
-				continue
-			case "mining.extranonce.subscribe":
-				mc.handleExtranonceSubscribe(&StratumRequest{ID: sniffedID})
-				continue
-			case "mining.subscribe":
-				if params, ok := sniffStratumStringParams(line, 1); ok {
-					req := buildStringRequest(sniffedID, sniffedMethod, params)
-					mc.handleSubscribe(&req)
-					continue
-				}
-			case "mining.authorize":
-				if params, ok := sniffStratumStringParams(line, 2); ok {
-					req := buildStringRequest(sniffedID, sniffedMethod, params)
-					mc.handleAuthorize(&req)
-					continue
-				}
 			case "mining.submit":
 				// Fast-path: most mining.submit payloads are small and string-only.
 				// Avoid full JSON unmarshal on the connection goroutine to reduce

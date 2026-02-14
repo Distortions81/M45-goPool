@@ -117,15 +117,3 @@ func appendJSONValue(buf []byte, value interface{}) ([]byte, error) {
 		return append(buf, b...), nil
 	}
 }
-
-func buildStringRequest(id interface{}, method string, params []string) StratumRequest {
-	iface := make([]interface{}, len(params))
-	for i, p := range params {
-		iface[i] = p
-	}
-	return StratumRequest{
-		ID:     id,
-		Method: method,
-		Params: iface,
-	}
-}
