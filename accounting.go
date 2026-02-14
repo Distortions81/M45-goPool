@@ -72,14 +72,15 @@ type WorkerView struct {
 // "Recent work" table. It only includes fields that are actually displayed
 // to avoid exposing unnecessary worker information.
 type RecentWorkView struct {
-	Name            string  `json:"name"`
-	DisplayName     string  `json:"display_name"`
-	RollingHashrate float64 `json:"rolling_hashrate"`
-	Difficulty      float64 `json:"difficulty"`
-	Vardiff         float64 `json:"vardiff"`
-	ShareRate       float64 `json:"share_rate"`
-	Accepted        uint64  `json:"accepted"`
-	ConnectionID    string  `json:"connection_id"`
+	Name             string  `json:"name"`
+	DisplayName      string  `json:"display_name"`
+	RollingHashrate  float64 `json:"rolling_hashrate"`
+	HashrateAccuracy string  `json:"hashrate_accuracy,omitempty"`
+	Difficulty       float64 `json:"difficulty"`
+	Vardiff          float64 `json:"vardiff"`
+	ShareRate        float64 `json:"share_rate"`
+	Accepted         uint64  `json:"accepted"`
+	ConnectionID     string  `json:"connection_id"`
 }
 
 // ShareDetail holds detailed data for each share, including coinbase transaction details.

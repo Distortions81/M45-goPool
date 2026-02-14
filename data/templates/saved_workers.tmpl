@@ -67,6 +67,12 @@
 				gap: 8px;
 			}
 		}
+		.hashrate-warmup {
+			opacity: 0.58;
+		}
+		.hashrate-settling {
+			opacity: 0.82;
+		}
 	</style>
 </head>
 <body>
@@ -111,7 +117,7 @@
 					Reconnect button: force-resets active sessions by banning for 30s, then disconnecting so the miner reconnects cleanly.
 				</p>
 				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Hashrate markers: <span class="mono">~</span> warming up (hidden), <span class="mono">≈</span> estimate settling, no marker = stable.
+					Hashrate markers: <span class="mono">~?</span> warming up (low confidence), <span class="mono">≈</span> settling, no marker = stable.
 				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
@@ -710,7 +716,15 @@
 			const base = formatHashrate(value);
 			if (base === '—' || base === '---') return '—';
 			const marker = String(accuracy || '').trim();
+			if (marker === '~') return `~? ${base}`;
 			return marker ? `${marker} ${base}` : base;
+		}
+
+		function hashrateClassForAccuracy(accuracy) {
+			const marker = String(accuracy || '').trim();
+			if (marker === '~') return 'hashrate-warmup';
+			if (marker === '≈') return 'hashrate-settling';
+			return '';
 		}
 
 		function formatShareRate(rate) {
@@ -796,11 +810,15 @@
 			const cells = document.querySelectorAll('[data-hashrate]');
 			cells.forEach((el) => {
 				const value = Number(el.getAttribute('data-hashrate'));
+				const accuracy = el.getAttribute('data-hashrate-accuracy');
+				el.classList.remove('hashrate-warmup', 'hashrate-settling');
 				if (!value) {
 					el.textContent = '—';
 					return;
 				}
-				el.textContent = formatWorkerHashrate(value, el.getAttribute('data-hashrate-accuracy'));
+				const cls = hashrateClassForAccuracy(accuracy);
+				if (cls) el.classList.add(cls);
+				el.textContent = formatWorkerHashrate(value, accuracy);
 			});
 		}
 
@@ -993,7 +1011,7 @@
 			onlineWorkersBody.innerHTML = data.map((w) => `
 					<tr>
 						<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
-						<td>${w.hashrate > 0 ? formatWorkerHashrate(w.hashrate, w.hashrate_accuracy) : '—'}</td>
+						<td class="hashrate-value ${w.hashrate > 0 ? hashrateClassForAccuracy(w.hashrate_accuracy) : ''}">${w.hashrate > 0 ? formatWorkerHashrate(w.hashrate, w.hashrate_accuracy) : '—'}</td>
 						<td>${formatDifficulty(w.best_difficulty)}</td>
 						<td>${formatDifficulty(w.difficulty)}</td>
 					<td>${formatShareRate(w.shares_per_minute)}</td>
@@ -1456,11 +1474,15 @@
 				const cells = document.querySelectorAll('[data-hashrate]');
 				cells.forEach((el) => {
 					const value = Number(el.getAttribute('data-hashrate'));
+					const accuracy = el.getAttribute('data-hashrate-accuracy');
+					el.classList.remove('hashrate-warmup', 'hashrate-settling');
 					if (!value) {
 						el.textContent = '—';
 						return;
 					}
-					el.textContent = formatWorkerHashrate(value, el.getAttribute('data-hashrate-accuracy'));
+					const cls = hashrateClassForAccuracy(accuracy);
+					if (cls) el.classList.add(cls);
+					el.textContent = formatWorkerHashrate(value, accuracy);
 				});
 			}
 
@@ -1499,7 +1521,15 @@
 				const base = formatHashrate(value);
 				if (base === '—' || base === '---') return '—';
 				const marker = String(accuracy || '').trim();
+				if (marker === '~') return `~? ${base}`;
 				return marker ? `${marker} ${base}` : base;
+			}
+
+			function hashrateClassForAccuracy(accuracy) {
+				const marker = String(accuracy || '').trim();
+				if (marker === '~') return 'hashrate-warmup';
+				if (marker === '≈') return 'hashrate-settling';
+				return '';
 			}
 
 		function formatShareRate(rate) {
@@ -1518,11 +1548,19 @@
 
 		function updateGridCards(newData) {
 			if (!newData) return;
+			const poolGroupTitle = document.querySelector('.status-group .status-group-title');
+			if (poolGroupTitle && poolGroupTitle.textContent.trim().toLowerCase() === 'pool') {
+				poolGroupTitle.textContent = 'Your stats';
+			}
 			const cardContainers = document.querySelectorAll('.grid > .card');
 			cardContainers.forEach(card => {
 				const label = card.querySelector('.label');
 				const valueEl = card.querySelector('.value');
 				if (!label || !valueEl) return;
+				const rawLabelText = label.textContent.trim();
+				if (rawLabelText === 'Estimated pool hashrate' || rawLabelText === 'Pool hashrate') {
+					label.textContent = 'Your hashrate';
+				}
 				const labelText = label.textContent.trim();
 				switch (labelText) {
 					case 'Open connections':
@@ -1554,6 +1592,7 @@
 						break;
 					case 'Estimated pool hashrate':
 					case 'Pool hashrate':
+					case 'Your hashrate':
 						{
 							const rate = typeof window.savedWorkersTotalHashrate === 'number'
 								? window.savedWorkersTotalHashrate

@@ -245,14 +245,15 @@ func (s *StatusServer) buildStatusData() StatusData {
 	recentWork := make([]RecentWorkView, 0, len(workers))
 	for _, w := range workers {
 		recentWork = append(recentWork, RecentWorkView{
-			Name:            w.Name,
-			DisplayName:     w.DisplayName,
-			RollingHashrate: w.RollingHashrate,
-			Difficulty:      w.Difficulty,
-			Vardiff:         w.Vardiff,
-			ShareRate:       w.ShareRate,
-			Accepted:        w.Accepted,
-			ConnectionID:    w.ConnectionID,
+			Name:             w.Name,
+			DisplayName:      w.DisplayName,
+			RollingHashrate:  w.RollingHashrate,
+			HashrateAccuracy: w.HashrateAccuracy,
+			Difficulty:       w.Difficulty,
+			Vardiff:          w.Vardiff,
+			ShareRate:        w.ShareRate,
+			Accepted:         w.Accepted,
+			ConnectionID:     w.ConnectionID,
 		})
 	}
 

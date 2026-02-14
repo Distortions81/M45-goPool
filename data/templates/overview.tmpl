@@ -7,6 +7,14 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Overview</title>
 	<link rel="stylesheet" href="/style.css">
+	<style>
+		.hashrate-warmup {
+			opacity: 0.58;
+		}
+		.hashrate-settling {
+			opacity: 0.82;
+		}
+	</style>
 </head>
 <body>
 	{{template "header" .}}
@@ -128,6 +136,9 @@
 
 		<h2 id="workers">Recent work</h2>
 		<div class="card">
+			<p class="text-sm" style="color:var(--text-muted); margin-top:0;">
+				Hashrate markers: <span class="mono">~?</span> warming up (low confidence), <span class="mono">≈</span> settling, no marker = stable.
+			</p>
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-workers-table">
 					<thead>
@@ -268,6 +279,21 @@
 			return val.toFixed(2) + ' ' + units[idx];
 		}
 
+		function hashrateClassForAccuracy(accuracy) {
+			const marker = String(accuracy || '').trim();
+			if (marker === '~') return 'hashrate-warmup';
+			if (marker === '≈') return 'hashrate-settling';
+			return '';
+		}
+
+		function formatWorkerHashrate(h, accuracy) {
+			const base = formatHashrate(h);
+			if (base === '---') return '—';
+			const marker = String(accuracy || '').trim();
+			if (marker === '~') return `~? ${base}`;
+			return marker ? `${marker} ${base}` : base;
+		}
+
 		function formatShareRate(rate) {
 			if (!rate) return '0';
 			if (rate < 1000) return rate.toFixed(1);
@@ -396,7 +422,7 @@
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
 							<td class="mono">${connectionId}</td>
-							<td>${formatHashrate(worker.rolling_hashrate)}</td>
+								<td class="${hashrateClassForAccuracy(worker.hashrate_accuracy)}">${formatWorkerHashrate(worker.rolling_hashrate, worker.hashrate_accuracy)}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
 							<td>${shareRate}</td>
 							<td>${worker.accepted || 0}</td>
