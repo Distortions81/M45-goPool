@@ -165,7 +165,7 @@
 						<td>{{.Accepted}}</td>
 						<td>{{.Rejected}}</td>
 						<td class="latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</td>
-						<td class="latency-pair-work" data-work-p50-ms="{{printf "%.6f" .NotifyToFirstShareP50MS}}" data-work-p95-ms="{{printf "%.6f" .NotifyToFirstShareP95MS}}" data-work-last-ms="{{printf "%.6f" .NotifyToFirstShareMS}}" data-work-samples="{{.NotifyToFirstShareSamples}}">—</td>
+						<td class="latency-pair-work" data-work-min-ms="{{printf "%.6f" .NotifyToFirstShareMinMS}}" data-work-p50-ms="{{printf "%.6f" .NotifyToFirstShareP50MS}}" data-work-p95-ms="{{printf "%.6f" .NotifyToFirstShareP95MS}}" data-work-last-ms="{{printf "%.6f" .NotifyToFirstShareMS}}" data-work-samples="{{.NotifyToFirstShareSamples}}">—</td>
 						<td>{{humanDuration .ConnectedDuration}}</td>
 						<td style="text-align:right;">
 										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
@@ -870,8 +870,10 @@
 		}
 
 		function formatWorkStartLatency(row) {
+			const min = Number(row.notify_to_first_share_min_ms || 0);
 			const p50 = Number(row.notify_to_first_share_p50_ms || 0);
 			const last = Number(row.notify_to_first_share_ms || 0);
+			if (min > 0) return formatLatency(min);
 			return formatLatency(p50 > 0 ? p50 : last);
 		}
 
@@ -914,8 +916,13 @@
 			});
 			const workPairCells = document.querySelectorAll('.latency-pair-work[data-work-p95-ms]');
 				workPairCells.forEach((el) => {
+					const min = Number(el.getAttribute('data-work-min-ms') || 0);
 					const p50 = Number(el.getAttribute('data-work-p50-ms') || 0);
 					const last = Number(el.getAttribute('data-work-last-ms') || 0);
+				if (min > 0) {
+					el.textContent = formatLatency(min);
+					return;
+				}
 				el.textContent = formatLatency(p50 > 0 ? p50 : last);
 			});
 		}

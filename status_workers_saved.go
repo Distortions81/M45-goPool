@@ -97,6 +97,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					Difficulty:                view.Difficulty,
 					EstimatedPingP50MS:        view.EstimatedPingP50MS,
 					EstimatedPingP95MS:        view.EstimatedPingP95MS,
+					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
 					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
 					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
 					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
@@ -196,6 +197,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Difficulty                float64 `json:"difficulty"`
 		EstimatedPingP50MS        float64 `json:"estimated_ping_p50_ms,omitempty"`
 		EstimatedPingP95MS        float64 `json:"estimated_ping_p95_ms,omitempty"`
+		NotifyToFirstShareMinMS   float64 `json:"notify_to_first_share_min_ms,omitempty"`
 		NotifyToFirstShareMS      float64 `json:"notify_to_first_share_ms,omitempty"`
 		NotifyToFirstShareP50MS   float64 `json:"notify_to_first_share_p50_ms,omitempty"`
 		NotifyToFirstShareP95MS   float64 `json:"notify_to_first_share_p95_ms,omitempty"`
@@ -295,6 +297,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Difficulty:                view.Difficulty,
 					EstimatedPingP50MS:        view.EstimatedPingP50MS,
 					EstimatedPingP95MS:        view.EstimatedPingP95MS,
+					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
 					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
 					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
 					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,

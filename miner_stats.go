@@ -311,6 +311,7 @@ type minerShareSnapshot struct {
 	SubmitRTTP95MS            float64
 	PingRTTP50MS              float64
 	PingRTTP95MS              float64
+	NotifyToFirstShareMinMS   float64
 	NotifyToFirstShareMS      float64
 	NotifyToFirstShareP50MS   float64
 	NotifyToFirstShareP95MS   float64
@@ -329,6 +330,7 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 	now := time.Now()
 	p50, p95 := submitRTTPercentilesLocked(mc.submitRTTSamplesMs, mc.submitRTTCount)
 	pingP50, pingP95 := submitRTTPercentilesLocked(mc.pingRTTSamplesMs, mc.pingRTTCount)
+	warmMin := submitRTTMinLocked(mc.notifyToFirstSamplesMs, mc.notifyToFirstCount)
 	warmP50, warmP95 := submitRTTPercentilesLocked(mc.notifyToFirstSamplesMs, mc.notifyToFirstCount)
 	workStartMS := mc.lastNotifyToFirstShareMs
 	if mc.notifyAwaitingFirstShare && !mc.notifySentAt.IsZero() {
@@ -352,6 +354,7 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 		SubmitRTTP95MS:            p95,
 		PingRTTP50MS:              pingP50,
 		PingRTTP95MS:              pingP95,
+		NotifyToFirstShareMinMS:   warmMin,
 		NotifyToFirstShareMS:      workStartMS,
 		NotifyToFirstShareP50MS:   warmP50,
 		NotifyToFirstShareP95MS:   warmP95,
@@ -475,4 +478,24 @@ func submitRTTPercentilesLocked(samples [64]float64, count int) (p50, p95 float6
 	idx50 := (len(vals) - 1) * 50 / 100
 	idx95 := (len(vals) - 1) * 95 / 100
 	return vals[idx50], vals[idx95]
+}
+
+func submitRTTMinLocked(samples [64]float64, count int) float64 {
+	if count <= 0 {
+		return 0
+	}
+	if count > len(samples) {
+		count = len(samples)
+	}
+	min := 0.0
+	for i := 0; i < count; i++ {
+		v := samples[i]
+		if v <= 0 {
+			continue
+		}
+		if min <= 0 || v < min {
+			min = v
+		}
+	}
+	return min
 }

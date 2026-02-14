@@ -17,6 +17,7 @@ type savedWorkerEntry struct {
 	Difficulty                float64
 	EstimatedPingP50MS        float64
 	EstimatedPingP95MS        float64
+	NotifyToFirstShareMinMS   float64
 	NotifyToFirstShareMS      float64
 	NotifyToFirstShareP50MS   float64
 	NotifyToFirstShareP95MS   float64

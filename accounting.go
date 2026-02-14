@@ -56,6 +56,7 @@ type WorkerView struct {
 	HashrateAccuracy          string       `json:"hashrate_accuracy,omitempty"`
 	SubmitRTTP50MS            float64      `json:"submit_rtt_p50_ms,omitempty"`
 	SubmitRTTP95MS            float64      `json:"submit_rtt_p95_ms,omitempty"`
+	NotifyToFirstShareMinMS   float64      `json:"notify_to_first_share_min_ms,omitempty"`
 	NotifyToFirstShareMS      float64      `json:"notify_to_first_share_ms,omitempty"`
 	NotifyToFirstShareP50MS   float64      `json:"notify_to_first_share_p50_ms,omitempty"`
 	NotifyToFirstShareP95MS   float64      `json:"notify_to_first_share_p95_ms,omitempty"`

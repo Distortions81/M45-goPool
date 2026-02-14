@@ -453,6 +453,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		HashrateAccuracy:          hashrateAccuracySymbol(conf),
 		SubmitRTTP50MS:            snap.SubmitRTTP50MS,
 		SubmitRTTP95MS:            snap.SubmitRTTP95MS,
+		NotifyToFirstShareMinMS:   snap.NotifyToFirstShareMinMS,
 		NotifyToFirstShareMS:      snap.NotifyToFirstShareMS,
 		NotifyToFirstShareP50MS:   snap.NotifyToFirstShareP50MS,
 		NotifyToFirstShareP95MS:   snap.NotifyToFirstShareP95MS,
@@ -515,6 +516,9 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 		}
 		if w.NotifyToFirstShareMS > current.NotifyToFirstShareMS {
 			current.NotifyToFirstShareMS = w.NotifyToFirstShareMS
+		}
+		if w.NotifyToFirstShareMinMS > 0 && (current.NotifyToFirstShareMinMS <= 0 || w.NotifyToFirstShareMinMS < current.NotifyToFirstShareMinMS) {
+			current.NotifyToFirstShareMinMS = w.NotifyToFirstShareMinMS
 		}
 		if w.NotifyToFirstShareP50MS > current.NotifyToFirstShareP50MS {
 			current.NotifyToFirstShareP50MS = w.NotifyToFirstShareP50MS
