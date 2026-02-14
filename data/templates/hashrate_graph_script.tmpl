@@ -31,6 +31,7 @@
 	const blockHeights = [];
 	let smoothedHashrate = null;
 	let lastBlockHeight = null;
+	let historyPrimed = false;
 
 	function trimHistory() {
 		const cutoff = Date.now() - historyWindowMS;
@@ -52,7 +53,7 @@
 	}
 
 	function primeHashrateGraphHistory(history) {
-		if (!Array.isArray(history) || hashrateData.length > 0) {
+		if (!Array.isArray(history) || historyPrimed) {
 			return false;
 		}
 		const cutoff = Date.now() - historyWindowMS;
@@ -73,6 +74,9 @@
 		if (rows.length === 0) {
 			return false;
 		}
+		hashrateData.length = 0;
+		timestamps.length = 0;
+		blockHeights.length = 0;
 		rows.forEach(row => {
 			hashrateData.push(row.hashrate);
 			timestamps.push(new Date(row.timestamp));
@@ -85,6 +89,7 @@
 		if (hashrateData.length > 0) {
 			smoothedHashrate = hashrateData[hashrateData.length - 1];
 		}
+		historyPrimed = true;
 		drawGraph();
 		return true;
 	}
