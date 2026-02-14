@@ -46,4 +46,4 @@ nano data/config/tuning.toml
 2. **Auto-detection** - goPool searches common locations if `rpc_cookie_path` is empty
 3. **Username/password** (deprecated) - Use `rpc_user`/`rpc_pass` in `secrets.toml` with `-allow-rpc-credentials` flag
 
-See [operations.md](../../../guide/operations.md) for detailed configuration options.
+See [operations.md](../../../documentation/operations.md) for detailed configuration options.
