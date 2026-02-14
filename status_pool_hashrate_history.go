@@ -54,6 +54,31 @@ func (s *StatusServer) poolHashrateHistorySnapshot(now time.Time) []poolHashrate
 	return out
 }
 
+func (s *StatusServer) latestPoolHashrateHistorySince(now time.Time, maxAge time.Duration) (float64, int64, bool) {
+	if s == nil || maxAge <= 0 {
+		return 0, 0, false
+	}
+	s.poolHashrateHistoryMu.Lock()
+	defer s.poolHashrateHistoryMu.Unlock()
+
+	s.trimPoolHashrateHistoryLocked(now)
+	if len(s.poolHashrateHistory) == 0 {
+		return 0, 0, false
+	}
+	cutoff := now.Add(-maxAge)
+	for i := len(s.poolHashrateHistory) - 1; i >= 0; i-- {
+		sample := s.poolHashrateHistory[i]
+		if sample.Hashrate <= 0 || sample.At.IsZero() {
+			continue
+		}
+		if sample.At.Before(cutoff) {
+			break
+		}
+		return sample.Hashrate, sample.BlockHeight, true
+	}
+	return 0, 0, false
+}
+
 func (s *StatusServer) trimPoolHashrateHistoryLocked(now time.Time) {
 	cutoff := now.Add(-poolHashrateHistoryWindow)
 	keepFrom := 0
