@@ -31,10 +31,11 @@
 					<div class="connect-panel-header">
 						<div class="connect-panel-intro">
 							<p class="connect-panel-title">
-								Connect your miner{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
+								How to connect your miner!
+									<button type="button" class="connect-panel-fold" id="connect-panel-fold-toggle" aria-controls="connect-panel-body" aria-expanded="false">show info</button>
+								{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
 							</p>
 						</div>
-						<button type="button" class="connect-panel-fold" id="connect-panel-fold-toggle" aria-controls="connect-panel-body" aria-expanded="true">Fold</button>
 					</div>
 					<div class="connect-panel-body" id="connect-panel-body">
 					<div class="connect-steps">
@@ -1113,49 +1114,31 @@
 	})();
 	</script>
 	<script>
-		;(function () {
-			const banner = document.getElementById("overview-banner");
-			if (!banner) {
-				return;
-			}
-			const connectPanel = banner.querySelector(".connect-panel");
-			const foldToggle = document.getElementById("connect-panel-fold-toggle");
-			const FOLD_COOKIE = "overview_connect_folded";
-			const FOLD_COOKIE_MAX_AGE_SEC = 31536000;
-
-			function getCookie(name) {
-				const parts = document.cookie ? document.cookie.split("; ") : [];
-				for (let i = 0; i < parts.length; i++) {
-					const part = parts[i];
-					if (part.startsWith(name + "=")) {
-						return decodeURIComponent(part.slice(name.length + 1));
-					}
-				}
-				return "";
-			}
-
-			function setCookie(name, value, maxAgeSec) {
-				document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax`;
-			}
-
-			function applyFoldState(folded) {
-				if (!connectPanel || !foldToggle) {
+			;(function () {
+				const banner = document.getElementById("overview-banner");
+				if (!banner) {
 					return;
 				}
-				connectPanel.dataset.folded = folded ? "true" : "false";
-				foldToggle.textContent = folded ? "Unfold" : "Fold";
-				foldToggle.setAttribute("aria-expanded", folded ? "false" : "true");
-				foldToggle.setAttribute("aria-label", folded ? "Expand connect steps" : "Collapse connect steps");
-			}
+				const connectPanel = banner.querySelector(".connect-panel");
+				const foldToggle = document.getElementById("connect-panel-fold-toggle");
 
-			if (connectPanel && foldToggle) {
-				applyFoldState(getCookie(FOLD_COOKIE) === "1");
-				foldToggle.addEventListener("click", () => {
-					const nextFolded = connectPanel.dataset.folded !== "true";
-					applyFoldState(nextFolded);
-					setCookie(FOLD_COOKIE, nextFolded ? "1" : "0", FOLD_COOKIE_MAX_AGE_SEC);
-				});
-			}
+				function applyFoldState(folded) {
+					if (!connectPanel || !foldToggle) {
+						return;
+					}
+					connectPanel.dataset.folded = folded ? "true" : "false";
+					foldToggle.textContent = folded ? "show info" : "hide info";
+					foldToggle.setAttribute("aria-expanded", folded ? "false" : "true");
+					foldToggle.setAttribute("aria-label", folded ? "Expand connect steps" : "Collapse connect steps");
+				}
+
+				if (connectPanel && foldToggle) {
+					applyFoldState(true);
+					foldToggle.addEventListener("click", () => {
+						const nextFolded = connectPanel.dataset.folded !== "true";
+						applyFoldState(nextFolded);
+					});
+				}
 
 			const host = banner.dataset.host || window.location.hostname || "localhost";
 			banner.querySelectorAll("[data-stratum-host]").forEach(el => {

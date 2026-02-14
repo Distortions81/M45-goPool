@@ -358,7 +358,7 @@ header {
 .connect-panel-header {
 	display: flex;
 	align-items: flex-start;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 16px;
 }
 
@@ -418,6 +418,10 @@ header {
 	font-weight: 750;
 	letter-spacing: 0.02em;
 	color: #eafff7;
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
 }
 
 .connect-panel-subtitle {
