@@ -232,6 +232,10 @@
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
+					<div>
+						<div class="label" title="Difficulty quantization granularity for mining.set_difficulty (1=power-of-two, 2=half, 3=third, 4=quarter; requires restart).">difficulty_step_granularity {{template "restart-required" .}}</div>
+						<input name="difficulty_step_granularity" type="number" min="1" class="textfield" value="{{.Settings.DifficultyStepGranularity}}">
+					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Bans</h3>
@@ -299,9 +303,9 @@
 						<input name="log_level" type="text" class="textfield" value="{{.Settings.LogLevel}}">
 					</div>
 					<div>
-						<div class="label" title="Solo mode uses lighter submit validation (skips worker-mismatch + some policy checks; requires restart).">solo_mode {{template "restart-required" .}}</div>
+						<div class="label" title="Use relaxed submit validation (skips worker-mismatch + some policy checks; requires restart).">relaxed_submit_validation {{template "restart-required" .}}</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="solo_mode" value="1" {{if .Settings.SoloMode}}checked{{end}}>
+							<input type="checkbox" name="relaxed_submit_validation" value="1" {{if .Settings.RelaxedSubmitValidation}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>

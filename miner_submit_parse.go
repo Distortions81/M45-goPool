@@ -196,7 +196,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id interface{}, params []string, n
 // still exercising the core share-processing path without extra goroutine
 // scheduling noise.
 func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (submissionTask, bool) {
-	if mc.cfg.SoloMode {
+	if mc.cfg.RelaxedSubmitValidation {
 		return mc.prepareSubmissionTaskSolo(req, now)
 	}
 	return mc.prepareSubmissionTaskStrict(req, now)

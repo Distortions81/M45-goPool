@@ -135,14 +135,14 @@ type Config struct {
 
 	LockSuggestedDifficulty          bool    // keep suggested difficulty instead of vardiff
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
-	VardiffFine                      bool    // use half-step vardiff adjustments (tuning.toml only)
+	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
 	NTimeForwardSlackSeconds         int     // max seconds ntime can roll forward
 	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
 
-	SoloMode               bool   // light validation for solo pools (default true)
-	DirectSubmitProcessing bool   // process submits on connection goroutine (bypass worker pool)
-	LogLevel               string // log level: debug, info, warn, error
+	RelaxedSubmitValidation bool   // skip worker-mismatch + selected policy checks (default true)
+	DirectSubmitProcessing  bool   // process submits on connection goroutine (bypass worker pool)
+	LogLevel                string // log level: debug, info, warn, error
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
@@ -229,8 +229,8 @@ type EffectiveConfig struct {
 	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
 	TargetSharesPerMin                float64  `json:"target_shares_per_min,omitempty"`
 	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
-	VardiffFine                       bool     `json:"vardiff_fine,omitempty"`
-	SoloMode                          bool     `json:"solo_mode"`
+	DifficultyStepGranularity         int      `json:"difficulty_step_granularity,omitempty"`
+	RelaxedSubmitValidation           bool     `json:"relaxed_submit_validation"`
 	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
 	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`

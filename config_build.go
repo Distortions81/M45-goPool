@@ -54,7 +54,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			PoolEntropy:               stringPtr(cfg.PoolEntropy),
 			PoolTagPrefix:             cfg.PoolTagPrefix,
 			CoinbaseScriptSigMaxBytes: intPtr(cfg.CoinbaseScriptSigMaxBytes),
-			SoloMode:                  boolPtr(cfg.SoloMode),
+			RelaxedSubmitValidation:   boolPtr(cfg.RelaxedSubmitValidation),
 			DirectSubmitProcessing:    boolPtr(cfg.DirectSubmitProcessing),
 			CheckDuplicateShares:      boolPtr(cfg.CheckDuplicateShares),
 		},
@@ -109,8 +109,8 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			EnforceSuggestedDifficultyLimits: boolPtr(cfg.EnforceSuggestedDifficultyLimits),
 		},
 		Mining: miningTuning{
-			DisablePoolJobEntropy: boolPtr(false),
-			VardiffFine:           boolPtr(cfg.VardiffFine),
+			DisablePoolJobEntropy:     boolPtr(false),
+			DifficultyStepGranularity: intPtr(cfg.DifficultyStepGranularity),
 		},
 		Hashrate: hashrateTuning{
 			HashrateEMATauSeconds:    float64Ptr(cfg.HashrateEMATauSeconds),
@@ -214,8 +214,8 @@ func (cfg Config) Effective() EffectiveConfig {
 		TargetSharesPerMin:                cfg.TargetSharesPerMin,
 		// Effective config mirrors whether suggested difficulty locking is enabled.
 		LockSuggestedDifficulty:       cfg.LockSuggestedDifficulty,
-		VardiffFine:                   cfg.VardiffFine,
-		SoloMode:                      cfg.SoloMode,
+		DifficultyStepGranularity:     cfg.DifficultyStepGranularity,
+		RelaxedSubmitValidation:       cfg.RelaxedSubmitValidation,
 		DirectSubmitProcessing:        cfg.DirectSubmitProcessing,
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,

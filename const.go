@@ -88,8 +88,9 @@ const (
 	defaultVarDiffAdjustmentWindow   = 120 * time.Second
 	defaultVarDiffStep               = 2
 	defaultVarDiffDampingFactor      = 0.4
+	defaultDifficultyStepGranularity = 4
 
-	defaultHashrateEMATauSeconds = 300.0
+	defaultHashrateEMATauSeconds = 600.0
 	initialHashrateEMATau        = 45 * time.Second
 	// When anchoring a fresh sampling window after reset, place WindowStart at
 	// this percent of the elapsed time from reset to first share (0-100).
@@ -103,7 +104,7 @@ const (
 	// Grace periods for new/changing connections.
 	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
 	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
-	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 2
+	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 4
 	stratumFloodLimitMultiplier = 2
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60

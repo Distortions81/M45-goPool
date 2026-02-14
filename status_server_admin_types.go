@@ -72,13 +72,14 @@ type AdminSettingsData struct {
 	ConnectionTimeoutSeconds int
 
 	// Difficulty / mining toggles
-	MinDifficulty           float64
-	MaxDifficulty           float64
-	TargetSharesPerMin      float64
-	LockSuggestedDifficulty bool
-	SoloMode                bool
-	DirectSubmitProcessing  bool
-	CheckDuplicateShares    bool
+	MinDifficulty             float64
+	MaxDifficulty             float64
+	TargetSharesPerMin        float64
+	DifficultyStepGranularity int
+	LockSuggestedDifficulty   bool
+	RelaxedSubmitValidation   bool
+	DirectSubmitProcessing    bool
+	CheckDuplicateShares      bool
 
 	// Peer cleanup
 	PeerCleanupEnabled   bool

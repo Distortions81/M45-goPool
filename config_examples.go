@@ -78,7 +78,7 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
 # Mining behavior
-# - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).
+# - [mining].relaxed_submit_validation: Lighter submit validation (skips worker-mismatch + some policy checks; requires restart).
 # - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
 # - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
 #
@@ -115,7 +115,7 @@ func tuningConfigDocComments() []byte {
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
-# - vardiff_fine: Enable half-step VarDiff adjustments and disable power-of-two snapping (requires restart).
+# - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
 # Status UI ([status])
 # - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").

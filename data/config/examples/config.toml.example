@@ -11,7 +11,7 @@
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
 # Mining behavior
-# - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).
+# - [mining].relaxed_submit_validation: Lighter submit validation (skips worker-mismatch + some policy checks; requires restart).
 # - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
 # - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
 #
@@ -68,7 +68,7 @@
   operator_donation_url = ""
   pool_fee_percent = 2.0
   pooltag_prefix = ""
-  solo_mode = true
+  relaxed_submit_validation = true
   template_extra_nonce2_size = 8
 
 [node]
