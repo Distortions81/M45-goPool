@@ -128,6 +128,7 @@ Types referenced:
   - `name` (string; censored)
   - `display_name` (string; censored)
   - `rolling_hashrate` (number)
+  - `hashrate_accuracy` (string; optional; currently `"≈"` when hashrate is estimated and not fully settled)
   - `difficulty` (number)
   - `vardiff` (number)
   - `share_rate` (number)
@@ -292,13 +293,20 @@ curl -sS https://STATUS_HOST/api/server | jq .
 
 Fast “headline stats” endpoint used for the hashrate UI and block timer.
 
+Query parameters:
+
+- `include_history` (optional; set to `1` to include `pool_hashrate_history` for initial chart priming)
+
 Response object:
 
 - `api_version` (string)
 - `pool_hashrate` (number)
+- `pool_hashrate_history` (array of `PoolHashrateHistoryPoint`; optional; returned when `include_history=1`)
 - `block_height` (integer)
 - `block_difficulty` (number)
-- `block_time_left_sec` (integer; seconds; `-1` means “block timer not started yet”)
+- `block_time_left_sec` (integer; signed seconds)
+  - `-1` means “block timer not started yet”
+  - `<0` (other values) means the target interval has been exceeded (overdue)
 - `recent_block_times` (array of string; RFC3339)
 - `next_difficulty_retarget` (object; optional)
   - `height` (integer)
@@ -307,6 +315,12 @@ Response object:
 - `template_tx_fees_sats` (integer; optional)
 - `template_updated_at` (string; optional; RFC3339)
 - `updated_at` (string; RFC3339)
+
+`PoolHashrateHistoryPoint`:
+
+- `at` (string; RFC3339)
+- `hashrate` (number)
+- `block_height` (integer; optional)
 
 Example:
 
@@ -450,10 +464,17 @@ Each worker entry:
 - `last_online_at` (string; RFC3339; optional)
 - `last_share` (string; RFC3339; optional)
 - `hashrate` (number)
+- `hashrate_accuracy` (string; optional; currently `"≈"` for estimated/settling values)
 - `shares_per_minute` (number)
 - `accepted` (integer)
 - `rejected` (integer)
 - `difficulty` (number)
+- `estimated_ping_p50_ms` (number; optional; only when available)
+- `estimated_ping_p95_ms` (number; optional; only when available)
+- `notify_to_first_share_ms` (number; optional; only when available)
+- `notify_to_first_share_p50_ms` (number; optional; only when available)
+- `notify_to_first_share_p95_ms` (number; optional; only when available)
+- `notify_to_first_share_samples` (integer; optional; only when available)
 - `connection_seq` (integer; optional; only when online)
 - `connection_duration_seconds` (number; optional; only when online)
 
