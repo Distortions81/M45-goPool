@@ -250,6 +250,74 @@
 		const REFRESH_INTERVAL = 10000; // 10 seconds
 		const BLOCKS_REFRESH_INTERVAL = 3000; // 3 seconds
 		const FIAT_CURRENCY = '{{.FiatCurrency}}';
+		const workerHashrateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerHashrateFallback = new Map();
+		const workerShareRateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerShareRateFallback = new Map();
+
+		function workerHashrateKey(worker) {
+			const connectionId = String(worker?.connection_id ?? '').trim();
+			if (connectionId) {
+				return `conn:${connectionId}`;
+			}
+			const name = String(worker?.name || worker?.display_name || '').trim();
+			if (name) {
+				return `name:${name}`;
+			}
+			return '';
+		}
+
+		function pruneWorkerHashrateFallback(nowMillis) {
+			for (const [key, sample] of workerHashrateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerHashrateFallbackMaxAgeMS) {
+					workerHashrateFallback.delete(key);
+				}
+			}
+		}
+
+		function pruneWorkerShareRateFallback(nowMillis) {
+			for (const [key, sample] of workerShareRateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerShareRateFallbackMaxAgeMS) {
+					workerShareRateFallback.delete(key);
+				}
+			}
+		}
+
+		function effectiveWorkerHashrate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.rolling_hashrate);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerHashrateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerHashrateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerHashrateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
+
+		function effectiveWorkerShareRate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.share_rate);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerShareRateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerShareRateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerShareRateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
 
 		function normalizeFiatCurrency(cur) {
 			const s = String(cur ?? '').trim();
@@ -410,17 +478,23 @@
 					tbody.innerHTML = '<tr><td colspan="6" class="text-sm">No worker stats yet.</td></tr>';
 					return;
 				}
+				const nowMillis = Date.now();
+				pruneWorkerHashrateFallback(nowMillis);
+				pruneWorkerShareRateFallback(nowMillis);
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
 					const suffix = workerSuffix(name);
-					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+					const shareRate = effectiveWorkerShareRate(worker, nowMillis).toFixed(1);
+					const hashrate = effectiveWorkerHashrate(worker, nowMillis);
+					const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(worker.hashrate_accuracy) : '';
+					const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, worker.hashrate_accuracy) : '—';
 					let connectionId = worker.connection_id ?? '—';
 					if (connectionId === '') connectionId = '0';
 					return `
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
 							<td class="mono">${connectionId}</td>
-								<td class="${hashrateClassForAccuracy(worker.hashrate_accuracy)}">${formatWorkerHashrate(worker.rolling_hashrate, worker.hashrate_accuracy)}</td>
+								<td class="${hashrateClass}">${hashrateText}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
 							<td>${shareRate}</td>
 							<td>${worker.accepted || 0}</td>

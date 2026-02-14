@@ -40,3 +40,33 @@ func TestPoolHashrateHistorySnapshotDropsExpired(t *testing.T) {
 		t.Fatalf("expected empty history after expiry, got %d samples", len(got))
 	}
 }
+
+func TestLatestPoolHashrateHistorySinceReturnsNewestInRange(t *testing.T) {
+	t.Parallel()
+
+	base := time.Unix(1_700_000_000, 0).UTC()
+	s := &StatusServer{}
+	s.appendPoolHashrateHistory(120, 820000, base.Add(-4*time.Minute))
+	s.appendPoolHashrateHistory(220, 820001, base.Add(-90*time.Second))
+	s.appendPoolHashrateHistory(320, 820002, base.Add(-30*time.Second))
+
+	hashrate, height, ok := s.latestPoolHashrateHistorySince(base, 2*time.Minute)
+	if !ok {
+		t.Fatalf("expected recent hashrate fallback")
+	}
+	if hashrate != 320 || height != 820002 {
+		t.Fatalf("unexpected fallback sample: hashrate=%v height=%d", hashrate, height)
+	}
+}
+
+func TestLatestPoolHashrateHistorySinceRespectsMaxAge(t *testing.T) {
+	t.Parallel()
+
+	base := time.Unix(1_700_000_000, 0).UTC()
+	s := &StatusServer{}
+	s.appendPoolHashrateHistory(220, 820001, base.Add(-3*time.Minute))
+
+	if _, _, ok := s.latestPoolHashrateHistorySince(base, 2*time.Minute); ok {
+		t.Fatalf("expected no fallback sample outside max age")
+	}
+}

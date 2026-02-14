@@ -678,6 +678,78 @@
 		let lastOnlineWorkers = [];
 		let currentSortField = 'connection_seq';
 		let sortDescending = true;
+		const workerHashrateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerHashrateFallback = new Map();
+		const workerShareRateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerShareRateFallback = new Map();
+
+		function workerHashrateKey(worker) {
+			const hash = String(worker?.hash || '').trim().toLowerCase();
+			if (hash) {
+				return `hash:${hash}`;
+			}
+			const connectionSeq = Number(worker?.connection_seq || 0);
+			if (connectionSeq > 0) {
+				return `connseq:${connectionSeq}`;
+			}
+			const name = String(worker?.name || '').trim();
+			if (name) {
+				return `name:${name}`;
+			}
+			return '';
+		}
+
+		function pruneWorkerHashrateFallback(nowMillis) {
+			for (const [key, sample] of workerHashrateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerHashrateFallbackMaxAgeMS) {
+					workerHashrateFallback.delete(key);
+				}
+			}
+		}
+
+		function pruneWorkerShareRateFallback(nowMillis) {
+			for (const [key, sample] of workerShareRateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerShareRateFallbackMaxAgeMS) {
+					workerShareRateFallback.delete(key);
+				}
+			}
+		}
+
+		function effectiveWorkerHashrate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.hashrate || 0);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerHashrateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerHashrateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerHashrateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
+
+		function effectiveWorkerShareRate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.shares_per_minute || 0);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerShareRateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerShareRateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerShareRateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
 
 		function notifyToggleText(enabled) {
 			return enabled ? '🔔' : '🔕';
@@ -1002,14 +1074,22 @@
 				onlineWorkersBody.innerHTML = '<tr><td colspan="12" class="text-sm">No saved workers online right now.</td></tr>';
 				return;
 			}
+			const nowMillis = Date.now();
+			pruneWorkerHashrateFallback(nowMillis);
+			pruneWorkerShareRateFallback(nowMillis);
 			if (onlineWorkersCard) onlineWorkersCard.style.display = '';
-			onlineWorkersBody.innerHTML = data.map((w) => `
+			onlineWorkersBody.innerHTML = data.map((w) => {
+				const hashrate = effectiveWorkerHashrate(w, nowMillis);
+				const shareRate = effectiveWorkerShareRate(w, nowMillis);
+				const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(w.hashrate_accuracy) : '';
+				const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, w.hashrate_accuracy) : '—';
+				return `
 					<tr>
 						<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
-						<td class="hashrate-value ${w.hashrate > 0 ? hashrateClassForAccuracy(w.hashrate_accuracy) : ''}">${w.hashrate > 0 ? formatWorkerHashrate(w.hashrate, w.hashrate_accuracy) : '—'}</td>
+						<td class="hashrate-value ${hashrateClass}">${hashrateText}</td>
 						<td>${formatDifficulty(w.best_difficulty)}</td>
 						<td>${formatDifficulty(w.difficulty)}</td>
-					<td>${formatShareRate(w.shares_per_minute)}</td>
+					<td>${formatShareRate(shareRate)}</td>
 					<td>${formatLastShare(w.last_share)}</td>
 					<td>${Number(w.accepted || 0).toLocaleString()}</td>
 					<td>${Number(w.rejected || 0).toLocaleString()}</td>
@@ -1038,7 +1118,8 @@
 						</div>
 					</td>
 				</tr>
-			`).join('');
+			`;
+			}).join('');
 			applyWorkerNameCensoring(onlineWorkersBody);
 			attachRemoveConfirms(onlineWorkersBody);
 			attachReconnectConfirms(onlineWorkersBody);

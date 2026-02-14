@@ -31,6 +31,7 @@ const hashPerShare = float64(1 << 32)
 const overviewRefreshInterval = defaultRefreshInterval
 const poolHashrateTTL = 5 * time.Second
 const poolHashrateHistoryWindow = 6 * time.Minute
+const poolHashrateDisplayFallbackMaxAge = 2 * time.Minute
 const blocksRefreshInterval = 3 * time.Second
 const settlingHashrateMaxRelativeError = 0.20
 const settlingHashrateMinExpectedShares = 8.0

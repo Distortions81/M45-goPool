@@ -379,8 +379,16 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			TemplateUpdatedAt:      templateUpdatedAt,
 			UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
 		}
-		data.PoolHashrate = s.computePoolHashrate()
-		s.appendPoolHashrateHistory(data.PoolHashrate, blockHeight, now)
+		computedHashrate := s.computePoolHashrate()
+		if computedHashrate > 0 {
+			data.PoolHashrate = computedHashrate
+			s.appendPoolHashrateHistory(computedHashrate, blockHeight, now)
+		} else if fallbackHashrate, fallbackHeight, ok := s.latestPoolHashrateHistorySince(now, poolHashrateDisplayFallbackMaxAge); ok {
+			data.PoolHashrate = fallbackHashrate
+			if data.BlockHeight <= 0 && fallbackHeight > 0 {
+				data.BlockHeight = fallbackHeight
+			}
+		}
 		if includeHistory {
 			data.PoolHashrateHistory = s.poolHashrateHistorySnapshot(now)
 		}
