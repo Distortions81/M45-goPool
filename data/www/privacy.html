@@ -177,7 +177,7 @@
     </ul>
 
     <h3>2.1.1 Exact Data Stored in Our Database (Current Format)</h3>
-    <p><strong>Post-migration format only:</strong> this list describes what is currently stored in <code>data/state/workers.db</code> and does not describe older historical formats.</p>
+    <p>This list describes what is currently stored in <code>data/state/workers.db</code>.</p>
     <ul>
       <li><strong>saved_workers:</strong> <code>user_id</code> (Clerk user ID), <code>worker_hash</code> (SHA256 of full worker string), <code>worker</code> (same hash value used as internal key), <code>worker_display</code> (censored worker label), <code>notify_enabled</code> (notification toggle), <code>best_difficulty</code> (best share difficulty seen for that saved worker hash).</li>
       <li><strong>clerk_users:</strong> <code>user_id</code>, <code>first_seen_unix</code>, <code>last_seen_unix</code>, <code>seen_count</code>.</li>
