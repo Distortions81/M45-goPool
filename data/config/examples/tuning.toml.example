@@ -47,7 +47,7 @@
 #
 
 [bans]
-  ban_invalid_submissions_after = 60
+  ban_invalid_submissions_after = 40
   ban_invalid_submissions_duration_seconds = 900
   ban_invalid_submissions_window_seconds = 300
   banned_miner_types = []
@@ -68,7 +68,7 @@
   worker_notify_threshold_seconds = 300
 
 [hashrate]
-  hashrate_ema_tau_seconds = 600.0
+  hashrate_ema_tau_seconds = 300.0
   ntime_forward_slack_seconds = 7000
 
 [mining]

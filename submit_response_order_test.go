@@ -83,6 +83,8 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
 	mc.shareTarget.Store(targetFromDifficulty(1))
+	mc.initialEMAWindowDone.Store(true)
+	mc.lastDiffChange.Store(time.Now().Add(-2 * mc.vardiff.AdjustmentWindow).UnixNano())
 	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 
 	// Prime stats so VarDiff can move difficulty, which also triggers writes

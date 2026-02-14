@@ -40,7 +40,7 @@ func TestUpdateHashrateLocked_UsesBootstrapWindowThenUpdatesIncrementally(t *tes
 		t.Fatalf("rollingHashrateValue=%v, want 0 after first share", mc.rollingHashrateValue)
 	}
 
-	mc.updateHashrateLocked(1, base.Add(31*time.Second))
+	mc.updateHashrateLocked(1, base.Add(initialHashrateEMATau+time.Second))
 	if mc.rollingHashrateValue <= 0 {
 		t.Fatalf("rollingHashrateValue=%v, want > 0 once bootstrap tau elapsed", mc.rollingHashrateValue)
 	}

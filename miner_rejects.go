@@ -281,7 +281,7 @@ func (mc *MinerConn) hashrateEMATau() time.Duration {
 	return time.Duration(tauSeconds * float64(time.Second))
 }
 
-func (mc *MinerConn) vardiffRetargetInterval() time.Duration {
+func (mc *MinerConn) vardiffRetargetInterval(rollingHashrate, currentDiff, targetShares float64) time.Duration {
 	interval := mc.vardiff.AdjustmentWindow
 	if interval <= 0 {
 		interval = defaultVarDiffAdjustmentWindow
@@ -289,13 +289,49 @@ func (mc *MinerConn) vardiffRetargetInterval() time.Duration {
 	if interval <= 0 {
 		interval = time.Minute
 	}
+	// Keep explicit non-default windows fixed; adaptive behavior applies to
+	// the compiled default window only.
+	if interval == defaultVarDiffAdjustmentWindow {
+		interval = mc.adaptiveVardiffWindow(interval, rollingHashrate, currentDiff, targetShares)
+	}
 
 	// During bootstrap, enforce both the EMA warmup horizon and the vardiff
 	// adjustment window by waiting for whichever is longer.
 	if !mc.initialEMAWindowDone.Load() && interval < initialHashrateEMATau {
 		interval = initialHashrateEMATau
 	}
+	if mc.vardiff.RetargetDelay > 0 && interval < mc.vardiff.RetargetDelay {
+		interval = mc.vardiff.RetargetDelay
+	}
 	return interval
+}
+
+func (mc *MinerConn) adaptiveVardiffWindow(base time.Duration, rollingHashrate, currentDiff, targetShares float64) time.Duration {
+	if base <= 0 || rollingHashrate <= 0 || currentDiff <= 0 || targetShares <= 0 {
+		return base
+	}
+	sharesPerMin := (rollingHashrate / hashPerShare) * 60.0 / currentDiff
+	if sharesPerMin <= 0 {
+		return base
+	}
+	expectedShares := sharesPerMin * base.Minutes()
+	switch {
+	case expectedShares >= vardiffAdaptiveHighShareCount*2:
+		base = base / 2
+	case expectedShares >= vardiffAdaptiveHighShareCount:
+		base = (base * 3) / 4
+	case expectedShares <= vardiffAdaptiveLowShareCount/2:
+		base = base * 2
+	case expectedShares <= vardiffAdaptiveLowShareCount:
+		base = (base * 3) / 2
+	}
+	if base < vardiffAdaptiveMinWindow {
+		base = vardiffAdaptiveMinWindow
+	}
+	if base > vardiffAdaptiveMaxWindow {
+		base = vardiffAdaptiveMaxWindow
+	}
+	return base
 }
 
 // updateHashrateLocked updates the per-connection hashrate using a simple
@@ -572,6 +608,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	}
 	mc.setDifficulty(newDiff)
 	mc.vardiffAdjustments.Add(1)
+	mc.resetVardiffPending()
 	return true
 }
 
@@ -589,13 +626,6 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		currentDiff = mc.vardiff.MinDiff
 	}
 	if windowSubmissions == 0 || windowStart.IsZero() {
-		return currentDiff
-	}
-	guardStart := lastChange
-	if !mc.initialEMAWindowDone.Load() && windowStart.After(guardStart) {
-		guardStart = windowStart
-	}
-	if !guardStart.IsZero() && now.Sub(guardStart) < mc.vardiffRetargetInterval() {
 		return currentDiff
 	}
 	if windowAccepted == 0 {
@@ -624,17 +654,21 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if targetShares <= 0 {
 		targetShares = 6
 	}
+
+	interval := mc.vardiffRetargetInterval(rollingHashrate, currentDiff, targetShares)
+	guardStart := lastChange
+	if !mc.initialEMAWindowDone.Load() && windowStart.After(guardStart) {
+		guardStart = windowStart
+	}
+	if !guardStart.IsZero() && now.Sub(guardStart) < interval {
+		return currentDiff
+	}
 	targetDiff := (rollingHashrate / hashPerShare) * 60 / targetShares
 	if targetDiff <= 0 || math.IsNaN(targetDiff) || math.IsInf(targetDiff, 0) {
 		return currentDiff
 	}
 
-	// Aim one step lower than the computed target to reduce timeouts.
-	stepFactor := mc.vardiff.Step
-	if stepFactor <= 1 {
-		stepFactor = 2
-	}
-	targetDiff = targetDiff / stepFactor
+	// Aim directly at computed target share cadence.
 	if mc.vardiff.MaxDiff > 0 && targetDiff > mc.vardiff.MaxDiff {
 		targetDiff = mc.vardiff.MaxDiff
 	}
@@ -646,14 +680,25 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	}
 
 	ratio := targetDiff / currentDiff
-	const band = 0.5
+	band := mc.vardiffNoiseBand(windowAccepted)
 	if ratio >= 1-band && ratio <= 1+band {
+		mc.resetVardiffPending()
+		return currentDiff
+	}
+	dir := int32(1)
+	if ratio < 1 {
+		dir = -1
+	}
+	if dir < 0 && mc.shouldHoldLowHashrateDownshift(windowAccepted, rollingHashrate, currentDiff, interval) {
+		return currentDiff
+	}
+	if mc.shouldDelayVardiffAdjustment(dir, ratio) {
 		return currentDiff
 	}
 
 	dampingFactor := mc.vardiff.DampingFactor
 	if dampingFactor <= 0 || dampingFactor > 1 {
-		dampingFactor = 0.5
+		dampingFactor = 0.7
 	}
 
 	newDiff := currentDiff + dampingFactor*(targetDiff-currentDiff)
@@ -666,7 +711,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	if step <= 1 {
 		step = 2
 	}
-	maxFactor := mc.vardiffAdjustmentCap(step)
+	maxFactor := mc.vardiffAdjustmentCap(step, ratio)
 	minFactor := 1 / maxFactor
 	if factor > maxFactor {
 		factor = maxFactor
@@ -676,20 +721,131 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	}
 	newDiff = currentDiff * factor
 
+	newDiff = mc.applyVardiffShareRateSafety(newDiff, rollingHashrate)
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return currentDiff
 	}
 	return mc.clampDifficulty(newDiff)
 }
 
-func (mc *MinerConn) vardiffAdjustmentCap(baseStep float64) float64 {
+func (mc *MinerConn) vardiffAdjustmentCap(baseStep, targetRatio float64) float64 {
 	if baseStep <= 1 {
 		return 1
 	}
+	absRatio := targetRatio
+	if absRatio <= 0 || math.IsNaN(absRatio) || math.IsInf(absRatio, 0) {
+		return baseStep
+	}
+	if absRatio < 1 {
+		absRatio = 1 / absRatio
+	}
 	if mc.vardiffAdjustments.Load() < 2 {
+		// Startup: allow more aggressive catch-up while we are clearly far off.
+		if absRatio >= math.Pow(baseStep, 4) {
+			return baseStep * baseStep * baseStep
+		}
+		return baseStep * baseStep
+	}
+	// Post-bootstrap: scale allowed move by how far off target we still are.
+	if absRatio >= math.Pow(baseStep, 6) {
+		return baseStep * baseStep * baseStep
+	}
+	if absRatio >= math.Pow(baseStep, 4) {
 		return baseStep * baseStep
 	}
 	return baseStep
+}
+
+func (mc *MinerConn) shouldDelayVardiffAdjustment(dir int32, targetRatio float64) bool {
+	if dir != -1 && dir != 1 {
+		return false
+	}
+	// Keep startup corrections fast.
+	if mc.vardiffAdjustments.Load() < 2 || !mc.initialEMAWindowDone.Load() {
+		return false
+	}
+	absRatio := targetRatio
+	if absRatio < 0 {
+		absRatio = -absRatio
+	}
+	// When clearly far from target, don't debounce; prioritize catch-up.
+	if absRatio >= 8 {
+		return false
+	}
+	required := int32(2)
+	// Near target, require more consistent evidence before moving.
+	if absRatio < 2 {
+		required = 3
+	}
+	if absRatio < 1.5 {
+		required = 4
+	}
+	prevDir := mc.vardiffPendingDirection.Load()
+	if prevDir != dir {
+		mc.vardiffPendingDirection.Store(dir)
+		mc.vardiffPendingCount.Store(1)
+		return true
+	}
+	count := mc.vardiffPendingCount.Add(1)
+	if count < required {
+		return true
+	}
+	return false
+}
+
+func (mc *MinerConn) resetVardiffPending() {
+	mc.vardiffPendingDirection.Store(0)
+	mc.vardiffPendingCount.Store(0)
+}
+
+func (mc *MinerConn) vardiffNoiseBand(windowAccepted int) float64 {
+	const baseBand = 0.2
+	if windowAccepted <= 0 {
+		return baseBand
+	}
+	// Approximate 95% Poisson confidence around observed share rate.
+	noiseBand := 2.0 / math.Sqrt(float64(windowAccepted))
+	if noiseBand < baseBand {
+		return baseBand
+	}
+	// Cap so we still react to large clear mismatches.
+	if noiseBand > 0.6 {
+		return 0.6
+	}
+	return noiseBand
+}
+
+func (mc *MinerConn) applyVardiffShareRateSafety(diff, rollingHashrate float64) float64 {
+	if diff <= 0 || rollingHashrate <= 0 {
+		return diff
+	}
+	// shares/min = (H/hashPerShare)*60/diff
+	nominal := (rollingHashrate / hashPerShare) * 60.0
+	if nominal <= 0 {
+		return diff
+	}
+	// Guard rails to avoid both long no-share gaps and share-flood spam.
+	minDiffForMaxShares := nominal / vardiffSafetyMaxSharesPerMin
+	maxDiffForMinShares := nominal / vardiffSafetyMinSharesPerMin
+	if minDiffForMaxShares > 0 && diff < minDiffForMaxShares {
+		diff = minDiffForMaxShares
+	}
+	if maxDiffForMinShares > 0 && diff > maxDiffForMinShares {
+		diff = maxDiffForMinShares
+	}
+	return diff
+}
+
+func (mc *MinerConn) shouldHoldLowHashrateDownshift(windowAccepted int, rollingHashrate, currentDiff float64, interval time.Duration) bool {
+	if windowAccepted < 0 || rollingHashrate <= 0 || currentDiff <= 0 || interval <= 0 {
+		return false
+	}
+	sharesPerMin := (rollingHashrate / hashPerShare) * 60.0 / currentDiff
+	expectedShares := sharesPerMin * interval.Minutes()
+	if expectedShares >= vardiffLowHashrateExpectedShares {
+		return false
+	}
+	return windowAccepted < vardiffLowHashrateMinAccepted
 }
 
 // quantizeDifficulty snaps a difficulty value to 2^(k/granularity) levels

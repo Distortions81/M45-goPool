@@ -47,7 +47,7 @@ const (
 
 	// Ban thresholds.
 	defaultNTimeForwardSlackSeconds      = 7000
-	defaultBanInvalidSubmissionsAfter    = 60
+	defaultBanInvalidSubmissionsAfter    = 40
 	defaultBanInvalidSubmissionsWindow   = 5 * time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
 	defaultReconnectBanThreshold         = 60
@@ -72,7 +72,7 @@ const (
 	defaultZMQReconnectMax        = 10 * time.Second
 	defaultZMQRecreateBackoffMin  = 500 * time.Millisecond
 	defaultZMQRecreateBackoffMax  = 10 * time.Second
-	defaultInitialDifficultyDelay = 250 * time.Millisecond
+	defaultInitialDifficultyDelay = 2 * time.Second
 	defaultZMQHashBlockAddr       = "tcp://127.0.0.1:28334"
 	defaultZMQRawBlockAddr        = "tcp://127.0.0.1:28332"
 
@@ -85,12 +85,24 @@ const (
 
 	// VarDiff defaults.
 	defaultVarDiffTargetSharesPerMin = 7
-	defaultVarDiffAdjustmentWindow   = 120 * time.Second
+	defaultVarDiffAdjustmentWindow   = 60 * time.Second
 	defaultVarDiffStep               = 2
-	defaultVarDiffDampingFactor      = 0.4
+	defaultVarDiffDampingFactor      = 0.7
+	defaultVarDiffRetargetDelay      = 30 * time.Second
 	defaultDifficultyStepGranularity = 4
+	vardiffAdaptiveMinWindow         = 30 * time.Second
+	vardiffAdaptiveMaxWindow         = 4 * time.Minute
+	vardiffAdaptiveHighShareCount    = 24.0
+	vardiffAdaptiveLowShareCount     = 6.0
+	vardiffLowHashrateExpectedShares = 8.0
+	vardiffLowHashrateMinAccepted    = 3
+	// Safety rails for vardiff decisions to avoid extreme share cadences.
+	// - below min shares/min can cause long no-share gaps and miner timeouts.
+	// - above max shares/min can spam submits and overload the pool.
+	vardiffSafetyMinSharesPerMin = 2.0
+	vardiffSafetyMaxSharesPerMin = 30.0
 
-	defaultHashrateEMATauSeconds = 600.0
+	defaultHashrateEMATauSeconds = 300.0
 	initialHashrateEMATau        = 45 * time.Second
 	// When anchoring a fresh sampling window after reset, place WindowStart at
 	// this percent of the elapsed time from reset to first share (0-100).
