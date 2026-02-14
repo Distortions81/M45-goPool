@@ -79,6 +79,16 @@ Authenticated endpoints rely on a session cookie (name is configured via `[auth]
 
 ## Endpoint catalog
 
+Removed in this branch on **2026-02-14**:
+
+- `GET /api/pool` was removed and is no longer served.
+- Use these endpoints instead:
+  - `GET /api/overview` for headline miner/hashrate values
+  - `GET /api/pool-page` for pool RPC/share diagnostics
+  - `GET /api/server` for process/system diagnostics
+  - `GET /api/pool-hashrate` for fast hashrate + block timer telemetry
+  - `GET /api/blocks` for recent found blocks
+
 Public (no auth):
 
 - `GET /api/overview` — overview page snapshot (default refresh ~10s)
@@ -86,7 +96,6 @@ Public (no auth):
 - `GET /api/node` — node info snapshot (default refresh ~10s)
 - `GET /api/server` — server diagnostics snapshot (default refresh ~10s)
 - `GET /api/pool-hashrate` — fast pool hashrate/block timer snapshot (default refresh ~5s)
-- `GET /api/pool` — pool stats snapshot (default refresh ~10s)
 - `GET /api/blocks` — recent blocks list (default refresh ~3s; supports `?limit=`)
 
 Clerk-authenticated:
