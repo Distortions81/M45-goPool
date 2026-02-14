@@ -37,8 +37,11 @@ const settlingHashrateMaxRelativeError = 0.20
 const settlingHashrateMinExpectedShares = 8.0
 const stableHashrateMaxRelativeError = 0.10
 const stableHashrateMinExpectedShares = 16.0
+const veryStableHashrateMaxRelativeError = 0.05
+const veryStableHashrateMinExpectedShares = 32.0
 const settlingHashrateCumulativeMaxRelativeError = 0.20
 const stableHashrateCumulativeMaxRelativeError = 0.10
+const veryStableHashrateCumulativeMaxRelativeError = 0.05
 const hashrateCumulativeAgreementMinAccepted = 16
 const hashrateCumulativeAgreementMinConnected = 6 * time.Minute
 

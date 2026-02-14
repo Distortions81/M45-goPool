@@ -115,3 +115,35 @@ func TestHashrateConfidenceLevel_AllowsCumulativeSettlingWhenWindowTooShort(t *t
 		t.Fatalf("confidence=%d want 1 when cumulative evidence settles a short window", got)
 	}
 }
+
+func TestHashrateConfidenceLevel_VeryStableTier(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	connectedAt := now.Add(-30 * time.Minute)
+	modeledRate := 10.0 // shares/min
+	estimatedHashrate := (modeledRate * hashPerShare) / 60.0
+	stats := MinerStats{
+		WindowStart:     now.Add(-10 * time.Minute),
+		WindowAccepted:  100,
+		Accepted:        120,
+		TotalDifficulty: modeledRate * now.Sub(connectedAt).Minutes(),
+	}
+
+	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 3 {
+		t.Fatalf("confidence=%d want 3 for very stable evidence and agreement", got)
+	}
+}
+
+func TestHashrateAccuracySymbol_MultiLevel(t *testing.T) {
+	if got := hashrateAccuracySymbol(0); got != "~" {
+		t.Fatalf("symbol=%q want %q for level 0", got, "~")
+	}
+	if got := hashrateAccuracySymbol(1); got != "≈" {
+		t.Fatalf("symbol=%q want %q for level 1", got, "≈")
+	}
+	if got := hashrateAccuracySymbol(2); got != "≈+" {
+		t.Fatalf("symbol=%q want %q for level 2", got, "≈+")
+	}
+	if got := hashrateAccuracySymbol(3); got != "✓" {
+		t.Fatalf("symbol=%q want %q for level 3", got, "✓")
+	}
+}

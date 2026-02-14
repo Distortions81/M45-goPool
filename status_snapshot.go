@@ -251,6 +251,13 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 				if evidence >= highEvidence {
 					if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
 						hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+						if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+							hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+							stats.Accepted >= 32 &&
+							!connectedAt.IsZero() &&
+							now.Sub(connectedAt) >= 20*time.Minute {
+							return 3
+						}
 						return 2
 					}
 					return 1
@@ -261,12 +268,25 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 	if stats.Accepted >= highCum && !connectedAt.IsZero() && now.Sub(connectedAt) >= highConn {
 		if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
 			hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+			if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+				hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+				stats.Accepted >= 32 &&
+				now.Sub(connectedAt) >= 20*time.Minute {
+				return 3
+			}
 			return 2
 		}
 		return 1
 	}
 	if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
 		hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+		if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+			hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+			stats.Accepted >= 32 &&
+			!connectedAt.IsZero() &&
+			now.Sub(connectedAt) >= 20*time.Minute {
+			return 3
+		}
 		return 2
 	}
 	return 1
@@ -317,11 +337,13 @@ func hashrateEstimateAgreesWithCumulative(stats MinerStats, now, connectedAt tim
 func hashrateAccuracySymbol(level int) string {
 	switch level {
 	case 0:
-		return ""
+		return "~"
 	case 1:
 		return "≈"
+	case 2:
+		return "≈+"
 	default:
-		return ""
+		return "✓"
 	}
 }
 
