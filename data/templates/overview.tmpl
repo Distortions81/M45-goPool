@@ -593,9 +593,6 @@
 					case 'Estimated pool hashrate':
 					case 'Pool hashrate':
 						valueEl.textContent = formatHashrate(newData.pool_hashrate);
-						if (window.updateHashrateGraph && newData.pool_hashrate) {
-							window.updateHashrateGraph(newData.pool_hashrate);
-						}
 						break;
 				}
 			});
