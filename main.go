@@ -50,6 +50,7 @@ func main() {
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
 	logLevelFlag := flag.String("log-level", "", "override log level (debug/info/warn/error)")
 	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
+	minerProfileJSONFlag := flag.String("miner-profile-json", "", "optional path to write aggregated miner profile JSON for offline tuning")
 	flag.Parse()
 
 	network := strings.ToLower(*networkFlag)
@@ -259,9 +260,11 @@ func main() {
 	} else {
 		defer workerLists.Close()
 	}
+	var backupSvc *backblazeBackupService
 	if svc, err := newBackblazeBackupService(ctx, cfg, workerListDBPath); err != nil {
 		logger.Warn("initialize backblaze backup service", "error", err)
 	} else if svc != nil {
+		backupSvc = svc
 		if svc.b2Enabled {
 			if svc.bucket == nil {
 				logger.Warn("backblaze backups enabled but bucket is not reachable; using local snapshots only",
@@ -317,11 +320,23 @@ func main() {
 			time.Duration(cfg.ReconnectBanDurationSeconds)*time.Second,
 		)
 	}
+	if profiler := newMinerProfileCollector(*minerProfileJSONFlag); profiler != nil {
+		setMinerProfileCollector(profiler)
+		defer func() {
+			if err := profiler.Flush(); err != nil {
+				logger.Warn("flush miner profile json", "error", err, "path", *minerProfileJSONFlag)
+			}
+			setMinerProfileCollector(nil)
+		}()
+		go profiler.Run(ctx)
+		logger.Info("miner profile collector enabled", "path", *minerProfileJSONFlag)
+	}
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
 	tuningPath := filepath.Join(cfg.DataDir, "config", "tuning.toml")
 	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, tuningPath, stop)
+	statusServer.SetBackupService(backupSvc)
 	statusServer.startOneTimeCodeJanitor(ctx)
 	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)
 	statusServer.startOneTimeCodePersistence(ctx)
@@ -404,6 +419,10 @@ func main() {
 	mux.HandleFunc("/admin/logins/ban", statusServer.handleAdminLoginBan)
 	mux.HandleFunc("/admin/bans", statusServer.handleAdminBansPage)
 	mux.HandleFunc("/admin/bans/remove", statusServer.handleAdminBanRemove)
+	mux.HandleFunc("/admin/operator", statusServer.handleAdminOperatorPage)
+	mux.HandleFunc("/admin/logs", statusServer.handleAdminLogsPage)
+	mux.HandleFunc("/admin/logs/tail", statusServer.handleAdminLogsTail)
+	mux.HandleFunc("/admin/logs/log-level", statusServer.handleAdminLogsSetLogLevel)
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
 	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)

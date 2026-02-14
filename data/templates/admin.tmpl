@@ -7,6 +7,8 @@
 	<a class="admin-tab {{if eq .AdminSection "miners"}}active{{end}}" href="/admin/miners">Connected miners</a>
 	<a class="admin-tab {{if eq .AdminSection "logins"}}active{{end}}" href="/admin/logins">Accounts</a>
 	<a class="admin-tab {{if eq .AdminSection "bans"}}active{{end}}" href="/admin/bans">Bans</a>
+	<a class="admin-tab {{if eq .AdminSection "operator"}}active{{end}}" href="/admin/operator">Operator stats</a>
+	<a class="admin-tab {{if eq .AdminSection "logs"}}active{{end}}" href="/admin/logs">Logs</a>
 </div>
 {{end}}
 <!DOCTYPE html>
@@ -213,6 +215,14 @@
 						<div class="label" title="Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).">steady_state_reconnect_window {{template "restart-required" .}}</div>
 						<input name="accept_steady_state_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateReconnectWindow}}">
 					</div>
+					<div>
+						<div class="label" title="Per-connection Stratum message cap per minute (0 disables; requires restart).">stratum_messages_per_minute {{template "restart-required" .}}</div>
+						<input name="stratum_messages_per_minute" type="number" min="0" class="textfield" value="{{.Settings.StratumMessagesPerMinute}}">
+					</div>
+					<div>
+						<div class="label" title="Recent job IDs cached per miner for stale-share handling and duplicate checks (requires restart).">max_recent_jobs {{template "restart-required" .}}</div>
+						<input name="max_recent_jobs" type="number" min="1" class="textfield" value="{{.Settings.MaxRecentJobs}}">
+					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Difficulty</h3>
@@ -226,9 +236,24 @@
 						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>
+						<div class="label" title="Starting difficulty before VarDiff has enough evidence (0 uses min_difficulty; requires restart).">default_difficulty {{template "restart-required" .}}</div>
+						<input name="default_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.DefaultDifficulty}}">
+					</div>
+					<div>
+						<div class="label" title="VarDiff target share cadence in shares per minute (requires restart).">target_shares_per_min {{template "restart-required" .}}</div>
+						<input name="target_shares_per_min" type="text" class="textfield" value="{{printf "%.4f" .Settings.TargetSharesPerMin}}">
+					</div>
+					<div>
 						<div class="label" title="When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).">lock_suggested_difficulty {{template "restart-required" .}}</div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label" title="Reject/ban suggested difficulties outside configured min/max bounds (requires restart).">enforce_suggested_difficulty_limits {{template "restart-required" .}}</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="enforce_suggested_difficulty_limits" value="1" {{if .Settings.EnforceSuggestedDifficultyLimits}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
@@ -292,15 +317,20 @@
 					</div>
 				</div>
 
-				<h3 style="margin:18px 0 8px 0;">Other</h3>
+				<h3 style="margin:18px 0 8px 0;">Main config runtime</h3>
 				<div class="grid admin-grid">
 					<div>
 						<div class="label" title="Miner connection idle timeout (seconds; requires restart).">connection_timeout_seconds {{template "restart-required" .}}</div>
 						<input name="connection_timeout_seconds" type="number" min="30" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Logging verbosity for goPool (debug, info, warn, error; requires restart).">log_level {{template "restart-required" .}}</div>
-						<input name="log_level" type="text" class="textfield" value="{{.Settings.LogLevel}}">
+						<div class="label" title="Logging verbosity for goPool (applies live immediately and is persisted on save-to-disk).">log_level</div>
+						<select name="log_level" class="textfield">
+							<option value="debug" {{if eq .Settings.LogLevel "debug"}}selected{{end}}>debug</option>
+							<option value="info" {{if eq .Settings.LogLevel "info"}}selected{{end}}>info</option>
+							<option value="warn" {{if or (eq .Settings.LogLevel "warn") (eq .Settings.LogLevel "")}}selected{{end}}>warn</option>
+							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
+						</select>
 					</div>
 					<div>
 						<div class="label" title="Use relaxed submit validation (skips worker-mismatch + some policy checks; requires restart).">relaxed_submit_validation {{template "restart-required" .}}</div>
@@ -323,6 +353,22 @@
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
+					<div>
+						<div class="label" title="Per-share extranonce2 byte length for submitted shares (requires restart).">extranonce2_size {{template "restart-required" .}}</div>
+						<input name="extranonce2_size" type="number" min="1" class="textfield" value="{{.Settings.Extranonce2Size}}">
+					</div>
+					<div>
+						<div class="label" title="Template extranonce2 byte length used in generated jobs (requires restart).">template_extranonce2_size {{template "restart-required" .}}</div>
+						<input name="template_extranonce2_size" type="number" min="1" class="textfield" value="{{.Settings.TemplateExtraNonce2Size}}">
+					</div>
+					<div>
+						<div class="label" title="Entropy bytes added to per-job tags in coinbase (requires restart).">job_entropy {{template "restart-required" .}}</div>
+						<input name="job_entropy" type="number" min="0" class="textfield" value="{{.Settings.JobEntropy}}">
+					</div>
+					<div>
+						<div class="label" title="Maximum allowed coinbase scriptSig size in bytes (requires restart).">coinbase_scriptsig_max_bytes {{template "restart-required" .}}</div>
+						<input name="coinbase_scriptsig_max_bytes" type="number" min="2" class="textfield" value="{{.Settings.CoinbaseScriptSigMaxBytes}}">
+					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Tuning</h3>
@@ -338,6 +384,17 @@
 					<div>
 						<div class="label" title="Maximum seconds a miner can roll nTime forward (requires restart).">ntime_forward_slack_seconds {{template "restart-required" .}}</div>
 						<input name="ntime_forward_slack_seconds" type="number" min="1" class="textfield" value="{{.Settings.NTimeForwardSlackSeconds}}">
+					</div>
+					<div>
+						<div class="label" title="Minimum number of version-rolling bits required when version mask is active (requires restart).">min_version_bits {{template "restart-required" .}}</div>
+						<input name="min_version_bits" type="number" min="0" class="textfield" value="{{.Settings.MinVersionBits}}">
+					</div>
+					<div>
+						<div class="label" title="Allow version rolling even when miners advertise fewer bits than required (requires restart).">ignore_min_version_bits {{template "restart-required" .}}</div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="ignore_min_version_bits" value="1" {{if .Settings.IgnoreMinVersionBits}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
 					</div>
 				</div>
 

@@ -54,6 +54,8 @@ type StatusServer struct {
 	workerPageMu    sync.RWMutex
 	workerPageCache map[string]cachedWorkerPage
 
+	backupSvc *backblazeBackupService
+
 	configPath      string
 	adminConfigPath string
 	tuningPath      string
@@ -105,6 +107,13 @@ func (s *StatusServer) SetStaticFileServer(staticFiles *fileServerWithFallback) 
 		return
 	}
 	s.staticFiles = staticFiles
+}
+
+func (s *StatusServer) SetBackupService(svc *backblazeBackupService) {
+	if s == nil {
+		return
+	}
+	s.backupSvc = svc
 }
 
 func (s *StatusServer) ReloadStaticFiles() error {

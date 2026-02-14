@@ -1,0 +1,110 @@
+{{/* Admin operator stats page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Operator Stats</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<main class="page admin-page" id="content">
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			Operator health view with backup status, auth status, and currency-rate fetch status.
+		</p>
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin panel is disabled. Enable it by editing <span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<p class="text-sm">
+				Sign in on the <a href="/admin">main admin page</a> to view operator stats.
+			</p>
+		</div>
+		{{else}}
+		{{template "admin-nav" .}}
+
+		<div class="card">
+			<div class="label">Pool runtime</div>
+			<div class="grid admin-grid" style="margin-top:8px;">
+				<div><div class="label">Active miners</div><div class="mono">{{.OperatorStats.Pool.ActiveMiners}}</div></div>
+				<div><div class="label">Pool hashrate</div><div class="mono">{{formatHashrate .OperatorStats.Pool.PoolHashrate}}</div></div>
+				<div><div class="label">Shares/s</div><div class="mono">{{formatShareRate .OperatorStats.Pool.SharesPerSecond}}</div></div>
+				<div><div class="label">Active admin sessions</div><div class="mono">{{.OperatorStats.Pool.ActiveAdminSessions}}</div></div>
+			</div>
+			<p class="text-sm" style="margin:10px 0 0 0;color:var(--text-muted);">Generated {{formatTime .OperatorStats.GeneratedAt}} ({{formatTimeUTC .OperatorStats.GeneratedAt}})</p>
+		</div>
+
+		<div class="card">
+			<div class="label">Backups</div>
+			{{if not .OperatorStats.Backups.Enabled}}
+			<p class="text-sm" style="margin-top:8px;">Backup service is not active (cloud + local snapshot backup is disabled).</p>
+			{{else}}
+			<div class="grid admin-grid" style="margin-top:8px;">
+				<div><div class="label">Mode</div><div class="mono">{{if .OperatorStats.Backups.B2Enabled}}Backblaze + local snapshot{{else}}Local snapshot only{{end}}</div></div>
+				<div><div class="label">Interval</div><div class="mono">{{humanDuration .OperatorStats.Backups.Interval}}</div></div>
+				<div><div class="label">Force every interval</div><div class="mono">{{if .OperatorStats.Backups.ForceEveryInterval}}Enabled{{else}}Disabled{{end}}</div></div>
+				<div><div class="label">Bucket</div><div class="mono">{{if .OperatorStats.Backups.BucketName}}{{.OperatorStats.Backups.BucketName}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Bucket config</div><div class="mono">{{if .OperatorStats.Backups.BucketConfigured}}Configured{{else}}Missing credentials/config{{end}}</div></div>
+				<div><div class="label">Bucket health</div><div class="mono">{{if .OperatorStats.Backups.BucketReachable}}Reachable{{else}}Unavailable{{end}}</div></div>
+				<div><div class="label">Last attempt</div><div class="mono">{{formatTime .OperatorStats.Backups.LastAttemptAt}}</div></div>
+				<div><div class="label">Last snapshot</div><div class="mono">{{formatTime .OperatorStats.Backups.LastSnapshotAt}}</div></div>
+				<div><div class="label">Last upload</div><div class="mono">{{formatTime .OperatorStats.Backups.LastUploadAt}}</div></div>
+				<div><div class="label">Snapshot path</div><div class="mono">{{if .OperatorStats.Backups.SnapshotPath}}{{.OperatorStats.Backups.SnapshotPath}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Snapshot version</div><div class="mono">{{.OperatorStats.Backups.LastSnapshotVersion}}</div></div>
+				<div><div class="label">Upload version</div><div class="mono">{{.OperatorStats.Backups.LastUploadVersion}}</div></div>
+			</div>
+			{{if .OperatorStats.Backups.LastError}}
+			<p class="text-sm" style="margin:10px 0 0 0;color:#f88d8d;">Last backup warning/error: {{.OperatorStats.Backups.LastError}}</p>
+			{{end}}
+			{{end}}
+		</div>
+
+		<div class="card">
+			<div class="label">Clerk auth</div>
+			<div class="grid admin-grid" style="margin-top:8px;">
+				<div><div class="label">Configured</div><div class="mono">{{if .OperatorStats.Clerk.Configured}}Yes{{else}}No{{end}}</div></div>
+				<div><div class="label">Verifier status</div><div class="mono">{{if .OperatorStats.Clerk.VerifierReady}}Ready{{else}}Not ready{{end}}</div></div>
+				<div><div class="label">Known Clerk users</div><div class="mono">{{.OperatorStats.Clerk.KnownUsers}}</div></div>
+				<div><div class="label">Loaded JWKS keys</div><div class="mono">{{.OperatorStats.Clerk.LoadedVerificationKeys}}</div></div>
+				<div><div class="label">Last key refresh</div><div class="mono">{{formatTime .OperatorStats.Clerk.LastKeyRefresh}}</div></div>
+				<div><div class="label">Key refresh interval</div><div class="mono">{{humanDuration .OperatorStats.Clerk.KeyRefreshInterval}}</div></div>
+				<div><div class="label">Issuer</div><div class="mono">{{if .OperatorStats.Clerk.Issuer}}{{.OperatorStats.Clerk.Issuer}}{{else}}—{{end}}</div></div>
+				<div><div class="label">JWKS URL</div><div class="mono">{{if .OperatorStats.Clerk.JWKSURL}}{{.OperatorStats.Clerk.JWKSURL}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Callback path</div><div class="mono">{{if .OperatorStats.Clerk.CallbackPath}}{{.OperatorStats.Clerk.CallbackPath}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Sign-in URL</div><div class="mono">{{if .OperatorStats.Clerk.SignInURL}}{{.OperatorStats.Clerk.SignInURL}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Session cookie</div><div class="mono">{{if .OperatorStats.Clerk.SessionCookieName}}{{.OperatorStats.Clerk.SessionCookieName}}{{else}}—{{end}}</div></div>
+			</div>
+			{{if .OperatorStats.Clerk.KnownUsersLoadError}}
+			<p class="text-sm" style="margin:10px 0 0 0;color:#f88d8d;">Failed to load Clerk users: {{.OperatorStats.Clerk.KnownUsersLoadError}}</p>
+			{{end}}
+		</div>
+
+		<div class="card">
+			<div class="label">Currency rate fetch</div>
+			<div class="grid admin-grid" style="margin-top:8px;">
+				<div><div class="label">Fiat</div><div class="mono">{{.OperatorStats.Currency.FiatCurrency}}</div></div>
+				<div><div class="label">Last BTC price</div><div class="mono">{{if gt .OperatorStats.Currency.LastPrice 0.0}}{{printf "%.2f" .OperatorStats.Currency.LastPrice}}{{else}}—{{end}}</div></div>
+				<div><div class="label">Last fetch</div><div class="mono">{{formatTime .OperatorStats.Currency.LastFetchAt}}</div></div>
+				<div><div class="label">Cache TTL</div><div class="mono">{{humanDuration .OperatorStats.Currency.CacheTTL}}</div></div>
+			</div>
+			{{if .OperatorStats.Currency.LastError}}
+			<p class="text-sm" style="margin:10px 0 0 0;color:#f88d8d;">Last rate-fetch error: {{.OperatorStats.Currency.LastError}}</p>
+			{{end}}
+		</div>
+		{{end}}
+		{{template "footer" .}}
+	</main>
+</body>
+</html>

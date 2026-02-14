@@ -76,6 +76,16 @@ func (s *StatusServer) pruneExpiredAdminSessions() {
 	s.adminSessionsMu.Unlock()
 }
 
+func (s *StatusServer) activeAdminSessionCount() int {
+	if s == nil {
+		return 0
+	}
+	s.pruneExpiredAdminSessions()
+	s.adminSessionsMu.Lock()
+	defer s.adminSessionsMu.Unlock()
+	return len(s.adminSessions)
+}
+
 func generateAdminToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {

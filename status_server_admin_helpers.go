@@ -92,6 +92,7 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 		AdminConfigPath:     s.adminConfigPath,
 		AdminNotice:         adminNoticeMessage(noticeKey),
 		AdminPerPageOptions: adminPerPageOptions,
+		AdminLogSources:     adminLogSourceKeys(),
 	}
 	cfg, err := loadAdminConfigFile(s.adminConfigPath)
 	if err != nil {
@@ -103,8 +104,95 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	data.AdminEnabled = cfg.Enabled
 	data.LoggedIn = s.isAdminAuthenticated(r)
 	data.Settings = buildAdminSettingsData(s.Config())
+	data.OperatorStats = s.buildAdminOperatorStats(data.StatusData, data.Settings)
 	data.AdminSection = "settings"
+	if r != nil {
+		data.AdminLogSource = normalizeAdminLogSource(r.URL.Query().Get("source"))
+	}
+	if data.AdminLogSource == "" {
+		data.AdminLogSource = defaultAdminLogSource
+	}
 	return data, cfg, nil
+}
+
+func (s *StatusServer) buildAdminOperatorStats(status StatusData, settings AdminSettingsData) AdminOperatorStatsData {
+	adminSessions := s.activeAdminSessionCount()
+	now := time.Now()
+	stats := AdminOperatorStatsData{
+		GeneratedAt: now,
+		Pool: AdminOperatorPoolStats{
+			ActiveMiners:        status.ActiveMiners,
+			PoolHashrate:        status.PoolHashrate,
+			SharesPerSecond:     status.SharesPerSecond,
+			ActiveAdminSessions: adminSessions,
+		},
+		Currency: AdminOperatorCurrencyStats{
+			FiatCurrency: strings.ToUpper(strings.TrimSpace(settings.FiatCurrency)),
+			CacheTTL:     priceCacheTTL,
+		},
+		Clerk: AdminOperatorClerkStats{
+			Configured:          clerkConfigured(s.Config()),
+			ActiveAdminSessions: adminSessions,
+		},
+	}
+	if stats.Currency.FiatCurrency == "" {
+		stats.Currency.FiatCurrency = "USD"
+	}
+
+	if s.priceSvc != nil {
+		priceSnap := s.priceSvc.Snapshot()
+		stats.Currency.LastPrice = priceSnap.LastPrice
+		stats.Currency.LastFetchAt = priceSnap.LastFetch
+		stats.Currency.LastError = priceSnap.LastErr
+		if fiat := strings.ToUpper(strings.TrimSpace(priceSnap.LastFiat)); fiat != "" {
+			stats.Currency.FiatCurrency = fiat
+		}
+	}
+
+	if s.clerk != nil {
+		clerkSnap := s.clerk.Snapshot()
+		stats.Clerk.VerifierReady = clerkSnap.LoadedKeys > 0
+		stats.Clerk.Issuer = clerkSnap.Issuer
+		stats.Clerk.JWKSURL = clerkSnap.JWKSURL
+		stats.Clerk.CallbackPath = clerkSnap.CallbackPath
+		stats.Clerk.SignInURL = clerkSnap.SignInURL
+		stats.Clerk.SessionCookieName = clerkSnap.SessionCookieName
+		stats.Clerk.LastKeyRefresh = clerkSnap.LastKeyRefresh
+		stats.Clerk.KeyRefreshInterval = clerkSnap.KeyRefreshLimit
+		stats.Clerk.LoadedVerificationKeys = clerkSnap.LoadedKeys
+	}
+	if s.workerLists != nil {
+		users, err := s.workerLists.ListAllClerkUsers()
+		if err != nil {
+			stats.Clerk.KnownUsersLoadError = err.Error()
+		} else {
+			stats.Clerk.KnownUsers = len(users)
+		}
+	}
+
+	if s.backupSvc != nil {
+		backupSnap := s.backupSvc.Snapshot()
+		stats.Backups.Enabled = true
+		stats.Backups.B2Enabled = backupSnap.B2Enabled
+		stats.Backups.BucketConfigured = backupSnap.BucketConfigured
+		stats.Backups.BucketName = backupSnap.BucketName
+		stats.Backups.BucketReachable = backupSnap.BucketReachable
+		stats.Backups.Interval = backupSnap.Interval
+		stats.Backups.ForceEveryInterval = backupSnap.ForceEveryInterval
+		stats.Backups.LastAttemptAt = backupSnap.LastAttemptAt
+		stats.Backups.LastSnapshotAt = backupSnap.LastSnapshotAt
+		stats.Backups.LastSnapshotVersion = backupSnap.LastSnapshotVersion
+		stats.Backups.LastUploadAt = backupSnap.LastUploadAt
+		stats.Backups.LastUploadVersion = backupSnap.LastUploadVersion
+		stats.Backups.SnapshotPath = backupSnap.SnapshotPath
+		if backupSnap.LastB2InitMsg != "" && backupSnap.LastB2InitLogAt.After(backupSnap.LastSkipLogAt) {
+			stats.Backups.LastError = backupSnap.LastB2InitMsg
+		} else if backupSnap.LastSkipMsg != "" {
+			stats.Backups.LastError = backupSnap.LastSkipMsg
+		}
+	}
+
+	return stats
 }
 
 func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, data AdminPageData) {
@@ -193,9 +281,11 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ConnectionTimeoutSeconds:             timeoutSec,
 		MinDifficulty:                        cfg.MinDifficulty,
 		MaxDifficulty:                        cfg.MaxDifficulty,
+		DefaultDifficulty:                    cfg.DefaultDifficulty,
 		TargetSharesPerMin:                   cfg.TargetSharesPerMin,
 		DifficultyStepGranularity:            cfg.DifficultyStepGranularity,
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
+		EnforceSuggestedDifficultyLimits:     cfg.EnforceSuggestedDifficultyLimits,
 		RelaxedSubmitValidation:              cfg.RelaxedSubmitValidation,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
 		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
@@ -210,9 +300,17 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ReconnectBanWindowSeconds:            cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
 		LogLevel:                             cfg.LogLevel,
+		StratumMessagesPerMinute:             cfg.StratumMessagesPerMinute,
+		MaxRecentJobs:                        cfg.MaxRecentJobs,
+		Extranonce2Size:                      cfg.Extranonce2Size,
+		TemplateExtraNonce2Size:              cfg.TemplateExtraNonce2Size,
+		JobEntropy:                           cfg.JobEntropy,
+		CoinbaseScriptSigMaxBytes:            cfg.CoinbaseScriptSigMaxBytes,
 		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
 		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSeconds:             cfg.NTimeForwardSlackSeconds,
+		MinVersionBits:                       cfg.MinVersionBits,
+		IgnoreMinVersionBits:                 cfg.IgnoreMinVersionBits,
 	}
 }
 
@@ -573,6 +671,12 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.AcceptSteadyStateReconnectWindow, err = parseInt("accept_steady_state_reconnect_window", next.AcceptSteadyStateReconnectWindow); err != nil {
 		return err
 	}
+	if next.StratumMessagesPerMinute, err = parseInt("stratum_messages_per_minute", next.StratumMessagesPerMinute); err != nil {
+		return err
+	}
+	if next.MaxRecentJobs, err = parseInt("max_recent_jobs", next.MaxRecentJobs); err != nil {
+		return err
+	}
 
 	timeoutSec, err := parseInt("connection_timeout_seconds", int(next.ConnectionTimeout/time.Second))
 	if err != nil {
@@ -589,6 +693,9 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxDifficulty, err = parseFloat("max_difficulty", next.MaxDifficulty); err != nil {
 		return err
 	}
+	if next.DefaultDifficulty, err = parseFloat("default_difficulty", next.DefaultDifficulty); err != nil {
+		return err
+	}
 	if next.TargetSharesPerMin, err = parseFloat("target_shares_per_min", next.TargetSharesPerMin); err != nil {
 		return err
 	}
@@ -602,6 +709,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return fmt.Errorf("difficulty_step_granularity must be >= 1")
 	}
 	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
+	next.EnforceSuggestedDifficultyLimits = getBool("enforce_suggested_difficulty_limits")
 
 	next.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
 	if next.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", next.BanInvalidSubmissionsAfter); err != nil {
@@ -638,9 +746,29 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	next.RelaxedSubmitValidation = getBool("relaxed_submit_validation")
 	next.DirectSubmitProcessing = getBool("direct_submit_processing")
 	next.CheckDuplicateShares = getBool("check_duplicate_shares")
+	next.IgnoreMinVersionBits = getBool("ignore_min_version_bits")
+
+	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {
+		return err
+	}
+	if next.TemplateExtraNonce2Size, err = parseInt("template_extranonce2_size", next.TemplateExtraNonce2Size); err != nil {
+		return err
+	}
+	if next.JobEntropy, err = parseInt("job_entropy", next.JobEntropy); err != nil {
+		return err
+	}
+	if next.CoinbaseScriptSigMaxBytes, err = parseInt("coinbase_scriptsig_max_bytes", next.CoinbaseScriptSigMaxBytes); err != nil {
+		return err
+	}
+	if next.MinVersionBits, err = parseInt("min_version_bits", next.MinVersionBits); err != nil {
+		return err
+	}
 
 	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
 		next.LogLevel = lvl
+	}
+	if _, err := parseLogLevel(next.LogLevel); err != nil {
+		return err
 	}
 
 	if next.DiscordWorkerNotifyThresholdSeconds, err = parseInt("discord_worker_notify_threshold_seconds", next.DiscordWorkerNotifyThresholdSeconds); err != nil {

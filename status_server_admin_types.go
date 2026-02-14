@@ -17,6 +17,7 @@ type AdminPageData struct {
 	AdminNotice          string
 	AdminLoginsLoadError string
 	AdminBansLoadError   string
+	AdminLogsLoadError   string
 	Settings             AdminSettingsData
 	AdminSection         string
 	AdminMinerRows       []AdminMinerRow
@@ -26,6 +27,65 @@ type AdminPageData struct {
 	AdminLoginPagination AdminPagination
 	AdminBansPagination  AdminPagination
 	AdminPerPageOptions  []int
+	AdminLogSources      []string
+	AdminLogSource       string
+	OperatorStats        AdminOperatorStatsData
+}
+
+type AdminOperatorStatsData struct {
+	GeneratedAt time.Time
+	Pool        AdminOperatorPoolStats
+	Backups     AdminOperatorBackupStats
+	Clerk       AdminOperatorClerkStats
+	Currency    AdminOperatorCurrencyStats
+}
+
+type AdminOperatorPoolStats struct {
+	ActiveMiners        int
+	PoolHashrate        float64
+	SharesPerSecond     float64
+	ActiveAdminSessions int
+}
+
+type AdminOperatorBackupStats struct {
+	Enabled             bool
+	B2Enabled           bool
+	BucketConfigured    bool
+	BucketName          string
+	BucketReachable     bool
+	Interval            time.Duration
+	ForceEveryInterval  bool
+	LastAttemptAt       time.Time
+	LastSnapshotAt      time.Time
+	LastSnapshotVersion int64
+	LastUploadAt        time.Time
+	LastUploadVersion   int64
+	SnapshotPath        string
+	LastError           string
+}
+
+type AdminOperatorClerkStats struct {
+	Configured             bool
+	VerifierReady          bool
+	Issuer                 string
+	JWKSURL                string
+	CallbackPath           string
+	SignInURL              string
+	SessionCookieName      string
+	KnownUsers             int
+	KnownUsersLoadError    string
+	ActiveAdminSessions    int
+	LastKeyRefresh         time.Time
+	KeyRefreshInterval     time.Duration
+	LoadedVerificationKeys int
+}
+
+type AdminOperatorCurrencyStats struct {
+	FiatCurrency string
+	LastPrice    float64
+	LastFetchAt  time.Time
+	LastError    string
+	CacheTTL     time.Duration
 }
 
 type AdminSettingsData struct {
@@ -72,14 +132,16 @@ type AdminSettingsData struct {
 	ConnectionTimeoutSeconds int
 
 	// Difficulty / mining toggles
-	MinDifficulty             float64
-	MaxDifficulty             float64
-	TargetSharesPerMin        float64
-	DifficultyStepGranularity int
-	LockSuggestedDifficulty   bool
-	RelaxedSubmitValidation   bool
-	DirectSubmitProcessing    bool
-	CheckDuplicateShares      bool
+	MinDifficulty                    float64
+	MaxDifficulty                    float64
+	DefaultDifficulty                float64
+	TargetSharesPerMin               float64
+	DifficultyStepGranularity        int
+	LockSuggestedDifficulty          bool
+	EnforceSuggestedDifficultyLimits bool
+	RelaxedSubmitValidation          bool
+	DirectSubmitProcessing           bool
+	CheckDuplicateShares             bool
 
 	// Peer cleanup
 	PeerCleanupEnabled   bool
@@ -99,9 +161,17 @@ type AdminSettingsData struct {
 	LogLevel string
 
 	// Tuning / misc
+	StratumMessagesPerMinute            int
+	MaxRecentJobs                       int
+	Extranonce2Size                     int
+	TemplateExtraNonce2Size             int
+	JobEntropy                          int
+	CoinbaseScriptSigMaxBytes           int
 	DiscordWorkerNotifyThresholdSeconds int
 	HashrateEMATauSeconds               float64
 	NTimeForwardSlackSeconds            int
+	MinVersionBits                      int
+	IgnoreMinVersionBits                bool
 }
 
 type AdminMinerRow struct {

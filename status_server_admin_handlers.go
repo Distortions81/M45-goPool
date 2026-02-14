@@ -82,6 +82,24 @@ func (s *StatusServer) handleAdminBansPage(w http.ResponseWriter, r *http.Reques
 	s.renderAdminPageTemplate(w, r, data, "admin_bans")
 }
 
+func (s *StatusServer) handleAdminOperatorPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin/operator", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	if !data.AdminEnabled {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !data.LoggedIn {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data.AdminSection = "operator"
+	s.renderAdminPageTemplate(w, r, data, "admin_operator")
+}
+
 func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
@@ -223,8 +241,18 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 		s.renderAdminPage(w, r, data)
 		return
 	}
+	level, err := parseLogLevel(cfg.LogLevel)
+	if err != nil {
+		data.AdminApplyError = fmt.Sprintf("Validation error: %v", err)
+		data.Settings = buildAdminSettingsData(cfg)
+		s.renderAdminPage(w, r, data)
+		return
+	}
 
 	s.UpdateConfig(cfg)
+	setLogLevel(level)
+	debugLogging = debugEnabled()
+	verboseLogging = verboseEnabled()
 	logger.Info("admin applied live settings (in memory)")
 	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
 }

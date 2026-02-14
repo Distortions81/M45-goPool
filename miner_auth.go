@@ -321,6 +321,9 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	// to be valid, schedule initial difficulty and a job so hashing can start.
 	// We delay very briefly to give miners a chance to send suggest_* first.
 	mc.scheduleInitialWork()
+	if profiler := getMinerProfileCollector(); profiler != nil {
+		profiler.ObserveAuthorize(mc, workerName)
+	}
 }
 
 func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {

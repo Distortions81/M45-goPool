@@ -707,6 +707,9 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	newDiff := mc.suggestedVardiff(now, snap)
 
 	currentDiff := atomicLoadFloat64(&mc.difficulty)
+	if profiler := getMinerProfileCollector(); profiler != nil {
+		profiler.ObserveVardiff(mc, now, snap, currentDiff, newDiff)
+	}
 
 	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
 		return false

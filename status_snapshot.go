@@ -700,6 +700,8 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	adminMinersPath := filepath.Join(dataDir, "templates", "admin_miners.tmpl")
 	adminLoginsPath := filepath.Join(dataDir, "templates", "admin_logins.tmpl")
 	adminBansPath := filepath.Join(dataDir, "templates", "admin_bans.tmpl")
+	adminOperatorPath := filepath.Join(dataDir, "templates", "admin_operator.tmpl")
+	adminLogsPath := filepath.Join(dataDir, "templates", "admin_logs.tmpl")
 	errorPath := filepath.Join(dataDir, "templates", "error.tmpl")
 
 	// Load template files
@@ -779,6 +781,14 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load admin bans template: %w", err)
 	}
+	adminOperatorHTML, err := os.ReadFile(adminOperatorPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin operator template: %w", err)
+	}
+	adminLogsHTML, err := os.ReadFile(adminLogsPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin logs template: %w", err)
+	}
 	errorHTML, err := os.ReadFile(errorPath)
 	if err != nil {
 		return nil, fmt.Errorf("load error template: %w", err)
@@ -842,6 +852,12 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	}
 	if _, err := tmpl.New("admin_bans").Parse(string(adminBansHTML)); err != nil {
 		return nil, fmt.Errorf("parse admin bans template: %w", err)
+	}
+	if _, err := tmpl.New("admin_operator").Parse(string(adminOperatorHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin operator template: %w", err)
+	}
+	if _, err := tmpl.New("admin_logs").Parse(string(adminLogsHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin logs template: %w", err)
 	}
 	if _, err := tmpl.New("error").Parse(string(errorHTML)); err != nil {
 		return nil, fmt.Errorf("parse error template: %w", err)
