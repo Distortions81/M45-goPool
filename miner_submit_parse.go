@@ -360,7 +360,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID interface{}, params
 
 	authorizedWorker := strings.TrimSpace(mc.currentWorker())
 	submitWorker := strings.TrimSpace(worker)
-	if authorizedWorker != "" && submitWorker != authorizedWorker {
+	if mc.cfg.SubmitWorkerNameMatch && authorizedWorker != "" && submitWorker != authorizedWorker {
 		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
 		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
 		if mc.metrics != nil {

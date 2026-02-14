@@ -104,7 +104,7 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	data.AdminEnabled = cfg.Enabled
 	data.LoggedIn = s.isAdminAuthenticated(r)
 	data.Settings = buildAdminSettingsData(s.Config())
-	data.OperatorStats = s.buildAdminOperatorStats(data.StatusData, data.Settings)
+	data.OperatorStats = s.buildAdminOperatorStats(s.statusDataView(), data.Settings)
 	data.AdminSection = "settings"
 	if r != nil {
 		data.AdminLogSource = normalizeAdminLogSource(r.URL.Query().Get("source"))
@@ -287,6 +287,7 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
 		EnforceSuggestedDifficultyLimits:     cfg.EnforceSuggestedDifficultyLimits,
 		RelaxedSubmitValidation:              cfg.RelaxedSubmitValidation,
+		SubmitWorkerNameMatch:                cfg.SubmitWorkerNameMatch,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
 		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
@@ -744,6 +745,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	}
 
 	next.RelaxedSubmitValidation = getBool("relaxed_submit_validation")
+	next.SubmitWorkerNameMatch = getBool("submit_worker_name_match")
 	next.DirectSubmitProcessing = getBool("direct_submit_processing")
 	next.CheckDuplicateShares = getBool("check_duplicate_shares")
 	next.IgnoreMinVersionBits = getBool("ignore_min_version_bits")

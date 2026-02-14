@@ -85,6 +85,7 @@ type miningConfig struct {
 	PoolTagPrefix             string   `toml:"pooltag_prefix"`
 	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
 	RelaxedSubmitValidation   *bool    `toml:"relaxed_submit_validation"`
+	SubmitWorkerNameMatch     *bool    `toml:"submit_worker_name_match"`
 	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
 	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
 }

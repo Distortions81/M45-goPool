@@ -61,3 +61,38 @@ func TestApplyAdminSettingsForm_DefaultDifficultyZeroFallsBackToMinDifficulty(t 
 		t.Fatalf("expected default_difficulty to remain unset (0) when not provided, got %v", cfg.DefaultDifficulty)
 	}
 }
+
+func TestApplyAdminSettingsForm_SubmitWorkerNameMatchToggle(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.SubmitWorkerNameMatch = false
+
+	form := url.Values{}
+	form.Set("status_tagline", cfg.StatusTagline) // required field (present in UI)
+	form.Set("submit_worker_name_match", "1")
+	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
+	}
+	if !cfg.SubmitWorkerNameMatch {
+		t.Fatalf("expected submit_worker_name_match to be enabled")
+	}
+
+	form = url.Values{}
+	form.Set("status_tagline", cfg.StatusTagline)
+	// Intentionally omit submit_worker_name_match to model an unchecked checkbox.
+	r = httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
+	}
+	if cfg.SubmitWorkerNameMatch {
+		t.Fatalf("expected submit_worker_name_match to be disabled when omitted")
+	}
+}

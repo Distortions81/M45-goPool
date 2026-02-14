@@ -302,6 +302,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Mining.RelaxedSubmitValidation != nil {
 		cfg.RelaxedSubmitValidation = *fc.Mining.RelaxedSubmitValidation
 	}
+	if fc.Mining.SubmitWorkerNameMatch != nil {
+		cfg.SubmitWorkerNameMatch = *fc.Mining.SubmitWorkerNameMatch
+	}
 	if fc.Mining.DirectSubmitProcessing != nil {
 		cfg.DirectSubmitProcessing = *fc.Mining.DirectSubmitProcessing
 	}

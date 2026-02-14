@@ -69,6 +69,7 @@ func defaultConfig() Config {
 		CleanExpiredBansOnStartup:           true,
 		LogLevel:                            "warn",
 		RelaxedSubmitValidation:             true,
+		SubmitWorkerNameMatch:               false,
 		BanInvalidSubmissionsAfter:          defaultBanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:         defaultBanInvalidSubmissionsWindow,
 		BanInvalidSubmissionsDuration:       defaultBanInvalidSubmissionsDuration,

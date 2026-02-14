@@ -332,16 +332,23 @@
 							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
 						</select>
 					</div>
-					<div>
-						<div class="label" title="Use relaxed submit validation (skips worker-mismatch + some policy checks; requires restart).">relaxed_submit_validation {{template "restart-required" .}}</div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="relaxed_submit_validation" value="1" {{if .Settings.RelaxedSubmitValidation}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
-					</div>
-					<div>
-						<div class="label" title="Process mining.submit on the connection goroutine (lower latency; can block reads; requires restart).">direct_submit_processing {{template "restart-required" .}}</div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
+						<div>
+							<div class="label" title="Use relaxed submit validation (skips selected submit policy checks; requires restart).">relaxed_submit_validation {{template "restart-required" .}}</div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+								<input type="checkbox" name="relaxed_submit_validation" value="1" {{if .Settings.RelaxedSubmitValidation}}checked{{end}}>
+								<span style="margin-left:8px;">Enabled</span>
+							</label>
+						</div>
+						<div>
+							<div class="label" title="Require submitted worker name to match the authorized worker for the connection (requires restart).">submit_worker_name_match {{template "restart-required" .}}</div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+								<input type="checkbox" name="submit_worker_name_match" value="1" {{if .Settings.SubmitWorkerNameMatch}}checked{{end}}>
+								<span style="margin-left:8px;">Enabled</span>
+							</label>
+						</div>
+						<div>
+							<div class="label" title="Process mining.submit on the connection goroutine (lower latency; can block reads; requires restart).">direct_submit_processing {{template "restart-required" .}}</div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="direct_submit_processing" value="1" {{if .Settings.DirectSubmitProcessing}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>

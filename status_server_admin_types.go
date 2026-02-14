@@ -140,6 +140,7 @@ type AdminSettingsData struct {
 	LockSuggestedDifficulty          bool
 	EnforceSuggestedDifficultyLimits bool
 	RelaxedSubmitValidation          bool
+	SubmitWorkerNameMatch            bool
 	DirectSubmitProcessing           bool
 	CheckDuplicateShares             bool
 

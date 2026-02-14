@@ -141,6 +141,7 @@ type Config struct {
 	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
 
 	RelaxedSubmitValidation bool   // skip worker-mismatch + selected policy checks (default true)
+	SubmitWorkerNameMatch   bool   // enforce submit worker name must match authorized worker
 	DirectSubmitProcessing  bool   // process submits on connection goroutine (bypass worker pool)
 	LogLevel                string // log level: debug, info, warn, error
 
@@ -231,6 +232,7 @@ type EffectiveConfig struct {
 	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
 	DifficultyStepGranularity         int      `json:"difficulty_step_granularity,omitempty"`
 	RelaxedSubmitValidation           bool     `json:"relaxed_submit_validation"`
+	SubmitWorkerNameMatch             bool     `json:"submit_worker_name_match"`
 	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
 	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
