@@ -200,7 +200,7 @@ func (c *minerProfileCollector) ObserveVardiff(mc *MinerConn, now time.Time, sna
 	profileKey := profileIdentityKey(minerType, clientName, clientVersion)
 
 	modeledRate := modeledShareRatePerMinute(snap.RollingHashrate, currentDiff)
-	confLevel := hashrateConfidenceLevel(snap.Stats, now, modeledRate, mc.connectedAt)
+	confLevel := hashrateConfidenceLevel(snap.Stats, now, modeledRate, snap.RollingHashrate, mc.connectedAt)
 	settled := confLevel >= 2
 	workStartMS := snap.NotifyToFirstShareP50MS
 	if workStartMS <= 0 {

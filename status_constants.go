@@ -32,6 +32,14 @@ const overviewRefreshInterval = defaultRefreshInterval
 const poolHashrateTTL = 5 * time.Second
 const poolHashrateHistoryWindow = 6 * time.Minute
 const blocksRefreshInterval = 3 * time.Second
+const settlingHashrateMaxRelativeError = 0.20
+const settlingHashrateMinExpectedShares = 8.0
+const stableHashrateMaxRelativeError = 0.10
+const stableHashrateMinExpectedShares = 16.0
+const settlingHashrateCumulativeMaxRelativeError = 0.20
+const stableHashrateCumulativeMaxRelativeError = 0.10
+const hashrateCumulativeAgreementMinAccepted = 24
+const hashrateCumulativeAgreementMinConnected = 6 * time.Minute
 
 // apiVersion is a short, human-readable version identifier included in all
 // JSON API responses so power users can detect schema changes.

@@ -67,9 +67,6 @@
 				gap: 8px;
 			}
 		}
-		.hashrate-warmup {
-			opacity: 0.58;
-		}
 		.hashrate-settling {
 			opacity: 0.82;
 		}
@@ -117,7 +114,7 @@
 					Force reset button: bans for 30s, then disconnects active sessions so the miner reconnects cleanly.
 				</p>
 				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Hashrate markers: <span class="mono">~?</span> warming up (low confidence), <span class="mono">≈</span> settling, no marker = stable.
+					Hashrate markers: <span class="mono">≈</span> settling, no marker = stable.
 				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
@@ -716,13 +713,11 @@
 			const base = formatHashrate(value);
 			if (base === '—' || base === '---') return '—';
 			const marker = String(accuracy || '').trim();
-			if (marker === '~') return `~? ${base}`;
 			return marker ? `${marker} ${base}` : base;
 		}
 
 		function hashrateClassForAccuracy(accuracy) {
 			const marker = String(accuracy || '').trim();
-			if (marker === '~') return 'hashrate-warmup';
 			if (marker === '≈') return 'hashrate-settling';
 			return '';
 		}
@@ -811,7 +806,7 @@
 			cells.forEach((el) => {
 				const value = Number(el.getAttribute('data-hashrate'));
 				const accuracy = el.getAttribute('data-hashrate-accuracy');
-				el.classList.remove('hashrate-warmup', 'hashrate-settling');
+				el.classList.remove('hashrate-settling');
 				if (!value) {
 					el.textContent = '—';
 					return;
@@ -1475,7 +1470,7 @@
 				cells.forEach((el) => {
 					const value = Number(el.getAttribute('data-hashrate'));
 					const accuracy = el.getAttribute('data-hashrate-accuracy');
-					el.classList.remove('hashrate-warmup', 'hashrate-settling');
+					el.classList.remove('hashrate-settling');
 					if (!value) {
 						el.textContent = '—';
 						return;
@@ -1521,13 +1516,11 @@
 				const base = formatHashrate(value);
 				if (base === '—' || base === '---') return '—';
 				const marker = String(accuracy || '').trim();
-				if (marker === '~') return `~? ${base}`;
 				return marker ? `${marker} ${base}` : base;
 			}
 
 			function hashrateClassForAccuracy(accuracy) {
 				const marker = String(accuracy || '').trim();
-				if (marker === '~') return 'hashrate-warmup';
 				if (marker === '≈') return 'hashrate-settling';
 				return '';
 			}

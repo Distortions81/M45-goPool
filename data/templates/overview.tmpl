@@ -8,9 +8,6 @@
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Overview</title>
 	<link rel="stylesheet" href="/style.css">
 	<style>
-		.hashrate-warmup {
-			opacity: 0.58;
-		}
 		.hashrate-settling {
 			opacity: 0.82;
 		}
@@ -140,7 +137,7 @@
 		<h2 id="workers">Recent work</h2>
 		<div class="card">
 			<p class="text-sm" style="color:var(--text-muted); margin-top:0;">
-				Hashrate markers: <span class="mono">~?</span> warming up (low confidence), <span class="mono">≈</span> settling, no marker = stable.
+				Hashrate markers: <span class="mono">≈</span> settling, no marker = stable.
 			</p>
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-workers-table">
@@ -284,7 +281,6 @@
 
 		function hashrateClassForAccuracy(accuracy) {
 			const marker = String(accuracy || '').trim();
-			if (marker === '~') return 'hashrate-warmup';
 			if (marker === '≈') return 'hashrate-settling';
 			return '';
 		}
@@ -293,7 +289,6 @@
 			const base = formatHashrate(h);
 			if (base === '---') return '—';
 			const marker = String(accuracy || '').trim();
-			if (marker === '~') return `~? ${base}`;
 			return marker ? `${marker} ${base}` : base;
 		}
 

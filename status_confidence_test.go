@@ -48,13 +48,65 @@ func TestReliabilityThresholdsAreBoundedAndAdaptive(t *testing.T) {
 }
 
 func TestHashrateAccuracySymbol(t *testing.T) {
-	if got := hashrateAccuracySymbol(0); got != "~" {
-		t.Fatalf("level0 got %q want %q", got, "~")
+	if got := hashrateAccuracySymbol(0); got != "" {
+		t.Fatalf("level0 got %q want empty", got)
 	}
 	if got := hashrateAccuracySymbol(1); got != "≈" {
 		t.Fatalf("level1 got %q want %q", got, "≈")
 	}
 	if got := hashrateAccuracySymbol(2); got != "" {
 		t.Fatalf("level2 got %q want empty", got)
+	}
+}
+
+func TestHashrateConfidenceLevel_DemotesLargeMismatch(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	modeledRate := 10.0 // shares/min
+	connectedAt := now.Add(-4 * time.Minute)
+	stats := MinerStats{
+		WindowStart:    now.Add(-2 * time.Minute),
+		WindowAccepted: 15, // 25% below modeled expectation (20)
+		Accepted:       40,
+	}
+
+	estimatedHashrate := 10.0 * hashPerShare / 60.0
+	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 0 {
+		t.Fatalf("confidence=%d want 0 for >=25%% mismatch", got)
+	}
+}
+
+func TestHashrateConfidenceLevel_RequiresTighterAgreementForStable(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	modeledRate := 10.0 // shares/min
+	connectedAt := now.Add(-4 * time.Minute)
+	stats := MinerStats{
+		WindowStart:    now.Add(-2 * time.Minute),
+		WindowAccepted: 16, // 20% below modeled expectation (20)
+		Accepted:       40,
+	}
+
+	estimatedHashrate := 10.0 * hashPerShare / 60.0
+	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 1 {
+		t.Fatalf("confidence=%d want 1 when settling threshold passes but stable threshold fails", got)
+	}
+}
+
+func TestHashrateConfidenceLevel_DemotesWhenCumulativeDisagrees(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	connectedAt := now.Add(-10 * time.Minute)
+	modeledRate := 10.0 // shares/min
+	estimatedHashrate := (modeledRate * hashPerShare) / 60.0
+	// Cumulative implies 7.5 shares/min (25% lower), so the estimator should not
+	// be treated as settled when enough long-horizon evidence exists.
+	totalDiff := 7.5 * now.Sub(connectedAt).Minutes()
+	stats := MinerStats{
+		WindowStart:     now.Add(-2 * time.Minute),
+		WindowAccepted:  20,
+		Accepted:        60,
+		TotalDifficulty: totalDiff,
+	}
+
+	if got := hashrateConfidenceLevel(stats, now, modeledRate, estimatedHashrate, connectedAt); got != 0 {
+		t.Fatalf("confidence=%d want 0 when cumulative disagrees by settling threshold", got)
 	}
 }

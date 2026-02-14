@@ -174,11 +174,18 @@ func reliabilityThresholds(modeledRate float64) (minWindow time.Duration, minEvi
 	return minWindow, minEvidence, minCumulativeAccepted, minConnected
 }
 
-func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate float64, connectedAt time.Time) int {
-	if modeledRate <= 0 {
+func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estimatedHashrate float64, connectedAt time.Time) int {
+	if modeledRate <= 0 || estimatedHashrate <= 0 {
 		return 0
 	}
 	if !hasReliableRateEstimate(stats, now, modeledRate, connectedAt) {
+		return 0
+	}
+	if !hashrateAgreementWithinTolerance(stats, now, modeledRate, settlingHashrateMaxRelativeError, settlingHashrateMinExpectedShares) {
+		return 0
+	}
+	settlingCumulativeAgreement := hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, settlingHashrateCumulativeMaxRelativeError)
+	if hashrateHasCumulativeEvidence(stats, now, connectedAt) && !settlingCumulativeAgreement {
 		return 0
 	}
 	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
@@ -218,23 +225,77 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate float6
 				evidence := float64(stats.WindowAccepted)
 				if expected < evidence {
 					evidence = expected
-				}
-				if evidence >= highEvidence {
-					return 2
-				}
+					}
+					if evidence >= highEvidence {
+						if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+							hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+							return 2
+						}
+						return 1
+					}
 			}
 		}
 	}
 	if stats.Accepted >= highCum && !connectedAt.IsZero() && now.Sub(connectedAt) >= highConn {
+		if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+			hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+			return 2
+		}
+		return 1
+	}
+	if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+		hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
 		return 2
 	}
 	return 1
 }
 
+func hashrateAgreementWithinTolerance(stats MinerStats, now time.Time, modeledRate, maxRelativeError, minExpectedShares float64) bool {
+	if modeledRate <= 0 || maxRelativeError < 0 || minExpectedShares <= 0 || stats.WindowStart.IsZero() {
+		return false
+	}
+	window := now.Sub(stats.WindowStart)
+	if window <= 0 {
+		return false
+	}
+	expectedShares := modeledRate * window.Minutes()
+	if expectedShares < minExpectedShares {
+		return false
+	}
+	observedShares := float64(stats.WindowAccepted)
+	if observedShares <= 0 {
+		return false
+	}
+	relativeError := math.Abs(observedShares-expectedShares) / expectedShares
+	return relativeError <= maxRelativeError
+}
+
+func hashrateHasCumulativeEvidence(stats MinerStats, now, connectedAt time.Time) bool {
+	if connectedAt.IsZero() || !now.After(connectedAt) {
+		return false
+	}
+	if stats.Accepted < hashrateCumulativeAgreementMinAccepted {
+		return false
+	}
+	return now.Sub(connectedAt) >= hashrateCumulativeAgreementMinConnected
+}
+
+func hashrateEstimateAgreesWithCumulative(stats MinerStats, now, connectedAt time.Time, estimateHashrate, maxRelativeError float64) bool {
+	if estimateHashrate <= 0 || maxRelativeError < 0 || connectedAt.IsZero() || !now.After(connectedAt) {
+		return false
+	}
+	cumulative := cumulativeHashrateEstimate(stats, connectedAt, now)
+	if cumulative <= 0 {
+		return false
+	}
+	relativeError := math.Abs(estimateHashrate-cumulative) / cumulative
+	return relativeError <= maxRelativeError
+}
+
 func hashrateAccuracySymbol(level int) string {
 	switch level {
 	case 0:
-		return "~"
+		return ""
 	case 1:
 		return "≈"
 	default:
@@ -290,7 +351,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, cumulativeHashrateEstimate(stats, mc.connectedAt, now))
 	modeledRate := modeledShareRatePerMinute(hashRate, diff)
 	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
-	conf := hashrateConfidenceLevel(stats, now, modeledRate, mc.connectedAt)
+	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)
 	if conf == 0 {
 		hashRate = 0
 		accRate = 0
