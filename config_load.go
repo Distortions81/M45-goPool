@@ -299,8 +299,8 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
 		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
 	}
-	if fc.Mining.SoloMode != nil {
-		cfg.SoloMode = *fc.Mining.SoloMode
+	if fc.Mining.RelaxedSubmitValidation != nil {
+		cfg.RelaxedSubmitValidation = *fc.Mining.RelaxedSubmitValidation
 	}
 	if fc.Mining.DirectSubmitProcessing != nil {
 		cfg.DirectSubmitProcessing = *fc.Mining.DirectSubmitProcessing
@@ -393,8 +393,8 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		// the suffix builder (which is gated on JobEntropy > 0).
 		cfg.JobEntropy = 0
 	}
-	if fc.Mining.VardiffFine != nil {
-		cfg.VardiffFine = *fc.Mining.VardiffFine
+	if fc.Mining.DifficultyStepGranularity != nil && *fc.Mining.DifficultyStepGranularity > 0 {
+		cfg.DifficultyStepGranularity = *fc.Mining.DifficultyStepGranularity
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds

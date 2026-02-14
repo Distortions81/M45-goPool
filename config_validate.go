@@ -91,6 +91,9 @@ func validateConfig(cfg Config) error {
 	if cfg.TargetSharesPerMin <= 0 {
 		return fmt.Errorf("target_shares_per_min must be > 0, got %v", cfg.TargetSharesPerMin)
 	}
+	if cfg.DifficultyStepGranularity <= 0 {
+		return fmt.Errorf("difficulty_step_granularity must be > 0, got %d", cfg.DifficultyStepGranularity)
+	}
 	if cfg.PoolFeePercent < 0 || cfg.PoolFeePercent >= 100 {
 		return fmt.Errorf("pool_fee_percent must be >= 0 and < 100, got %v", cfg.PoolFeePercent)
 	}

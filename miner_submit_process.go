@@ -22,7 +22,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
-	if mc.cfg.SoloMode {
+	if mc.cfg.RelaxedSubmitValidation {
 		ctx, ok := mc.prepareShareContextSolo(task)
 		if !ok {
 			return

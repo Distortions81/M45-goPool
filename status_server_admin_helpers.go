@@ -194,8 +194,9 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		MinDifficulty:                        cfg.MinDifficulty,
 		MaxDifficulty:                        cfg.MaxDifficulty,
 		TargetSharesPerMin:                   cfg.TargetSharesPerMin,
+		DifficultyStepGranularity:            cfg.DifficultyStepGranularity,
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
-		SoloMode:                             cfg.SoloMode,
+		RelaxedSubmitValidation:              cfg.RelaxedSubmitValidation,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
 		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
@@ -594,6 +595,12 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.TargetSharesPerMin <= 0 {
 		return fmt.Errorf("target_shares_per_min must be > 0")
 	}
+	if next.DifficultyStepGranularity, err = parseInt("difficulty_step_granularity", next.DifficultyStepGranularity); err != nil {
+		return err
+	}
+	if next.DifficultyStepGranularity < 1 {
+		return fmt.Errorf("difficulty_step_granularity must be >= 1")
+	}
 	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
 
 	next.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
@@ -628,7 +635,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return err
 	}
 
-	next.SoloMode = getBool("solo_mode")
+	next.RelaxedSubmitValidation = getBool("relaxed_submit_validation")
 	next.DirectSubmitProcessing = getBool("direct_submit_processing")
 	next.CheckDuplicateShares = getBool("check_duplicate_shares")
 

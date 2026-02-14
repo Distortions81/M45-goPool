@@ -629,10 +629,6 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 		return currentDiff
 	}
 
-	if mc.cfg.VardiffFine {
-		return mc.suggestedVardiffFine(currentDiff, targetDiff, windowAccepted)
-	}
-
 	// Aim one step lower than the computed target to reduce timeouts.
 	stepFactor := mc.vardiff.Step
 	if stepFactor <= 1 {
@@ -686,61 +682,6 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 	return mc.clampDifficulty(newDiff)
 }
 
-func (mc *MinerConn) suggestedVardiffFine(currentDiff, targetDiff float64, windowAccepted int) float64 {
-	if currentDiff <= 0 {
-		return currentDiff
-	}
-
-	if mc.vardiff.MaxDiff > 0 && targetDiff > mc.vardiff.MaxDiff {
-		targetDiff = mc.vardiff.MaxDiff
-	}
-	if targetDiff < mc.vardiff.MinDiff {
-		targetDiff = mc.vardiff.MinDiff
-	}
-	if mc.cfg.MaxDifficulty > 0 && targetDiff > mc.cfg.MaxDifficulty {
-		targetDiff = mc.cfg.MaxDifficulty
-	}
-
-	step := mc.vardiff.Step
-	if step <= 1 {
-		step = 2
-	}
-	halfStep := math.Sqrt(step)
-	if halfStep <= 1 {
-		halfStep = 1.1
-	}
-
-	ratio := targetDiff / currentDiff
-	band := 0.12
-	if windowAccepted < 20 {
-		band = 0.25
-	}
-	if ratio >= 1-band && ratio <= 1+band {
-		return currentDiff
-	}
-
-	const k = 0.55
-	factor := math.Pow(ratio, k)
-	if math.IsNaN(factor) || math.IsInf(factor, 0) || factor <= 0 {
-		return currentDiff
-	}
-
-	maxFactor := mc.vardiffAdjustmentCap(halfStep)
-	minFactor := 1 / maxFactor
-	if factor > maxFactor {
-		factor = maxFactor
-	}
-	if factor < minFactor {
-		factor = minFactor
-	}
-	newDiff := currentDiff * factor
-
-	if newDiff == 0 || math.Abs(newDiff-currentDiff) < 1e-6 {
-		return currentDiff
-	}
-	return mc.clampDifficulty(newDiff)
-}
-
 func (mc *MinerConn) vardiffAdjustmentCap(baseStep float64) float64 {
 	if baseStep <= 1 {
 		return 1
@@ -751,33 +692,35 @@ func (mc *MinerConn) vardiffAdjustmentCap(baseStep float64) float64 {
 	return baseStep
 }
 
-// quantizeDifficultyToPowerOfTwo snaps a difficulty value to a power-of-two
-// level within [min, max] (if max > 0). This keeps stratum difficulty levels
-// on clean power-of-two boundaries.
-func quantizeDifficultyToPowerOfTwo(diff, min, max float64) float64 {
+// quantizeDifficulty snaps a difficulty value to 2^(k/granularity) levels
+// within [min, max] (if max > 0). granularity=1 is power-of-two only.
+func quantizeDifficulty(diff, min, max float64, granularity int) float64 {
 	if diff <= 0 {
 		diff = min
 	}
 	if diff <= 0 {
 		return diff
 	}
+	if granularity <= 0 {
+		granularity = 1
+	}
 
-	log2 := math.Log2(diff)
+	log2 := math.Log2(diff) * float64(granularity)
 	if math.IsNaN(log2) || math.IsInf(log2, 0) {
 		return diff
 	}
 
 	exp := math.Round(log2)
-	cand := math.Pow(2, exp)
+	cand := math.Pow(2, exp/float64(granularity))
 
 	// Ensure candidate lies within [min, max] by snapping up/down as needed.
 	if cand < min && min > 0 {
-		exp = math.Ceil(math.Log2(min))
-		cand = math.Pow(2, exp)
+		exp = math.Ceil(math.Log2(min) * float64(granularity))
+		cand = math.Pow(2, exp/float64(granularity))
 	}
 	if max > 0 && cand > max {
-		exp = math.Floor(math.Log2(max))
-		cand = math.Pow(2, exp)
+		exp = math.Floor(math.Log2(max) * float64(granularity))
+		cand = math.Pow(2, exp/float64(granularity))
 	}
 
 	if cand < min {
@@ -817,11 +760,12 @@ func (mc *MinerConn) clampDifficulty(diff float64) float64 {
 	if max > 0 && diff > max {
 		diff = max
 	}
-	if mc.cfg.VardiffFine {
-		return diff
+	granularity := mc.cfg.DifficultyStepGranularity
+	if granularity <= 0 {
+		granularity = defaultDifficultyStepGranularity
 	}
-	// Snap the final difficulty to a power-of-two level within [min, max].
-	return quantizeDifficultyToPowerOfTwo(diff, min, max)
+	// Snap the final difficulty to the configured logarithmic step grid.
+	return quantizeDifficulty(diff, min, max, granularity)
 }
 
 func (mc *MinerConn) setDifficulty(diff float64) {

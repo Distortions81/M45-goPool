@@ -50,51 +50,6 @@ func TestSuggestedVardiff_FirstTwoAdjustmentsUseTwoSteps(t *testing.T) {
 	}
 }
 
-func TestSuggestedVardiffFine_FirstTwoAdjustmentsUseTwoSteps(t *testing.T) {
-	now := time.Unix(1700000000, 0)
-	mc := &MinerConn{
-		cfg: Config{
-			VardiffFine: true,
-		},
-		vardiff: VarDiffConfig{
-			MinDiff:            1,
-			MaxDiff:            1024,
-			TargetSharesPerMin: 1,
-			Step:               2,
-		},
-	}
-	atomicStoreFloat64(&mc.difficulty, 1)
-
-	snap := minerShareSnapshot{
-		Stats: MinerStats{
-			WindowStart:       now.Add(-time.Minute),
-			WindowAccepted:    25,
-			WindowSubmissions: 25,
-		},
-		RollingHashrate: hashPerShare,
-	}
-
-	tests := []struct {
-		name      string
-		adjustCnt int32
-		want      float64
-	}{
-		{name: "first adjustment", adjustCnt: 0, want: 2},
-		{name: "second adjustment", adjustCnt: 1, want: 2},
-		{name: "third adjustment", adjustCnt: 2, want: 1.4142135623730951},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			mc.vardiffAdjustments.Store(tc.adjustCnt)
-			got := mc.suggestedVardiff(now, snap)
-			if !almostEqualFloat64(got, tc.want, 1e-12) {
-				t.Fatalf("adjustCnt=%d got %.16g want %.16g", tc.adjustCnt, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestSuggestedVardiff_UsesAdjustmentWindowAfterBootstrap(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	mc := &MinerConn{

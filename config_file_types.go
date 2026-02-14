@@ -84,7 +84,7 @@ type miningConfig struct {
 	PoolEntropy               *string  `toml:"pool_entropy"`
 	PoolTagPrefix             string   `toml:"pooltag_prefix"`
 	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
-	SoloMode                  *bool    `toml:"solo_mode"`
+	RelaxedSubmitValidation   *bool    `toml:"relaxed_submit_validation"`
 	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
 	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
 }
@@ -139,8 +139,8 @@ type difficultyTuning struct {
 }
 
 type miningTuning struct {
-	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy"`
-	VardiffFine           *bool `toml:"vardiff_fine"`
+	DisablePoolJobEntropy     *bool `toml:"disable_pool_job_entropy"`
+	DifficultyStepGranularity *int  `toml:"difficulty_step_granularity"`
 }
 
 type hashrateTuning struct {
