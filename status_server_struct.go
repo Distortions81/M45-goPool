@@ -54,6 +54,9 @@ type StatusServer struct {
 	workerPageMu    sync.RWMutex
 	workerPageCache map[string]cachedWorkerPage
 
+	poolHashrateHistoryMu sync.Mutex
+	poolHashrateHistory   []poolHashrateHistorySample
+
 	backupSvc *backblazeBackupService
 
 	configPath      string

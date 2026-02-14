@@ -726,6 +726,7 @@
 		const blockChanceEl = document.getElementById('status-block-chance');
 		const templateTxFeesEl = document.getElementById('status-template-tx-fees');
 		const templateTxFeesUpdatedEl = document.getElementById('status-template-tx-fees-updated');
+		let poolHashrateIncludeHistory = true;
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
@@ -970,17 +971,24 @@
 		}
 
 		function fetchHashrate() {
-			fetch('/api/pool-hashrate')
+			const endpoint = poolHashrateIncludeHistory ? '/api/pool-hashrate?include_history=1' : '/api/pool-hashrate';
+			fetch(endpoint)
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					return response.json().then(data => ({ data, updatedAt }));
 				})
 					.then(({ data, updatedAt }) => {
+						if (poolHashrateIncludeHistory) {
+							poolHashrateIncludeHistory = false;
+						}
+						const primedFromHistory = !!(window.primeHashrateGraphHistory &&
+							Array.isArray(data?.pool_hashrate_history) &&
+							window.primeHashrateGraphHistory(data.pool_hashrate_history));
 						const heightForGraph = typeof data?.block_height === 'number' && data.block_height > 0 ? data.block_height : null;
 						if (data && typeof data.pool_hashrate === 'number') {
 							updateHashrateDisplay(data.pool_hashrate);
-							if (window.updateHashrateGraph && data.pool_hashrate > 0) {
+							if (window.updateHashrateGraph && data.pool_hashrate > 0 && !primedFromHistory) {
 								window.updateHashrateGraph(data.pool_hashrate, heightForGraph);
 							}
 						}

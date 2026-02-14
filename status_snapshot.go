@@ -893,6 +893,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		workerLists:         workerLists,
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
+		poolHashrateHistory: make([]poolHashrateHistorySample, 0, int(poolHashrateHistoryWindow/poolHashrateTTL)+1),
 		configPath:          configPath,
 		adminConfigPath:     adminConfigPath,
 		tuningPath:          tuningPath,

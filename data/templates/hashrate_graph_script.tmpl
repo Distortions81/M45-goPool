@@ -23,12 +23,71 @@
 		ctx = resizeCanvas();
 		drawGraph();
 	});
-	const maxDataPoints = 60; // 5 minutes at 5-second intervals
+	const sampleIntervalMS = 5000;
+	const historyWindowMS = 6 * 60 * 1000;
+	const maxDataPoints = Math.floor(historyWindowMS / sampleIntervalMS); // 6 minutes at 5-second intervals
 	const hashrateData = [];
 	const timestamps = [];
 	const blockHeights = [];
 	let smoothedHashrate = null;
 	let lastBlockHeight = null;
+
+	function trimHistory() {
+		const cutoff = Date.now() - historyWindowMS;
+		while (timestamps.length > 0) {
+			const ts = timestamps[0];
+			if (!(ts instanceof Date) || Number.isNaN(ts.getTime()) || ts.getTime() < cutoff) {
+				hashrateData.shift();
+				timestamps.shift();
+				blockHeights.shift();
+				continue;
+			}
+			break;
+		}
+		while (hashrateData.length > maxDataPoints) {
+			hashrateData.shift();
+			timestamps.shift();
+			blockHeights.shift();
+		}
+	}
+
+	function primeHashrateGraphHistory(history) {
+		if (!Array.isArray(history) || hashrateData.length > 0) {
+			return false;
+		}
+		const cutoff = Date.now() - historyWindowMS;
+		const rows = history
+			.map(row => {
+				const hashrate = Number(row && row.hashrate);
+				const ts = Date.parse(row && row.at);
+				const blockHeight = Number(row && row.block_height);
+				return {
+					hashrate,
+					timestamp: ts,
+					blockHeight: Number.isFinite(blockHeight) && blockHeight > 0 ? blockHeight : null,
+				};
+			})
+			.filter(row => Number.isFinite(row.hashrate) && row.hashrate > 0 && Number.isFinite(row.timestamp) && row.timestamp >= cutoff)
+			.sort((a, b) => a.timestamp - b.timestamp);
+
+		if (rows.length === 0) {
+			return false;
+		}
+		rows.forEach(row => {
+			hashrateData.push(row.hashrate);
+			timestamps.push(new Date(row.timestamp));
+			blockHeights.push(row.blockHeight);
+			if (row.blockHeight) {
+				lastBlockHeight = row.blockHeight;
+			}
+		});
+		trimHistory();
+		if (hashrateData.length > 0) {
+			smoothedHashrate = hashrateData[hashrateData.length - 1];
+		}
+		drawGraph();
+		return true;
+	}
 
 	function drawGraph() {
 		// Use display dimensions (logical pixels) for drawing
@@ -201,12 +260,7 @@
 		timestamps.push(new Date());
 		blockHeights.push(effectiveBlockHeight || null);
 
-		// Keep only last maxDataPoints
-		if (hashrateData.length > maxDataPoints) {
-			hashrateData.shift();
-			timestamps.shift();
-			blockHeights.shift();
-		}
+		trimHistory();
 
 		drawGraph();
 	}
@@ -216,6 +270,7 @@
 
 	// Expose update function globally so auto-refresh can call it
 	window.updateHashrateGraph = updateHashrateGraph;
+	window.primeHashrateGraphHistory = primeHashrateGraphHistory;
 
 	// Redraw on window resize
 	window.addEventListener('resize', drawGraph);

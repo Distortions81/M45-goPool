@@ -258,6 +258,13 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 // handleDiagnosticsJSON returns system diagnostics
 func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Request) {
 	key := "pool_hashrate"
+	includeHistory := false
+	if r != nil {
+		includeHistory = r.URL.Query().Get("include_history") == "1"
+	}
+	if includeHistory {
+		key += "_with_history"
+	}
 	s.serveCachedJSON(w, key, poolHashrateTTL, func() ([]byte, error) {
 		var blockHeight int64
 		var blockDifficulty float64
@@ -350,19 +357,19 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		data := struct {
-			APIVersion             string                  `json:"api_version"`
-			PoolHashrate           float64                 `json:"pool_hashrate"`
-			BlockHeight            int64                   `json:"block_height"`
-			BlockDifficulty        float64                 `json:"block_difficulty"`
-			BlockTimeLeftSec       int64                   `json:"block_time_left_sec"`
-			RecentBlockTimes       []string                `json:"recent_block_times"`
-			NextDifficultyRetarget *nextDifficultyRetarget `json:"next_difficulty_retarget,omitempty"`
-			TemplateTxFeesSats     *int64                  `json:"template_tx_fees_sats,omitempty"`
-			TemplateUpdatedAt      string                  `json:"template_updated_at,omitempty"`
-			UpdatedAt              string                  `json:"updated_at"`
+			APIVersion             string                     `json:"api_version"`
+			PoolHashrate           float64                    `json:"pool_hashrate"`
+			PoolHashrateHistory    []poolHashrateHistoryPoint `json:"pool_hashrate_history,omitempty"`
+			BlockHeight            int64                      `json:"block_height"`
+			BlockDifficulty        float64                    `json:"block_difficulty"`
+			BlockTimeLeftSec       int64                      `json:"block_time_left_sec"`
+			RecentBlockTimes       []string                   `json:"recent_block_times"`
+			NextDifficultyRetarget *nextDifficultyRetarget    `json:"next_difficulty_retarget,omitempty"`
+			TemplateTxFeesSats     *int64                     `json:"template_tx_fees_sats,omitempty"`
+			TemplateUpdatedAt      string                     `json:"template_updated_at,omitempty"`
+			UpdatedAt              string                     `json:"updated_at"`
 		}{
 			APIVersion:             apiVersion,
-			PoolHashrate:           s.computePoolHashrate(),
 			BlockHeight:            blockHeight,
 			BlockDifficulty:        blockDifficulty,
 			BlockTimeLeftSec:       blockTimeLeftSec,
@@ -371,6 +378,11 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			TemplateTxFeesSats:     templateTxFeesSats,
 			TemplateUpdatedAt:      templateUpdatedAt,
 			UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
+		}
+		data.PoolHashrate = s.computePoolHashrate()
+		s.appendPoolHashrateHistory(data.PoolHashrate, blockHeight, now)
+		if includeHistory {
+			data.PoolHashrateHistory = s.poolHashrateHistorySnapshot(now)
 		}
 		return sonic.Marshal(data)
 	})
