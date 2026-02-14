@@ -82,24 +82,26 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					duration = 0
 				}
 				entry := savedWorkerEntry{
-					Name:              saved.Name,
-					Hash:              view.WorkerSHA256,
-					NotifyEnabled:     saved.NotifyEnabled,
-					BestDifficulty:    saved.BestDifficulty,
-					Hashrate:          hashrate,
-					ShareRate:         view.ShareRate,
-					Accepted:          view.Accepted,
-					Rejected:          view.Rejected,
-					LastShare:         view.LastShare,
-					Difficulty:        view.Difficulty,
-					EstimatedPingP50MS: view.EstimatedPingP50MS,
-					EstimatedPingP95MS: view.EstimatedPingP95MS,
-					NotifyToFirstShareMS: view.NotifyToFirstShareMS,
-					NotifyToFirstShareP50MS: view.NotifyToFirstShareP50MS,
-					NotifyToFirstShareP95MS: view.NotifyToFirstShareP95MS,
-					ConnectedDuration: duration,
-					ConnectionID:      view.ConnectionID,
-					ConnectionSeq:     view.ConnectionSeq,
+					Name:                      saved.Name,
+					Hash:                      view.WorkerSHA256,
+					NotifyEnabled:             saved.NotifyEnabled,
+					BestDifficulty:            saved.BestDifficulty,
+					Hashrate:                  hashrate,
+					HashrateAccuracy:          view.HashrateAccuracy,
+					ShareRate:                 view.ShareRate,
+					Accepted:                  view.Accepted,
+					Rejected:                  view.Rejected,
+					LastShare:                 view.LastShare,
+					Difficulty:                view.Difficulty,
+					EstimatedPingP50MS:        view.EstimatedPingP50MS,
+					EstimatedPingP95MS:        view.EstimatedPingP95MS,
+					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
+					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
+					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
+					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
+					ConnectedDuration:         duration,
+					ConnectionID:              view.ConnectionID,
+					ConnectionSeq:             view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
 				perNameRowsShown[lookupHash]++
@@ -185,6 +187,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		LastOnlineAt              string  `json:"last_online_at,omitempty"`
 		LastShare                 string  `json:"last_share,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
+		HashrateAccuracy          string  `json:"hashrate_accuracy,omitempty"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
 		Accepted                  uint64  `json:"accepted"`
 		Rejected                  uint64  `json:"rejected"`
@@ -194,6 +197,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		NotifyToFirstShareMS      float64 `json:"notify_to_first_share_ms,omitempty"`
 		NotifyToFirstShareP50MS   float64 `json:"notify_to_first_share_p50_ms,omitempty"`
 		NotifyToFirstShareP95MS   float64 `json:"notify_to_first_share_p95_ms,omitempty"`
+		NotifyToFirstShareSamples int     `json:"notify_to_first_share_samples,omitempty"`
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
@@ -282,6 +286,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					NotifyEnabled:             savedEntry.NotifyEnabled,
 					BestDifficulty:            savedEntry.BestDifficulty,
 					Hashrate:                  hashrate,
+					HashrateAccuracy:          view.HashrateAccuracy,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
 					Rejected:                  view.Rejected,
@@ -291,6 +296,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
 					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
 					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
+					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
 					LastShare:                 lastShare,
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,

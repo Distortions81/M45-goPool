@@ -3,7 +3,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"net"
 
 	"golang.org/x/sys/unix"
@@ -12,9 +11,8 @@ import (
 // estimateConnRTTMS returns the kernel-estimated TCP RTT in milliseconds when
 // available (Linux TCP_INFO). Returns 0 when unavailable.
 func estimateConnRTTMS(conn net.Conn) float64 {
-	base := unwrapNetConn(conn)
-	tc, ok := base.(*net.TCPConn)
-	if !ok || tc == nil {
+	tc := findTCPConn(conn)
+	if tc == nil {
 		return 0
 	}
 	raw, err := tc.SyscallConn()
@@ -35,27 +33,6 @@ func estimateConnRTTMS(conn net.Conn) float64 {
 	return float64(info.Rtt) / 1000.0
 }
 
-func unwrapNetConn(conn net.Conn) net.Conn {
-	for {
-		switch c := conn.(type) {
-		case interface{ NetConn() net.Conn }:
-			next := c.NetConn()
-			if next == nil || next == conn {
-				return conn
-			}
-			conn = next
-		case *tls.Conn:
-			next := c.NetConn()
-			if next == nil || next == conn {
-				return conn
-			}
-			conn = next
-		default:
-			return conn
-		}
-	}
-}
-
 func getTCPInfo(fd int) (unix.TCPInfo, error) {
 	info, err := unix.GetsockoptTCPInfo(fd, unix.IPPROTO_TCP, unix.TCP_INFO)
 	if err != nil {
@@ -63,4 +40,3 @@ func getTCPInfo(fd int) (unix.TCPInfo, error) {
 	}
 	return *info, nil
 }
-

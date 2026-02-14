@@ -547,7 +547,7 @@ func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
 		// Lock this miner to the requested difficulty (within min/max).
 		mc.lockDifficulty = true
 	}
-	mc.setDifficulty(diff)
+	mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 	mc.maybeSendInitialWork()
 	mc.maybeSendCleanJobAfterSuggest()
 }

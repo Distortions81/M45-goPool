@@ -1,7 +1,9 @@
 package main
 
 import (
+	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -42,6 +44,7 @@ func (mc *MinerConn) statsWorker() {
 		mc.lastShareDifficulty = update.shareDiff
 		mc.lastShareDetail = update.detail
 		mc.observeNotifyFirstShareLocked(update.timestamp)
+		mc.observeRecentSubmitOutcomeLocked(update.accepted, update.reason)
 		if !update.accepted && update.reason != "" {
 			mc.lastRejectReason = update.reason
 		}
@@ -96,13 +99,7 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 	if mc.stats.WindowStart.IsZero() {
 		start := now
 		if !mc.windowResetAnchor.IsZero() && now.After(mc.windowResetAnchor) {
-			lagPct := windowStartLagPercent
-			if lagPct < 0 {
-				lagPct = 0
-			}
-			if lagPct > 100 {
-				lagPct = 100
-			}
+			lagPct := mc.dynamicWindowStartLagPercentLocked(now)
 			elapsed := now.Sub(mc.windowResetAnchor)
 			start = mc.windowResetAnchor.Add(time.Duration((int64(elapsed) * int64(lagPct)) / 100))
 		}
@@ -118,6 +115,56 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
 	}
+}
+
+func (mc *MinerConn) dynamicWindowStartLagPercentLocked(now time.Time) int {
+	lagPct := windowStartLagPercent
+	if lagPct < 0 {
+		lagPct = 0
+	}
+	if lagPct > 100 {
+		lagPct = 100
+	}
+	if mc.windowResetAnchor.IsZero() || !now.After(mc.windowResetAnchor) {
+		return lagPct
+	}
+	elapsedMS := now.Sub(mc.windowResetAnchor).Seconds() * 1000.0
+	if elapsedMS <= 0 {
+		return lagPct
+	}
+
+	// Use miner-response RTT only; this is less affected by share-luck noise
+	// than notify->first-share latency.
+	pingP50, pingP95 := submitRTTPercentilesLocked(mc.pingRTTSamplesMs, mc.pingRTTCount)
+	setupMS := pingP95
+	if setupMS <= 0 {
+		setupMS = pingP50
+	}
+	if setupMS > 0 {
+		// Convert request/response RTT into a conservative setup estimate and
+		// add a fixed miner-side prep offset commonly observed in practice.
+		setupMS = (setupMS * 2) + 1000
+	}
+	if setupMS <= 0 {
+		return lagPct
+	}
+
+	dynamicPct := int(math.Round((setupMS / elapsedMS) * 100.0))
+	if dynamicPct < 20 {
+		dynamicPct = 20
+	}
+	if dynamicPct > 85 {
+		dynamicPct = 85
+	}
+	// Blend with baseline so estimates are stable even with noisy latency.
+	blended := (dynamicPct + lagPct) / 2
+	if blended < 0 {
+		blended = 0
+	}
+	if blended > 100 {
+		blended = 100
+	}
+	return blended
 }
 
 // recordShare updates accounting for a submitted share. creditedDiff is the
@@ -182,6 +229,7 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 	mc.lastShareDifficulty = update.shareDiff
 	mc.lastShareDetail = update.detail
 	mc.observeNotifyFirstShareLocked(update.timestamp)
+	mc.observeRecentSubmitOutcomeLocked(update.accepted, update.reason)
 	if !update.accepted && update.reason != "" {
 		mc.lastRejectReason = update.reason
 	}
@@ -218,43 +266,60 @@ func (mc *MinerConn) snapshotStatsWithRates(now time.Time) (stats MinerStats, ac
 }
 
 type minerShareSnapshot struct {
-	Stats               MinerStats
-	RollingHashrate     float64
-	SubmitRTTP50MS      float64
-	SubmitRTTP95MS      float64
-	PingRTTP50MS        float64
-	PingRTTP95MS        float64
-	NotifyToFirstShareMS float64
-	NotifyToFirstShareP50MS float64
-	NotifyToFirstShareP95MS float64
-	LastShareHash       string
-	LastShareAccepted   bool
-	LastShareDifficulty float64
-	LastShareDetail     *ShareDetail
-	LastReject          string
+	Stats                     MinerStats
+	RollingHashrate           float64
+	RollingHashrateDisplay    float64
+	SubmitRTTP50MS            float64
+	SubmitRTTP95MS            float64
+	PingRTTP50MS              float64
+	PingRTTP95MS              float64
+	NotifyToFirstShareMS      float64
+	NotifyToFirstShareP50MS   float64
+	NotifyToFirstShareP95MS   float64
+	NotifyToFirstShareSamples int
+	RecentStaleRate           float64
+	LastShareHash             string
+	LastShareAccepted         bool
+	LastShareDifficulty       float64
+	LastShareDetail           *ShareDetail
+	LastReject                string
 }
 
 func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 	mc.statsMu.Lock()
 	defer mc.statsMu.Unlock()
+	now := time.Now()
 	p50, p95 := submitRTTPercentilesLocked(mc.submitRTTSamplesMs, mc.submitRTTCount)
 	pingP50, pingP95 := submitRTTPercentilesLocked(mc.pingRTTSamplesMs, mc.pingRTTCount)
 	warmP50, warmP95 := submitRTTPercentilesLocked(mc.notifyToFirstSamplesMs, mc.notifyToFirstCount)
+	workStartMS := mc.lastNotifyToFirstShareMs
+	if mc.notifyAwaitingFirstShare && !mc.notifySentAt.IsZero() {
+		if elapsed := time.Since(mc.notifySentAt).Seconds() * 1000.0; elapsed > workStartMS {
+			workStartMS = elapsed
+		}
+	}
+	controlHashrate, displayHashrate := mc.decayedHashratesLocked(now)
+	if controlHashrate <= 0 {
+		controlHashrate = displayHashrate
+	}
 	return minerShareSnapshot{
-		Stats:               mc.stats,
-		RollingHashrate:     mc.rollingHashrateValue,
-		SubmitRTTP50MS:      p50,
-		SubmitRTTP95MS:      p95,
-		PingRTTP50MS:        pingP50,
-		PingRTTP95MS:        pingP95,
-		NotifyToFirstShareMS: mc.lastNotifyToFirstShareMs,
-		NotifyToFirstShareP50MS: warmP50,
-		NotifyToFirstShareP95MS: warmP95,
-		LastShareHash:       mc.lastShareHash,
-		LastShareAccepted:   mc.lastShareAccepted,
-		LastShareDifficulty: mc.lastShareDifficulty,
-		LastShareDetail:     mc.lastShareDetail,
-		LastReject:          mc.lastRejectReason,
+		Stats:                     mc.stats,
+		RollingHashrate:           controlHashrate,
+		RollingHashrateDisplay:    displayHashrate,
+		SubmitRTTP50MS:            p50,
+		SubmitRTTP95MS:            p95,
+		PingRTTP50MS:              pingP50,
+		PingRTTP95MS:              pingP95,
+		NotifyToFirstShareMS:      workStartMS,
+		NotifyToFirstShareP50MS:   warmP50,
+		NotifyToFirstShareP95MS:   warmP95,
+		NotifyToFirstShareSamples: mc.notifyToFirstCount,
+		RecentStaleRate:           mc.recentStaleRateLocked(),
+		LastShareHash:             mc.lastShareHash,
+		LastShareAccepted:         mc.lastShareAccepted,
+		LastShareDifficulty:       mc.lastShareDifficulty,
+		LastShareDetail:           mc.lastShareDetail,
+		LastReject:                mc.lastRejectReason,
 	}
 }
 
@@ -314,6 +379,37 @@ func (mc *MinerConn) observeNotifyFirstShareLocked(shareAt time.Time) {
 		}
 	}
 	mc.notifyAwaitingFirstShare = false
+}
+
+func (mc *MinerConn) observeRecentSubmitOutcomeLocked(accepted bool, reason string) {
+	isStale := !accepted && isStaleRejectReason(reason)
+	slot := mc.recentSubmissionIndex
+	if mc.recentSubmissionCount >= len(mc.recentSubmissionKinds) {
+		if mc.recentSubmissionKinds[slot] == 1 && mc.recentStaleRejectCount > 0 {
+			mc.recentStaleRejectCount--
+		}
+	} else {
+		mc.recentSubmissionCount++
+	}
+	if isStale {
+		mc.recentSubmissionKinds[slot] = 1
+		mc.recentStaleRejectCount++
+	} else {
+		mc.recentSubmissionKinds[slot] = 0
+	}
+	mc.recentSubmissionIndex = (slot + 1) % len(mc.recentSubmissionKinds)
+}
+
+func (mc *MinerConn) recentStaleRateLocked() float64 {
+	if mc.recentSubmissionCount <= 0 {
+		return 0
+	}
+	return float64(mc.recentStaleRejectCount) / float64(mc.recentSubmissionCount)
+}
+
+func isStaleRejectReason(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	return reason == "stale job" || reason == "stale"
 }
 
 func submitRTTPercentilesLocked(samples [64]float64, count int) (p50, p95 float64) {

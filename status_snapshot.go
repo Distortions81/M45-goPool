@@ -31,6 +31,217 @@ func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
 	return float64(stats.WindowAccepted) / window.Minutes()
 }
 
+func modeledShareRatePerMinute(hashrate, diff float64) float64 {
+	if hashrate <= 0 || diff <= 0 {
+		return 0
+	}
+	return (hashrate / hashPerShare) * 60.0 / diff
+}
+
+func cumulativeHashrateEstimate(stats MinerStats, connectedAt, now time.Time) float64 {
+	if connectedAt.IsZero() || !now.After(connectedAt) || stats.TotalDifficulty <= 0 {
+		return 0
+	}
+	elapsed := now.Sub(connectedAt).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	return (stats.TotalDifficulty * hashPerShare) / elapsed
+}
+
+func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulative float64) float64 {
+	if ema <= 0 {
+		return cumulative
+	}
+	if cumulative <= 0 {
+		return ema
+	}
+	// Favor cumulative estimator as samples grow: it is more accurate over
+	// longer horizons and less sensitive to vardiff/window resets.
+	w := float64(stats.Accepted) / 16.0
+	if w < 0 {
+		w = 0
+	}
+	if w > 1 {
+		w = 1
+	}
+	if !connectedAt.IsZero() {
+		age := now.Sub(connectedAt)
+		if age > 0 && age < 4*time.Minute {
+			w *= age.Seconds() / (4 * 60)
+		}
+	}
+	if w < 0 {
+		w = 0
+	}
+	if w > 1 {
+		w = 1
+	}
+	return (1-w)*ema + w*cumulative
+}
+
+func blendedShareRatePerMinute(stats MinerStats, now time.Time, rawRate, modeledRate float64) float64 {
+	if rawRate <= 0 {
+		return modeledRate
+	}
+	if modeledRate <= 0 {
+		return rawRate
+	}
+	weight := float64(stats.WindowAccepted) / 16.0
+	if weight < 0 {
+		weight = 0
+	}
+	if weight > 1 {
+		weight = 1
+	}
+	if !stats.WindowStart.IsZero() {
+		if window := now.Sub(stats.WindowStart); window > 0 && window < 45*time.Second {
+			weight *= window.Seconds() / 45.0
+		}
+	}
+	if weight < 0 {
+		weight = 0
+	}
+	if weight > 1 {
+		weight = 1
+	}
+	return weight*rawRate + (1-weight)*modeledRate
+}
+
+func hasReliableRateEstimate(stats MinerStats, now time.Time, modeledRate float64, connectedAt time.Time) bool {
+	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
+	if modeledRate <= 0 {
+		return false
+	}
+	if !stats.WindowStart.IsZero() {
+		window := now.Sub(stats.WindowStart)
+		if window >= minWindow {
+			expected := modeledRate * window.Minutes()
+			if expected > 0 {
+				evidence := float64(stats.WindowAccepted)
+				if expected < evidence {
+					evidence = expected
+				}
+				if evidence >= minEvidence {
+					return true
+				}
+			}
+		}
+	}
+	// Fallback path for frequent vardiff resets: use cumulative accepted shares
+	// and minimum connection age to avoid suppressing useful estimates forever.
+	if stats.Accepted >= minCumulativeAccepted && !connectedAt.IsZero() && now.Sub(connectedAt) >= minConnected {
+		return true
+	}
+	return false
+}
+
+func reliabilityThresholds(modeledRate float64) (minWindow time.Duration, minEvidence float64, minCumulativeAccepted int64, minConnected time.Duration) {
+	// Base target: enough time for ~3 expected shares under modeled cadence.
+	if modeledRate <= 0 {
+		return 60 * time.Second, 4, 6, 90 * time.Second
+	}
+	targetWindow := time.Duration((3.0 / modeledRate) * float64(time.Minute))
+	if targetWindow < 30*time.Second {
+		targetWindow = 30 * time.Second
+	}
+	if targetWindow > 2*time.Minute {
+		targetWindow = 2 * time.Minute
+	}
+	expectedInWindow := modeledRate * targetWindow.Minutes()
+	if expectedInWindow < 2.5 {
+		expectedInWindow = 2.5
+	}
+	if expectedInWindow > 6 {
+		expectedInWindow = 6
+	}
+	minWindow = targetWindow
+	minEvidence = expectedInWindow
+	minCumulativeAccepted = int64(math.Ceil(expectedInWindow))
+	if minCumulativeAccepted < 3 {
+		minCumulativeAccepted = 3
+	}
+	if minCumulativeAccepted > 8 {
+		minCumulativeAccepted = 8
+	}
+	minConnected = targetWindow + 30*time.Second
+	if minConnected < 60*time.Second {
+		minConnected = 60 * time.Second
+	}
+	if minConnected > 4*time.Minute {
+		minConnected = 4 * time.Minute
+	}
+	return minWindow, minEvidence, minCumulativeAccepted, minConnected
+}
+
+func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate float64, connectedAt time.Time) int {
+	if modeledRate <= 0 {
+		return 0
+	}
+	if !hasReliableRateEstimate(stats, now, modeledRate, connectedAt) {
+		return 0
+	}
+	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
+	highWindow := minWindow * 2
+	if highWindow < 90*time.Second {
+		highWindow = 90 * time.Second
+	}
+	if highWindow > 6*time.Minute {
+		highWindow = 6 * time.Minute
+	}
+	highEvidence := minEvidence * 2
+	if highEvidence < 6 {
+		highEvidence = 6
+	}
+	if highEvidence > 20 {
+		highEvidence = 20
+	}
+	highCum := minCumulativeAccepted * 2
+	if highCum < 8 {
+		highCum = 8
+	}
+	if highCum > 24 {
+		highCum = 24
+	}
+	highConn := minConnected + 2*time.Minute
+	if highConn < 3*time.Minute {
+		highConn = 3 * time.Minute
+	}
+	if highConn > 10*time.Minute {
+		highConn = 10 * time.Minute
+	}
+	if !stats.WindowStart.IsZero() {
+		window := now.Sub(stats.WindowStart)
+		if window >= highWindow {
+			expected := modeledRate * window.Minutes()
+			if expected > 0 {
+				evidence := float64(stats.WindowAccepted)
+				if expected < evidence {
+					evidence = expected
+				}
+				if evidence >= highEvidence {
+					return 2
+				}
+			}
+		}
+	}
+	if stats.Accepted >= highCum && !connectedAt.IsZero() && now.Sub(connectedAt) >= highConn {
+		return 2
+	}
+	return 1
+}
+
+func hashrateAccuracySymbol(level int) string {
+	switch level {
+	case 0:
+		return "~"
+	case 1:
+		return "≈"
+	default:
+		return ""
+	}
+}
+
 func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
 	if view.RollingHashrate > 0 {
 		return view.RollingHashrate
@@ -67,15 +278,23 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	}
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
 	workerHash := strings.TrimSpace(stats.WorkerSHA256)
-	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
+	rawRate := shareRatePerMinute(stats, now)
 	hashRate := workerHashrateEstimate(WorkerView{
-		RollingHashrate:  snap.RollingHashrate,
+		RollingHashrate:  snap.RollingHashrateDisplay,
 		WindowStart:      stats.WindowStart,
 		WindowDifficulty: stats.WindowDifficulty,
-		ShareRate:        accRate,
+		ShareRate:        rawRate,
 		Difficulty:       diff,
 	}, now)
+	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, cumulativeHashrateEstimate(stats, mc.connectedAt, now))
+	modeledRate := modeledShareRatePerMinute(hashRate, diff)
+	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
+	conf := hashrateConfidenceLevel(stats, now, modeledRate, mc.connectedAt)
+	if conf == 0 {
+		hashRate = 0
+		accRate = 0
+	}
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
 	if len(script) > 0 {
@@ -96,47 +315,53 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		estPingP50 = snap.SubmitRTTP50MS
 		estPingP95 = snap.SubmitRTTP95MS
 	}
+	if estPingP95 <= 0 && estimatedRTT > 0 {
+		estPingP50 = estimatedRTT
+		estPingP95 = estimatedRTT
+	}
 	return WorkerView{
-		Name:                name,
-		DisplayName:         displayName,
-		WorkerSHA256:        workerHash,
-		Accepted:            uint64(stats.Accepted),
-		Rejected:            uint64(stats.Rejected),
-		BalanceSats:         0,
-		WalletAddress:       addr,
-		WalletScript:        scriptHex,
-		MinerType:           minerType,
-		MinerName:           minerName,
-		MinerVersion:        minerVersion,
-		LastShare:           stats.LastShare,
-		LastShareHash:       lastShareHash,
-		DisplayLastShare:    displayHash,
-		LastShareAccepted:   snap.LastShareAccepted,
-		LastShareDifficulty: snap.LastShareDifficulty,
-		LastShareDetail:     snap.LastShareDetail,
-		Difficulty:          diff,
-		Vardiff:             vardiff,
-		RollingHashrate:     hashRate,
-		LastReject:          snap.LastReject,
-		Banned:              banned,
-		BannedUntil:         until,
-		BanReason:           reason,
-		WindowStart:         stats.WindowStart,
-		WindowAccepted:      stats.WindowAccepted,
-		WindowSubmissions:   stats.WindowSubmissions,
-		WindowDifficulty:    stats.WindowDifficulty,
-		ShareRate:           accRate,
-		SubmitRTTP50MS:      snap.SubmitRTTP50MS,
-		SubmitRTTP95MS:      snap.SubmitRTTP95MS,
-		NotifyToFirstShareMS: snap.NotifyToFirstShareMS,
-		NotifyToFirstShareP50MS: snap.NotifyToFirstShareP50MS,
-		NotifyToFirstShareP95MS: snap.NotifyToFirstShareP95MS,
-		EstimatedPingP50MS:  estPingP50,
-		EstimatedPingP95MS:  estPingP95,
-		ConnectionID:        mc.connectionIDString(),
-		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
-		ConnectedAt:         mc.connectedAt,
-		WalletValidated:     valid,
+		Name:                      name,
+		DisplayName:               displayName,
+		WorkerSHA256:              workerHash,
+		Accepted:                  uint64(stats.Accepted),
+		Rejected:                  uint64(stats.Rejected),
+		BalanceSats:               0,
+		WalletAddress:             addr,
+		WalletScript:              scriptHex,
+		MinerType:                 minerType,
+		MinerName:                 minerName,
+		MinerVersion:              minerVersion,
+		LastShare:                 stats.LastShare,
+		LastShareHash:             lastShareHash,
+		DisplayLastShare:          displayHash,
+		LastShareAccepted:         snap.LastShareAccepted,
+		LastShareDifficulty:       snap.LastShareDifficulty,
+		LastShareDetail:           snap.LastShareDetail,
+		Difficulty:                diff,
+		Vardiff:                   vardiff,
+		RollingHashrate:           hashRate,
+		LastReject:                snap.LastReject,
+		Banned:                    banned,
+		BannedUntil:               until,
+		BanReason:                 reason,
+		WindowStart:               stats.WindowStart,
+		WindowAccepted:            stats.WindowAccepted,
+		WindowSubmissions:         stats.WindowSubmissions,
+		WindowDifficulty:          stats.WindowDifficulty,
+		ShareRate:                 accRate,
+		HashrateAccuracy:          hashrateAccuracySymbol(conf),
+		SubmitRTTP50MS:            snap.SubmitRTTP50MS,
+		SubmitRTTP95MS:            snap.SubmitRTTP95MS,
+		NotifyToFirstShareMS:      snap.NotifyToFirstShareMS,
+		NotifyToFirstShareP50MS:   snap.NotifyToFirstShareP50MS,
+		NotifyToFirstShareP95MS:   snap.NotifyToFirstShareP95MS,
+		NotifyToFirstShareSamples: snap.NotifyToFirstShareSamples,
+		EstimatedPingP50MS:        estPingP50,
+		EstimatedPingP95MS:        estPingP95,
+		ConnectionID:              mc.connectionIDString(),
+		ConnectionSeq:             atomic.LoadUint64(&mc.connectionSeq),
+		ConnectedAt:               mc.connectedAt,
+		WalletValidated:           valid,
 	}
 }
 
@@ -195,6 +420,9 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 		}
 		if w.NotifyToFirstShareP95MS > current.NotifyToFirstShareP95MS {
 			current.NotifyToFirstShareP95MS = w.NotifyToFirstShareP95MS
+		}
+		if w.NotifyToFirstShareSamples > current.NotifyToFirstShareSamples {
+			current.NotifyToFirstShareSamples = w.NotifyToFirstShareSamples
 		}
 		if w.EstimatedPingP50MS > current.EstimatedPingP50MS {
 			current.EstimatedPingP50MS = w.EstimatedPingP50MS

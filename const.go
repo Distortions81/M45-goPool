@@ -50,9 +50,13 @@ const (
 	defaultBanInvalidSubmissionsAfter    = 40
 	defaultBanInvalidSubmissionsWindow   = 5 * time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
-	defaultReconnectBanThreshold         = 60
-	defaultReconnectBanWindowSeconds     = 60
-	defaultReconnectBanDurationSeconds   = 3600
+	// Accepted-share forgiveness for invalid-submission bans:
+	// every N accepted shares reduce effective invalid count by 1, up to a cap.
+	banInvalidForgiveSharesPerUnit     = 2
+	banInvalidForgiveCapFraction       = 0.5
+	defaultReconnectBanThreshold       = 60
+	defaultReconnectBanWindowSeconds   = 60
+	defaultReconnectBanDurationSeconds = 3600
 
 	defaultDiscordWorkerNotifyThresholdSeconds = 300
 
@@ -101,6 +105,22 @@ const (
 	// - above max shares/min can spam submits and overload the pool.
 	vardiffSafetyMinSharesPerMin = 2.0
 	vardiffSafetyMaxSharesPerMin = 30.0
+	vardiffLargeUpJumpFactor     = 4.0
+	vardiffLargeUpCooldown       = 2 * time.Minute
+	vardiffHighWarmupP95MS       = 12000.0
+	vardiffHighWarmupSamplesMin  = 8
+	vardiffHighWarmupStreakNeed  = 3
+	vardiffWarmupDownwardBias    = 0.93
+	vardiffTimeoutGuardMinQuiet  = 20 * time.Second
+	vardiffTimeoutGuardLead      = 5 * time.Second
+	vardiffTimeoutGuardThreshold = 0.7
+	vardiffTimeoutGuardMaxPZero  = 0.01
+	vardiffUncertaintyAbsRatio   = 2.0
+	vardiffUncertaintyMinSamples = 4
+	hashrateControlTauFactor     = 0.35
+	hashrateControlTauMin        = 45 * time.Second
+	startupDiffPrimingFactor     = 0.75
+	startupDiffPrimingMinFactor  = 0.60
 
 	defaultHashrateEMATauSeconds = 300.0
 	initialHashrateEMATau        = 45 * time.Second

@@ -413,7 +413,7 @@ func (mc *MinerConn) sendInitialWork() {
 			}
 		}
 		if diff > 0 {
-			mc.setDifficulty(diff)
+			mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 		}
 	}
 

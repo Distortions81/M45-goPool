@@ -34,7 +34,7 @@ type VarDiffConfig struct {
 	// RetargetDelay is a minimum cooldown between vardiff decisions so miners
 	// have time to refill work queues and settle clocks after changes.
 	RetargetDelay time.Duration
-	Step               float64
+	Step          float64
 	// DampingFactor controls how aggressively vardiff moves toward target.
 	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
 	// Lower values reduce overshoot. Typical range: 0.5-0.85.
@@ -135,6 +135,7 @@ type MinerConn struct {
 	banReason            string
 	lastPenalty          time.Time
 	invalidSubs          int
+	validSubsForBan      int
 	lastProtoViolation   time.Time
 	protoViolations      int
 	versionRoll          bool
@@ -163,6 +164,12 @@ type MinerConn struct {
 	// direction: -1 down, +1 up, 0 unset.
 	vardiffPendingDirection atomic.Int32
 	vardiffPendingCount     atomic.Int32
+	// vardiffUpwardCooldownUntil blocks repeat upward retargets for a short
+	// cooldown after a large upward jump to avoid stacked overshoots.
+	vardiffUpwardCooldownUntil atomic.Int64
+	// vardiffWarmupHighLatencyStreak tracks persistent windows where work-start
+	// latency p95 is high; used for a small downward difficulty bias.
+	vardiffWarmupHighLatencyStreak atomic.Int32
 	// bootstrapDone tracks whether we've already performed the initial
 	// "bootstrap" vardiff move for this connection.
 	bootstrapDone bool
@@ -197,15 +204,21 @@ type MinerConn struct {
 	submitRTTCount     int
 	submitRTTIndex     int
 	// notifySentAt / notifyAwaitingFirstShare track notify->first-share latency.
-	notifySentAt              time.Time
-	notifyAwaitingFirstShare  bool
-	lastNotifyToFirstShareMs  float64
-	notifyToFirstSamplesMs    [64]float64
-	notifyToFirstCount        int
-	notifyToFirstIndex        int
-	pingRTTSamplesMs          [64]float64
-	pingRTTCount              int
-	pingRTTIndex              int
+	notifySentAt             time.Time
+	notifyAwaitingFirstShare bool
+	lastNotifyToFirstShareMs float64
+	notifyToFirstSamplesMs   [64]float64
+	notifyToFirstCount       int
+	notifyToFirstIndex       int
+	// recentSubmissionKinds tracks a rolling stale-reject ratio for VarDiff.
+	// 0 = accepted/other reject, 1 = stale reject.
+	recentSubmissionKinds  [128]uint8
+	recentSubmissionCount  int
+	recentSubmissionIndex  int
+	recentStaleRejectCount int
+	pingRTTSamplesMs       [64]float64
+	pingRTTCount           int
+	pingRTTIndex           int
 	// jobDifficulty records the difficulty in effect when each job notify
 	// was sent to this miner so we can credit shares with the assigned
 	// target even if vardiff changes before the share arrives.
@@ -213,6 +226,8 @@ type MinerConn struct {
 	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
 	// for this connection, derived from accepted work over time.
 	rollingHashrateValue float64
+	// rollingHashrateControl is a faster EMA used by VarDiff control decisions.
+	rollingHashrateControl float64
 	// initialEMAWindowDone marks that the first (bootstrap) EMA window has
 	// completed; after this, configured tau is used.
 	initialEMAWindowDone atomic.Bool
