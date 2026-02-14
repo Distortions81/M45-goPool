@@ -77,9 +77,9 @@
   disable_pool_job_entropy = false
 
 [peer_cleaning]
-  enabled = true
-  max_ping_ms = 150.0
-  min_peers = 20
+  enabled = false
+  max_ping_ms = 250.0
+  min_peers = 30
 
 [rate_limits]
   accept_burst_window = 5
@@ -89,8 +89,8 @@
   accept_steady_state_reconnect_window = 60
   accept_steady_state_window = 100
   auto_accept_rate_limits = true
-  max_accept_burst = 1000
   disable_connect_rate_limits = false
+  max_accept_burst = 1000
   max_accepts_per_second = 500
   max_conns = 50000
   stratum_messages_per_minute = 0
