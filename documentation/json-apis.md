@@ -128,7 +128,6 @@ Response object: `OverviewPageData`
 - `workers` (array of `RecentWorkView`, censored)
 - `banned_workers` (array of `WorkerView`, censored and truncated)
 - `best_shares` (array of `BestShare`, censored)
-- `found_blocks` (array of `FoundBlockView`, censored; optional)
 - `miner_types` (array of `MinerTypeView`; optional)
 
 Types referenced:
@@ -158,19 +157,6 @@ Types referenced:
   - `hash` (string; censored; optional)
   - `display_worker` (string; optional)
   - `display_hash` (string; optional)
-
-- `FoundBlockView`
-  - `height` (integer)
-  - `hash` (string; censored)
-  - `display_hash` (string; censored)
-  - `worker` (string; censored)
-  - `display_worker` (string; censored)
-  - `timestamp` (string; RFC3339)
-  - `share_diff` (number)
-  - `pool_fee_sats` (integer; optional)
-  - `worker_payout_sats` (integer; optional)
-  - `confirmations` (integer; optional)
-  - `result` (string; optional; `"possible"`, `"winning"`, or `"stale"`)
 
 Example:
 
@@ -337,75 +323,6 @@ Example:
 curl -sS https://STATUS_HOST/api/pool-hashrate | jq .
 ```
 
-### GET /api/pool
-
-Public pool stats endpoint (similar to what the HTML UI shows, but without worker-level details).
-
-Response object: `PoolStatsData`
-
-- `api_version` (string)
-- `brand_name` (string)
-- `brand_domain` (string)
-- `server_location` (string; optional)
-- `listen_addr` (string)
-- `stratum_tls_listen` (string; optional)
-- `pool_software` (string)
-- `build_version` (string; optional)
-- `build_time` (string)
-- `uptime` (int; duration nanoseconds)
-- `active_miners` (integer)
-- `pool_hashrate` (number)
-- `shares_per_second` (number)
-- `accepted` (integer)
-- `rejected` (integer)
-- `stale_shares` (integer)
-- `low_diff_shares` (integer)
-- `reject_reasons` (map string→integer; optional)
-- `window_accepted` (integer)
-- `window_submissions` (integer)
-- `window_start` (string)
-- `vardiff_up` (integer)
-- `vardiff_down` (integer)
-- `blocks_accepted` (integer)
-- `blocks_errored` (integer)
-- `min_difficulty` (number)
-- `max_difficulty` (number)
-- `pool_fee_percent` (number)
-- `operator_donation_percent` (number; optional)
-- `operator_donation_name` (string; optional)
-- `operator_donation_url` (string; optional)
-- `job_created` (string)
-- `template_time` (string)
-- `job_feed` (object `JobFeedView`)
-- `btc_price_fiat` (number; optional)
-- `btc_price_updated_at` (string; optional; RFC3339)
-- `fiat_currency` (string; optional)
-- `warnings` (array of string; optional)
-
-`JobFeedView`:
-
-- `ready` (boolean)
-- `last_success` (string; RFC3339)
-- `last_error` (string; optional)
-- `last_error_at` (string; optional; RFC3339)
-- `error_history` (array of string; optional)
-- `zmq_healthy` (boolean)
-- `zmq_disconnects` (integer)
-- `zmq_reconnects` (integer)
-- `last_raw_block_at` (string; optional; RFC3339)
-- `last_raw_block_bytes` (integer; optional)
-- `block_hash` (string; optional)
-- `block_height` (integer; optional)
-- `block_time` (string; optional; RFC3339)
-- `block_bits` (string; optional)
-- `block_difficulty` (number; optional)
-
-Example:
-
-```bash
-curl -sS https://STATUS_HOST/api/pool | jq .
-```
-
 ### GET /api/blocks
 
 Recent block list.
@@ -414,7 +331,21 @@ Query parameters:
 
 - `limit` (optional int; `1..100`; default `10`)
 
-Response: JSON array of `FoundBlockView` objects (see `/api/overview` for fields). Values are censored for safe display.
+Response: JSON array of `FoundBlockView` objects. Values are censored for safe display.
+
+`FoundBlockView`:
+
+- `height` (integer)
+- `hash` (string; censored)
+- `display_hash` (string; censored)
+- `worker` (string; censored)
+- `display_worker` (string; censored)
+- `timestamp` (string; RFC3339)
+- `share_diff` (number)
+- `pool_fee_sats` (integer; optional)
+- `worker_payout_sats` (integer; optional)
+- `confirmations` (integer; optional)
+- `result` (string; optional; `"possible"`, `"winning"`, or `"stale"`)
 
 Example:
 
