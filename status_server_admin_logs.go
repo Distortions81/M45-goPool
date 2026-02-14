@@ -122,8 +122,7 @@ func (s *StatusServer) handleAdminLogsTail(w http.ResponseWriter, r *http.Reques
 		resp.LastModified = modAt.UTC().Format(time.RFC3339)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	out, err := sonic.Marshal(resp)
 	if err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
@@ -181,7 +180,7 @@ func (s *StatusServer) handleAdminLogsSetLogLevel(w http.ResponseWriter, r *http
 		OK:       true,
 		LogLevel: levelName,
 	}
-	w.Header().Set("Content-Type", "application/json")
+	setShortJSONCacheHeaders(w, true)
 	out, err := sonic.Marshal(resp)
 	if err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)

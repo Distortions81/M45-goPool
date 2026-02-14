@@ -200,7 +200,7 @@ func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, d
 }
 
 func (s *StatusServer) renderAdminPageTemplate(w http.ResponseWriter, r *http.Request, data AdminPageData, templateName string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, templateName, data); err != nil {
 		logger.Error("admin template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,

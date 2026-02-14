@@ -59,6 +59,9 @@ type StatusServer struct {
 
 	backupSvc *backblazeBackupService
 
+	responseCacheMu sync.RWMutex
+	responseCache   map[string]cachedHTTPResponse
+
 	configPath      string
 	adminConfigPath string
 	tuningPath      string

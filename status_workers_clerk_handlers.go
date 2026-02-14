@@ -92,8 +92,7 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 	if claims.ExpiresAt != nil {
 		resp.ExpiresAt = claims.ExpiresAt.Time.UTC().Format(time.RFC3339)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

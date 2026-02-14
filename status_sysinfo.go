@@ -494,7 +494,7 @@ func (s *StatusServer) renderErrorPage(w http.ResponseWriter, r *http.Request, s
 		Detail:     detail,
 		Path:       r.URL.Path,
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	w.WriteHeader(statusCode)
 	if err := s.executeTemplate(w, "error", data); err != nil {
 		logger.Error("error page template error", "error", err)
@@ -506,6 +506,7 @@ func (s *StatusServer) renderErrorPage(w http.ResponseWriter, r *http.Request, s
 // from the www directory. This is used for legal pages like privacy.html and terms.html.
 func (s *StatusServer) handleStaticFile(filename string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		setShortHTMLCacheHeaders(w, false)
 		if s != nil && s.staticFiles != nil {
 			cleanPath := filepath.Clean(filename)
 			if s.staticFiles.ServeCached(w, r, cleanPath) {
@@ -532,7 +533,6 @@ func (s *StatusServer) handleStaticFile(filename string) http.HandlerFunc {
 		}
 
 		// Serve the file
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeFile(w, r, cleanPath)
 	}
 }

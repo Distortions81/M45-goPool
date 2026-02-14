@@ -1,9 +1,33 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
+
+const (
+	shortEndpointCacheTTL = 5 * time.Second
+)
+
+func cacheControlShortTTL(private bool) string {
+	scope := "public"
+	if private {
+		scope = "private"
+	}
+	seconds := int(shortEndpointCacheTTL / time.Second)
+	return fmt.Sprintf("%s, max-age=%d, stale-while-revalidate=%d", scope, seconds, seconds)
+}
+
+func setShortJSONCacheHeaders(w http.ResponseWriter, private bool) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", cacheControlShortTTL(private))
+}
+
+func setShortHTMLCacheHeaders(w http.ResponseWriter, private bool) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", cacheControlShortTTL(private))
+}
 
 func (s *StatusServer) cachedJSONResponse(key string, ttl time.Duration, build func() ([]byte, error)) ([]byte, time.Time, time.Time, error) {
 	now := time.Now()
@@ -39,8 +63,7 @@ func (s *StatusServer) serveCachedJSON(w http.ResponseWriter, key string, ttl ti
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, false)
 	w.Header().Set("X-JSON-Updated-At", updatedAt.UTC().Format(time.RFC3339))
 	w.Header().Set("X-JSON-Next-Update-At", expiresAt.UTC().Format(time.RFC3339))
 	if _, err := w.Write(payload); err != nil {
@@ -55,7 +78,7 @@ func (s *StatusServer) serveCachedHTML(w http.ResponseWriter, key string, build 
 	if ok && len(entry.payload) > 0 {
 		payload := entry.payload
 		s.pageCacheMu.RUnlock()
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		setShortHTMLCacheHeaders(w, false)
 		w.Header().Set("X-HTML-Updated-At", entry.updatedAt.UTC().Format(time.RFC3339))
 		_, err := w.Write(payload)
 		return err
@@ -78,7 +101,7 @@ func (s *StatusServer) serveCachedHTML(w http.ResponseWriter, key string, build 
 	}
 	s.pageCacheMu.Unlock()
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, false)
 	w.Header().Set("X-HTML-Updated-At", updatedAt.UTC().Format(time.RFC3339))
 	_, err = w.Write(payload)
 	return err

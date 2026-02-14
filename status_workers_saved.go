@@ -139,7 +139,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, "saved_workers", data); err != nil {
 		logger.Error("saved workers template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
@@ -303,8 +303,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("saved workers json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -344,8 +343,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *h
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("one time code json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -393,8 +391,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 		Cleared bool `json:"cleared"`
 	}{Cleared: cleared}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("one time code clear json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -476,8 +473,7 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 		OK:      true,
 		Enabled: *parsed.Enabled,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -542,8 +538,7 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 		OK:      true,
 		Enabled: *parsed.Enabled,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

@@ -510,10 +510,11 @@ func main() {
 
 	var statusHTTPServer *http.Server
 	var statusHTTPSServer *http.Server
+	appHandler := statusServer.serveShortResponseCache(mux)
 
 	// Start HTTP server.
 	if httpAddr != "" {
-		httpHandler := http.Handler(mux)
+		httpHandler := http.Handler(appHandler)
 		httpLogMsg := "status page listening (http)"
 		httpLogFields := []interface{}{"addr", httpAddr}
 		if needStatusTLS {
@@ -545,7 +546,7 @@ func main() {
 		}
 		statusHTTPSServer = &http.Server{
 			Addr:              httpsAddr,
-			Handler:           mux,
+			Handler:           appHandler,
 			TLSConfig:         tlsConfig,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       15 * time.Second,
