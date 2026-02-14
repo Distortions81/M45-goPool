@@ -415,6 +415,7 @@ func main() {
 	mux.HandleFunc("/worker/sha256", statusServer.withClerkUser(statusServer.handleWorkerStatusBySHA256))
 	mux.HandleFunc("/worker/save", statusServer.withClerkUser(statusServer.handleWorkerSave))
 	mux.HandleFunc("/worker/remove", statusServer.withClerkUser(statusServer.handleWorkerRemove))
+	mux.HandleFunc("/worker/reconnect", statusServer.withClerkUser(statusServer.handleWorkerReconnect))
 	mux.HandleFunc("/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkers))
 	mux.HandleFunc("/login", statusServer.handleClerkLogin)
 	mux.HandleFunc("/sign-in", statusServer.handleSignIn)

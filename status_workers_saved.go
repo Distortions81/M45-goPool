@@ -9,6 +9,8 @@ import (
 	"github.com/bytedance/sonic"
 )
 
+const manualReconnectBanDuration = 30 * time.Second
+
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	base := s.baseTemplateData(start)
@@ -608,6 +610,60 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 		if err := s.workerLists.Remove(user.UserID, worker); err != nil {
 			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
 		}
+	}
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleWorkerReconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	hash, errMsg := parseSHA256HexStrict(r.FormValue("hash"))
+	if errMsg != "" || hash == "" {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+
+	authorized := false
+	if s.workerLists != nil {
+		if list, err := s.workerLists.List(user.UserID); err == nil {
+			for _, saved := range list {
+				if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
+					authorized = true
+					break
+				}
+			}
+		} else {
+			logger.Warn("load saved workers for reconnect", "error", err, "user_id", user.UserID)
+		}
+	}
+	if !authorized {
+		http.Error(w, "worker not saved", http.StatusForbidden)
+		return
+	}
+	if s.workerRegistry == nil {
+		http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+		return
+	}
+
+	conns := s.workerRegistry.getConnectionsByHash(hash)
+	for _, mc := range conns {
+		if mc == nil {
+			continue
+		}
+		worker := strings.TrimSpace(mc.currentWorker())
+		mc.banFor("manual reconnect reset", manualReconnectBanDuration, worker)
+		mc.Close("manual reconnect reset")
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
 }
