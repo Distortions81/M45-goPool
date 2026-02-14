@@ -112,7 +112,9 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 		mc.stats.WindowDifficulty = 0
 		return
 	}
-	if now.Sub(mc.stats.WindowStart) > mc.vardiff.AdjustmentWindow*2 {
+	// Keep status/confidence windows independent from vardiff retarget cadence.
+	// Only reset after a long true idle gap to avoid carrying stale epochs.
+	if !mc.stats.LastShare.IsZero() && now.Sub(mc.stats.LastShare) > statusWindowIdleReset {
 		mc.stats.WindowStart = now
 		mc.windowResetAnchor = time.Time{}
 		mc.stats.WindowAccepted = 0
