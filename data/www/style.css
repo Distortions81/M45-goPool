@@ -1378,23 +1378,112 @@ h2 {
 .admin-tabs {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin: 12px 0 20px;
+	gap: 6px;
+	margin: 12px 0 0;
+	padding: 0 8px;
+	border-bottom: 2px solid var(--accent);
 }
 
 .admin-tab {
-	padding: 6px 14px;
-	border-radius: 12px;
-	border: 1px solid transparent;
+	padding: 9px 14px;
+	border-radius: 10px 10px 0 0;
+	border: 1px solid var(--card-border);
+	border-bottom: none;
 	font-size: 14px;
 	color: var(--text-secondary);
-	background: rgba(255, 255, 255, 0.04);
+	background: rgba(255, 255, 255, 0.03);
+	text-decoration: none;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+	position: relative;
+	top: 1px;
+}
+
+.admin-tab:hover {
+	color: var(--text-primary);
+	background: rgba(255, 255, 255, 0.07);
+	border-color: color-mix(in srgb, var(--accent) 45%, var(--card-border));
 }
 
 .admin-tab.active {
-	border-color: var(--card-border);
+	border-color: var(--accent);
 	color: var(--text-primary);
-	background: var(--card-bg);
+	background: linear-gradient(
+		to bottom,
+		color-mix(in srgb, var(--accent) 20%, transparent) 0%,
+		var(--card-bg-mid) 70%
+	);
+	font-weight: 600;
+	box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 70%, white 0%);
+}
+
+[data-theme="light"] .admin-tab {
+	background: rgba(0, 0, 0, 0.025);
+}
+
+[data-theme="light"] .admin-tab:hover {
+	background: rgba(0, 0, 0, 0.055);
+}
+
+.admin-tabs + .card {
+	margin-top: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+.admin-protected {
+	margin-top: 18px;
+	border: 1px solid var(--card-border);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.02);
+	padding: 8px 12px 12px;
+}
+
+.admin-protected-summary {
+	list-style: none;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 6px 0;
+}
+
+.admin-protected-summary::-webkit-details-marker {
+	display: none;
+}
+
+.admin-protected-title {
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-primary);
+}
+
+.admin-protected-hint {
+	font-size: 12px;
+	color: var(--text-muted);
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.admin-protected-hint::before {
+	content: "▸";
+	font-size: 13px;
+	transition: transform 0.15s ease;
+}
+
+.admin-protected[open] .admin-protected-hint::before {
+	transform: rotate(90deg);
+}
+
+.admin-protected[open] .admin-protected-hint {
+	color: var(--text-secondary);
+}
+
+[data-theme="light"] .admin-protected {
+	background: rgba(0, 0, 0, 0.02);
 }
 
 .admin-toolbar {

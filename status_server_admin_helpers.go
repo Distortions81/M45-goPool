@@ -221,7 +221,7 @@ func adminNoticeMessage(key string) string {
 	case "ui_reloaded":
 		return "UI templates and static assets reloaded."
 	case "logged_in":
-		return "Admin session unlocked."
+		return ""
 	case "logged_out":
 		return "Admin session cleared."
 	case "miner_disconnected":
@@ -677,8 +677,20 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.StratumMessagesPerMinute, err = parseInt("stratum_messages_per_minute", next.StratumMessagesPerMinute); err != nil {
 		return err
 	}
+	if next.StratumMessagesPerMinute < 0 {
+		return fmt.Errorf("stratum_messages_per_minute must be >= 0")
+	}
+	if next.StratumMessagesPerMinute > 0 && next.StratumMessagesPerMinute < adminMinStratumMessagesPerMinute {
+		return fmt.Errorf("stratum_messages_per_minute must be 0 (disabled) or >= %d", adminMinStratumMessagesPerMinute)
+	}
+	if next.StratumMessagesPerMinute > adminMaxStratumMessagesPerMinute {
+		return fmt.Errorf("stratum_messages_per_minute must be <= %d", adminMaxStratumMessagesPerMinute)
+	}
 	if next.MaxRecentJobs, err = parseInt("max_recent_jobs", next.MaxRecentJobs); err != nil {
 		return err
+	}
+	if next.MaxRecentJobs < adminMinMaxRecentJobs || next.MaxRecentJobs > adminMaxMaxRecentJobs {
+		return fmt.Errorf("max_recent_jobs must be between %d and %d", adminMinMaxRecentJobs, adminMaxMaxRecentJobs)
 	}
 
 	timeoutSec, err := parseInt("connection_timeout_seconds", int(next.ConnectionTimeout/time.Second))
@@ -702,14 +714,25 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.TargetSharesPerMin, err = parseFloat("target_shares_per_min", next.TargetSharesPerMin); err != nil {
 		return err
 	}
-	if next.TargetSharesPerMin <= 0 {
-		return fmt.Errorf("target_shares_per_min must be > 0")
+	if next.TargetSharesPerMin < adminMinTargetSharesPerMin || next.TargetSharesPerMin > adminMaxTargetSharesPerMin {
+		return fmt.Errorf("target_shares_per_min must be between %.1f and %.1f", adminMinTargetSharesPerMin, adminMaxTargetSharesPerMin)
 	}
 	if next.DifficultyStepGranularity, err = parseInt("difficulty_step_granularity", next.DifficultyStepGranularity); err != nil {
 		return err
 	}
 	if next.DifficultyStepGranularity < 1 {
 		return fmt.Errorf("difficulty_step_granularity must be >= 1")
+	}
+	if next.MaxDifficulty > 0 && next.MinDifficulty > next.MaxDifficulty {
+		return fmt.Errorf("min_difficulty must be <= max_difficulty when max_difficulty is set")
+	}
+	if next.DefaultDifficulty > 0 {
+		if next.MinDifficulty > 0 && next.DefaultDifficulty < next.MinDifficulty {
+			return fmt.Errorf("default_difficulty must be >= min_difficulty when min_difficulty is set")
+		}
+		if next.MaxDifficulty > 0 && next.DefaultDifficulty > next.MaxDifficulty {
+			return fmt.Errorf("default_difficulty must be <= max_difficulty when max_difficulty is set")
+		}
 	}
 	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
 	next.EnforceSuggestedDifficultyLimits = getBool("enforce_suggested_difficulty_limits")
@@ -718,24 +741,42 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", next.BanInvalidSubmissionsAfter); err != nil {
 		return err
 	}
+	if next.BanInvalidSubmissionsAfter < adminMinBanThreshold || next.BanInvalidSubmissionsAfter > adminMaxBanThreshold {
+		return fmt.Errorf("ban_invalid_submissions_after must be between %d and %d", adminMinBanThreshold, adminMaxBanThreshold)
+	}
 	windowSec, err := parseInt("ban_invalid_submissions_window_seconds", int(next.BanInvalidSubmissionsWindow/time.Second))
 	if err != nil {
 		return err
+	}
+	if windowSec < adminMinBanWindowSeconds || windowSec > adminMaxBanWindowSeconds {
+		return fmt.Errorf("ban_invalid_submissions_window_seconds must be between %d and %d", adminMinBanWindowSeconds, adminMaxBanWindowSeconds)
 	}
 	next.BanInvalidSubmissionsWindow = time.Duration(windowSec) * time.Second
 	durSec, err := parseInt("ban_invalid_submissions_duration_seconds", int(next.BanInvalidSubmissionsDuration/time.Second))
 	if err != nil {
 		return err
 	}
+	if durSec < adminMinBanDurationSeconds || durSec > adminMaxBanDurationSeconds {
+		return fmt.Errorf("ban_invalid_submissions_duration_seconds must be between %d and %d", adminMinBanDurationSeconds, adminMaxBanDurationSeconds)
+	}
 	next.BanInvalidSubmissionsDuration = time.Duration(durSec) * time.Second
 	if next.ReconnectBanThreshold, err = parseInt("reconnect_ban_threshold", next.ReconnectBanThreshold); err != nil {
 		return err
 	}
+	if next.ReconnectBanThreshold < adminMinReconnectBanThreshold || next.ReconnectBanThreshold > adminMaxReconnectBanThreshold {
+		return fmt.Errorf("reconnect_ban_threshold must be between %d and %d", adminMinReconnectBanThreshold, adminMaxReconnectBanThreshold)
+	}
 	if next.ReconnectBanWindowSeconds, err = parseInt("reconnect_ban_window_seconds", next.ReconnectBanWindowSeconds); err != nil {
 		return err
 	}
+	if next.ReconnectBanWindowSeconds < adminMinReconnectBanWindowSecs || next.ReconnectBanWindowSeconds > adminMaxReconnectBanWindowSecs {
+		return fmt.Errorf("reconnect_ban_window_seconds must be between %d and %d", adminMinReconnectBanWindowSecs, adminMaxReconnectBanWindowSecs)
+	}
 	if next.ReconnectBanDurationSeconds, err = parseInt("reconnect_ban_duration_seconds", next.ReconnectBanDurationSeconds); err != nil {
 		return err
+	}
+	if next.ReconnectBanDurationSeconds < adminMinReconnectBanDurationSecs || next.ReconnectBanDurationSeconds > adminMaxReconnectBanDurationSecs {
+		return fmt.Errorf("reconnect_ban_duration_seconds must be between %d and %d", adminMinReconnectBanDurationSecs, adminMaxReconnectBanDurationSecs)
 	}
 
 	next.PeerCleanupEnabled = getBool("peer_cleanup_enabled")
@@ -755,8 +796,17 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {
 		return err
 	}
+	if next.Extranonce2Size < adminMinExtranonce2Size || next.Extranonce2Size > adminMaxExtranonce2Size {
+		return fmt.Errorf("extranonce2_size must be between %d and %d", adminMinExtranonce2Size, adminMaxExtranonce2Size)
+	}
 	if next.TemplateExtraNonce2Size, err = parseInt("template_extranonce2_size", next.TemplateExtraNonce2Size); err != nil {
 		return err
+	}
+	if next.TemplateExtraNonce2Size < adminMinTemplateExtranonce2Size || next.TemplateExtraNonce2Size > adminMaxTemplateExtranonce2Size {
+		return fmt.Errorf("template_extranonce2_size must be between %d and %d", adminMinTemplateExtranonce2Size, adminMaxTemplateExtranonce2Size)
+	}
+	if next.TemplateExtraNonce2Size < next.Extranonce2Size {
+		return fmt.Errorf("template_extranonce2_size must be >= extranonce2_size")
 	}
 	if next.JobEntropy, err = parseInt("job_entropy", next.JobEntropy); err != nil {
 		return err

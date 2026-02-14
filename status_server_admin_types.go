@@ -237,12 +237,37 @@ const (
 var adminPerPageOptions = []int{10, 25, 50, 100}
 
 const (
-	adminMinConnsLimit               = 0
+	adminMinConnsLimit               = 10
 	adminMaxConnsLimit               = 1_000_000
-	adminMinAcceptsPerSecondLimit    = 0
+	adminMinAcceptsPerSecondLimit    = 1
 	adminMaxAcceptsPerSecondLimit    = 100_000
-	adminMinAcceptBurstLimit         = 0
+	adminMinAcceptBurstLimit         = 1
 	adminMaxAcceptBurstLimit         = 500_000
 	adminMinConnectionTimeoutSeconds = 30
 	adminMaxConnectionTimeoutSeconds = 86_400
+	adminMinStratumMessagesPerMinute = 10
+	adminMaxStratumMessagesPerMinute = 1_000_000
+	adminMinMaxRecentJobs            = 8
+	adminMaxMaxRecentJobs            = 10_000
+	adminMinBanThreshold             = 3
+	adminMaxBanThreshold             = 10_000
+	adminMinBanWindowSeconds         = 10
+	adminMaxBanWindowSeconds         = 86_400
+	adminMinBanDurationSeconds       = 10
+	adminMaxBanDurationSeconds       = 604_800
+	adminMinReconnectBanThreshold    = 3
+	adminMaxReconnectBanThreshold    = 10_000
+	adminMinReconnectBanWindowSecs   = 10
+	adminMaxReconnectBanWindowSecs   = 86_400
+	adminMinReconnectBanDurationSecs = 10
+	adminMaxReconnectBanDurationSecs = 604_800
+	adminMinExtranonce2Size          = 1
+	adminMaxExtranonce2Size          = 8
+	adminMinTemplateExtranonce2Size  = 1
+	adminMaxTemplateExtranonce2Size  = 16
+)
+
+const (
+	adminMinTargetSharesPerMin = 0.1
+	adminMaxTargetSharesPerMin = 120.0
 )
