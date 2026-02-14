@@ -44,15 +44,11 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 
 	savedHashes := make(map[string]struct{}, len(data.SavedWorkers))
-	savedNames := make(map[string]struct{}, len(data.SavedWorkers))
 
 	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
 		if hash := strings.ToLower(strings.TrimSpace(saved.Hash)); hash != "" {
 			savedHashes[hash] = struct{}{}
-		}
-		if name := strings.ToLower(strings.TrimSpace(saved.Name)); name != "" {
-			savedNames[name] = struct{}{}
 		}
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
 		if lookupHash == "" {
@@ -129,13 +125,6 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					if viewHash := strings.ToLower(strings.TrimSpace(view.WorkerSHA256)); viewHash != "" {
 						if _, ok := savedHashes[viewHash]; ok {
 							alreadySaved = true
-						}
-					}
-					if !alreadySaved {
-						if nameKey := strings.ToLower(strings.TrimSpace(view.Name)); nameKey != "" {
-							if _, ok := savedNames[nameKey]; ok {
-								alreadySaved = true
-							}
 						}
 					}
 					data.WalletLookupResults = append(data.WalletLookupResults, walletLookupResult{
@@ -604,14 +593,14 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid submission", http.StatusBadRequest)
 		return
 	}
-	worker := strings.TrimSpace(r.FormValue("worker"))
-	if worker == "" {
+	hash, errMsg := parseSHA256HexStrict(r.FormValue("hash"))
+	if errMsg != "" || hash == "" {
 		http.Redirect(w, r, "/worker", http.StatusSeeOther)
 		return
 	}
 	if s.workerLists != nil {
-		if err := s.workerLists.Remove(user.UserID, worker); err != nil {
-			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
+		if err := s.workerLists.Remove(user.UserID, hash); err != nil {
+			logger.Warn("remove worker by hash", "error", err, "user_id", user.UserID, "hash", hash)
 		}
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)

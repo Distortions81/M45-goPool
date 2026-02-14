@@ -181,7 +181,7 @@
 											</button>
 										</form>
 											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-												<input type="hidden" name="worker" value="{{.Name}}">
+												<input type="hidden" name="hash" value="{{.Hash}}">
 												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
 													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 														<polyline points="3 6 5 6 21 6"></polyline>
@@ -232,7 +232,7 @@
 									</button>
 								{{end}}
 								<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-									<input type="hidden" name="worker" value="{{.Name}}">
+									<input type="hidden" name="hash" value="{{.Hash}}">
 									<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
 										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 											<polyline points="3 6 5 6 21 6"></polyline>
@@ -1123,7 +1123,7 @@
 									<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">Force reset</button>
 								</form>
 							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-								<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+								<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
 								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
 									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 										<polyline points="3 6 5 6 21 6"></polyline>
@@ -1456,7 +1456,7 @@
 								<div class="offline-actions" style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
 									${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
 									<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-										<input type="hidden" name="worker" value="${escapeAttr(w.name || '')}">
+										<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
 										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
 											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 												<polyline points="3 6 5 6 21 6"></polyline>

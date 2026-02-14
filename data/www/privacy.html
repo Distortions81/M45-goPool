@@ -155,6 +155,7 @@
       <div class="site-name">m45core.com</div>
       <h1>Privacy Policy</h1>
       <p class="effective-date">Effective Date: December 22, 2025</p>
+      <p class="effective-date">Last Updated: February 14, 2026</p>
     </div>
 
     <div class="important">
@@ -171,8 +172,23 @@
     <h3>2.1 Information You Provide</h3>
     <p>When you use the Service, we collect the following information that you directly provide:</p>
     <ul>
-      <li><strong>Worker IDs:</strong> Custom names or identifiers provided by your mining hardware/software, or manually assigned by you through the personal dashboard if you use our optional login system. Worker IDs contain Bitcoin wallet addresses used to receive mining rewards.</li>
-      <li><strong>Login System User IDs:</strong> If you use our optional login system, we store user IDs provided by Clerk.com (our authentication service provider) to associate your account with your workers and statistics</li>
+      <li><strong>Worker IDs:</strong> Worker strings sent by your miner and/or entered in the dashboard. These can contain wallet addresses.</li>
+      <li><strong>Login System User IDs:</strong> If you use our optional login system, we store Clerk user IDs to associate your account with saved workers and settings.</li>
+    </ul>
+
+    <h3>2.1.1 Exact Data Stored in Our Database (Current Format)</h3>
+    <p><strong>Post-migration format only:</strong> this list describes what is currently stored in <code>data/state/workers.db</code> and does not describe older historical formats.</p>
+    <ul>
+      <li><strong>saved_workers:</strong> <code>user_id</code> (Clerk user ID), <code>worker_hash</code> (SHA256 of full worker string), <code>worker</code> (same hash value used as internal key), <code>worker_display</code> (censored worker label), <code>notify_enabled</code> (notification toggle), <code>best_difficulty</code> (best share difficulty seen for that saved worker hash).</li>
+      <li><strong>clerk_users:</strong> <code>user_id</code>, <code>first_seen_unix</code>, <code>last_seen_unix</code>, <code>seen_count</code>.</li>
+      <li><strong>discord_links:</strong> <code>user_id</code>, <code>discord_user_id</code>, <code>enabled</code>, <code>linked_at</code>, <code>updated_at</code>.</li>
+      <li><strong>discord_worker_state:</strong> <code>user_id</code>, <code>worker_hash</code>, <code>online</code>, <code>since</code>, <code>seen_online</code>, <code>seen_offline</code>, <code>offline_eligible</code>, <code>offline_notified</code>, <code>recovery_eligible</code>, <code>recovery_notified</code>, <code>updated_at</code>.</li>
+      <li><strong>one_time_codes:</strong> <code>user_id</code>, <code>code</code>, <code>created_at_unix</code>, <code>expires_at_unix</code>.</li>
+      <li><strong>bans:</strong> <code>worker</code>, <code>worker_hash</code>, <code>until_unix</code>, <code>reason</code>, <code>updated_at_unix</code>.</li>
+      <li><strong>best_shares:</strong> <code>position</code>, <code>worker</code>, <code>difficulty</code>, <code>timestamp_unix</code>, <code>hash</code>.</li>
+      <li><strong>found_blocks_log:</strong> <code>id</code>, <code>created_at_unix</code>, <code>json</code> (serialized found-block event data).</li>
+      <li><strong>pending_submissions:</strong> <code>submission_key</code>, <code>timestamp_unix</code>, <code>height</code>, <code>hash</code>, <code>worker</code>, <code>block_hex</code>, <code>rpc_error</code>, <code>rpc_url</code>, <code>payout_addr</code>, <code>status</code>.</li>
+      <li><strong>backup_state and db_change_state:</strong> operational metadata used for backup and cache/version invalidation.</li>
     </ul>
 
     <h3>2.2 Automatically Collected Information</h3>
@@ -231,9 +247,9 @@
       </thead>
       <tbody>
         <tr>
-          <td>Worker IDs</td>
+          <td>Saved worker records (worker hash + censored display label)</td>
           <td>Retained indefinitely while account is active; may be retained after inactivity for accounting and legal purposes</td>
-          <td>Worker identification, performance tracking</td>
+          <td>Saved-worker identification, notifications, performance tracking</td>
         </tr>
         <tr>
           <td>Login System User IDs</td>
@@ -437,7 +453,9 @@
     </ul>
 
     <h2>14. Changes to This Privacy Policy</h2>
-    <p>We reserve the right to modify this Privacy Policy at any time. Changes will be effective immediately upon posting to this page, with the "Effective Date" revised accordingly. Material changes may be announced through the Service interface or other reasonable means. Your continued use of the Service after changes constitutes acceptance of the updated Privacy Policy. We encourage you to review this Policy periodically.</p>
+    <p>We reserve the right to modify this Privacy Policy at any time. Changes are effective immediately when posted to this page, and we will update the "Last Updated" date above and below.</p>
+    <p>Because we generally do not collect or maintain direct individual contact methods for miners, we do not provide individualized notice of policy changes. Instead, we will post policy updates on our GitHub repository and in our Discord community, in addition to publishing updates on the Service website.</p>
+    <p>Your continued use of the Service after changes are posted constitutes acceptance of the updated Privacy Policy. You are responsible for reviewing this Policy periodically.</p>
 
     <h2>15. Contact Information</h2>
     <p>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us through the communication channels provided on the Service interface.</p>
@@ -453,7 +471,7 @@
 
     <div class="footer">
       <p><strong>m45core.com</strong> &mdash; Bitcoin Mining Pool</p>
-      <p>Last Updated: December 22, 2025</p>
+      <p>Last Updated: February 14, 2026</p>
     </div>
   </div>
 </body>

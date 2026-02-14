@@ -99,41 +99,23 @@ func isSameOriginRequest(r *http.Request, host string) bool {
 	return true
 }
 
-func savedWorkerLookupHashes(savedName, savedHash string) (primary string, fallbacks []string) {
-	primary = strings.ToLower(strings.TrimSpace(savedHash))
-	if primary == "" {
-		primary = workerNameHash(savedName)
-	}
-	if primary == "" {
-		return "", nil
-	}
-
-	base := workerBaseAddress(savedName)
-	if base != "" && base != strings.TrimSpace(savedName) {
-		if baseHash := workerNameHash(base); baseHash != "" && baseHash != primary {
-			fallbacks = append(fallbacks, baseHash)
-		}
-	}
-	return primary, fallbacks
+func savedWorkerLookupHash(savedHash string) string {
+	return strings.ToLower(strings.TrimSpace(savedHash))
 }
 
 func (s *StatusServer) findSavedWorkerConnections(savedName, savedHash string, now time.Time) (views []WorkerView, queryHash string) {
+	_ = savedName
 	if s == nil {
 		return nil, ""
 	}
-	primary, fallbacks := savedWorkerLookupHashes(savedName, savedHash)
-	if primary == "" {
+	hash := savedWorkerLookupHash(savedHash)
+	if hash == "" {
 		return nil, ""
 	}
-	if views = s.findAllWorkerViewsByHash(primary, now); len(views) > 0 {
-		return views, primary
+	if views = s.findAllWorkerViewsByHash(hash, now); len(views) > 0 {
+		return views, hash
 	}
-	for _, h := range fallbacks {
-		if v := s.findAllWorkerViewsByHash(h, now); len(v) > 0 {
-			return v, h
-		}
-	}
-	return nil, primary
+	return nil, hash
 }
 
 func buildWorkerLookupByHash(workers []WorkerView, banned []WorkerView) map[string]WorkerView {

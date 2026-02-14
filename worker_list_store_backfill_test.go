@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestWorkerListStore_ListAllSavedWorkers_DoesNotDeadlockOnHashBackfill(t *testing.T) {
+func TestWorkerListStore_NormalizeSavedWorkersStorage_ScrubsRawWorkerNames(t *testing.T) {
 	dbPath := t.TempDir() + "/workers.db"
 	db, err := openStateDB(dbPath)
 	if err != nil {
@@ -29,24 +29,30 @@ func TestWorkerListStore_ListAllSavedWorkers_DoesNotDeadlockOnHashBackfill(t *te
 	done := make(chan struct{})
 	var gotErr error
 	go func() {
-		_, gotErr = store.ListAllSavedWorkers()
+		gotErr = normalizeSavedWorkersStorage(store.db)
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatalf("ListAllSavedWorkers appears to be stuck (possible DB deadlock)")
+		t.Fatalf("normalizeSavedWorkersStorage appears to be stuck (possible DB deadlock)")
 	}
 	if gotErr != nil {
-		t.Fatalf("ListAllSavedWorkers error: %v", gotErr)
+		t.Fatalf("normalizeSavedWorkersStorage error: %v", gotErr)
 	}
 
-	var backfilled string
-	if err := db.QueryRow("SELECT COALESCE(worker_hash, '') FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker).Scan(&backfilled); err != nil {
-		t.Fatalf("query backfilled hash: %v", err)
+	var (
+		backfilledHash string
+		storedWorker   string
+	)
+	if err := db.QueryRow("SELECT COALESCE(worker_hash, ''), COALESCE(worker, '') FROM saved_workers WHERE user_id = ? AND worker_hash = ?", userID, expectedHash).Scan(&backfilledHash, &storedWorker); err != nil {
+		t.Fatalf("query normalized row: %v", err)
 	}
-	if backfilled != expectedHash {
-		t.Fatalf("worker_hash not backfilled: got %q want %q", backfilled, expectedHash)
+	if backfilledHash != expectedHash {
+		t.Fatalf("worker_hash not backfilled: got %q want %q", backfilledHash, expectedHash)
+	}
+	if storedWorker != expectedHash {
+		t.Fatalf("worker column was not scrubbed to hash: got %q want %q", storedWorker, expectedHash)
 	}
 }
