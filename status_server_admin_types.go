@@ -120,6 +120,7 @@ type AdminSettingsData struct {
 	MaxConns                          int
 	MaxAcceptsPerSecond               int
 	MaxAcceptBurst                    int
+	DisableConnectRateLimits          bool
 	AutoAcceptRateLimits              bool
 	AcceptReconnectWindow             int
 	AcceptBurstWindow                 int

@@ -94,6 +94,7 @@ func baseConfigDocComments() []byte {
 func tuningConfigDocComments() []byte {
 	return []byte(`# Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
+# - disable_connect_rate_limits: Disable accept/connect throttling entirely (intended for local-only pools on trusted networks; requires restart).
 # - auto_accept_rate_limits: When true, computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).
 # - max_accepts_per_second: Accepts/sec during the initial restart/reconnect window (requires restart).
 # - max_accept_burst: Token bucket burst size for accepts (requires restart).

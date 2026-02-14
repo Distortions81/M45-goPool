@@ -1364,6 +1364,17 @@ h2 {
 	font-size: 13px;
 }
 
+.page.admin-page .label-note {
+	display: block;
+	margin-top: 6px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.4;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
 .admin-tabs {
 	display: flex;
 	flex-wrap: wrap;
@@ -1503,6 +1514,17 @@ h2 {
 	word-break: break-word;
 	letter-spacing: 0.08em;
 	font-size: 13px;
+}
+
+.page.admin-page .label-note {
+	display: block;
+	margin-top: 6px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.4;
+	letter-spacing: 0;
+	text-transform: none;
 }
 
 .page.admin-page .restart-required {

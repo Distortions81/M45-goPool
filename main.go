@@ -650,7 +650,12 @@ func main() {
 		logger.Info("stratum TLS listening", "addr", cfg.StratumTLSListen)
 	}
 
-	acceptLimiter := newAcceptRateLimiter(cfg.MaxAcceptsPerSecond, cfg.MaxAcceptBurst)
+	var acceptLimiter *acceptRateLimiter
+	if cfg.DisableConnectRateLimits {
+		logger.Warn("connect rate limits disabled by config")
+	} else {
+		acceptLimiter = newAcceptRateLimiter(cfg.MaxAcceptsPerSecond, cfg.MaxAcceptBurst)
+	}
 
 	// If steady-state throttling is configured, schedule a transition
 	// from reconnection mode to steady-state mode after the configured window.

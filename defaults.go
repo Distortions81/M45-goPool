@@ -45,6 +45,7 @@ func defaultConfig() Config {
 		MaxConns:                            defaultMaxConns,
 		MaxAcceptsPerSecond:                 defaultMaxAcceptsPerSecond,
 		MaxAcceptBurst:                      defaultMaxAcceptBurst,
+		DisableConnectRateLimits:            false,
 		AutoAcceptRateLimits:                defaultAutoAcceptRateLimits,
 		AcceptReconnectWindow:               defaultAcceptReconnectWindow,
 		AcceptBurstWindow:                   defaultAcceptBurstWindow,

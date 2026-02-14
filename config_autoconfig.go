@@ -143,6 +143,9 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 	if cfg == nil || cfg.MaxConns <= 0 {
 		return
 	}
+	if cfg.DisableConnectRateLimits {
+		return
+	}
 
 	reconnectWindow := cfg.AcceptReconnectWindow
 	if reconnectWindow <= 0 {

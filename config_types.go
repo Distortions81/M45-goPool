@@ -113,6 +113,7 @@ type Config struct {
 	// Accept rate limiting (auto-configured from MaxConns when AutoAcceptRateLimits=true).
 	MaxAcceptsPerSecond               int
 	MaxAcceptBurst                    int
+	DisableConnectRateLimits          bool
 	AutoAcceptRateLimits              bool
 	AcceptReconnectWindow             int     // seconds for all miners to reconnect after restart
 	AcceptBurstWindow                 int     // seconds of burst before sustained rate kicks in
@@ -213,6 +214,7 @@ type EffectiveConfig struct {
 	MaxConns                          int      `json:"max_conns,omitempty"`
 	MaxAcceptsPerSecond               int      `json:"max_accepts_per_second,omitempty"`
 	MaxAcceptBurst                    int      `json:"max_accept_burst,omitempty"`
+	DisableConnectRateLimits          bool     `json:"disable_connect_rate_limits,omitempty"`
 	AutoAcceptRateLimits              bool     `json:"auto_accept_rate_limits,omitempty"`
 	AcceptReconnectWindow             int      `json:"accept_reconnect_window,omitempty"`
 	AcceptBurstWindow                 int      `json:"accept_burst_window,omitempty"`

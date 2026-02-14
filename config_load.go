@@ -346,6 +346,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.RateLimits.MaxAcceptBurst != nil {
 		cfg.MaxAcceptBurst = *fc.RateLimits.MaxAcceptBurst
 	}
+	if fc.RateLimits.DisableConnectRateLimits != nil {
+		cfg.DisableConnectRateLimits = *fc.RateLimits.DisableConnectRateLimits
+	}
 	if fc.RateLimits.AutoAcceptRateLimits != nil {
 		cfg.AutoAcceptRateLimits = *fc.RateLimits.AutoAcceptRateLimits
 	}

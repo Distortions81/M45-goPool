@@ -271,6 +271,7 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		MaxConns:                             cfg.MaxConns,
 		MaxAcceptsPerSecond:                  cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                       cfg.MaxAcceptBurst,
+		DisableConnectRateLimits:             cfg.DisableConnectRateLimits,
 		AutoAcceptRateLimits:                 cfg.AutoAcceptRateLimits,
 		AcceptReconnectWindow:                cfg.AcceptReconnectWindow,
 		AcceptBurstWindow:                    cfg.AcceptBurstWindow,
@@ -641,6 +642,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxConns < adminMinConnsLimit || next.MaxConns > adminMaxConnsLimit {
 		return fmt.Errorf("max_conns must be between %d and %d", adminMinConnsLimit, adminMaxConnsLimit)
 	}
+	next.DisableConnectRateLimits = getBool("disable_connect_rate_limits")
 	next.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
 	if next.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", next.MaxAcceptsPerSecond); err != nil {
 		return err

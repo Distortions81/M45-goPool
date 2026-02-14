@@ -116,6 +116,7 @@ type rateLimitTuning struct {
 	MaxConns                          *int     `toml:"max_conns"`
 	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
 	MaxAcceptBurst                    *int     `toml:"max_accept_burst"`
+	DisableConnectRateLimits          *bool    `toml:"disable_connect_rate_limits"`
 	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits"`
 	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window"`
 	AcceptBurstWindow                 *int     `toml:"accept_burst_window"`
