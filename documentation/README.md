@@ -8,5 +8,3 @@
 - `systemd.service` - Example systemd unit file.
 
 Related:
-
-- `changes/` - Changelog-style branch summaries.
