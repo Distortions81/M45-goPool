@@ -7,7 +7,7 @@ const (
 
 	// Duplicate share detection: track last N submissions per job (LRU eviction).
 	duplicateShareHistory  = 100
-	evictedShareCacheGrace = 60 * time.Second // keep caches for evicted jobs to catch late duplicates
+	evictedShareCacheGrace = time.Minute // keep caches for evicted jobs to catch late duplicates
 
 	workerPageCacheLimit = 100
 
@@ -26,7 +26,7 @@ const (
 	defaultTemplateExtraNonce2Size = 8
 	defaultPoolFeePercent          = 2.0
 	defaultRecentJobs              = 10
-	defaultConnectionTimeout       = 300 * time.Second
+	defaultConnectionTimeout       = 3 * time.Minute
 
 	// Accept rate limiting defaults.
 	defaultMaxAcceptsPerSecond               = 500
@@ -129,7 +129,7 @@ const (
 	statusWindowIdleReset = 15 * time.Minute
 	// When anchoring a fresh sampling window after reset, place WindowStart at
 	// this percent of the elapsed time from reset to first share (0-100).
-	windowStartLagPercent = 55
+	windowStartLagPercent = 66
 
 	maxStratumMessageSize = 64 * 1024
 	stratumWriteTimeout   = 60 * time.Second

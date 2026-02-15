@@ -146,7 +146,7 @@
 		<h2 id="workers">Recent work</h2>
 		<div class="card">
 			<p class="text-sm" style="color:var(--text-muted); margin-top:0;">
-				Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, <span class="mono">≈+</span> near-stable, <span class="mono">✓</span> stable.
+				Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, <span class="mono">≈+</span> near-stable, stable (no symbol).
 			</p>
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-workers-table">
@@ -368,7 +368,10 @@
 		function formatWorkerHashrate(h, accuracy) {
 			const base = formatHashrate(h);
 			if (base === '---') return '—';
-			const marker = String(accuracy || '').trim();
+			let marker = String(accuracy || '').trim();
+			if (marker === '✓') {
+				marker = '';
+			}
 			return marker ? `${marker} ${base}` : base;
 		}
 

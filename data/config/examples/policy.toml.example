@@ -50,7 +50,7 @@
   submit_process_inline = true
 
 [timeouts]
-  connection_timeout_seconds = 300
+  connection_timeout_seconds = 180
 
 [version]
   min_version_bits = 1

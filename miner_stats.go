@@ -170,7 +170,7 @@ func (mc *MinerConn) dynamicWindowStartLagPercentLocked(now time.Time) int {
 	if setupMS > 0 {
 		// Convert request/response RTT into a conservative setup estimate and
 		// add a fixed miner-side prep offset commonly observed in practice.
-		setupMS = (setupMS * 2) + 1000
+		setupMS = (setupMS * 2)
 	}
 	if setupMS <= 0 {
 		return lagPct

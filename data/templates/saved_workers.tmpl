@@ -123,7 +123,7 @@
 					Force reset button: bans for 30s, then disconnects active sessions so the miner reconnects cleanly.
 				</p>
 				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, <span class="mono">≈+</span> near-stable, <span class="mono">✓</span> stable.
+					Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, <span class="mono">≈+</span> near-stable, stable (no symbol).
 				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
@@ -793,7 +793,8 @@
 		function formatWorkerHashrate(value, accuracy) {
 			const base = formatHashrate(value);
 			if (base === '—' || base === '---') return '—';
-			const marker = String(accuracy || '').trim();
+			let marker = String(accuracy || '').trim();
+			if (marker === '✓') marker = '';
 			return marker ? `${marker} ${base}` : base;
 		}
 
@@ -1641,7 +1642,8 @@
 			function formatWorkerHashrate(value, accuracy) {
 				const base = formatHashrate(value);
 				if (base === '—' || base === '---') return '—';
-				const marker = String(accuracy || '').trim();
+				let marker = String(accuracy || '').trim();
+				if (marker === '✓') marker = '';
 				return marker ? `${marker} ${base}` : base;
 			}
 
