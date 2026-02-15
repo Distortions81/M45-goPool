@@ -1,4 +1,4 @@
-# Generated performance config example (copy to a real config and edit as needed)
+# Generated tuning config example (copy to a real config and edit as needed)
 
 # Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).

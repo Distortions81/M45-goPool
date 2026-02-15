@@ -197,7 +197,7 @@ type versionTuning struct {
 }
 
 // fileOverrideConfig groups override sections used internally when applying
-// policy/performance overlays.
+// policy/tuning overlays.
 type fileOverrideConfig struct {
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
 	Timeouts     timeoutTuning      `toml:"timeouts"`
@@ -233,15 +233,15 @@ type policyFileConfig struct {
 	Timeouts timeoutTuning        `toml:"timeouts"`
 }
 
-type performanceHashrateConfig struct {
+type tuningHashrateConfig struct {
 	HashrateEMATauSeconds *float64 `toml:"hashrate_ema_tau_seconds"`
 }
 
-type performanceFileConfig struct {
+type tuningFileConfig struct {
 	RateLimits   rateLimitTuning           `toml:"rate_limits"`
 	Difficulty   difficultyTuning          `toml:"difficulty"`
 	Mining       miningTuning              `toml:"mining"`
-	Hashrate     performanceHashrateConfig `toml:"hashrate"`
+	Hashrate     tuningHashrateConfig      `toml:"hashrate"`
 	PeerCleaning peerCleaningTuning        `toml:"peer_cleaning"`
 }
 

@@ -39,7 +39,7 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 
 1. Run `./goPool`; it generates `data/config/examples/` and exits.
 2. Copy the base example to `data/config/config.toml` and edit required values (especially `node.payout_address`, `node.rpc_url`, and ZMQ addresses: `node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`—leave blank to fall back to RPC/longpoll).
-3. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/performance.toml.example` to `data/config/` for sensitive credentials or advanced tuning.
+3. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/tuning.toml.example` to `data/config/` for sensitive credentials or advanced tuning.
 4. Re-run `./goPool`; it may regenerate `pool_entropy` and normalized listener ports if you later invoke `./goPool -rewrite-config`.
 
 ## Runtime overrides
@@ -69,7 +69,7 @@ Flags only override values for the running instance; nothing is written back to 
 1. Run `./goPool` once without a config. The daemon stops after generating `data/config/examples/`.
 2. Copy `data/config/examples/config.toml.example` to `data/config/config.toml`.
 3. Provide the required values (payout address, RPC/ZMQ endpoints, any branding overrides) and restart the pool.
-4. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/performance.toml.example` to `data/config/` and edit as needed.
+4. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/tuning.toml.example` to `data/config/` and edit as needed.
 5. If you prefer reproducible derived settings, rerun `./goPool -rewrite-config` once after editing. This writes derived fields such as `pool_entropy` and normalized listener ports back to `config.toml`.
 
 ### Common runtime flags
@@ -90,7 +90,7 @@ Flags only override values for the running instance; nothing is written back to 
 | `-allow-public-rpc` | Allow connecting to an unauthenticated RPC endpoint (testing only). |
 | `-allow-rpc-creds` | Force RPC auth to come from `secrets.toml` `rpc_user`/`rpc_pass`. Deprecated and insecure; prefer cookie auth. |
 
-Additional runtime knobs exist in `config.toml` plus optional `services.toml`/`policy.toml`/`performance.toml`, but the flags above let you temporarily override them without editing files.
+Additional runtime knobs exist in `config.toml` plus optional `services.toml`/`policy.toml`/`tuning.toml`, but the flags above let you temporarily override them without editing files.
 Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, `-allow-public-rpc`, and `-secrets` only affect the current invocation; they override the values from `config.toml` or `secrets.toml` at runtime but are not persisted back to the files.
 
 ## Configuration files
@@ -206,7 +206,7 @@ goPool now stores a `password_sha256` alongside the plaintext password. On start
 When enabled, visit `/admin` (deliberately absent from the main navigation) and log in with the credentials stored in `admin.toml`. The panel exposes:
 
 * **Live settings** – a field-based UI that updates goPool's in-memory configuration immediately. Some settings still require a reboot to fully apply across all subsystems.
-* **Save to disk** – optionally force-write the current in-memory settings to `config.toml`, `services.toml`, `policy.toml`, and `performance.toml`.
+* **Save to disk** – optionally force-write the current in-memory settings to `config.toml`, `services.toml`, `policy.toml`, and `tuning.toml`.
 * **Reboot** – a button that sends SIGTERM to goPool. It requires re-entering the admin password and typing `REBOOT` to confirm the action so your pool does not restart accidentally.
 
 Because the admin login is intentionally simple, bind this UI to trusted networks only (e.g., keep `server.status_listen` local-domain, use firewall rules, or run behind an authenticated proxy) and rotate credentials whenever you rotate administrators.
@@ -215,7 +215,7 @@ Because the admin login is intentionally simple, bind this UI to trusted network
 
 - `mining.pool_fee_percent`, `operator_donation_percent`, and `operator_donation_address` determine how rewards are split.
 - `pooltag_prefix` customizes the `/goPool/` coinbase tag (only letters/digits).
-- `job_entropy` and `pool_entropy` help make each template unique; disable the suffix with `performance.toml` `[mining] disable_pool_job_entropy = true`.
+- `job_entropy` and `pool_entropy` help make each template unique; disable the suffix with `tuning.toml` `[mining] disable_pool_job_entropy = true`.
 - Share validation checks are explicit toggles in `policy.toml` `[mining]`:
   - `share_require_authorized_connection` defaults to `true`.
   - `share_job_freshness_mode` defaults to `1` (options: `0=off`, `1=job_id`, `2=job_id+prevhash`).
@@ -280,7 +280,7 @@ The `data/state/` directory also holds ban metadata, saved workers snapshots, an
 
 ## Tuning limits
 
-Auto-configured accept rate limits calculate `max_accept_burst`/`max_accepts_per_second` based on `max_conns` unless `performance.toml` overrides them. Recent defaults aim to allow all miners to reconnect within `accept_reconnect_window` seconds.
+Auto-configured accept rate limits calculate `max_accept_burst`/`max_accepts_per_second` based on `max_conns` unless `tuning.toml` overrides them. Recent defaults aim to allow all miners to reconnect within `accept_reconnect_window` seconds.
 
 Key runtime knobs:
 
@@ -295,7 +295,7 @@ Each override value logs when set, so goPool operators can audit what changed vi
 ## Runtime operations
 
 - **SIGUSR1** reloads the HTML templates under `data/templates/`. Errors (parse failures, missing files) are logged but the previous template set remains active so the site keeps serving—check `pool.log` if pages look odd after a reload.
-- **SIGUSR2** reloads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, and `performance.toml`, reapplies overrides, and updates the status server with the new config.
+- **SIGUSR2** reloads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, and `tuning.toml`, reapplies overrides, and updates the status server with the new config.
 - **Shutdown** occurs on `SIGINT`/`SIGTERM`. goPool stops the status servers, Stratum listener, and pending replayers gracefully.
 - **TLS cert reloading** uses `certReloader` to monitor `data/tls_cert.pem`/`tls_key.pem` hourly. Certificate renewals (e.g., via certbot) are picked up without restarts.
 
