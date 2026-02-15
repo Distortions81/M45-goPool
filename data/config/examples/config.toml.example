@@ -13,7 +13,7 @@
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
 #
-# Advanced settings can be split across services.toml, policy.toml, and performance.toml.
+# Advanced settings can be split across services.toml, policy.toml, and tuning.toml.
 #
 
 [branding]

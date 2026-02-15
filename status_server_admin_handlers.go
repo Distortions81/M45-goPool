@@ -350,7 +350,7 @@ func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request
 	configDir := filepath.Dir(s.configPath)
 	servicesPath := filepath.Join(configDir, "services.toml")
 	policyPath := filepath.Join(configDir, "policy.toml")
-	performancePath := filepath.Join(configDir, "performance.toml")
+	tuningPath := filepath.Join(configDir, "tuning.toml")
 	if err := rewriteServicesFile(servicesPath, cfg); err != nil {
 		data.AdminPersistError = fmt.Sprintf("Failed to write services.toml: %v", err)
 		s.renderAdminPage(w, r, data)
@@ -361,13 +361,13 @@ func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	if err := rewritePerformanceFile(performancePath, cfg); err != nil {
-		data.AdminPersistError = fmt.Sprintf("Failed to write performance.toml: %v", err)
+	if err := rewriteTuningFile(tuningPath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write tuning.toml: %v", err)
 		s.renderAdminPage(w, r, data)
 		return
 	}
 
-	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "services_path", servicesPath, "policy_path", policyPath, "performance_path", performancePath)
+	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "services_path", servicesPath, "policy_path", policyPath, "tuning_path", tuningPath)
 	http.Redirect(w, r, "/admin?notice=saved_to_disk", http.StatusSeeOther)
 }
 

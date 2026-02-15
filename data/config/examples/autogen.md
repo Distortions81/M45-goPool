@@ -10,7 +10,7 @@ Configuration example files in this directory are automatically generated on fir
 - **`secrets.toml.example`** - Example for sensitive credentials (RPC auth, Discord tokens, Clerk keys)
 - **`services.toml.example`** - Optional services/integrations overrides (auth, backblaze backup, discord, status links)
 - **`policy.toml.example`** - Optional policy/security overrides
-- **`performance.toml.example`** - Optional performance/capacity overrides
+- **`tuning.toml.example`** - Optional tuning/capacity overrides
 
 ## How to Use
 
@@ -32,7 +32,7 @@ Override files are optional. Only create them if you need advanced overrides:
 
 ```bash
 cp data/config/examples/policy.toml.example data/config/policy.toml
-cp data/config/examples/performance.toml.example data/config/performance.toml
+cp data/config/examples/tuning.toml.example data/config/tuning.toml
 cp data/config/examples/services.toml.example data/config/services.toml
 ```
 

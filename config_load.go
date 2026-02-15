@@ -77,9 +77,9 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	configDir := filepath.Join(cfg.DataDir, "config")
 	servicesPath := filepath.Join(configDir, "services.toml")
 	policyPath := filepath.Join(configDir, "policy.toml")
-	performancePath := filepath.Join(configDir, "performance.toml")
+	tuningPath := filepath.Join(configDir, "tuning.toml")
 	var runtimeOverrides fileOverrideConfig
-	var performanceConfigLoaded bool
+	var tuningConfigLoaded bool
 	var servicesConfigLoaded bool
 	if sf, ok, err := loadServicesFile(servicesPath); err != nil {
 		fatal("services config file", err, "path", servicesPath)
@@ -92,11 +92,11 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	} else if ok {
 		applyPolicyConfig(&cfg, *pf)
 	}
-	if pf, ok, err := loadPerformanceFile(performancePath); err != nil {
-		fatal("performance config file", err, "path", performancePath)
+	if pf, ok, err := loadTuningFile(tuningPath); err != nil {
+		fatal("tuning config file", err, "path", tuningPath)
 	} else if ok {
-		applyPerformanceConfig(&cfg, *pf)
-		performanceConfigLoaded = true
+		applyTuningConfig(&cfg, *pf)
+		tuningConfigLoaded = true
 		runtimeOverrides.RateLimits = pf.RateLimits
 	}
 
@@ -108,7 +108,7 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	// Auto-configure accept rate limits based on max_conns if they weren't
 	// explicitly set in the config file. This ensures miners can reconnect
 	// smoothly after pool restarts without hitting rate limits.
-	autoConfigureAcceptRateLimits(&cfg, runtimeOverrides, performanceConfigLoaded)
+	autoConfigureAcceptRateLimits(&cfg, runtimeOverrides, tuningConfigLoaded)
 
 	if needsServicesMigration && !servicesConfigLoaded && configFileExisted {
 		if err := rewriteServicesFile(servicesPath, cfg); err != nil {
@@ -150,8 +150,8 @@ func loadServicesFile(path string) (*servicesFileConfig, bool, error) {
 	return loadTOMLFile[servicesFileConfig](path)
 }
 
-func loadPerformanceFile(path string) (*performanceFileConfig, bool, error) {
-	return loadTOMLFile[performanceFileConfig](path)
+func loadTuningFile(path string) (*tuningFileConfig, bool, error) {
+	return loadTOMLFile[tuningFileConfig](path)
 }
 
 func loadSecretsFile(path string) (*secretsConfig, bool, error) {
@@ -182,7 +182,7 @@ func ensureSecretFilePermissions(path string) {
 	logger.Warn("secrets file permissions tightened", "path", path, "mode", "0600")
 }
 
-func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool, migratedServices bool) {
+func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (configChanged bool, migratedServices bool) {
 	if fc.Server.PoolListen != "" {
 		cfg.ListenAddr = fc.Server.PoolListen
 	}
@@ -245,7 +245,7 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool, migrate
 			logger.Warn("node.zmq_block_addr is deprecated; migrating to node.zmq_hashblock_addr/node.zmq_rawblock_addr", "addr", legacy)
 			cfg.ZMQHashBlockAddr = legacy
 			cfg.ZMQRawBlockAddr = legacy
-			migrated = true
+			configChanged = true
 		}
 	}
 	if fc.Node.ZMQHashBlockAddr != "" {
@@ -350,8 +350,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool, migrate
 	}
 	if migratedServices {
 		logger.Warn("legacy services settings detected in config.toml; migrate them to services.toml")
+		configChanged = true
 	}
-	return migrated, migratedServices
+	return configChanged, migratedServices
 }
 
 func applyServicesConfig(cfg *Config, fc servicesFileConfig) {
@@ -585,7 +586,7 @@ func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
 	applyFileOverrides(cfg, t)
 }
 
-func applyPerformanceConfig(cfg *Config, fc performanceFileConfig) {
+func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	t := fileOverrideConfig{
 		RateLimits:   fc.RateLimits,
 		Difficulty:   fc.Difficulty,

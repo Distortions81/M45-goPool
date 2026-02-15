@@ -215,7 +215,7 @@ func adminNoticeMessage(key string) string {
 	case "settings_applied":
 		return "Live settings applied in memory."
 	case "saved_to_disk":
-		return "Saved current in-memory settings to config.toml, services.toml, policy.toml, and performance.toml."
+		return "Saved current in-memory settings to config.toml, services.toml, policy.toml, and tuning.toml."
 	case "reboot_requested":
 		return "Reboot requested. goPool is shutting down now."
 	case "ui_reloaded":
@@ -917,17 +917,17 @@ func adminSensitiveFieldsChanged(orig, next Config) []string {
 	return changed
 }
 
-func rewritePerformanceFile(path string, cfg Config) error {
+func rewriteTuningFile(path string, cfg Config) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	pf := buildPerformanceFileConfig(cfg)
+	pf := buildTuningFileConfig(cfg)
 	data, err := toml.Marshal(pf)
 	if err != nil {
-		return fmt.Errorf("encode performance: %w", err)
+		return fmt.Errorf("encode tuning: %w", err)
 	}
-	data = withPrependedTOMLComments(data, generatedPerformanceFileHeader(), performanceConfigDocComments())
+	data = withPrependedTOMLComments(data, generatedTuningFileHeader(), tuningConfigDocComments())
 	if err := atomicWriteFile(path, data); err != nil {
 		return err
 	}

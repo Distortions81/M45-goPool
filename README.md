@@ -33,7 +33,7 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 - Optional split files:
   - `data/config/services.toml` for service/integration settings (`auth`, `backblaze_backup`, `discord`, `status` links).
   - `data/config/policy.toml` for submit-policy/version/bans/timeouts.
-  - `data/config/performance.toml` for rate limits, vardiff, EMA tuning, and peer-cleaning controls.
+  - `data/config/tuning.toml` for rate limits, vardiff, EMA tuning, and peer-cleaning controls.
   - `data/config/secrets.toml` for sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
 - `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. goPool writes `password_sha256` on startup and clears the plaintext password after the first successful login; subsequent logins use the hash. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + split override files, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
 - `[logging].level` controls runtime verbosity (`debug`, `info`, `warn`, `error`) and gates features like `net-debug.log`; override it temporarily with `-log-level <level>`.

@@ -23,7 +23,7 @@ func ensureExampleFiles(dataDir string) {
 	ensureExampleFile(filepath.Join(examplesDir, "secrets.toml.example"), secretsConfigExample)
 	ensureExampleFile(filepath.Join(examplesDir, "services.toml.example"), exampleServicesConfigBytes())
 	ensureExampleFile(filepath.Join(examplesDir, "policy.toml.example"), examplePolicyConfigBytes())
-	ensureExampleFile(filepath.Join(examplesDir, "performance.toml.example"), examplePerformanceConfigBytes())
+	ensureExampleFile(filepath.Join(examplesDir, "tuning.toml.example"), exampleTuningConfigBytes())
 }
 
 func ensureExampleFile(path string, contents []byte) {
@@ -76,9 +76,9 @@ func generatedServicesFileHeader() []byte {
 `)
 }
 
-func generatedPerformanceFileHeader() []byte {
-	return []byte(`# goPool performance.toml
-# Optional performance/capacity overrides loaded after config.toml on startup.
+func generatedTuningFileHeader() []byte {
+	return []byte(`# goPool tuning.toml
+# Optional tuning/capacity overrides loaded after config.toml on startup.
 # Keep this file absent unless you need to override defaults.
 #
 `)
@@ -98,7 +98,7 @@ func baseConfigDocComments() []byte {
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
 #
-# Advanced settings can be split across services.toml, policy.toml, and performance.toml.
+# Advanced settings can be split across services.toml, policy.toml, and tuning.toml.
 #
 `)
 }
@@ -113,7 +113,7 @@ func servicesConfigDocComments() []byte {
 `)
 }
 
-func performanceConfigDocComments() []byte {
+func tuningConfigDocComments() []byte {
 	return []byte(`# Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
 # - disable_connect_rate_limits: Disable accept/connect throttling entirely (intended for local-only pools on trusted networks; requires restart).
@@ -191,15 +191,15 @@ func exampleConfigBytes() []byte {
 	return withPrependedTOMLComments(data, exampleHeader("base config"), baseConfigDocComments())
 }
 
-func examplePerformanceConfigBytes() []byte {
+func exampleTuningConfigBytes() []byte {
 	cfg := defaultConfig()
-	pf := buildPerformanceFileConfig(cfg)
+	pf := buildTuningFileConfig(cfg)
 	data, err := toml.Marshal(pf)
 	if err != nil {
-		logger.Warn("encode performance config example failed", "error", err)
+		logger.Warn("encode tuning config example failed", "error", err)
 		return nil
 	}
-	return withPrependedTOMLComments(data, exampleHeader("performance config"), performanceConfigDocComments())
+	return withPrependedTOMLComments(data, exampleHeader("tuning config"), tuningConfigDocComments())
 }
 
 func examplePolicyConfigBytes() []byte {

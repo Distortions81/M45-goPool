@@ -121,8 +121,8 @@ func buildPolicyFileConfig(cfg Config) policyFileConfig {
 	}
 }
 
-func buildPerformanceFileConfig(cfg Config) performanceFileConfig {
-	return performanceFileConfig{
+func buildTuningFileConfig(cfg Config) tuningFileConfig {
+	return tuningFileConfig{
 		RateLimits: rateLimitTuning{
 			MaxConns:                          new(cfg.MaxConns),
 			MaxAcceptsPerSecond:               new(cfg.MaxAcceptsPerSecond),
@@ -154,9 +154,9 @@ func buildPerformanceFileConfig(cfg Config) performanceFileConfig {
 			DisablePoolJobEntropy:     new(false),
 			DifficultyStepGranularity: new(cfg.DifficultyStepGranularity),
 		},
-		Hashrate: performanceHashrateConfig{
-			HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
-		},
+	Hashrate: tuningHashrateConfig{
+		HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
+	},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   new(cfg.PeerCleanupEnabled),
 			MaxPingMs: new(cfg.PeerCleanupMaxPingMs),

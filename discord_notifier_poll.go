@@ -268,7 +268,7 @@ func formatNotifyThresholdLabel(d time.Duration) string {
 
 func (n *discordNotifier) updateWorkerStates(userID string, current map[string]bool, now time.Time) (offlineOverdue, onlineOverdue []string) {
 	// Use one sustained threshold to reduce flapping notifications and require
-	// meaningful state changes (configured via services.toml/policy.toml/performance.toml).
+	// meaningful state changes (configured via services.toml/policy.toml/tuning.toml).
 	offlineThreshold := n.workerNotifyThreshold()
 	onlineBeforeOfflineThreshold := offlineThreshold
 	recoveryThreshold := offlineThreshold
