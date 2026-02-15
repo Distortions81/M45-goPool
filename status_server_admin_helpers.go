@@ -215,7 +215,7 @@ func adminNoticeMessage(key string) string {
 	case "settings_applied":
 		return "Live settings applied in memory."
 	case "saved_to_disk":
-		return "Saved current in-memory settings to config.toml and tuning.toml."
+		return "Saved current in-memory settings to config.toml, services.toml, policy.toml, and performance.toml."
 	case "reboot_requested":
 		return "Reboot requested. goPool is shutting down now."
 	case "ui_reloaded":
@@ -240,10 +240,7 @@ func adminNoticeMessage(key string) string {
 }
 
 func buildAdminSettingsData(cfg Config) AdminSettingsData {
-	timeoutSec := int(cfg.ConnectionTimeout / time.Second)
-	if timeoutSec < 0 {
-		timeoutSec = 0
-	}
+	timeoutSec := max(int(cfg.ConnectionTimeout/time.Second), 0)
 	return AdminSettingsData{
 		StatusBrandName:                      cfg.StatusBrandName,
 		StatusBrandDomain:                    cfg.StatusBrandDomain,
@@ -284,14 +281,19 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		MaxDifficulty:                        cfg.MaxDifficulty,
 		DefaultDifficulty:                    cfg.DefaultDifficulty,
 		TargetSharesPerMin:                   cfg.TargetSharesPerMin,
+		VarDiffEnabled:                       cfg.VarDiffEnabled,
 		DifficultyStepGranularity:            cfg.DifficultyStepGranularity,
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
 		EnforceSuggestedDifficultyLimits:     cfg.EnforceSuggestedDifficultyLimits,
-		RelaxedSubmitValidation:              cfg.RelaxedSubmitValidation,
-		SubmitWorkerNameMatch:                cfg.SubmitWorkerNameMatch,
-		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
-		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
-		RejectNoJobID:                        cfg.RejectNoJobID,
+		ShareJobFreshnessMode:                cfg.ShareJobFreshnessMode,
+		ShareCheckNTimeWindow:                cfg.ShareCheckNTimeWindow,
+		ShareCheckVersionRolling:             cfg.ShareCheckVersionRolling,
+		ShareRequireAuthorizedConnection:     cfg.ShareRequireAuthorizedConnection,
+		ShareCheckParamFormat:                cfg.ShareCheckParamFormat,
+		ShareRequireWorkerMatch:              cfg.ShareRequireWorkerMatch,
+		SubmitProcessInline:                  cfg.SubmitProcessInline,
+		ShareCheckDuplicate:                  cfg.ShareCheckDuplicate,
+		ShareRequireJobID:                    cfg.ShareRequireJobID,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
 		PeerCleanupMaxPingMs:                 cfg.PeerCleanupMaxPingMs,
 		PeerCleanupMinPeers:                  cfg.PeerCleanupMinPeers,
@@ -311,9 +313,9 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		CoinbaseScriptSigMaxBytes:            cfg.CoinbaseScriptSigMaxBytes,
 		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
 		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
-		NTimeForwardSlackSeconds:             cfg.NTimeForwardSlackSeconds,
+		ShareNTimeMaxForwardSeconds:          cfg.ShareNTimeMaxForwardSeconds,
 		MinVersionBits:                       cfg.MinVersionBits,
-		IgnoreMinVersionBits:                 cfg.IgnoreMinVersionBits,
+		ShareAllowDegradedVersionBits:        cfg.ShareAllowDegradedVersionBits,
 	}
 }
 
@@ -788,12 +790,23 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return err
 	}
 
-	next.RelaxedSubmitValidation = getBool("relaxed_submit_validation")
-	next.SubmitWorkerNameMatch = getBool("submit_worker_name_match")
-	next.DirectSubmitProcessing = getBool("direct_submit_processing")
-	next.CheckDuplicateShares = getBool("check_duplicate_shares")
-	next.RejectNoJobID = getBool("reject_no_job_id")
-	next.IgnoreMinVersionBits = getBool("ignore_min_version_bits")
+	if mode, err := parseInt("share_job_freshness_mode", next.ShareJobFreshnessMode); err != nil {
+		return err
+	} else if normalizeShareJobFreshnessMode(mode) < 0 {
+		return fmt.Errorf("share_job_freshness_mode must be one of %d, %d, or %d", shareJobFreshnessOff, shareJobFreshnessJobID, shareJobFreshnessJobIDPrev)
+	} else {
+		next.ShareJobFreshnessMode = mode
+	}
+	next.ShareCheckNTimeWindow = getBool("share_check_ntime_window")
+	next.ShareCheckVersionRolling = getBool("share_check_version_rolling")
+	next.ShareRequireAuthorizedConnection = getBool("share_require_authorized_connection")
+	next.ShareCheckParamFormat = getBool("share_check_param_format")
+	next.ShareRequireWorkerMatch = getBool("share_require_worker_match")
+	next.SubmitProcessInline = getBool("submit_process_inline")
+	next.ShareCheckDuplicate = getBool("share_check_duplicate")
+	next.ShareRequireJobID = getBool("share_require_job_id")
+	next.ShareAllowDegradedVersionBits = getBool("share_allow_degraded_version_bits")
+	next.VarDiffEnabled = getBool("vardiff_enabled")
 
 	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {
 		return err
@@ -839,11 +852,11 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0")
 	}
-	if next.NTimeForwardSlackSeconds, err = parseInt("ntime_forward_slack_seconds", next.NTimeForwardSlackSeconds); err != nil {
+	if next.ShareNTimeMaxForwardSeconds, err = parseInt("share_ntime_max_forward_seconds", next.ShareNTimeMaxForwardSeconds); err != nil {
 		return err
 	}
-	if next.NTimeForwardSlackSeconds <= 0 {
-		return fmt.Errorf("ntime_forward_slack_seconds must be > 0")
+	if next.ShareNTimeMaxForwardSeconds <= 0 {
+		return fmt.Errorf("share_ntime_max_forward_seconds must be > 0")
 	}
 
 	if changed := adminSensitiveFieldsChanged(orig, next); len(changed) > 0 {
@@ -904,17 +917,53 @@ func adminSensitiveFieldsChanged(orig, next Config) []string {
 	return changed
 }
 
-func rewriteTuningFile(path string, cfg Config) error {
+func rewritePerformanceFile(path string, cfg Config) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tf := buildTuningFileConfig(cfg)
-	data, err := toml.Marshal(tf)
+	pf := buildPerformanceFileConfig(cfg)
+	data, err := toml.Marshal(pf)
 	if err != nil {
-		return fmt.Errorf("encode tuning: %w", err)
+		return fmt.Errorf("encode performance: %w", err)
 	}
-	data = withPrependedTOMLComments(data, generatedTuningFileHeader(), tuningConfigDocComments())
+	data = withPrependedTOMLComments(data, generatedPerformanceFileHeader(), performanceConfigDocComments())
+	if err := atomicWriteFile(path, data); err != nil {
+		return err
+	}
+	_ = os.Chmod(path, 0o644)
+	return nil
+}
+
+func rewritePolicyFile(path string, cfg Config) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	pf := buildPolicyFileConfig(cfg)
+	data, err := toml.Marshal(pf)
+	if err != nil {
+		return fmt.Errorf("encode policy: %w", err)
+	}
+	data = withPrependedTOMLComments(data, generatedPolicyFileHeader(), policyConfigDocComments())
+	if err := atomicWriteFile(path, data); err != nil {
+		return err
+	}
+	_ = os.Chmod(path, 0o644)
+	return nil
+}
+
+func rewriteServicesFile(path string, cfg Config) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	sf := buildServicesFileConfig(cfg)
+	data, err := toml.Marshal(sf)
+	if err != nil {
+		return fmt.Errorf("encode services: %w", err)
+	}
+	data = withPrependedTOMLComments(data, generatedServicesFileHeader(), servicesConfigDocComments())
 	if err := atomicWriteFile(path, data); err != nil {
 		return err
 	}

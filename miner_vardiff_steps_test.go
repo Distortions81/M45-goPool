@@ -449,7 +449,7 @@ func TestSuggestedVardiff_SteadyStateNearTargetNeedsManyConfirmations(t *testing
 		RollingHashrate: rolling,
 	}
 
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		ts := now.Add(time.Duration(i) * 10 * time.Second)
 		if got := mc.suggestedVardiff(ts, snap); got != 1000 {
 			t.Fatalf("iteration %d got %.8g want %.8g before steady-state confirmation threshold", i+1, got, 1000.0)
@@ -638,10 +638,10 @@ func TestAdaptiveVardiffWindow_AdjustsForShareDensity(t *testing.T) {
 	}
 	base := defaultVarDiffAdjustmentWindow
 	tests := []struct {
-		name       string
-		rolling    float64
+		name        string
+		rolling     float64
 		currentDiff float64
-		wantSign   int // -1 means shorter, +1 means longer
+		wantSign    int // -1 means shorter, +1 means longer
 	}{
 		{name: "high density shortens", rolling: 90e12, currentDiff: 1024, wantSign: -1},
 		{name: "low density lengthens", rolling: 200e3, currentDiff: 1, wantSign: 1},

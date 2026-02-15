@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"slices"
 	"strings"
 )
 
@@ -50,12 +51,7 @@ func normalizePoolTag(tag string) string {
 }
 
 func containsPoolChar(b byte) bool {
-	for _, c := range poolTagCharsetBytes {
-		if c == b {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(poolTagCharsetBytes, b)
 }
 
 // randomAlnumString returns a string of the requested length composed of

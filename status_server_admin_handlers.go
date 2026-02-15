@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -233,7 +234,7 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 	}
 
 	// Best-effort helper: keep accept limits consistent when auto mode is enabled.
-	autoConfigureAcceptRateLimits(&cfg, tuningFileConfig{}, false)
+	autoConfigureAcceptRateLimits(&cfg, fileOverrideConfig{}, false)
 
 	if err := validateConfig(cfg); err != nil {
 		data.AdminApplyError = fmt.Sprintf("Validation error: %v", err)
@@ -346,13 +347,27 @@ func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	if err := rewriteTuningFile(s.tuningPath, cfg); err != nil {
-		data.AdminPersistError = fmt.Sprintf("Failed to write tuning.toml: %v", err)
+	configDir := filepath.Dir(s.configPath)
+	servicesPath := filepath.Join(configDir, "services.toml")
+	policyPath := filepath.Join(configDir, "policy.toml")
+	performancePath := filepath.Join(configDir, "performance.toml")
+	if err := rewriteServicesFile(servicesPath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write services.toml: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := rewritePolicyFile(policyPath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write policy.toml: %v", err)
+		s.renderAdminPage(w, r, data)
+		return
+	}
+	if err := rewritePerformanceFile(performancePath, cfg); err != nil {
+		data.AdminPersistError = fmt.Sprintf("Failed to write performance.toml: %v", err)
 		s.renderAdminPage(w, r, data)
 		return
 	}
 
-	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "tuning_path", s.tuningPath)
+	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "services_path", servicesPath, "policy_path", policyPath, "performance_path", performancePath)
 	http.Redirect(w, r, "/admin?notice=saved_to_disk", http.StatusSeeOther)
 }
 

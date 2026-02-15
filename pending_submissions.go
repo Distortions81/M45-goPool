@@ -228,7 +228,7 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 			continue
 		}
 
-		var submitRes interface{}
+		var submitRes any
 		// Bound each submitblock call so a slow or unresponsive node
 		// doesn't block shutdown or delay retries for other entries.
 		parent := ctx
@@ -236,7 +236,7 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 			parent = context.Background()
 		}
 		callCtx, cancel := context.WithTimeout(parent, 30*time.Second)
-		err := rpc.callCtx(callCtx, "submitblock", []interface{}{rec.BlockHex}, &submitRes)
+		err := rpc.callCtx(callCtx, "submitblock", []any{rec.BlockHex}, &submitRes)
 		cancel()
 		if err != nil {
 			retryIn := pendingReplayBackoff.fail(item.Key, now)

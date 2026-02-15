@@ -193,6 +193,13 @@
 						<input name="target_shares_per_min" type="number" min="0.1" max="120" step="0.1" class="textfield" value="{{printf "%.4f" .Settings.TargetSharesPerMin}}">
 					</div>
 					<div>
+						<div class="label">vardiff_enabled {{template "restart-required" .}}<div class="label-note">Enable automatic difficulty retargeting. Disable to keep connection difficulty static unless explicitly changed.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="vardiff_enabled" value="1" {{if .Settings.VarDiffEnabled}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
 						<div class="label">lock_suggested_difficulty {{template "restart-required" .}}<div class="label-note">When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
@@ -290,38 +297,67 @@
 							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
 						</select>
 					</div>
-						<div>
-							<div class="label">relaxed_submit_validation {{template "restart-required" .}}<div class="label-note">Uses the relaxed submit path: skips strict policy rejections for prevhash mismatch, nTime window policy, and version-rolling policy checks. Authorization, ban checks, stale-job checks, and basic submit field validation are still enforced.</div></div>
-							<label class="label" style="font-weight:500;margin-top:10px;">
-								<input type="checkbox" name="relaxed_submit_validation" value="1" {{if .Settings.RelaxedSubmitValidation}}checked{{end}}>
-								<span style="margin-left:8px;">Enabled</span>
-							</label>
-						</div>
-						<div>
-							<div class="label">submit_worker_name_match {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the submitted worker name does not match the worker authorized on this connection.</div></div>
-							<label class="label" style="font-weight:500;margin-top:10px;">
-								<input type="checkbox" name="submit_worker_name_match" value="1" {{if .Settings.SubmitWorkerNameMatch}}checked{{end}}>
-								<span style="margin-left:8px;">Enabled</span>
-							</label>
-						</div>
-						<div>
-							<div class="label">direct_submit_processing {{template "restart-required" .}}<div class="label-note">Processes mining.submit inline on the miner connection goroutine instead of a worker queue. Reduces queue latency, but heavy submit work can block reads/writes on that connection.</div></div>
-							<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="direct_submit_processing" value="1" {{if .Settings.DirectSubmitProcessing}}checked{{end}}>
+					<div>
+						<div class="label">share_job_freshness_mode {{template "restart-required" .}}<div class="label-note">Job freshness policy for submit validation.</div></div>
+						<select name="share_job_freshness_mode" class="textfield">
+							<option value="0" {{if eq .Settings.ShareJobFreshnessMode 0}}selected{{end}}>0 (off)</option>
+							<option value="1" {{if eq .Settings.ShareJobFreshnessMode 1}}selected{{end}}>1 (job_id)</option>
+							<option value="2" {{if eq .Settings.ShareJobFreshnessMode 2}}selected{{end}}>2 (job_id+prevhash)</option>
+						</select>
+					</div>
+					<div>
+						<div class="label">share_check_ntime_window {{template "restart-required" .}}<div class="label-note">Rejects submits when nTime is outside the configured min/max window.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="share_check_ntime_window" value="1" {{if .Settings.ShareCheckNTimeWindow}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label">check_duplicate_shares {{template "restart-required" .}}<div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection.</div></div>
+						<div class="label">share_check_version_rolling {{template "restart-required" .}}<div class="label-note">Rejects submits that violate negotiated version-rolling policy (mask/min-bits/version-roll enablement).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="check_duplicate_shares" value="1" {{if .Settings.CheckDuplicateShares}}checked{{end}}>
+							<input type="checkbox" name="share_check_version_rolling" value="1" {{if .Settings.ShareCheckVersionRolling}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label">reject_no_job_id {{template "restart-required" .}}<div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling.</div></div>
+						<div class="label">share_require_authorized_connection {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the connection has not authorized or the worker identity check fails.</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="reject_no_job_id" value="1" {{if .Settings.RejectNoJobID}}checked{{end}}>
+							<input type="checkbox" name="share_require_authorized_connection" value="1" {{if .Settings.ShareRequireAuthorizedConnection}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">share_check_param_format {{template "restart-required" .}}<div class="label-note">Enforces strict mining.submit field length/format checks before share processing.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="share_check_param_format" value="1" {{if .Settings.ShareCheckParamFormat}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+						<div>
+							<div class="label">share_require_worker_match {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the submitted worker name does not match the worker authorized on this connection.</div></div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+								<input type="checkbox" name="share_require_worker_match" value="1" {{if .Settings.ShareRequireWorkerMatch}}checked{{end}}>
+								<span style="margin-left:8px;">Enabled</span>
+							</label>
+						</div>
+						<div>
+						<div class="label">submit_process_inline {{template "restart-required" .}}<div class="label-note">Processes mining.submit inline on the miner connection goroutine instead of a worker queue. Usually gives materially lower submit latency; consider disabling mainly for very large pools (for example, tens of thousands of miners) where queue isolation is preferred.</div></div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="submit_process_inline" value="1" {{if .Settings.SubmitProcessInline}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">share_check_duplicate {{template "restart-required" .}}<div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="share_check_duplicate" value="1" {{if .Settings.ShareCheckDuplicate}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">share_require_job_id {{template "restart-required" .}}<div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="share_require_job_id" value="1" {{if .Settings.ShareRequireJobID}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
@@ -343,9 +379,9 @@
 					</div>
 				</div>
 
-				<h3 style="margin:18px 0 8px 0;">Tuning</h3>
+				<h3 style="margin:18px 0 8px 0;">Runtime</h3>
 				<p class="text-sm" style="margin:0 0 8px 0;">
-					Performance and protocol tuning for notifications, hashrate smoothing, nTime slack, and version-rolling checks.
+					Performance and protocol runtime controls for notifications, hashrate smoothing, nTime slack, and version-rolling checks.
 				</p>
 				<div class="grid admin-grid">
 					<div>
@@ -357,17 +393,17 @@
 						<input name="hashrate_ema_tau_seconds" type="number" min="1" step="1" class="textfield" value="{{printf "%.0f" .Settings.HashrateEMATauSeconds}}">
 					</div>
 					<div>
-						<div class="label">ntime_forward_slack_seconds {{template "restart-required" .}}<div class="label-note">Maximum seconds a miner can roll nTime forward.</div></div>
-						<input name="ntime_forward_slack_seconds" type="number" min="1" class="textfield" value="{{.Settings.NTimeForwardSlackSeconds}}">
+						<div class="label">share_ntime_max_forward_seconds {{template "restart-required" .}}<div class="label-note">Maximum seconds a miner can roll nTime forward.</div></div>
+						<input name="share_ntime_max_forward_seconds" type="number" min="1" class="textfield" value="{{.Settings.ShareNTimeMaxForwardSeconds}}">
 					</div>
 					<div>
 						<div class="label">min_version_bits {{template "restart-required" .}}<div class="label-note">Minimum number of version-rolling bits required when version mask is active.</div></div>
 						<input name="min_version_bits" type="number" min="0" class="textfield" value="{{.Settings.MinVersionBits}}">
 					</div>
 					<div>
-						<div class="label">ignore_min_version_bits {{template "restart-required" .}}<div class="label-note">Allow version rolling even when miners advertise fewer bits than required.</div></div>
+						<div class="label">share_allow_degraded_version_bits {{template "restart-required" .}}<div class="label-note">Allow version rolling even when miners advertise fewer bits than required.</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="ignore_min_version_bits" value="1" {{if .Settings.IgnoreMinVersionBits}}checked{{end}}>
+							<input type="checkbox" name="share_allow_degraded_version_bits" value="1" {{if .Settings.ShareAllowDegradedVersionBits}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
@@ -457,7 +493,7 @@
 		<div class="card">
 			<div class="label">Save to disk</div>
 			<p class="text-sm" style="margin:4px 0 10px 0;">
-				Force-write the current in-memory config to <span class="mono">config.toml</span> and <span class="mono">tuning.toml</span>.
+				Force-write the current in-memory config to <span class="mono">config.toml</span>, <span class="mono">services.toml</span>, <span class="mono">policy.toml</span>, and <span class="mono">performance.toml</span>.
 				This overwrites files on disk; use with care.
 			</p>
 			{{if .AdminPersistError}}
@@ -468,7 +504,7 @@
 				<input id="persist-password" name="password" type="password" class="textfield" autocomplete="current-password" placeholder="Enter admin.toml password" required>
 				<label class="label" for="persist-confirm">Confirmation</label>
 				<input id="persist-confirm" name="confirm" type="text" class="textfield" placeholder="Type SAVE" required>
-				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Save config.toml + tuning.toml</button>
+				<button class="btn btn-secondary" type="submit" style="margin-top:12px;">Save split config files</button>
 			</form>
 		</div>
 

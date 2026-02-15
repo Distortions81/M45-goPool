@@ -283,7 +283,7 @@ func TestVirtualVardiff_SevenMinuteCharacterization(t *testing.T) {
 	avgFinalDiff := 0.0
 	avgAdjustments := 0.0
 
-	for i := 0; i < trials; i++ {
+	for i := range trials {
 		res := runVirtualVardiff(virtualVardiffConfig{
 			duration:      7 * time.Minute,
 			window:        120 * time.Second,
@@ -322,7 +322,7 @@ func TestVirtualVardiff_ConvergenceStepsCharacterization(t *testing.T) {
 	totalSteps := 0
 	observed := 0
 
-	for i := 0; i < trials; i++ {
+	for i := range trials {
 		res := runVirtualVardiff(virtualVardiffConfig{
 			duration:      10 * time.Minute,
 			window:        60 * time.Second,
@@ -392,7 +392,7 @@ func TestVirtualVardiff_TuningSweep(t *testing.T) {
 			stepsObserved := make([]int, 0, trials)
 			tailRates := make([]float64, 0, trials)
 
-			for i := 0; i < trials; i++ {
+			for i := range trials {
 				res := runVirtualVardiff(virtualVardiffConfig{
 					duration:      10 * time.Minute,
 					window:        pf.window,
@@ -454,7 +454,7 @@ func TestVirtualVardiff_SteadyStateChurnIsLow(t *testing.T) {
 	const trials = 96
 	totalLateAdjustments := 0.0
 
-	for i := 0; i < trials; i++ {
+	for i := range trials {
 		res := runVirtualVardiff(virtualVardiffConfig{
 			duration:      20 * time.Minute,
 			window:        60 * time.Second,

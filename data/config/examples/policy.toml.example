@@ -1,0 +1,57 @@
+# Generated policy config example (copy to a real config and edit as needed)
+
+# Mining policy ([mining])
+# - share_job_freshness_mode: 0=off, 1=job_id, 2=job_id+prevhash.
+# - share_check_ntime_window: Enforce nTime policy window.
+# - share_check_version_rolling: Enforce version-rolling policy.
+# - share_require_authorized_connection: Require authorized connection for submit.
+# - share_check_param_format: Enforce submit parameter format checks.
+# - share_require_worker_match: Require submit worker matches authorized worker.
+# - submit_process_inline: Process mining.submit inline on connection goroutine.
+# - share_check_duplicate: Enable duplicate share checks.
+# - share_require_job_id: Require non-empty job_id.
+#
+# Hashrate policy ([hashrate])
+# - share_ntime_max_forward_seconds: max allowed forward nTime skew.
+#
+# Version policy ([version])
+# - min_version_bits
+# - share_allow_degraded_version_bits
+#
+# Timeouts ([timeouts])
+# - connection_timeout_seconds
+#
+# Bans ([bans])
+# - invalid-submit and reconnect ban thresholds/windows.
+#
+
+[bans]
+  ban_invalid_submissions_after = 40
+  ban_invalid_submissions_duration_seconds = 900
+  ban_invalid_submissions_window_seconds = 300
+  banned_miner_types = []
+  clean_expired_on_startup = true
+  reconnect_ban_duration_seconds = 3600
+  reconnect_ban_threshold = 60
+  reconnect_ban_window_seconds = 60
+
+[hashrate]
+  share_ntime_max_forward_seconds = 7000
+
+[mining]
+  share_check_duplicate = true
+  share_check_ntime_window = false
+  share_check_param_format = true
+  share_check_version_rolling = false
+  share_job_freshness_mode = 1
+  share_require_authorized_connection = true
+  share_require_job_id = true
+  share_require_worker_match = false
+  submit_process_inline = true
+
+[timeouts]
+  connection_timeout_seconds = 300
+
+[version]
+  min_version_bits = 1
+  share_allow_degraded_version_bits = true

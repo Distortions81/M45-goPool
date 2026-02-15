@@ -123,29 +123,34 @@ type Config struct {
 	AcceptSteadyStateReconnectWindow  int     // seconds to spread steady-state reconnects
 	StratumMessagesPerMinute          int     // per-connection Stratum messages/min (0 disables)
 
-	MaxRecentJobs         int
-	ConnectionTimeout     time.Duration
-	VersionMask           uint32
-	MinVersionBits        int
-	IgnoreMinVersionBits  bool
-	VersionMaskConfigured bool
-	MaxDifficulty         float64
-	MinDifficulty         float64
-	DefaultDifficulty     float64
-	TargetSharesPerMin    float64 // vardiff target share rate
+	MaxRecentJobs                 int
+	ConnectionTimeout             time.Duration
+	VersionMask                   uint32
+	MinVersionBits                int
+	ShareAllowDegradedVersionBits bool
+	VersionMaskConfigured         bool
+	MaxDifficulty                 float64
+	MinDifficulty                 float64
+	DefaultDifficulty             float64
+	TargetSharesPerMin            float64 // vardiff target share rate
+	VarDiffEnabled                bool    // enable dynamic difficulty retargeting
 
 	LockSuggestedDifficulty          bool    // keep suggested difficulty instead of vardiff
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
 	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
-	NTimeForwardSlackSeconds         int     // max seconds ntime can roll forward
-	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
-	RejectNoJobID                    bool    // reject empty job_id in mining.submit (default false)
+	ShareNTimeMaxForwardSeconds      int     // max seconds ntime can roll forward
+	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
+	ShareRequireJobID                bool    // reject empty job_id in mining.submit (default false)
 
-	RelaxedSubmitValidation bool   // skip worker-mismatch + selected policy checks (default true)
-	SubmitWorkerNameMatch   bool   // enforce submit worker name must match authorized worker
-	DirectSubmitProcessing  bool   // process submits on connection goroutine (bypass worker pool)
-	LogLevel                string // log level: debug, info, warn, error
+	ShareJobFreshnessMode            int    // 0=off, 1=job_id, 2=job_id+prevhash
+	ShareCheckNTimeWindow            bool   // reject ntime outside configured window
+	ShareCheckVersionRolling         bool   // reject invalid version rolling policy violations
+	ShareRequireAuthorizedConnection bool   // reject submits from unauthorized connections
+	ShareCheckParamFormat            bool   // enforce strict submit field format/length checks
+	ShareRequireWorkerMatch          bool   // enforce submit worker name must match authorized worker
+	SubmitProcessInline              bool   // process submits on connection goroutine (bypass worker pool)
+	LogLevel                         string // log level: debug, info, warn, error
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
@@ -228,19 +233,24 @@ type EffectiveConfig struct {
 	ConnectionTimeout                 string   `json:"connection_timeout"`
 	VersionMask                       string   `json:"version_mask,omitempty"`
 	MinVersionBits                    int      `json:"min_version_bits,omitempty"`
-	IgnoreMinVersionBits              bool     `json:"ignore_min_version_bits,omitempty"`
+	ShareAllowDegradedVersionBits     bool     `json:"share_allow_degraded_version_bits,omitempty"`
 	MaxDifficulty                     float64  `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
 	TargetSharesPerMin                float64  `json:"target_shares_per_min,omitempty"`
+	VarDiffEnabled                    bool     `json:"vardiff_enabled"`
 	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
 	DifficultyStepGranularity         int      `json:"difficulty_step_granularity,omitempty"`
-	RelaxedSubmitValidation           bool     `json:"relaxed_submit_validation"`
-	SubmitWorkerNameMatch             bool     `json:"submit_worker_name_match"`
-	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
+	ShareJobFreshnessMode             int      `json:"share_job_freshness_mode"`
+	ShareCheckNTimeWindow             bool     `json:"share_check_ntime_window"`
+	ShareCheckVersionRolling          bool     `json:"share_check_version_rolling"`
+	ShareRequireAuthorizedConnection  bool     `json:"share_require_authorized_connection"`
+	ShareCheckParamFormat             bool     `json:"share_check_param_format"`
+	ShareRequireWorkerMatch           bool     `json:"share_require_worker_match"`
+	SubmitProcessInline               bool     `json:"submit_process_inline"`
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
-	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
-	CheckDuplicateShares              bool     `json:"check_duplicate_shares,omitempty"`
-	RejectNoJobID                     bool     `json:"reject_no_job_id,omitempty"`
+	ShareNTimeMaxForwardSeconds       int      `json:"share_ntime_max_forward_seconds,omitempty"`
+	ShareCheckDuplicate               bool     `json:"share_check_duplicate,omitempty"`
+	ShareRequireJobID                 bool     `json:"share_require_job_id,omitempty"`
 	LogLevel                          string   `json:"log_level,omitempty"`
 	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`
 	BanInvalidSubmissionsAfter        int      `json:"ban_invalid_submissions_after,omitempty"`

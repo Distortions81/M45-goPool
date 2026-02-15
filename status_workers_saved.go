@@ -75,10 +75,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					break
 				}
 				hashrate := workerHashrateEstimate(view, now)
-				duration := now.Sub(view.ConnectedAt)
-				if duration < 0 {
-					duration = 0
-				}
+				duration := max(now.Sub(view.ConnectedAt), 0)
 				entry := savedWorkerEntry{
 					Name:                      saved.Name,
 					Hash:                      view.WorkerSHA256,

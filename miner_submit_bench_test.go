@@ -157,7 +157,7 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		mc := benchmarkMinerConnForSubmit(metrics)
-		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.cfg.ShareNTimeMaxForwardSeconds = 600
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
@@ -173,7 +173,7 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare(b *testing.B) {
 			req := &StratumRequest{
 				ID:     1,
 				Method: "mining.submit",
-				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+				Params: []any{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
 			}
 
 			now := time.Unix(1700000000+int64(i), 0)
@@ -213,8 +213,8 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare_DupCheckEnabled(b *testing.B) 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		mc := benchmarkMinerConnForSubmit(metrics)
-		mc.cfg.CheckDuplicateShares = true
-		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.cfg.ShareCheckDuplicate = true
+		mc.cfg.ShareNTimeMaxForwardSeconds = 600
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
@@ -230,7 +230,7 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare_DupCheckEnabled(b *testing.B) 
 			req := &StratumRequest{
 				ID:     1,
 				Method: "mining.submit",
-				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+				Params: []any{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
 			}
 
 			now := time.Unix(1700000000+int64(i), 0)
@@ -269,8 +269,8 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckDisabled(b *testing.B) 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		mc := benchmarkMinerConnForSubmit(metrics)
-		mc.cfg.CheckDuplicateShares = false
-		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.cfg.ShareCheckDuplicate = false
+		mc.cfg.ShareNTimeMaxForwardSeconds = 600
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
@@ -286,7 +286,7 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckDisabled(b *testing.B) 
 			req := &StratumRequest{
 				ID:     1,
 				Method: "mining.submit",
-				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+				Params: []any{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
 			}
 
 			now := time.Unix(1700000000+int64(i), 0)
@@ -308,8 +308,8 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckEnabled(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		mc := benchmarkMinerConnForSubmit(metrics)
-		mc.cfg.CheckDuplicateShares = true
-		mc.cfg.NTimeForwardSlackSeconds = 600
+		mc.cfg.ShareCheckDuplicate = true
+		mc.cfg.ShareNTimeMaxForwardSeconds = 600
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
@@ -325,7 +325,7 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckEnabled(b *testing.B) {
 			req := &StratumRequest{
 				ID:     1,
 				Method: "mining.submit",
-				Params: []interface{}{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
+				Params: []any{"worker1", jobID, en2Hex, ntimeHex, nonceHex},
 			}
 
 			now := time.Unix(1700000000+int64(i), 0)

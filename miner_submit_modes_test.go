@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -12,7 +11,10 @@ import (
 func newSubmitReadyMinerConnForModesTest(t *testing.T) (*MinerConn, *Job) {
 	t.Helper()
 	mc := benchmarkMinerConnForSubmit(NewPoolMetrics())
-	mc.cfg.NTimeForwardSlackSeconds = 600
+	mc.cfg.ShareNTimeMaxForwardSeconds = 600
+	mc.cfg.ShareRequireAuthorizedConnection = true
+	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobID
+	mc.cfg.ShareCheckParamFormat = true
 	mc.authorized = true
 
 	authorizedWorker := "authorized.worker"
@@ -36,7 +38,7 @@ func testSubmitRequestForJob(job *Job, worker string) *StratumRequest {
 	return &StratumRequest{
 		ID:     1,
 		Method: "mining.submit",
-		Params: []interface{}{
+		Params: []any{
 			worker,
 			job.JobID,
 			"00000000",
@@ -46,11 +48,11 @@ func testSubmitRequestForJob(job *Job, worker string) *StratumRequest {
 	}
 }
 
-func TestPrepareSubmissionTask_WorkerMismatch_StrictVsRelaxed(t *testing.T) {
-	t.Run("strict rejects mismatched worker", func(t *testing.T) {
+func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) {
+	t.Run("authorization check rejects mismatched worker", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = false
-		mc.cfg.SubmitWorkerNameMatch = true
+		mc.cfg.ShareRequireAuthorizedConnection = true
+		mc.cfg.ShareRequireWorkerMatch = true
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -58,37 +60,37 @@ func TestPrepareSubmissionTask_WorkerMismatch_StrictVsRelaxed(t *testing.T) {
 
 		req := testSubmitRequestForJob(job, "other.worker")
 		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
-			t.Fatalf("expected strict mode to reject mismatched worker")
+			t.Fatalf("expected submit to reject mismatched worker")
 		}
 		if out := conn.String(); out == "" {
 			t.Fatalf("expected strict rejection response to be written")
 		}
 	})
 
-	t.Run("strict allows mismatched worker when worker-match option disabled", func(t *testing.T) {
+	t.Run("allows mismatched worker when worker-match option disabled", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = false
-		mc.cfg.SubmitWorkerNameMatch = false
+		mc.cfg.ShareRequireAuthorizedConnection = true
+		mc.cfg.ShareRequireWorkerMatch = false
 
 		req := testSubmitRequestForJob(job, "other.worker")
 		task, ok := mc.prepareSubmissionTask(req, time.Now())
 		if !ok {
-			t.Fatalf("expected strict mode to allow mismatch when submit_worker_name_match is disabled")
+			t.Fatalf("expected submit to allow mismatch when share_require_worker_match is disabled")
 		}
 		if got, want := task.workerName, mc.currentWorker(); got != want {
 			t.Fatalf("task workerName=%q want authorized worker %q", got, want)
 		}
 	})
 
-	t.Run("relaxed accepts mismatched worker and keeps authorized identity", func(t *testing.T) {
+	t.Run("authorization check disabled accepts mismatched worker", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = true
-		mc.cfg.SubmitWorkerNameMatch = true
+		mc.cfg.ShareRequireAuthorizedConnection = false
+		mc.cfg.ShareRequireWorkerMatch = true
 
 		req := testSubmitRequestForJob(job, "other.worker")
 		task, ok := mc.prepareSubmissionTask(req, time.Now())
 		if !ok {
-			t.Fatalf("expected relaxed mode to accept submit task")
+			t.Fatalf("expected submit task to be accepted")
 		}
 		if got, want := task.workerName, mc.currentWorker(); got != want {
 			t.Fatalf("task workerName=%q want authorized worker %q", got, want)
@@ -97,22 +99,17 @@ func TestPrepareSubmissionTask_WorkerMismatch_StrictVsRelaxed(t *testing.T) {
 }
 
 func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
+	ensureSubmissionWorkerPool()
 	oldWorkers := submissionWorkers
-	oldOnce := submissionWorkerOnce
 	t.Cleanup(func() {
 		submissionWorkers = oldWorkers
-		submissionWorkerOnce = oldOnce
 	})
 
 	submissionWorkers = &submissionWorkerPool{tasks: make(chan submissionTask, 1)}
-	submissionWorkerOnce = sync.Once{}
-	// Mark the once as done so ensureSubmissionWorkerPool() does not replace our test pool.
-	submissionWorkerOnce.Do(func() {})
 
 	t.Run("disabled queues to worker pool", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = true
-		mc.cfg.DirectSubmitProcessing = false
+		mc.cfg.SubmitProcessInline = false
 
 		req := testSubmitRequestForJob(job, mc.currentWorker())
 		mc.handleSubmit(req)
@@ -129,8 +126,7 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 
 	t.Run("enabled processes inline without queuing", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = true
-		mc.cfg.DirectSubmitProcessing = true
+		mc.cfg.SubmitProcessInline = true
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -150,10 +146,10 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 	})
 }
 
-func TestHandleSubmit_CheckDuplicateSharesMode(t *testing.T) {
+func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 	t.Run("enabled rejects duplicate non-block share", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.CheckDuplicateShares = true
+		mc.cfg.ShareCheckDuplicate = true
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -191,7 +187,7 @@ func TestHandleSubmit_CheckDuplicateSharesMode(t *testing.T) {
 
 	t.Run("disabled allows duplicate non-block share", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.CheckDuplicateShares = false
+		mc.cfg.ShareCheckDuplicate = false
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -228,11 +224,10 @@ func TestHandleSubmit_CheckDuplicateSharesMode(t *testing.T) {
 	})
 }
 
-func TestPrepareSubmissionTask_RejectNoJobIDToggle(t *testing.T) {
+func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
 	t.Run("disabled allows empty job id to reach stale-job rejection", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = true
-		mc.cfg.RejectNoJobID = false
+		mc.cfg.ShareRequireJobID = false
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -244,14 +239,13 @@ func TestPrepareSubmissionTask_RejectNoJobIDToggle(t *testing.T) {
 			t.Fatalf("expected empty job id submit to be rejected")
 		}
 		if out := conn.String(); !strings.Contains(out, "job not found") {
-			t.Fatalf("expected stale-job rejection when reject_no_job_id is disabled, got: %q", out)
+			t.Fatalf("expected stale-job rejection when share_require_job_id is disabled, got: %q", out)
 		}
 	})
 
 	t.Run("enabled rejects empty job id during parse validation", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.RelaxedSubmitValidation = true
-		mc.cfg.RejectNoJobID = true
+		mc.cfg.ShareRequireJobID = true
 
 		conn := &recordConn{}
 		mc.conn = conn
@@ -263,7 +257,7 @@ func TestPrepareSubmissionTask_RejectNoJobIDToggle(t *testing.T) {
 			t.Fatalf("expected empty job id submit to be rejected")
 		}
 		if out := conn.String(); !strings.Contains(out, "job id required") {
-			t.Fatalf("expected parse-time empty-job-id rejection when reject_no_job_id is enabled, got: %q", out)
+			t.Fatalf("expected parse-time empty-job-id rejection when share_require_job_id is enabled, got: %q", out)
 		}
 	})
 }

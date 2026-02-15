@@ -106,7 +106,7 @@ func (s *StatusServer) createNewOneTimeCode(userID string, now time.Time) (code 
 
 	s.evictOneTimeCodesLocked(now)
 
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		raw := strings.TrimSpace(oneTimeCodeGenerator())
 		if raw == "" {
 			continue

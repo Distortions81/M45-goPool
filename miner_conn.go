@@ -165,7 +165,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 
 	var shareCache map[string]*duplicateShareSet
 	var evictedShareCache map[string]*evictedCacheEntry
-	if cfg.CheckDuplicateShares {
+	if cfg.ShareCheckDuplicate {
 		shareCache = make(map[string]*duplicateShareSet, maxRecentJobs)
 		evictedShareCache = make(map[string]*evictedCacheEntry)
 	}

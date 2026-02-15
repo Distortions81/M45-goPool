@@ -11,7 +11,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if !ok {
 		return
 	}
-	if mc.cfg.DirectSubmitProcessing {
+	if mc.cfg.SubmitProcessInline {
 		mc.processSubmissionTask(task)
 		return
 	}
@@ -19,13 +19,13 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	submissionWorkers.submit(task)
 }
 
-func (mc *MinerConn) handleSubmitStringParams(id interface{}, params []string) {
+func (mc *MinerConn) handleSubmitStringParams(id any, params []string) {
 	now := time.Now()
 	task, ok := mc.prepareSubmissionTaskStringParams(id, params, now)
 	if !ok {
 		return
 	}
-	if mc.cfg.DirectSubmitProcessing {
+	if mc.cfg.SubmitProcessInline {
 		mc.processSubmissionTask(task)
 		return
 	}
@@ -33,12 +33,12 @@ func (mc *MinerConn) handleSubmitStringParams(id interface{}, params []string) {
 	submissionWorkers.submit(task)
 }
 
-func (mc *MinerConn) prepareSubmissionTaskStringParams(id interface{}, params []string, now time.Time) (submissionTask, bool) {
+func (mc *MinerConn) prepareSubmissionTaskStringParams(id any, params []string, now time.Time) (submissionTask, bool) {
 	parsed, ok := mc.parseSubmitParamsStrings(id, params, now)
 	if !ok {
 		return submissionTask{}, false
 	}
-	if mc.cfg.RelaxedSubmitValidation {
+	if !mc.useStrictSubmitPath() {
 		return mc.prepareSubmissionTaskSoloParsed(id, parsed, now)
 	}
 	return mc.prepareSubmissionTaskStrictParsed(id, parsed, now)

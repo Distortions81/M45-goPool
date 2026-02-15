@@ -137,14 +137,19 @@ type AdminSettingsData struct {
 	MaxDifficulty                    float64
 	DefaultDifficulty                float64
 	TargetSharesPerMin               float64
+	VarDiffEnabled                   bool
 	DifficultyStepGranularity        int
 	LockSuggestedDifficulty          bool
 	EnforceSuggestedDifficultyLimits bool
-	RelaxedSubmitValidation          bool
-	SubmitWorkerNameMatch            bool
-	DirectSubmitProcessing           bool
-	CheckDuplicateShares             bool
-	RejectNoJobID                    bool
+	ShareJobFreshnessMode            int
+	ShareCheckNTimeWindow            bool
+	ShareCheckVersionRolling         bool
+	ShareRequireAuthorizedConnection bool
+	ShareCheckParamFormat            bool
+	ShareRequireWorkerMatch          bool
+	SubmitProcessInline              bool
+	ShareCheckDuplicate              bool
+	ShareRequireJobID                bool
 
 	// Peer cleanup
 	PeerCleanupEnabled   bool
@@ -163,7 +168,7 @@ type AdminSettingsData struct {
 	// Logging
 	LogLevel string
 
-	// Tuning / misc
+	// Runtime / misc
 	StratumMessagesPerMinute            int
 	MaxRecentJobs                       int
 	Extranonce2Size                     int
@@ -172,9 +177,9 @@ type AdminSettingsData struct {
 	CoinbaseScriptSigMaxBytes           int
 	DiscordWorkerNotifyThresholdSeconds int
 	HashrateEMATauSeconds               float64
-	NTimeForwardSlackSeconds            int
+	ShareNTimeMaxForwardSeconds         int
 	MinVersionBits                      int
-	IgnoreMinVersionBits                bool
+	ShareAllowDegradedVersionBits       bool
 }
 
 type AdminMinerRow struct {

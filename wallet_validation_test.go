@@ -89,7 +89,7 @@ func TestScriptForAddress_MatchesBtcdPayToAddrScript(t *testing.T) {
 			pkh := make([]byte, 20)
 			sh := make([]byte, 20)
 			sh32 := make([]byte, 32)
-			for i := 0; i < 20; i++ {
+			for i := range 20 {
 				pkh[i] = byte(i + 1)
 				sh[i] = byte(0x80 + i)
 				if i < 32 {

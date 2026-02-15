@@ -12,7 +12,7 @@ func parseUint32BEHex(hexStr string) (uint32, error) {
 		return 0, fmt.Errorf("expected 8 hex characters, got %d", len(hexStr))
 	}
 	var v uint32
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		c := hexStr[i]
 		var nibble byte
 		switch {
@@ -54,7 +54,7 @@ func hexToLEHex(src string) string {
 	}
 	var buf [32]byte
 	copy(buf[:], b)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		j := i * 4
 		v := uint32(buf[j])<<24 | uint32(buf[j+1])<<16 | uint32(buf[j+2])<<8 | uint32(buf[j+3])
 		buf[j] = byte(v)

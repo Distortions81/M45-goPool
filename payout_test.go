@@ -384,17 +384,17 @@ func TestDualPayoutParams_NonPositivePoolFeeDisablesDualPayout(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-		mc := &MinerConn{
-			cfg: Config{
-				PayoutAddress:  poolAddr,
-				PoolFeePercent: tt.fee,
-			},
-		}
-		mc.setWorkerWallet(workerName, workerAddr, workerScript)
-		_, _, _, _, ok := mc.dualPayoutParams(job, workerName)
-		if ok {
-			t.Fatalf("expected dual payout disabled for pool fee %v", tt.fee)
-		}
+			mc := &MinerConn{
+				cfg: Config{
+					PayoutAddress:  poolAddr,
+					PoolFeePercent: tt.fee,
+				},
+			}
+			mc.setWorkerWallet(workerName, workerAddr, workerScript)
+			_, _, _, _, ok := mc.dualPayoutParams(job, workerName)
+			if ok {
+				t.Fatalf("expected dual payout disabled for pool fee %v", tt.fee)
+			}
 		})
 	}
 }

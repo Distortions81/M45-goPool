@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (mc *MinerConn) writeJSON(v interface{}) error {
+func (mc *MinerConn) writeJSON(v any) error {
 	b, err := fastJSONMarshal(v)
 	if err != nil {
 		return err
@@ -41,25 +41,25 @@ var (
 	cannedTrueSuffix       = []byte(`,"result":true,"error":null}`)
 )
 
-func (mc *MinerConn) writePongResponse(id interface{}) {
+func (mc *MinerConn) writePongResponse(id any) {
 	mc.sendCannedResponse("pong", id, cannedPongSuffix)
 }
 
-func (mc *MinerConn) writeEmptySliceResponse(id interface{}) {
+func (mc *MinerConn) writeEmptySliceResponse(id any) {
 	mc.sendCannedResponse("empty slice", id, cannedEmptySliceSuffix)
 }
 
-func (mc *MinerConn) writeTrueResponse(id interface{}) {
+func (mc *MinerConn) writeTrueResponse(id any) {
 	mc.sendCannedResponse("true", id, cannedTrueSuffix)
 }
 
-func (mc *MinerConn) sendCannedResponse(label string, id interface{}, suffix []byte) {
+func (mc *MinerConn) sendCannedResponse(label string, id any, suffix []byte) {
 	if err := mc.writeCannedResponse(id, suffix); err != nil {
 		logger.Error("write canned response", "remote", mc.id, "label", label, "error", err)
 	}
 }
 
-func (mc *MinerConn) writeCannedResponse(id interface{}, suffix []byte) error {
+func (mc *MinerConn) writeCannedResponse(id any, suffix []byte) error {
 	buf := make([]byte, 0, 64)
 	buf = append(buf, `{"id":`...)
 	var err error
@@ -72,7 +72,7 @@ func (mc *MinerConn) writeCannedResponse(id interface{}, suffix []byte) error {
 	return mc.writeBytes(buf)
 }
 
-func appendJSONValue(buf []byte, value interface{}) ([]byte, error) {
+func appendJSONValue(buf []byte, value any) ([]byte, error) {
 	switch v := value.(type) {
 	case nil:
 		return append(buf, "null"...), nil

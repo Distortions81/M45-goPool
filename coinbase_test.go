@@ -94,10 +94,7 @@ func TestSerializeDualCoinbaseTx_DualOutputs(t *testing.T) {
 	}
 
 	// Recompute expected split using the same logic as serializeDualCoinbaseTx.
-	poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
-	if poolFee < 0 {
-		poolFee = 0
-	}
+	poolFee := max(int64(math.Round(float64(totalValue)*feePercent/100.0)), 0)
 	if poolFee > totalValue {
 		poolFee = totalValue
 	}

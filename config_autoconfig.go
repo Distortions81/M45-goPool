@@ -49,7 +49,7 @@ func normalizeMempoolAddressURL(raw string) string {
 // autoConfigureVersionMaskFromNode. It is satisfied by *RPCClient and by
 // test fakes.
 type versionMaskRPC interface {
-	callCtx(ctx context.Context, method string, params interface{}, out interface{}) error
+	callCtx(ctx context.Context, method string, params any, out any) error
 }
 
 // autoConfigureVersionMaskFromNode inspects the connected Bitcoin node to
@@ -139,7 +139,7 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 // Combined, this allows all max_conns miners to reconnect within accept_reconnect_window
 // seconds of a pool restart without being rate-limited, while still protecting
 // the node from connection floods during normal operation.
-func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuningConfigLoaded bool) {
+func autoConfigureAcceptRateLimits(cfg *Config, overrides fileOverrideConfig, overridesLoaded bool) {
 	if cfg == nil || cfg.MaxConns <= 0 {
 		return
 	}
@@ -157,15 +157,12 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		burstWindow = defaultAcceptBurstWindow
 	}
 	if burstWindow >= reconnectWindow {
-		burstWindow = reconnectWindow / 2
-		if burstWindow < 1 {
-			burstWindow = 1
-		}
+		burstWindow = max(reconnectWindow/2, 1)
 	}
 
-	explicitMaxAccepts := tuningConfigLoaded && overrides.RateLimits.MaxAcceptsPerSecond != nil
-	explicitMaxBurst := tuningConfigLoaded && overrides.RateLimits.MaxAcceptBurst != nil
-	explicitSteadyStateRate := tuningConfigLoaded && overrides.RateLimits.AcceptSteadyStateRate != nil
+	explicitMaxAccepts := overridesLoaded && overrides.RateLimits.MaxAcceptsPerSecond != nil
+	explicitMaxBurst := overridesLoaded && overrides.RateLimits.MaxAcceptBurst != nil
+	explicitSteadyStateRate := overridesLoaded && overrides.RateLimits.AcceptSteadyStateRate != nil
 
 	// Auto-configure max_accept_burst if:
 	// 1. auto_accept_rate_limits is enabled (always override), OR
@@ -176,10 +173,9 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		// Burst window handles a proportional amount of total miners
 		// For 15s total with 5s burst: 5/15 = 33% of miners in burst
 		burstFraction := float64(burstWindow) / float64(reconnectWindow)
-		burstCapacity := int(float64(cfg.MaxConns) * burstFraction)
-		if burstCapacity < 20 {
-			burstCapacity = 20 // minimum burst of 20
-		}
+		burstCapacity := max(int(float64(cfg.MaxConns)*burstFraction),
+			// minimum burst of 20
+			20)
 		// Cap at a reasonable maximum to avoid runaway values.
 		if burstCapacity > 500000 {
 			burstCapacity = 500000
@@ -199,14 +195,8 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 	if shouldConfigureRate {
 		burstFraction := float64(burstWindow) / float64(reconnectWindow)
 		remainingMiners := int(float64(cfg.MaxConns) * (1.0 - burstFraction))
-		sustainedWindow := reconnectWindow - burstWindow
-		if sustainedWindow < 1 {
-			sustainedWindow = 1
-		}
-		sustainedRate := remainingMiners / sustainedWindow
-		if sustainedRate < 10 {
-			sustainedRate = 10
-		}
+		sustainedWindow := max(reconnectWindow-burstWindow, 1)
+		sustainedRate := max(remainingMiners/sustainedWindow, 10)
 		if sustainedRate > 100000 {
 			sustainedRate = 100000
 		}
@@ -238,11 +228,7 @@ func autoConfigureAcceptRateLimits(cfg *Config, overrides tuningFileConfig, tuni
 		// Calculate: (max_conns × reconnect_percent / 100) / window_seconds
 		// For example: 10000 miners × 5% = 500 miners over 60s = ~8/sec
 		expectedReconnects := float64(cfg.MaxConns) * (reconnectPercent / 100.0)
-		steadyStateRate := int(expectedReconnects / float64(steadyStateWindow))
-
-		if steadyStateRate < 5 {
-			steadyStateRate = 5
-		}
+		steadyStateRate := max(int(expectedReconnects/float64(steadyStateWindow)), 5)
 		if steadyStateRate > 1000 {
 			steadyStateRate = 1000
 		}

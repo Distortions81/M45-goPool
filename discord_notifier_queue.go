@@ -245,14 +245,8 @@ func (n *discordNotifier) sendNextQueuedMessage() {
 	affected := len(uniqueUsers)
 	subscribed := n.subscribedUserCount()
 	if subscribed > 0 {
-		pctThreshold := int(math.Ceil(float64(subscribed) * 0.10))
-		if pctThreshold < 0 {
-			pctThreshold = 0
-		}
-		threshold := 100
-		if pctThreshold > threshold {
-			threshold = pctThreshold
-		}
+		pctThreshold := max(int(math.Ceil(float64(subscribed)*0.10)), 0)
+		threshold := max(pctThreshold, 100)
 		if affected > threshold {
 			logger.Warn("notification burst dropped (possible localized outage)",
 				"affected_users", affected,

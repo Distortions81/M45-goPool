@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-func sniffStratumMethodID(data []byte) (string, interface{}, bool) {
+func sniffStratumMethodID(data []byte) (string, any, bool) {
 	idIdx := bytes.Index(data, []byte(`"id"`))
 	if idIdx < 0 {
 		return "", nil, false
@@ -145,7 +145,7 @@ func skipSpaces(data []byte, idx int) int {
 	return idx
 }
 
-func parseJSONValue(data []byte, idx int) (interface{}, int, bool) {
+func parseJSONValue(data []byte, idx int) (any, int, bool) {
 	if idx >= len(data) {
 		return nil, idx, false
 	}

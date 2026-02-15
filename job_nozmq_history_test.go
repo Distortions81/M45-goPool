@@ -34,7 +34,7 @@ func TestJobManagerRefreshBlockHistoryFromRPC(t *testing.T) {
 			data, _ := json.Marshal("h3")
 			resp.Result = data
 		case "getblockheader":
-			params, _ := req.Params.([]interface{})
+			params, _ := req.Params.([]any)
 			if len(params) < 1 {
 				resp.Error = &rpcError{Code: -32602, Message: "missing hash param"}
 				break

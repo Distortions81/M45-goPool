@@ -39,7 +39,7 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 
 1. Run `./goPool`; it generates `data/config/examples/` and exits.
 2. Copy the base example to `data/config/config.toml` and edit required values (especially `node.payout_address`, `node.rpc_url`, and ZMQ addresses: `node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`—leave blank to fall back to RPC/longpoll).
-3. Optional: copy `data/config/examples/secrets.toml.example` and `data/config/examples/tuning.toml.example` to `data/config/` for sensitive credentials or advanced tuning.
+3. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/performance.toml.example` to `data/config/` for sensitive credentials or advanced tuning.
 4. Re-run `./goPool`; it may regenerate `pool_entropy` and normalized listener ports if you later invoke `./goPool -rewrite-config`.
 
 ## Runtime overrides
@@ -57,6 +57,7 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 | `-flood` | Force both `min_difficulty` and `max_difficulty` to a low value for stress testing. |
 | `-log-level <debug|info|warn|error>` | Override `[logging].level` for this run only (not persisted). |
 | `-no-json` | Disable the JSON status endpoints while keeping the HTML UI active. |
+| `-allow-public-rpc` | Allow connecting to an unauthenticated RPC endpoint (testing only). |
 | `-allow-rpc-creds` | Force username/password auth from `secrets.toml`; logs a warning and is deprecated. |
 
 Flags only override values for the running instance; nothing is written back to `config.toml` (except `node.rpc_cookie_path` when auto-detected). Use configuration files for durable behavior.
@@ -68,7 +69,7 @@ Flags only override values for the running instance; nothing is written back to 
 1. Run `./goPool` once without a config. The daemon stops after generating `data/config/examples/`.
 2. Copy `data/config/examples/config.toml.example` to `data/config/config.toml`.
 3. Provide the required values (payout address, RPC/ZMQ endpoints, any branding overrides) and restart the pool.
-4. Optional: copy `data/config/examples/secrets.toml.example` and `data/config/examples/tuning.toml.example` to `data/config/` and edit as needed. The tuning file sits beside the base config and can be deleted to revert to defaults.
+4. Optional: copy `data/config/examples/secrets.toml.example`, `data/config/examples/services.toml.example`, `data/config/examples/policy.toml.example`, and `data/config/examples/performance.toml.example` to `data/config/` and edit as needed.
 5. If you prefer reproducible derived settings, rerun `./goPool -rewrite-config` once after editing. This writes derived fields such as `pool_entropy` and normalized listener ports back to `config.toml`.
 
 ### Common runtime flags
@@ -86,10 +87,11 @@ Flags only override values for the running instance; nothing is written back to 
 | `-flood` | Force `min_difficulty`/`max_difficulty` to the same low value for stress testing. |
 | `-log-level <debug|info|warn|error>` | Override the `[logging].level` setting for the current run (not persisted back to config). |
 | `-no-json` | Disable the JSON status endpoints (you still get the HTML status UI). |
+| `-allow-public-rpc` | Allow connecting to an unauthenticated RPC endpoint (testing only). |
 | `-allow-rpc-creds` | Force RPC auth to come from `secrets.toml` `rpc_user`/`rpc_pass`. Deprecated and insecure; prefer cookie auth. |
 
-Additional runtime knobs exist in `config.toml`/`tuning.toml`, but the flags above let you temporarily override them without editing files.
-Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` only affect the current invocation; they override the values from `config.toml` or `secrets.toml` at runtime but are not persisted back to the files.
+Additional runtime knobs exist in `config.toml` plus optional `services.toml`/`policy.toml`/`performance.toml`, but the flags above let you temporarily override them without editing files.
+Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, `-allow-public-rpc`, and `-secrets` only affect the current invocation; they override the values from `config.toml` or `secrets.toml` at runtime but are not persisted back to the files.
 
 ## Configuration files
 
@@ -98,32 +100,31 @@ Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` only affect 
 The required `data/config/config.toml` is the primary interface for pool behavior. Key sections include:
 
 - `[server]`: `pool_listen`, `status_listen`, `status_tls_listen`, and `status_public_url`. Set `status_tls_listen = ""` to disable HTTPS and rely on `status_listen` only. Leaving `status_listen` empty disables HTTP entirely (e.g., TLS-only deployments). `status_public_url` feeds redirects and Clerk cookie domains. When both HTTP and HTTPS are enabled, the HTTP listener now issues a temporary (307) redirect to the HTTPS endpoint so the public UI and JSON APIs stay behind TLS.
-- `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, GitHub link, location string).
+- `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel.
-- `[auth]`: Clerk URLs and session cookies used for the status UI.
-- `[node]`: `rpc_url`, `rpc_cookie_path`, ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`), and `allow_public_rpc`.
-- `[mining]`: Pool fee, donation settings, `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `pooltag_prefix`, and flags that control solo-mode shortcuts.
-- `[backblaze_backup]`: Cloud backup toggle, bucket name, prefix, and upload interval.
+- `[node]`: `rpc_url`, `rpc_cookie_path`, and ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`).
+- `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
 - `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.
 
 Set numeric values explicitly (do not rely on automation), and trim whitespace (goPool trims internally but a clean config is easier to audit). After editing, restart goPool or send `SIGUSR2` (see below).
 
-### tuning.toml
+### Split Override Files
 
-The `data/config/tuning.toml` file overrides fine-grained limits without touching the main config. Sections include:
+Optional split override files can layer advanced settings without touching the main config:
 
+- `services.toml`: service/integration settings:
+  `auth` (Clerk URLs/session cookie), `backblaze_backup` (backup service settings), `discord` (Discord URLs/channels + worker notify threshold), `status` (`mempool_address_url`, `github_url` links).
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, `stratum_messages_per_minute` (messages/min before disconnect + 1h ban), and whether to auto-calculate throttles from `max_conns`.
 - `[timeouts]`: `connection_timeout_seconds`.
+- `[mining]` in `policy.toml`: share-validation policy toggles (`share_*` settings) plus `submit_process_inline`.
 - `[difficulty]`: `default_difficulty` fallback when no suggestion arrives, `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits). The first `mining.suggest_*` is honored once per connection, triggers a clean notify, and subsequent suggests are ignored.
-- `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `difficulty_step_granularity` to control difficulty quantization precision (`1` power-of-two, `2` half-step, `3` third-step, `4` quarter-step default).
-- `[hashrate]`: `hashrate_ema_tau_seconds`, `ntime_forward_slack_seconds`.
-- `[discord]`: Worker notification thresholds for Discord alerts.
-- `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.
+- `[mining]`: `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `coinbase_scriptsig_max_bytes`, `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `difficulty_step_granularity` to control difficulty quantization precision (`1` power-of-two, `2` half-step, `3` third-step, `4` quarter-step default).
+- `[hashrate]`: `hashrate_ema_tau_seconds`, `share_ntime_max_forward_seconds`.
 - `[peer_cleaning]`: Enable/disable peer cleanup and tune thresholds.
 - `[bans]`: Ban thresholds/durations, `banned_miner_types` (disconnect miners by client ID on subscribe), and `clean_expired_on_startup` (defaults to `true`). Prefer `data/config/miner_blacklist.json` for client ID blacklist management; it overrides `banned_miner_types` when present. Set `clean_expired_on_startup = false` if you want to keep expired bans for inspection.
-- `[version]`: `min_version_bits` and `ignore_min_version_bits`.
+- `[version]`: `min_version_bits` and `share_allow_degraded_version_bits`.
 
-Delete `tuning.toml` to revert to built-in defaults. The first run creates `data/config/examples/tuning.toml.example`.
+Keep these files absent to use built-in defaults. The first run creates examples under `data/config/examples/`.
 
 ### secrets.toml
 
@@ -140,7 +141,7 @@ goPool expects a Bitcoin Core node with RPC enabled. Configure:
 
 - `node.rpc_url`: The RPC endpoint for `getblocktemplate` and `submitblock`.
 - `node.rpc_cookie_path`: Point this to `~/.bitcoin/.cookie` (or equivalent). When empty, goPool auto-detects common locations and, when successful, writes the discovered path back into `config.toml`.
-- `node.allow_public_rpc`: Set to `true` only when intentionally connecting to an unauthenticated endpoint.
+- `-allow-public-rpc`: Allow connecting to an unauthenticated RPC endpoint (testing only).
 - `-rpc-cookie`/`-rpc-url`: Use these overrides for temporary testing (e.g., a local regtest instance).
 - `-allow-rpc-creds`: Forces `rpc_user`/`rpc_pass` from `secrets.toml`. goPool logs a warning every run and you lose the security of the cookie file workflow.
 
@@ -205,7 +206,7 @@ goPool now stores a `password_sha256` alongside the plaintext password. On start
 When enabled, visit `/admin` (deliberately absent from the main navigation) and log in with the credentials stored in `admin.toml`. The panel exposes:
 
 * **Live settings** – a field-based UI that updates goPool's in-memory configuration immediately. Some settings still require a reboot to fully apply across all subsystems.
-* **Save to disk** – optionally force-write the current in-memory settings to `config.toml` and `tuning.toml`.
+* **Save to disk** – optionally force-write the current in-memory settings to `config.toml`, `services.toml`, `policy.toml`, and `performance.toml`.
 * **Reboot** – a button that sends SIGTERM to goPool. It requires re-entering the admin password and typing `REBOOT` to confirm the action so your pool does not restart accidentally.
 
 Because the admin login is intentionally simple, bind this UI to trusted networks only (e.g., keep `server.status_listen` local-domain, use firewall rules, or run behind an authenticated proxy) and rotate credentials whenever you rotate administrators.
@@ -214,15 +215,17 @@ Because the admin login is intentionally simple, bind this UI to trusted network
 
 - `mining.pool_fee_percent`, `operator_donation_percent`, and `operator_donation_address` determine how rewards are split.
 - `pooltag_prefix` customizes the `/goPool/` coinbase tag (only letters/digits).
-- `job_entropy` and `pool_entropy` help make each template unique; disable the suffix with `[tuning.mining] disable_pool_job_entropy = true`.
-- `relaxed_submit_validation` defaults to `true` (lighter validation). Set to `false` to enforce stricter duplicate detection and low-difficulty checks.
-- `check_duplicate_shares` enables duplicate share detection when `relaxed_submit_validation = true`; set it to `true` to apply the same checks used in multi-worker pools.
-- `reject_no_job_id` defaults to `false`; set it to `true` to hard-reject empty `job_id` (`invalid params` path) instead of allowing it to fall through to stale-job handling.
-- `direct_submit_processing` lets each stratum connection process `mining.submit` inline instead of via the worker queue; useful for low-latency environments but eases backpressure.
-- `relaxed_submit_validation` skips several policy guards that multi-worker pools still perform:
-  - worker-mismatch validation (the connection’s authorized worker name is trusted once you authenticate),
-  - strict stale-job/prevhash checks, tight `ntime` window enforcement, and BIP320 version/mask requirements,
-  - duplicate-share filtering and low-difficulty rejection.
+- `job_entropy` and `pool_entropy` help make each template unique; disable the suffix with `performance.toml` `[mining] disable_pool_job_entropy = true`.
+- Share validation checks are explicit toggles in `policy.toml` `[mining]`:
+  - `share_require_authorized_connection` defaults to `true`.
+  - `share_job_freshness_mode` defaults to `1` (options: `0=off`, `1=job_id`, `2=job_id+prevhash`).
+  - `share_check_param_format` defaults to `true`.
+  - `share_check_ntime_window` and `share_check_version_rolling` default to `false`.
+- `share_check_duplicate` defaults to `true` and enables duplicate-share detection (same job/extranonce2/ntime/nonce/version on one connection).
+- `share_require_job_id` defaults to `true` and hard-rejects empty `job_id` (`invalid params` path).
+- `share_require_worker_match` defaults to `false`; enable it if you want strict submit/authorize worker-name matching.
+- `submit_process_inline` defaults to `true` and usually provides materially better submit latency. Set it in `policy.toml` `[mining]` and disable mainly for very large pools (for example, tens of thousands of concurrent miners) where queue isolation is preferred.
+- `vardiff_enabled` defaults to `true`; set it to `false` to keep connection difficulty static unless explicitly changed.
 
 ## Logging and diagnostics
 
@@ -242,7 +245,7 @@ goPool maintains its state in `data/state/workers.db`. For Backblaze uploads, it
 
 ### Backblaze B2
 
-Configure the `[backblaze_backup]` section:
+Configure `services.toml` `[backblaze_backup]`:
 
 ```toml
 [backblaze_backup]
@@ -260,7 +263,7 @@ If Backblaze is temporarily unavailable at startup (network outage, transient au
 
 ### Ban cleanup
 
-Expired bans are rewritten on every startup by default. Control this via `[tuning.bans].clean_expired_on_startup` (defaults to `true`). Set it to `false` to inspect expired entries without clearing them.
+Expired bans are rewritten on every startup by default. Control this via `policy.toml` `[bans].clean_expired_on_startup` (defaults to `true`). Set it to `false` to inspect expired entries without clearing them.
 
 Clean bans happen inside `NewAccountStore` as it opens the shared state DB; when disabled, you still get bans loaded from disk, but expired entries remain visible via the status UI.
 
@@ -276,22 +279,22 @@ The `data/state/` directory also holds ban metadata, saved workers snapshots, an
 
 ## Tuning limits
 
-Auto-configured accept rate limits calculate `max_accept_burst`/`max_accepts_per_second` based on `max_conns` unless `tuning.toml` overrides them. Recent defaults aim to allow all miners to reconnect within `accept_reconnect_window` seconds.
+Auto-configured accept rate limits calculate `max_accept_burst`/`max_accepts_per_second` based on `max_conns` unless `performance.toml` overrides them. Recent defaults aim to allow all miners to reconnect within `accept_reconnect_window` seconds.
 
-Key tuning knobs:
+Key runtime knobs:
 
 - `accept_burst_window` / `accept_reconnect_window` / `accept_steady_state_*` – windows that shape burst vs sustained behavior.
 - `hashrate_ema_tau_seconds` – tune EMA smoothing for per-worker hashrate.
-- `ntime_forward_slack_seconds` – tolerated future timestamps on shares (default 7000 seconds).
+- `share_ntime_max_forward_seconds` – tolerated future timestamps on shares (default 7000 seconds).
 - `peer_cleaning` – enable/disable and tune thresholds for cleaning stalled miners.
 - `difficulty` – clamp advertised difficulty, optionally enforce min/max on miner-suggested difficulty, and optionally lock miner suggestions.
 
-Each tuning value logs when set, so goPool operators can audit what changed via `pool.log`.
+Each override value logs when set, so goPool operators can audit what changed via `pool.log`.
 
 ## Runtime operations
 
 - **SIGUSR1** reloads the HTML templates under `data/templates/`. Errors (parse failures, missing files) are logged but the previous template set remains active so the site keeps serving—check `pool.log` if pages look odd after a reload.
-- **SIGUSR2** reloads `config.toml`, `secrets.toml`, and `tuning.toml`, reapplies overrides, and updates the status server with the new config.
+- **SIGUSR2** reloads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, and `performance.toml`, reapplies overrides, and updates the status server with the new config.
 - **Shutdown** occurs on `SIGINT`/`SIGTERM`. goPool stops the status servers, Stratum listener, and pending replayers gracefully.
 - **TLS cert reloading** uses `certReloader` to monitor `data/tls_cert.pem`/`tls_key.pem` hourly. Certificate renewals (e.g., via certbot) are picked up without restarts.
 

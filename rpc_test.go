@@ -254,7 +254,7 @@ func TestRPCClientIgnoresDisconnectNodeNotFoundHTTP500(t *testing.T) {
 		metrics: metrics,
 	}
 
-	if err := client.call("disconnectnode", []interface{}{"180.181.249.116:20630"}, nil); err != nil {
+	if err := client.call("disconnectnode", []any{"180.181.249.116:20630"}, nil); err != nil {
 		t.Fatalf("expected disconnectnode -29 to be ignored, got: %v", err)
 	}
 
@@ -283,7 +283,7 @@ func TestRPCClientIgnoresDisconnectNodeNotFoundHTTP200(t *testing.T) {
 		metrics: metrics,
 	}
 
-	if err := client.call("disconnectnode", []interface{}{"180.181.249.116:20630"}, nil); err != nil {
+	if err := client.call("disconnectnode", []any{"180.181.249.116:20630"}, nil); err != nil {
 		t.Fatalf("expected disconnectnode -29 to be ignored, got: %v", err)
 	}
 

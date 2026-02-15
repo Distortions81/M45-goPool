@@ -156,10 +156,7 @@ func reliabilityThresholds(modeledRate float64) (minWindow time.Duration, minEvi
 	if modeledRate <= 0 {
 		return 60 * time.Second, 4, 6, 90 * time.Second
 	}
-	targetWindow := time.Duration((3.0 / modeledRate) * float64(time.Minute))
-	if targetWindow < 30*time.Second {
-		targetWindow = 30 * time.Second
-	}
+	targetWindow := max(time.Duration((3.0/modeledRate)*float64(time.Minute)), 30*time.Second)
 	if targetWindow > 2*time.Minute {
 		targetWindow = 2 * time.Minute
 	}
@@ -172,17 +169,11 @@ func reliabilityThresholds(modeledRate float64) (minWindow time.Duration, minEvi
 	}
 	minWindow = targetWindow
 	minEvidence = expectedInWindow
-	minCumulativeAccepted = int64(math.Ceil(expectedInWindow))
-	if minCumulativeAccepted < 3 {
-		minCumulativeAccepted = 3
-	}
+	minCumulativeAccepted = max(int64(math.Ceil(expectedInWindow)), 3)
 	if minCumulativeAccepted > 8 {
 		minCumulativeAccepted = 8
 	}
-	minConnected = targetWindow + 30*time.Second
-	if minConnected < 60*time.Second {
-		minConnected = 60 * time.Second
-	}
+	minConnected = max(targetWindow+30*time.Second, 60*time.Second)
 	if minConnected > 4*time.Minute {
 		minConnected = 4 * time.Minute
 	}
@@ -211,10 +202,7 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 		return 0
 	}
 	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
-	highWindow := minWindow * 2
-	if highWindow < 90*time.Second {
-		highWindow = 90 * time.Second
-	}
+	highWindow := max(minWindow*2, 90*time.Second)
 	if highWindow > 6*time.Minute {
 		highWindow = 6 * time.Minute
 	}
@@ -225,17 +213,11 @@ func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estim
 	if highEvidence > 20 {
 		highEvidence = 20
 	}
-	highCum := minCumulativeAccepted * 2
-	if highCum < 8 {
-		highCum = 8
-	}
+	highCum := max(minCumulativeAccepted*2, 8)
 	if highCum > 24 {
 		highCum = 24
 	}
-	highConn := minConnected + 2*time.Minute
-	if highConn < 3*time.Minute {
-		highConn = 3 * time.Minute
-	}
+	highConn := max(minConnected+2*time.Minute, 3*time.Minute)
 	if highConn > 10*time.Minute {
 		highConn = 10 * time.Minute
 	}
@@ -700,10 +682,7 @@ func buildTemplateFuncs() template.FuncMap {
 				//
 				// We intentionally truncate instead of round so values slightly below 1 don't
 				// display as "1" due to formatting.
-				prec := int(math.Ceil(-math.Log10(d))) + 2
-				if prec < 3 {
-					prec = 3
-				}
+				prec := max(int(math.Ceil(-math.Log10(d)))+2, 3)
 				if prec > 8 {
 					prec = 8
 				}
@@ -982,7 +961,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath, tuningPath string, shutdown func()) *StatusServer {
+func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath string, shutdown func()) *StatusServer {
 	// Load HTML templates from data_dir/templates so operators can customize the
 	// UI without recompiling. These are treated as required assets.
 	tmpl, err := loadTemplates(cfg.DataDir)
@@ -1012,7 +991,6 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		poolHashrateHistory: make([]poolHashrateHistorySample, 0, int(poolHashrateHistoryWindow/poolHashrateTTL)+1),
 		configPath:          configPath,
 		adminConfigPath:     adminConfigPath,
-		tuningPath:          tuningPath,
 		adminSessions:       make(map[string]time.Time),
 		requestShutdown:     shutdown,
 	}
@@ -1059,7 +1037,7 @@ func (s *StatusServer) ReloadTemplates() error {
 // handleRPCResult is registered as an RPCClient result hook to opportunistically
 // warm cached node info based on normal RPC traffic. It never changes how
 // callers use the RPC client; it only updates StatusServer's own cache.
-func (s *StatusServer) handleRPCResult(method string, params interface{}, raw stdjson.RawMessage) {
+func (s *StatusServer) handleRPCResult(method string, params any, raw stdjson.RawMessage) {
 	if s == nil {
 		return
 	}
@@ -1130,7 +1108,7 @@ func (s *StatusServer) handleRPCResult(method string, params interface{}, raw st
 	case "getblockhash":
 		// Only care about genesis hash (height 0) to avoid polluting cache
 		// with unrelated getblockhash calls.
-		args, ok := params.([]interface{})
+		args, ok := params.([]any)
 		if !ok || len(args) != 1 {
 			return
 		}

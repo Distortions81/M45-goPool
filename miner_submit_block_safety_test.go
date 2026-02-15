@@ -15,11 +15,11 @@ type countingSubmitRPC struct {
 	submitCalls atomic.Int64
 }
 
-func (c *countingSubmitRPC) call(method string, params interface{}, out interface{}) error {
+func (c *countingSubmitRPC) call(method string, params any, out any) error {
 	return c.callCtx(context.Background(), method, params, out)
 }
 
-func (c *countingSubmitRPC) callCtx(_ context.Context, method string, params interface{}, out interface{}) error {
+func (c *countingSubmitRPC) callCtx(_ context.Context, method string, params any, out any) error {
 	if method == "submitblock" {
 		c.submitCalls.Add(1)
 	}
@@ -44,7 +44,7 @@ func flushFoundBlockLog(t *testing.T) {
 func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	metrics := NewPoolMetrics()
 	mc := benchmarkMinerConnForSubmit(metrics)
-	mc.cfg.CheckDuplicateShares = true
+	mc.cfg.ShareCheckDuplicate = true
 	mc.cfg.DataDir = t.TempDir()
 	mc.rpc = &countingSubmitRPC{}
 
@@ -95,7 +95,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 	metrics := NewPoolMetrics()
 	mc := benchmarkMinerConnForSubmit(metrics)
-	mc.cfg.CheckDuplicateShares = false
+	mc.cfg.ShareCheckDuplicate = false
 	mc.cfg.DataDir = t.TempDir()
 	mc.rpc = &countingSubmitRPC{}
 
@@ -126,7 +126,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		t.Fatalf("missing payout script for current worker")
 	}
 	var chosenNonce string
-	for i := uint32(0); i < 500000; i++ {
+	for i := range uint32(500000) {
 		nonceHex := fmt.Sprintf("%08x", i)
 
 		cbTx, cbTxid, err := serializeCoinbaseTxPredecoded(
@@ -134,7 +134,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 			mc.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
-				payoutScript,
+			payoutScript,
 			job.CoinbaseValue,
 			job.witnessCommitScript,
 			job.coinbaseFlagsBytes,
@@ -163,7 +163,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 			mc.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
-				payoutScript,
+			payoutScript,
 			job.CoinbaseValue,
 			job.witnessCommitScript,
 			job.coinbaseFlagsBytes,
@@ -229,7 +229,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 func TestBlockBypassesPolicyRejects(t *testing.T) {
 	metrics := NewPoolMetrics()
 	mc := benchmarkMinerConnForSubmit(metrics)
-	mc.cfg.CheckDuplicateShares = false
+	mc.cfg.ShareCheckDuplicate = false
 	mc.cfg.DataDir = t.TempDir()
 	mc.rpc = &countingSubmitRPC{}
 

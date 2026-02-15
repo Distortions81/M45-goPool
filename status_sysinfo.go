@@ -173,7 +173,7 @@ func (s *StatusServer) refreshNodeInfo() {
 	}
 
 	var genesis string
-	if err := s.rpcCallCtx("getblockhash", []interface{}{0}, &genesis); err == nil {
+	if err := s.rpcCallCtx("getblockhash", []any{0}, &genesis); err == nil {
 		genesis = strings.TrimSpace(genesis)
 		if genesis != "" {
 			info.genesisHash = genesis
@@ -202,7 +202,7 @@ func (s *StatusServer) refreshNodeInfo() {
 
 // rpcCallCtx issues a single RPC with a short timeout derived from the
 // StatusServer's context so node-info refreshes don't block shutdown.
-func (s *StatusServer) rpcCallCtx(method string, params interface{}, out interface{}) error {
+func (s *StatusServer) rpcCallCtx(method string, params any, out any) error {
 	if s == nil || s.rpc == nil {
 		return fmt.Errorf("rpc client not configured")
 	}
@@ -428,7 +428,7 @@ func readSystemMemory() (total, free uint64) {
 		memAvailableKB uint64
 		memFreeKB      uint64
 	)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue

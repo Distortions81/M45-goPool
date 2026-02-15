@@ -27,10 +27,10 @@ var rpcCookieWatchInterval = time.Second
 var rpcRetryJitterFrac = 0.2
 
 type rpcRequest struct {
-	Jsonrpc string      `json:"jsonrpc"`
-	ID      int         `json:"id"`
-	Method  string      `json:"method"`
-	Params  interface{} `json:"params"`
+	Jsonrpc string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
 }
 
 type rpcResponse struct {
@@ -85,7 +85,7 @@ type RPCClient struct {
 	lastErr   error
 
 	hookMu     sync.RWMutex
-	resultHook func(method string, params interface{}, raw json.RawMessage)
+	resultHook func(method string, params any, raw json.RawMessage)
 }
 
 func NewRPCClient(cfg Config, metrics *PoolMetrics) *RPCClient {
@@ -220,21 +220,21 @@ func (c *RPCClient) StartCookieWatcher(ctx context.Context) {
 // SetResultHook registers a callback that is invoked after every successful
 // RPC call, with the method name, request params, and raw JSON result.
 // It is safe to call on a running client; subsequent calls replace the hook.
-func (c *RPCClient) SetResultHook(hook func(method string, params interface{}, raw json.RawMessage)) {
+func (c *RPCClient) SetResultHook(hook func(method string, params any, raw json.RawMessage)) {
 	c.hookMu.Lock()
 	c.resultHook = hook
 	c.hookMu.Unlock()
 }
 
-func (c *RPCClient) callCtx(ctx context.Context, method string, params interface{}, out interface{}) error {
+func (c *RPCClient) callCtx(ctx context.Context, method string, params any, out any) error {
 	return c.callWithClientCtx(ctx, c.client, method, params, out)
 }
 
-func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params interface{}, out interface{}) error {
+func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params any, out any) error {
 	return c.callWithClientCtx(ctx, c.lp, method, params, out)
 }
 
-func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
+func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params any, out any) error {
 	retryCount := 0
 	for {
 		if ctx.Err() != nil {
@@ -345,7 +345,7 @@ func isRPCConnectivityError(err error) bool {
 	return false
 }
 
-func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params interface{}, out interface{}) error {
+func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params any, out any) error {
 	c.idMu.Lock()
 	id := c.nextID
 	c.nextID++
@@ -551,7 +551,7 @@ func (c *RPCClient) GetBestBlockHash(ctx context.Context) (string, error) {
 // GetBlockHash returns the hash of the block at the given height
 func (c *RPCClient) GetBlockHash(ctx context.Context, height int64) (string, error) {
 	var hash string
-	err := c.callCtx(ctx, "getblockhash", []interface{}{height}, &hash)
+	err := c.callCtx(ctx, "getblockhash", []any{height}, &hash)
 	return hash, err
 }
 
@@ -559,7 +559,7 @@ func (c *RPCClient) GetBlockHash(ctx context.Context, height int64) (string, err
 func (c *RPCClient) GetBlockHeader(ctx context.Context, hash string) (*BlockHeader, error) {
 	var header BlockHeader
 	// verbose=true to get JSON instead of hex
-	err := c.callCtx(ctx, "getblockheader", []interface{}{hash, true}, &header)
+	err := c.callCtx(ctx, "getblockheader", []any{hash, true}, &header)
 	if err != nil {
 		return nil, err
 	}

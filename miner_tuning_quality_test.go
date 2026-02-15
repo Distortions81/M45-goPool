@@ -119,7 +119,7 @@ func TestTuning_HashrateEMASweep(t *testing.T) {
 		sumMAPE := 0.0
 		count := 0
 		for _, hr := range profiles {
-			for i := 0; i < trials; i++ {
+			for i := range trials {
 				m := simulateEMAQuality(int64(5000+i)+int64(hr/1e3), c.tau, hr, hr*2)
 				sumSettle += m.settleSeconds
 				sumMAPE += m.preSwitchMAPE
@@ -184,7 +184,7 @@ func TestTuning_AutoBanSweep(t *testing.T) {
 	run := func(threshold int) result {
 		out := result{}
 		attackSum := 0.0
-		for i := 0; i < trials; i++ {
+		for i := range trials {
 			if banned, _ := simulateBan(int64(9000+i), threshold, window, benignRatePerMin, duration); banned {
 				out.benignBans++
 			}
@@ -214,4 +214,3 @@ func TestTuning_AutoBanSweep(t *testing.T) {
 		t.Fatalf("threshold 40 ban response %.1fs not sufficiently faster than threshold 60 %.1fs", r40.attackAvg, r60.attackAvg)
 	}
 }
-

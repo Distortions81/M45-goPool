@@ -263,10 +263,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 				tpl := job.Template
 				if tpl.Height > 0 && job.CoinbaseValue > 0 {
 					subsidy := calculateBlockSubsidy(tpl.Height)
-					fees := job.CoinbaseValue - subsidy
-					if fees < 0 {
-						fees = 0
-					}
+					fees := max(job.CoinbaseValue-subsidy, 0)
 					templateTxFeesSats = &fees
 				}
 				if templateUpdatedAt == "" && !job.CreatedAt.IsZero() {
@@ -307,10 +304,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		if blockHeight > 0 {
 			const retargetInterval = 2016
 			next := ((blockHeight / retargetInterval) + 1) * retargetInterval
-			remaining := next - blockHeight
-			if remaining < 0 {
-				remaining = 0
-			}
+			remaining := max(next-blockHeight, 0)
 			nextRetarget = &nextDifficultyRetarget{
 				Height:     next,
 				BlocksAway: remaining,

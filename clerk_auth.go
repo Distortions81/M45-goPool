@@ -145,7 +145,7 @@ func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 	}
 	if secretKey != "" {
 		cc := &clerk.ClientConfig{}
-		cc.Key = clerk.String(secretKey)
+		cc.Key = new(secretKey)
 		v.clerkClients = clerkclient.NewClient(cc)
 		v.clerkSessions = clerksession.NewClient(cc)
 	}
@@ -221,7 +221,7 @@ func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {
 		return nil, errors.New("missing session token")
 	}
 	claims := new(ClerkSessionClaims)
-	keyFunc := func(t *jwt.Token) (interface{}, error) {
+	keyFunc := func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		pub := v.keyFor(kid)
 		if pub == nil {
@@ -275,7 +275,7 @@ func (v *ClerkVerifier) ExchangeDevBrowserJWT(ctx context.Context, devBrowserJWT
 	if v.secretKey == "" || v.clerkClients == nil || v.clerkSessions == nil {
 		return "", nil, errors.New("clerk_secret_key not configured")
 	}
-	cl, err := v.clerkClients.Verify(ctx, &clerkclient.VerifyParams{Token: clerk.String(devBrowserJWT)})
+	cl, err := v.clerkClients.Verify(ctx, &clerkclient.VerifyParams{Token: new(devBrowserJWT)})
 	if err != nil {
 		return "", nil, fmt.Errorf("verify dev browser jwt: %w", err)
 	}
@@ -298,7 +298,7 @@ func (v *ClerkVerifier) ExchangeDevBrowserJWT(ctx context.Context, devBrowserJWT
 	}
 	tok, err := v.clerkSessions.CreateToken(ctx, &clerksession.CreateTokenParams{
 		ID:               sessionID,
-		ExpiresInSeconds: clerk.Int64(expiresIn),
+		ExpiresInSeconds: new(expiresIn),
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("create session token: %w", err)

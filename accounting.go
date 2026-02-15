@@ -46,7 +46,7 @@ type WorkerView struct {
 	RollingHashrate           float64      `json:"rolling_hashrate"`
 	LastReject                string       `json:"last_reject"`
 	Banned                    bool         `json:"banned"`
-	BannedUntil               time.Time    `json:"banned_until,omitempty"`
+	BannedUntil               time.Time    `json:"banned_until"`
 	BanReason                 string       `json:"ban_reason,omitempty"`
 	WindowStart               time.Time    `json:"window_start"`
 	WindowAccepted            int          `json:"window_accepted"`
@@ -65,7 +65,7 @@ type WorkerView struct {
 	EstimatedPingP95MS        float64      `json:"estimated_ping_p95_ms,omitempty"`
 	ConnectionID              string       `json:"connection_id,omitempty"`
 	ConnectionSeq             uint64       `json:"connection_seq,omitempty"`
-	ConnectedAt               time.Time    `json:"connected_at,omitempty"`
+	ConnectedAt               time.Time    `json:"connected_at"`
 	WalletValidated           bool         `json:"wallet_validated,omitempty"`
 }
 
@@ -148,7 +148,7 @@ func decodeCoinbaseHeight(script []byte) int64 {
 	}
 	numBytes := op
 	var height int64
-	for i := 0; i < numBytes; i++ {
+	for i := range numBytes {
 		height |= int64(script[1+i]) << (8 * i)
 	}
 	if height < 0 {
@@ -197,7 +197,7 @@ func (d *ShareDetail) DecodeCoinbaseFields() {
 	pos = pos2
 
 	var height int64
-	for inIdx := uint64(0); inIdx < vinCount; inIdx++ {
+	for inIdx := range vinCount {
 		if pos+36 > len(raw) {
 			return
 		}
@@ -234,7 +234,7 @@ func (d *ShareDetail) DecodeCoinbaseFields() {
 		outs = make([]CoinbaseOutputDebug, 0, int(voutCount))
 	}
 	var totalValue int64
-	for outIdx := uint64(0); outIdx < voutCount; outIdx++ {
+	for range voutCount {
 		if pos+8 > len(raw) {
 			return
 		}
@@ -260,13 +260,13 @@ func (d *ShareDetail) DecodeCoinbaseFields() {
 	}
 
 	if segwit {
-		for inIdx := uint64(0); inIdx < vinCount; inIdx++ {
+		for range vinCount {
 			itemCount, p3, ok := decodeVarInt(raw, pos)
 			if !ok {
 				return
 			}
 			pos = p3
-			for item := uint64(0); item < itemCount; item++ {
+			for range itemCount {
 				itemLen, p4, ok := decodeVarInt(raw, pos)
 				if !ok {
 					return

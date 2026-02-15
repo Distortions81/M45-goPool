@@ -14,7 +14,7 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 		Template: GetBlockTemplateResult{
 			Height: 120000,
 		},
-		JobID:                 "job-1",
+		JobID:                   "job-1",
 		Extranonce2Size:         4,
 		TemplateExtraNonce2Size: 4,
 		CoinbaseValue:           50 * 1e8,
@@ -22,7 +22,7 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 		ScriptTime:              1000,
 	}
 	mc := &MinerConn{
-		cfg:        Config{PoolFeePercent: 0},
+		cfg:         Config{PoolFeePercent: 0},
 		extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
 		jobScriptTime: map[string]int64{
 			"job-1": 2000,

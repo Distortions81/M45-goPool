@@ -89,7 +89,7 @@ func (jm *JobManager) markZMQUnhealthy(topics []string, addr string, reason stri
 		}
 	}
 
-	fields := []interface{}{"reason", reason, "addr", addr, "topics", topics}
+	fields := []any{"reason", reason, "addr", addr, "topics", topics}
 	if err != nil {
 		fields = append(fields, "error", err)
 	}
@@ -129,7 +129,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			continue
 		}
 
-		params := map[string]interface{}{
+		params := map[string]any{
 			"rules":      []string{"segwit"},
 			"longpollid": job.Template.LongPollID,
 		}

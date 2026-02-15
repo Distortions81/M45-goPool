@@ -47,6 +47,7 @@ func main() {
 	rewriteConfigFlag := flag.Bool("rewrite-config", false, "rewrite config on startup")
 	floodFlag := flag.Bool("flood", false, "flood-test mode")
 	disableJSONFlag := flag.Bool("no-json", false, "disable JSON API")
+	allowPublicRPCFlag := flag.Bool("allow-public-rpc", false, "allow unauthenticated RPC endpoint (testing only)")
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
 	logLevelFlag := flag.String("log-level", "", "override log level (debug/info/warn/error)")
 	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
@@ -59,6 +60,7 @@ func main() {
 		bind:                *bindFlag,
 		rpcURL:              *rpcURLFlag,
 		rpcCookiePath:       *rpcCookieFlag,
+		allowPublicRPC:      *allowPublicRPCFlag,
 		allowRPCCredentials: *allowRPCCredsFlag,
 		flood:               *floodFlag,
 		mainnet:             network == "mainnet",
@@ -334,8 +336,7 @@ func main() {
 
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
-	tuningPath := filepath.Join(cfg.DataDir, "config", "tuning.toml")
-	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, tuningPath, stop)
+	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, stop)
 	statusServer.SetBackupService(backupSvc)
 	statusServer.startOneTimeCodeJanitor(ctx)
 	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)
@@ -516,7 +517,7 @@ func main() {
 	if httpAddr != "" {
 		httpHandler := http.Handler(appHandler)
 		httpLogMsg := "status page listening (http)"
-		httpLogFields := []interface{}{"addr", httpAddr}
+		httpLogFields := []any{"addr", httpAddr}
 		if needStatusTLS {
 			httpHandler = http.HandlerFunc(statusServer.redirectToHTTPS)
 			httpLogMsg = "status http listener redirecting to https"
@@ -672,10 +673,7 @@ func main() {
 				return
 			case <-time.After(steadyStateDelay):
 				// Transition to steady-state mode
-				steadyBurst := cfg.AcceptSteadyStateRate * 2
-				if steadyBurst < 20 {
-					steadyBurst = 20
-				}
+				steadyBurst := max(cfg.AcceptSteadyStateRate*2, 20)
 				acceptLimiter.updateRate(cfg.AcceptSteadyStateRate, steadyBurst)
 				logger.Info("transitioned to steady-state throttle mode",
 					"rate", cfg.AcceptSteadyStateRate,

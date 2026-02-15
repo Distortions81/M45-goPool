@@ -1,4 +1,4 @@
-# Generated tuning config example (copy to a real config and edit as needed)
+# Generated performance config example (copy to a real config and edit as needed)
 
 # Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
@@ -14,9 +14,6 @@
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
 # - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect (0 disables; requires restart).
 #
-# Timeouts ([timeouts])
-# - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
-#
 # Difficulty ([difficulty])
 # - default_difficulty: Fallback difficulty if no suggest_* arrives during the startup delay; 0 means "use min_difficulty" (or the built-in minimum if min_difficulty=0).
 # - target_shares_per_min: VarDiff target share cadence used for difficulty adjustment and hashrate EMA sample window sizing.
@@ -25,37 +22,16 @@
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
+# - extranonce2_size: Per-share extranonce2 byte length used for submit parsing and validation (requires restart).
+# - template_extra_nonce2_size: Template extranonce2 byte length used in generated jobs (requires restart).
+# - job_entropy: Entropy bytes added to per-job coinbase tags (requires restart).
+# - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (requires restart).
 # - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
-# Status UI ([status])
-# - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
-#
-# Bans ([bans])
-# - clean_expired_on_startup: Remove expired bans from disk on startup (startup-only).
-# - ban_invalid_submissions_after: Ban a worker after N invalid submissions within the window (0 disables; requires restart).
-# - ban_invalid_submissions_window_seconds: Window size (seconds) for invalid submission counting (requires restart).
-# - ban_invalid_submissions_duration_seconds: Ban duration (seconds) when threshold is hit (requires restart).
-# - reconnect_ban_threshold: Ban a host after N reconnects within the window (0 disables; requires restart).
-# - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
-# - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
-# - banned_miner_types: List of miner client names or full IDs to disconnect on subscribe (requires restart).
-#   Prefer data_dir/config/miner_blacklist.json for managing this list; it overrides this field when present.
-#
 # Peer cleaning ([peer_cleaning])
-# - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
-# - max_ping_ms: Peers above this ping (ms) are candidates for disconnect.
-# - min_peers: Minimum number of peers to keep connected.
+# - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.
 #
-
-[bans]
-  ban_invalid_submissions_after = 40
-  ban_invalid_submissions_duration_seconds = 900
-  ban_invalid_submissions_window_seconds = 300
-  banned_miner_types = []
-  clean_expired_on_startup = true
-  reconnect_ban_duration_seconds = 3600
-  reconnect_ban_threshold = 60
-  reconnect_ban_window_seconds = 60
+#
 
 [difficulty]
   default_difficulty = 0.0
@@ -63,18 +39,19 @@
   lock_suggested_difficulty = false
   max_difficulty = 0.0
   min_difficulty = 256.0
-  target_shares_per_min = 10.0
-
-[discord]
-  worker_notify_threshold_seconds = 300
+  target_shares_per_min = 15.0
+  vardiff_enabled = true
 
 [hashrate]
-  hashrate_ema_tau_seconds = 300.0
-  ntime_forward_slack_seconds = 7000
+  hashrate_ema_tau_seconds = 450.0
 
 [mining]
+  coinbase_scriptsig_max_bytes = 100
   difficulty_step_granularity = 4
   disable_pool_job_entropy = false
+  extranonce2_size = 4
+  job_entropy = 4
+  template_extra_nonce2_size = 8
 
 [peer_cleaning]
   enabled = false
@@ -94,13 +71,3 @@
   max_accepts_per_second = 500
   max_conns = 50000
   stratum_messages_per_minute = 0
-
-[status]
-  mempool_address_url = "https://mempool.space/address/"
-
-[timeouts]
-  connection_timeout_seconds = 300
-
-[version]
-  ignore_min_version_bits = true
-  min_version_bits = 1

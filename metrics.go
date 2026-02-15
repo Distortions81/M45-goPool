@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"maps"
 	"math"
 	"path/filepath"
 	"sort"
@@ -488,9 +489,7 @@ func (m *PoolMetrics) Snapshot() (uint64, uint64, map[string]uint64) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	reasons := make(map[string]uint64, len(m.rejectReasons))
-	for k, v := range m.rejectReasons {
-		reasons[k] = v
-	}
+	maps.Copy(reasons, m.rejectReasons)
 	return m.accepted, m.rejected, reasons
 }
 
@@ -544,7 +543,7 @@ func snapshotLatencyWindow(buckets []latencyBucket, nowSec int64, windowSec int6
 	var sum float64
 	var count uint64
 	size := int64(len(buckets))
-	for i := int64(0); i < windowSec; i++ {
+	for i := range windowSec {
 		sec := nowSec - i
 		idx := int(sec % size)
 		b := buckets[idx]

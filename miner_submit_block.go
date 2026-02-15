@@ -13,10 +13,10 @@ import (
 // builds the full block (reusing any dual-payout header/coinbase when
 // available), submits it via RPC, logs the reward split and found-block
 // record, and sends the final Stratum response.
-func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
+func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
 	var (
 		blockHex  string
-		submitRes interface{}
+		submitRes any
 		err       error
 	)
 	scriptTime := mc.scriptTimeForJob(job.JobID, job.ScriptTime)
@@ -133,10 +133,7 @@ func (mc *MinerConn) handleBlockShare(reqID interface{}, job *Job, workerName st
 		if feePct > 99.99 {
 			feePct = 99.99
 		}
-		poolFee := int64(math.Round(float64(total) * feePct / 100.0))
-		if poolFee < 0 {
-			poolFee = 0
-		}
+		poolFee := max(int64(math.Round(float64(total)*feePct/100.0)), 0)
 		if poolFee > total {
 			poolFee = total
 		}
@@ -195,10 +192,7 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 	if feePct > 99.99 {
 		feePct = 99.99
 	}
-	poolFee := int64(math.Round(float64(total) * feePct / 100.0))
-	if poolFee < 0 {
-		poolFee = 0
-	}
+	poolFee := max(int64(math.Round(float64(total)*feePct/100.0)), 0)
 	if poolFee > total {
 		poolFee = total
 	}
@@ -224,7 +218,7 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 		dualFallback = true
 	}
 
-	rec := map[string]interface{}{
+	rec := map[string]any{
 		"timestamp":            now,
 		"height":               job.Template.Height,
 		"hash":                 hashHex,

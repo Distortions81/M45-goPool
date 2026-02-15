@@ -109,8 +109,11 @@ func validateConfig(cfg Config) error {
 	if cfg.StratumPasswordEnabled && strings.TrimSpace(cfg.StratumPassword) == "" {
 		return fmt.Errorf("stratum_password_enabled is true but stratum_password is empty")
 	}
-	if cfg.NTimeForwardSlackSeconds <= 0 {
-		return fmt.Errorf("ntime_forward_slack_seconds must be > 0, got %v", cfg.NTimeForwardSlackSeconds)
+	if cfg.ShareNTimeMaxForwardSeconds <= 0 {
+		return fmt.Errorf("share_ntime_max_forward_seconds must be > 0, got %v", cfg.ShareNTimeMaxForwardSeconds)
+	}
+	if normalizeShareJobFreshnessMode(cfg.ShareJobFreshnessMode) < 0 {
+		return fmt.Errorf("share_job_freshness_mode must be one of %d, %d, or %d", shareJobFreshnessOff, shareJobFreshnessJobID, shareJobFreshnessJobIDPrev)
 	}
 	if cfg.BanInvalidSubmissionsAfter < 0 {
 		return fmt.Errorf("ban_invalid_submissions_after cannot be negative")

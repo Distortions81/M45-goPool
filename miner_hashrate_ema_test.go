@@ -14,7 +14,7 @@ func TestUpdateHashrateLocked_DoesNotUpdateBeforeTau(t *testing.T) {
 	base := time.Unix(1700000000, 0)
 
 	mc.statsMu.Lock()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mc.updateHashrateLocked(1, base.Add(time.Duration(i)*time.Second))
 	}
 	if mc.rollingHashrateValue != 0 {

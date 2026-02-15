@@ -32,7 +32,7 @@ func ensureSubmissionWorkerPool() {
 
 type submissionTask struct {
 	mc               *MinerConn
-	reqID            interface{}
+	reqID            any
 	job              *Job
 	jobID            string
 	workerName       string
@@ -63,10 +63,7 @@ func newSubmissionWorkerPool(workerCount int) *submissionWorkerPool {
 	if workerCount <= 0 {
 		workerCount = 1
 	}
-	queueDepth := workerCount * submissionWorkerQueueMultiplier
-	if queueDepth < submissionWorkerQueueMinDepth {
-		queueDepth = submissionWorkerQueueMinDepth
-	}
+	queueDepth := max(workerCount*submissionWorkerQueueMultiplier, submissionWorkerQueueMinDepth)
 	pool := &submissionWorkerPool{
 		tasks: make(chan submissionTask, queueDepth),
 	}

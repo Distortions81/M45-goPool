@@ -13,7 +13,7 @@ func TestStratumRateLimit_DoubledThreshold(t *testing.T) {
 		connectedAt: now.Add(-10 * time.Minute),
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if mc.stratumMsgRateLimitExceeded(now, "mining.authorize") {
 			t.Fatalf("unexpected limit hit at message %d", i+1)
 		}
@@ -30,7 +30,7 @@ func TestStratumRateLimit_EarlySubmitCountsHalf(t *testing.T) {
 		connectedAt: now.Add(-1 * time.Minute),
 	}
 
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		if mc.stratumMsgRateLimitExceeded(now, "mining.submit") {
 			t.Fatalf("unexpected limit hit at early submit %d", i+1)
 		}
@@ -47,7 +47,7 @@ func TestStratumRateLimit_SubmitAfterWarmupCountsFull(t *testing.T) {
 		connectedAt: now.Add(-(earlySubmitHalfWeightWindow + time.Minute)),
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if mc.stratumMsgRateLimitExceeded(now, "mining.submit") {
 			t.Fatalf("unexpected limit hit at post-warmup submit %d", i+1)
 		}
@@ -64,7 +64,7 @@ func TestStratumRateLimit_WindowReset(t *testing.T) {
 		connectedAt: now.Add(-10 * time.Minute),
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if mc.stratumMsgRateLimitExceeded(now, "mining.authorize") {
 			t.Fatalf("unexpected limit hit before reset at message %d", i+1)
 		}

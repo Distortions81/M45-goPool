@@ -8,7 +8,9 @@ Configuration example files in this directory are automatically generated on fir
 
 - **`config.toml.example`** - Complete example with all available configuration options and inline documentation
 - **`secrets.toml.example`** - Example for sensitive credentials (RPC auth, Discord tokens, Clerk keys)
-- **`tuning.toml.example`** - Advanced performance tuning and operational limits with defaults
+- **`services.toml.example`** - Optional services/integrations overrides (auth, backblaze backup, discord, status links)
+- **`policy.toml.example`** - Optional policy/security overrides
+- **`performance.toml.example`** - Optional performance/capacity overrides
 
 ## How to Use
 
@@ -26,11 +28,12 @@ nano data/config/secrets.toml
 
 ### Tuning File (Optional)
 
-The `tuning.toml` file is optional. Only create it if you need to override advanced settings:
+Override files are optional. Only create them if you need advanced overrides:
 
 ```bash
-cp data/config/examples/tuning.toml.example data/config/tuning.toml
-nano data/config/tuning.toml
+cp data/config/examples/policy.toml.example data/config/policy.toml
+cp data/config/examples/performance.toml.example data/config/performance.toml
+cp data/config/examples/services.toml.example data/config/services.toml
 ```
 
 ## Important Notes

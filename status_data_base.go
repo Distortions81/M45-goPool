@@ -138,7 +138,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 		MinHashrateForTarget:           minHashrateForTarget,
 		MaxHashrateForTarget:           maxHashrateForTarget,
 		HashrateEMATauSeconds:          s.Config().HashrateEMATauSeconds,
-		NTimeForwardSlackSec:           s.Config().NTimeForwardSlackSeconds,
+		ShareNTimeMaxForwardSeconds:    s.Config().ShareNTimeMaxForwardSeconds,
 		RenderDuration:                 time.Since(start),
 		Warnings:                       warnings,
 		NodePeerCleanupEnabled:         s.Config().PeerCleanupEnabled,

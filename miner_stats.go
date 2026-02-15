@@ -148,10 +148,7 @@ func (mc *MinerConn) ensureVardiffWindowLocked(now time.Time) {
 }
 
 func (mc *MinerConn) dynamicWindowStartLagPercentLocked(now time.Time) int {
-	lagPct := windowStartLagPercent
-	if lagPct < 0 {
-		lagPct = 0
-	}
+	lagPct := max(windowStartLagPercent, 0)
 	if lagPct > 100 {
 		lagPct = 100
 	}
@@ -179,18 +176,12 @@ func (mc *MinerConn) dynamicWindowStartLagPercentLocked(now time.Time) int {
 		return lagPct
 	}
 
-	dynamicPct := int(math.Round((setupMS / elapsedMS) * 100.0))
-	if dynamicPct < 20 {
-		dynamicPct = 20
-	}
+	dynamicPct := max(int(math.Round((setupMS/elapsedMS)*100.0)), 20)
 	if dynamicPct > 85 {
 		dynamicPct = 85
 	}
 	// Blend with baseline so estimates are stable even with noisy latency.
-	blended := (dynamicPct + lagPct) / 2
-	if blended < 0 {
-		blended = 0
-	}
+	blended := max((dynamicPct+lagPct)/2, 0)
 	if blended > 100 {
 		blended = 100
 	}

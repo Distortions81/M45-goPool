@@ -41,7 +41,7 @@ func TestHandleAuthorizeRejectsPersistedWorkerBan(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.authorize",
-		Params: []interface{}{worker, "x"},
+		Params: []any{worker, "x"},
 	}
 	mc.handleAuthorize(req)
 

@@ -93,7 +93,7 @@ func difficultyFromHash(hash []byte) float64 {
 	}
 
 	var top uint64
-	for j := 0; j < 8; j++ {
+	for j := range 8 {
 		idx := msb - j
 		var b byte
 		if idx >= 0 {
@@ -375,7 +375,7 @@ func stripWitnessData(raw []byte) ([]byte, bool, error) {
 	}
 	idx += consumed
 
-	for inIdx := uint64(0); inIdx < vinCount; inIdx++ {
+	for inIdx := range vinCount {
 		if idx+36 > len(raw) {
 			return nil, false, fmt.Errorf("input %d truncated", inIdx)
 		}
@@ -399,7 +399,7 @@ func stripWitnessData(raw []byte) ([]byte, bool, error) {
 	}
 	idx += consumed
 
-	for outIdx := uint64(0); outIdx < voutCount; outIdx++ {
+	for outIdx := range voutCount {
 		if idx+8 > len(raw) {
 			return nil, false, fmt.Errorf("output %d truncated", outIdx)
 		}
@@ -420,14 +420,14 @@ func stripWitnessData(raw []byte) ([]byte, bool, error) {
 	witnessStart := idx
 
 	if hasWitness {
-		for inIdx := uint64(0); inIdx < vinCount; inIdx++ {
+		for inIdx := range vinCount {
 			itemCount, used, err := readVarInt(raw[idx:])
 			if err != nil {
 				return nil, false, fmt.Errorf("input %d witness count: %w", inIdx, err)
 			}
 			idx += used
 
-			for itemIdx := uint64(0); itemIdx < itemCount; itemIdx++ {
+			for itemIdx := range itemCount {
 				itemLen, n, err := readVarInt(raw[idx:])
 				if err != nil {
 					return nil, false, fmt.Errorf("input %d witness %d len: %w", inIdx, itemIdx, err)

@@ -11,19 +11,19 @@ import (
 )
 
 type StratumRequest struct {
-	ID     interface{}   `json:"id"`
-	Method string        `json:"method"`
-	Params []interface{} `json:"params"`
+	ID     any    `json:"id"`
+	Method string `json:"method"`
+	Params []any  `json:"params"`
 }
 
 type StratumResponse struct {
-	ID     interface{} `json:"id"`
-	Result interface{} `json:"result"`
-	Error  interface{} `json:"error"`
+	ID     any `json:"id"`
+	Result any `json:"result"`
+	Error  any `json:"error"`
 }
 
-func newStratumError(code int, msg string) []interface{} {
-	return []interface{}{code, msg, nil}
+func newStratumError(code int, msg string) []any {
+	return []any{code, msg, nil}
 }
 
 type VarDiffConfig struct {
@@ -254,5 +254,5 @@ type MinerConn struct {
 }
 
 type rpcCaller interface {
-	callCtx(ctx context.Context, method string, params interface{}, out interface{}) error
+	callCtx(ctx context.Context, method string, params any, out any) error
 }

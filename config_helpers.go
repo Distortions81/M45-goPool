@@ -7,16 +7,21 @@ import (
 	"strings"
 )
 
-func float64Ptr(v float64) *float64 { return &v }
-func intPtr(v int) *int             { return &v }
+//go:fix inline
+func float64Ptr(v float64) *float64 { return new(v) }
+
+//go:fix inline
+func intPtr(v int) *int { return new(v) }
 func stringPtr(v string) *string {
 	if v == "" {
 		return nil
 	}
 	return &v
 }
+
+//go:fix inline
 func boolPtr(v bool) *bool {
-	return &v
+	return new(v)
 }
 
 func filterAlphanumeric(s string) string {
@@ -78,4 +83,26 @@ func fileExists(path string) bool {
 		return true
 	}
 	return false
+}
+
+func normalizeShareJobFreshnessMode(mode int) int {
+	switch mode {
+	case shareJobFreshnessOff, shareJobFreshnessJobID, shareJobFreshnessJobIDPrev:
+		return mode
+	default:
+		return -1
+	}
+}
+
+func shareJobFreshnessChecksJobID(mode int) bool {
+	switch normalizeShareJobFreshnessMode(mode) {
+	case shareJobFreshnessJobID, shareJobFreshnessJobIDPrev:
+		return true
+	default:
+		return false
+	}
+}
+
+func shareJobFreshnessChecksPrevhash(mode int) bool {
+	return normalizeShareJobFreshnessMode(mode) == shareJobFreshnessJobIDPrev
 }

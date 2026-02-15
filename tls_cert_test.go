@@ -39,17 +39,15 @@ func TestCertReloaderConcurrentReload(t *testing.T) {
 	reloadCount := 0
 	var countMu sync.Mutex
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			if err := cr.reload(); err != nil {
 				t.Errorf("Reload failed: %v", err)
 			}
 			countMu.Lock()
 			reloadCount++
 			countMu.Unlock()
-		}()
+		})
 	}
 
 	wg.Wait()

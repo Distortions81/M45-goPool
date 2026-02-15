@@ -78,10 +78,7 @@ func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
 
 	// Evict oldest 10% when at capacity (keeps 90% of recent history)
 	if len(s.order) >= duplicateShareHistory {
-		evictCount := duplicateShareHistory / 10
-		if evictCount < 1 {
-			evictCount = 1
-		}
+		evictCount := max(duplicateShareHistory/10, 1)
 		for i := 0; i < evictCount; i++ {
 			delete(s.m, s.order[i])
 		}

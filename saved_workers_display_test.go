@@ -12,8 +12,8 @@ func jsCensorSavedWorkerName(s string) string {
 	if len(s) <= 16 {
 		return s
 	}
-	if strings.HasPrefix(s, "..") {
-		s = strings.TrimSpace(strings.TrimPrefix(s, ".."))
+	if after, ok := strings.CutPrefix(s, ".."); ok {
+		s = strings.TrimSpace(after)
 	}
 	if len(s) <= 16 {
 		return s

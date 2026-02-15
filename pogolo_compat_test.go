@@ -73,7 +73,7 @@ func TestMerkleBranchCompat(t *testing.T) {
 	t.Run("power_of_two_transactions", func(t *testing.T) {
 		// Create 7 transactions (coinbase + 7 = 8, which is 2^3)
 		var txids [][]byte
-		for i := 0; i < 7; i++ {
+		for i := range 7 {
 			txid := make([]byte, 32)
 			txid[0] = byte(i + 1)
 			txids = append(txids, txid)
@@ -132,7 +132,7 @@ func BenchmarkMerkleBranchComputation(b *testing.B) {
 		b.Run(strconv.Itoa(count)+"_transactions", func(b *testing.B) {
 			// Create dummy transaction IDs
 			txids := make([][]byte, count)
-			for i := 0; i < count; i++ {
+			for i := range count {
 				txid := make([]byte, 32)
 				txid[0] = byte(i)
 				txid[1] = byte(i >> 8)

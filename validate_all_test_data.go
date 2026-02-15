@@ -1,5 +1,4 @@
 //go:build ignore
-// +build ignore
 
 // Validates ALL test addresses used in the test suite against BTCD
 // Run with: go run validate_all_test_data.go

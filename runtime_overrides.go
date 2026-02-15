@@ -10,6 +10,7 @@ type runtimeOverrides struct {
 	bind                string
 	rpcURL              string
 	rpcCookiePath       string
+	allowPublicRPC      bool
 	allowRPCCredentials bool
 	flood               bool
 	mainnet             bool
@@ -56,6 +57,9 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 
 	if overrides.rpcCookiePath != "" {
 		cfg.RPCCookiePath = overrides.rpcCookiePath
+	}
+	if overrides.allowPublicRPC {
+		cfg.AllowPublicRPC = true
 	}
 
 	if overrides.bind != "" {

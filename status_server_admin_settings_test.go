@@ -62,13 +62,13 @@ func TestApplyAdminSettingsForm_DefaultDifficultyZeroFallsBackToMinDifficulty(t 
 	}
 }
 
-func TestApplyAdminSettingsForm_SubmitWorkerNameMatchToggle(t *testing.T) {
+func TestApplyAdminSettingsForm_ShareRequireWorkerMatchToggle(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.SubmitWorkerNameMatch = false
+	cfg.ShareRequireWorkerMatch = false
 
 	form := url.Values{}
 	form.Set("status_tagline", cfg.StatusTagline) // required field (present in UI)
-	form.Set("submit_worker_name_match", "1")
+	form.Set("share_require_worker_match", "1")
 	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if err := r.ParseForm(); err != nil {
@@ -77,13 +77,13 @@ func TestApplyAdminSettingsForm_SubmitWorkerNameMatchToggle(t *testing.T) {
 	if err := applyAdminSettingsForm(&cfg, r); err != nil {
 		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
 	}
-	if !cfg.SubmitWorkerNameMatch {
-		t.Fatalf("expected submit_worker_name_match to be enabled")
+	if !cfg.ShareRequireWorkerMatch {
+		t.Fatalf("expected share_require_worker_match to be enabled")
 	}
 
 	form = url.Values{}
 	form.Set("status_tagline", cfg.StatusTagline)
-	// Intentionally omit submit_worker_name_match to model an unchecked checkbox.
+	// Intentionally omit share_require_worker_match to model an unchecked checkbox.
 	r = httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if err := r.ParseForm(); err != nil {
@@ -92,8 +92,8 @@ func TestApplyAdminSettingsForm_SubmitWorkerNameMatchToggle(t *testing.T) {
 	if err := applyAdminSettingsForm(&cfg, r); err != nil {
 		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
 	}
-	if cfg.SubmitWorkerNameMatch {
-		t.Fatalf("expected submit_worker_name_match to be disabled when omitted")
+	if cfg.ShareRequireWorkerMatch {
+		t.Fatalf("expected share_require_worker_match to be disabled when omitted")
 	}
 }
 
@@ -132,13 +132,13 @@ func TestApplyAdminSettingsForm_DisableConnectRateLimitsToggle(t *testing.T) {
 	}
 }
 
-func TestApplyAdminSettingsForm_RejectNoJobIDToggle(t *testing.T) {
+func TestApplyAdminSettingsForm_ShareRequireJobIDToggle(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.RejectNoJobID = false
+	cfg.ShareRequireJobID = false
 
 	form := url.Values{}
 	form.Set("status_tagline", cfg.StatusTagline)
-	form.Set("reject_no_job_id", "1")
+	form.Set("share_require_job_id", "1")
 	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if err := r.ParseForm(); err != nil {
@@ -147,13 +147,13 @@ func TestApplyAdminSettingsForm_RejectNoJobIDToggle(t *testing.T) {
 	if err := applyAdminSettingsForm(&cfg, r); err != nil {
 		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
 	}
-	if !cfg.RejectNoJobID {
-		t.Fatalf("expected reject_no_job_id to be enabled")
+	if !cfg.ShareRequireJobID {
+		t.Fatalf("expected share_require_job_id to be enabled")
 	}
 
 	form = url.Values{}
 	form.Set("status_tagline", cfg.StatusTagline)
-	// Intentionally omit reject_no_job_id to model an unchecked checkbox.
+	// Intentionally omit share_require_job_id to model an unchecked checkbox.
 	r = httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if err := r.ParseForm(); err != nil {
@@ -162,7 +162,7 @@ func TestApplyAdminSettingsForm_RejectNoJobIDToggle(t *testing.T) {
 	if err := applyAdminSettingsForm(&cfg, r); err != nil {
 		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
 	}
-	if cfg.RejectNoJobID {
-		t.Fatalf("expected reject_no_job_id to be disabled when omitted")
+	if cfg.ShareRequireJobID {
+		t.Fatalf("expected share_require_job_id to be disabled when omitted")
 	}
 }

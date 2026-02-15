@@ -44,7 +44,7 @@ func TestSuggestDifficultyOutOfRangeBansAndDisconnects(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_difficulty",
-		Params: []interface{}{0.5},
+		Params: []any{0.5},
 	}
 	mc.suggestDifficulty(req)
 
@@ -79,7 +79,7 @@ func TestSuggestDifficultyAboveMaxBansAndDisconnects(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_difficulty",
-		Params: []interface{}{3.0},
+		Params: []any{3.0},
 	}
 	mc.suggestDifficulty(req)
 
@@ -114,7 +114,7 @@ func TestSuggestDifficultyInRangeDoesNotBan(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_difficulty",
-		Params: []interface{}{1.5},
+		Params: []any{1.5},
 	}
 	mc.suggestDifficulty(req)
 
@@ -140,7 +140,7 @@ func TestSuggestDifficultyOutOfRangeDoesNotBanWhenEnforcementDisabled(t *testing
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_difficulty",
-		Params: []interface{}{0.5},
+		Params: []any{0.5},
 	}
 	mc.suggestDifficulty(req)
 
@@ -170,7 +170,7 @@ func TestSuggestDifficultyZeroIsIgnoredAndDoesNotBan(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_difficulty",
-		Params: []interface{}{0.0},
+		Params: []any{0.0},
 	}
 	mc.suggestDifficulty(req)
 
@@ -235,7 +235,7 @@ func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_target",
-		Params: []interface{}{fmt.Sprintf("%064x", target)},
+		Params: []any{fmt.Sprintf("%064x", target)},
 	}
 	mc.suggestTarget(req)
 
@@ -266,7 +266,7 @@ func TestSuggestTargetAboveMaxBansAndDisconnects(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_target",
-		Params: []interface{}{fmt.Sprintf("%064x", target)},
+		Params: []any{fmt.Sprintf("%064x", target)},
 	}
 	mc.suggestTarget(req)
 
@@ -325,7 +325,7 @@ func TestSuggestTargetEmptyIsIgnoredAndDoesNotBan(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.suggest_target",
-		Params: []interface{}{""},
+		Params: []any{""},
 	}
 	mc.suggestTarget(req)
 

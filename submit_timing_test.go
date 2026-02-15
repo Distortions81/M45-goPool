@@ -18,7 +18,7 @@ type timingRPC struct {
 	method  string
 }
 
-func (t *timingRPC) call(method string, params interface{}, out interface{}) error {
+func (t *timingRPC) call(method string, params any, out any) error {
 	t.method = method
 	if !t.start.IsZero() {
 		t.elapsed = time.Since(t.start)
@@ -28,7 +28,7 @@ func (t *timingRPC) call(method string, params interface{}, out interface{}) err
 	return nil
 }
 
-func (t *timingRPC) callCtx(_ context.Context, method string, params interface{}, out interface{}) error {
+func (t *timingRPC) callCtx(_ context.Context, method string, params any, out any) error {
 	return t.call(method, params, out)
 }
 

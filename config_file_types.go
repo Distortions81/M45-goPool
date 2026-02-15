@@ -15,11 +15,23 @@ type brandingConfig struct {
 	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url"`
 	FiatCurrency                    string `toml:"fiat_currency"`
 	PoolDonationAddress             string `toml:"pool_donation_address"`
+	ServerLocation                  string `toml:"server_location"`
+}
+
+// brandingConfigRead includes legacy fields that used to live under [branding]
+// in config.toml before services.toml was introduced.
+type brandingConfigRead struct {
+	StatusBrandName                 string `toml:"status_brand_name"`
+	StatusBrandDomain               string `toml:"status_brand_domain"`
+	StatusTagline                   string `toml:"status_tagline"`
+	StatusConnectMinerTitleExtra    string `toml:"status_connect_miner_title_extra"`
+	StatusConnectMinerTitleExtraURL string `toml:"status_connect_miner_title_extra_url"`
+	FiatCurrency                    string `toml:"fiat_currency"`
+	PoolDonationAddress             string `toml:"pool_donation_address"`
+	ServerLocation                  string `toml:"server_location"`
 	DiscordURL                      string `toml:"discord_url"`
 	DiscordServerID                 string `toml:"discord_server_id"`
 	DiscordNotifyChannelID          string `toml:"discord_notify_channel_id"`
-	GitHubURL                       string `toml:"github_url"`
-	ServerLocation                  string `toml:"server_location"`
 }
 
 type stratumConfig struct {
@@ -45,7 +57,6 @@ type nodeConfig struct {
 	ZMQHashBlockAddr string `toml:"zmq_hashblock_addr"`
 	ZMQRawBlockAddr  string `toml:"zmq_rawblock_addr"`
 	RPCCookiePath    string `toml:"rpc_cookie_path"`
-	AllowPublicRPC   bool   `toml:"allow_public_rpc"`
 }
 
 type nodeConfigRead struct {
@@ -55,7 +66,6 @@ type nodeConfigRead struct {
 	ZMQHashBlockAddr   string `toml:"zmq_hashblock_addr"`
 	ZMQRawBlockAddr    string `toml:"zmq_rawblock_addr"`
 	RPCCookiePath      string `toml:"rpc_cookie_path"`
-	AllowPublicRPC     bool   `toml:"allow_public_rpc"`
 }
 
 type loggingConfig struct {
@@ -73,44 +83,52 @@ type backblazeBackupConfig struct {
 }
 
 type miningConfig struct {
-	PoolFeePercent            *float64 `toml:"pool_fee_percent"`
-	OperatorDonationPercent   *float64 `toml:"operator_donation_percent"`
-	OperatorDonationAddress   string   `toml:"operator_donation_address"`
-	OperatorDonationName      string   `toml:"operator_donation_name"`
-	OperatorDonationURL       string   `toml:"operator_donation_url"`
-	Extranonce2Size           *int     `toml:"extranonce2_size"`
-	TemplateExtraNonce2Size   *int     `toml:"template_extra_nonce2_size"`
-	JobEntropy                *int     `toml:"job_entropy"`
-	PoolEntropy               *string  `toml:"pool_entropy"`
-	PoolTagPrefix             string   `toml:"pooltag_prefix"`
-	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
-	RelaxedSubmitValidation   *bool    `toml:"relaxed_submit_validation"`
-	SubmitWorkerNameMatch     *bool    `toml:"submit_worker_name_match"`
-	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
-	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
-	RejectNoJobID             *bool    `toml:"reject_no_job_id"`
+	PoolFeePercent          *float64 `toml:"pool_fee_percent"`
+	OperatorDonationPercent *float64 `toml:"operator_donation_percent"`
+	OperatorDonationAddress string   `toml:"operator_donation_address"`
+	OperatorDonationName    string   `toml:"operator_donation_name"`
+	OperatorDonationURL     string   `toml:"operator_donation_url"`
+	PoolEntropy             *string  `toml:"pool_entropy"`
+	PoolTagPrefix           string   `toml:"pooltag_prefix"`
 }
 
 type baseFileConfig struct {
-	Server    serverConfig          `toml:"server"`
-	Branding  brandingConfig        `toml:"branding"`
-	Stratum   stratumConfig         `toml:"stratum"`
-	Auth      authConfig            `toml:"auth"`
-	Node      nodeConfig            `toml:"node"`
-	Mining    miningConfig          `toml:"mining"`
-	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
-	Logging   loggingConfig         `toml:"logging"`
+	Server   serverConfig   `toml:"server"`
+	Branding brandingConfig `toml:"branding"`
+	Stratum  stratumConfig  `toml:"stratum"`
+	Node     nodeConfig     `toml:"node"`
+	Mining   miningConfig   `toml:"mining"`
+	Logging  loggingConfig  `toml:"logging"`
 }
 
 type baseFileConfigRead struct {
 	Server    serverConfig          `toml:"server"`
-	Branding  brandingConfig        `toml:"branding"`
+	Branding  brandingConfigRead    `toml:"branding"`
 	Stratum   stratumConfig         `toml:"stratum"`
-	Auth      authConfig            `toml:"auth"`
 	Node      nodeConfigRead        `toml:"node"`
 	Mining    miningConfig          `toml:"mining"`
-	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
 	Logging   loggingConfig         `toml:"logging"`
+	Auth      authConfig            `toml:"auth"`             // legacy location
+	Backblaze backblazeBackupConfig `toml:"backblaze_backup"` // legacy location
+}
+
+type servicesDiscordConfig struct {
+	DiscordURL                   string `toml:"discord_url"`
+	DiscordServerID              string `toml:"discord_server_id"`
+	DiscordNotifyChannelID       string `toml:"discord_notify_channel_id"`
+	WorkerNotifyThresholdSeconds *int   `toml:"worker_notify_threshold_seconds"`
+}
+
+type servicesStatusConfig struct {
+	MempoolAddressURL string `toml:"mempool_address_url"`
+	GitHubURL         string `toml:"github_url"`
+}
+
+type servicesFileConfig struct {
+	Auth      authConfig            `toml:"auth"`
+	Backblaze backblazeBackupConfig `toml:"backblaze_backup"`
+	Discord   servicesDiscordConfig `toml:"discord"`
+	Status    servicesStatusConfig  `toml:"status"`
 }
 
 type rateLimitTuning struct {
@@ -137,22 +155,23 @@ type difficultyTuning struct {
 	MinDifficulty                    *float64 `toml:"min_difficulty"`
 	DefaultDifficulty                *float64 `toml:"default_difficulty"`
 	TargetSharesPerMin               *float64 `toml:"target_shares_per_min"`
+	VarDiffEnabled                   *bool    `toml:"vardiff_enabled"`
 	LockSuggestedDifficulty          *bool    `toml:"lock_suggested_difficulty"`
 	EnforceSuggestedDifficultyLimits *bool    `toml:"enforce_suggested_difficulty_limits"`
 }
 
 type miningTuning struct {
+	Extranonce2Size           *int  `toml:"extranonce2_size"`
+	TemplateExtraNonce2Size   *int  `toml:"template_extra_nonce2_size"`
+	JobEntropy                *int  `toml:"job_entropy"`
+	CoinbaseScriptSigMaxBytes *int  `toml:"coinbase_scriptsig_max_bytes"`
 	DisablePoolJobEntropy     *bool `toml:"disable_pool_job_entropy"`
 	DifficultyStepGranularity *int  `toml:"difficulty_step_granularity"`
 }
 
 type hashrateTuning struct {
-	HashrateEMATauSeconds    *float64 `toml:"hashrate_ema_tau_seconds"`
-	NTimeForwardSlackSeconds *int     `toml:"ntime_forward_slack_seconds"`
-}
-
-type discordTuning struct {
-	WorkerNotifyThresholdSeconds *int `toml:"worker_notify_threshold_seconds"`
+	HashrateEMATauSeconds       *float64 `toml:"hashrate_ema_tau_seconds"`
+	ShareNTimeMaxForwardSeconds *int     `toml:"share_ntime_max_forward_seconds"`
 }
 
 type peerCleaningTuning struct {
@@ -173,26 +192,57 @@ type banTuning struct {
 }
 
 type versionTuning struct {
-	MinVersionBits       *int  `toml:"min_version_bits"`
-	IgnoreMinVersionBits *bool `toml:"ignore_min_version_bits"`
+	MinVersionBits                *int  `toml:"min_version_bits"`
+	ShareAllowDegradedVersionBits *bool `toml:"share_allow_degraded_version_bits"`
 }
 
-type statusTuning struct {
-	MempoolAddressURL *string `toml:"mempool_address_url"`
-}
-
-// tuningFileConfig holds optional overrides from tuning.toml.
-type tuningFileConfig struct {
+// fileOverrideConfig groups override sections used internally when applying
+// policy/performance overlays.
+type fileOverrideConfig struct {
 	RateLimits   rateLimitTuning    `toml:"rate_limits"`
 	Timeouts     timeoutTuning      `toml:"timeouts"`
 	Difficulty   difficultyTuning   `toml:"difficulty"`
 	Mining       miningTuning       `toml:"mining"`
 	Hashrate     hashrateTuning     `toml:"hashrate"`
-	Discord      discordTuning      `toml:"discord"`
-	Status       statusTuning       `toml:"status"`
 	PeerCleaning peerCleaningTuning `toml:"peer_cleaning"`
 	Bans         banTuning          `toml:"bans"`
 	Version      versionTuning      `toml:"version"`
+}
+
+type policyMiningConfig struct {
+	ShareJobFreshnessMode            *int  `toml:"share_job_freshness_mode"`
+	ShareCheckNTimeWindow            *bool `toml:"share_check_ntime_window"`
+	ShareCheckVersionRolling         *bool `toml:"share_check_version_rolling"`
+	ShareRequireAuthorizedConnection *bool `toml:"share_require_authorized_connection"`
+	ShareCheckParamFormat            *bool `toml:"share_check_param_format"`
+	ShareRequireWorkerMatch          *bool `toml:"share_require_worker_match"`
+	SubmitProcessInline              *bool `toml:"submit_process_inline"`
+	ShareCheckDuplicate              *bool `toml:"share_check_duplicate"`
+	ShareRequireJobID                *bool `toml:"share_require_job_id"`
+}
+
+type policyHashrateConfig struct {
+	ShareNTimeMaxForwardSeconds *int `toml:"share_ntime_max_forward_seconds"`
+}
+
+type policyFileConfig struct {
+	Mining   policyMiningConfig   `toml:"mining"`
+	Hashrate policyHashrateConfig `toml:"hashrate"`
+	Version  versionTuning        `toml:"version"`
+	Bans     banTuning            `toml:"bans"`
+	Timeouts timeoutTuning        `toml:"timeouts"`
+}
+
+type performanceHashrateConfig struct {
+	HashrateEMATauSeconds *float64 `toml:"hashrate_ema_tau_seconds"`
+}
+
+type performanceFileConfig struct {
+	RateLimits   rateLimitTuning           `toml:"rate_limits"`
+	Difficulty   difficultyTuning          `toml:"difficulty"`
+	Mining       miningTuning              `toml:"mining"`
+	Hashrate     performanceHashrateConfig `toml:"hashrate"`
+	PeerCleaning peerCleaningTuning        `toml:"peer_cleaning"`
 }
 
 // secretsConfig holds values from secrets.toml: Clerk secrets and (when enabled)

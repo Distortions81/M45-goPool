@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"maps"
 	"strings"
 	"time"
 )
@@ -107,9 +108,7 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	var pending map[string]float64
 	if len(s.bestDiffPending) > 0 {
 		pending = make(map[string]float64, len(s.bestDiffPending))
-		for k, v := range s.bestDiffPending {
-			pending[k] = v
-		}
+		maps.Copy(pending, s.bestDiffPending)
 	}
 	s.bestDiffMu.Unlock()
 	if len(pending) > 0 {
@@ -178,9 +177,7 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	var pending map[string]float64
 	if len(s.bestDiffPending) > 0 {
 		pending = make(map[string]float64, len(s.bestDiffPending))
-		for k, v := range s.bestDiffPending {
-			pending[k] = v
-		}
+		maps.Copy(pending, s.bestDiffPending)
 	}
 	s.bestDiffMu.Unlock()
 	if len(pending) > 0 {

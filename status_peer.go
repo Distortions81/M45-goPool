@@ -155,5 +155,5 @@ func (s *StatusServer) disconnectPeer(addr string) error {
 	if s.rpc == nil {
 		return fmt.Errorf("rpc client not configured")
 	}
-	return s.rpcCallCtx("disconnectnode", []interface{}{addr}, nil)
+	return s.rpcCallCtx("disconnectnode", []any{addr}, nil)
 }

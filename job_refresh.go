@@ -21,7 +21,7 @@ func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval 
 	}
 	jm.lastRefreshAttempt = time.Now()
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"rules":        []string{"segwit"},
 		"capabilities": []string{"coinbasetxn", "workid", "coinbase/append"},
 	}
@@ -33,13 +33,13 @@ func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval 
 	return jm.refreshFromTemplate(ctx, tpl)
 }
 
-func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]interface{}, useLongPoll bool) (GetBlockTemplateResult, error) {
+func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]any, useLongPoll bool) (GetBlockTemplateResult, error) {
 	var tpl GetBlockTemplateResult
 	var err error
 	if useLongPoll {
-		err = jm.rpc.callLongPollCtx(ctx, "getblocktemplate", []interface{}{params}, &tpl)
+		err = jm.rpc.callLongPollCtx(ctx, "getblocktemplate", []any{params}, &tpl)
 	} else {
-		err = jm.rpc.callCtx(ctx, "getblocktemplate", []interface{}{params}, &tpl)
+		err = jm.rpc.callCtx(ctx, "getblocktemplate", []any{params}, &tpl)
 	}
 	return tpl, err
 }

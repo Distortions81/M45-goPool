@@ -170,4 +170,3 @@ func (s *StatusServer) serveShortResponseCache(next http.Handler) http.Handler {
 		s.responseCacheMu.Unlock()
 	})
 }
-

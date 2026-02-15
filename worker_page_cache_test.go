@@ -52,7 +52,7 @@ func TestCacheWorkerPageEvictsExpiredWhenAtCapacity(t *testing.T) {
 
 	// Seed the cache with workerPageCacheLimit entries, one of which is expired.
 	expiredKey := "expired-worker"
-	for i := 0; i < workerPageCacheLimit; i++ {
+	for i := range workerPageCacheLimit {
 		key := "worker-" + strconv.Itoa(i)
 		expiresAt := now.Add(time.Minute)
 		if i == 0 {

@@ -41,7 +41,7 @@ func TestFoundBlockSubmission_BtcdCompat(t *testing.T) {
 
 		if req.Method == "submitblock" {
 			submitCalls++
-			if params, ok := req.Params.([]interface{}); ok && len(params) > 0 {
+			if params, ok := req.Params.([]any); ok && len(params) > 0 {
 				if blockHex, ok := params[0].(string); ok {
 					submittedBlockHex = blockHex
 				}
@@ -105,8 +105,8 @@ func TestFoundBlockSubmission_BtcdCompat(t *testing.T) {
 	}
 
 	// Submit the block
-	var submitRes interface{}
-	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
+	var submitRes any
+	err = rpc.callCtx(context.Background(), "submitblock", []any{blockHex}, &submitRes)
 	if err != nil {
 		t.Fatalf("submitblock error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 		_ = json.Unmarshal(body, &req)
 
 		if req.Method == "submitblock" {
-			if params, ok := req.Params.([]interface{}); ok && len(params) > 0 {
+			if params, ok := req.Params.([]any); ok && len(params) > 0 {
 				if blockHex, ok := params[0].(string); ok {
 					submittedBlockHex = blockHex
 				}
@@ -233,8 +233,8 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 	blockHex := hex.EncodeToString(blockBuf.Bytes())
 
 	// Submit
-	var submitRes interface{}
-	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
+	var submitRes any
+	err = rpc.callCtx(context.Background(), "submitblock", []any{blockHex}, &submitRes)
 	if err != nil {
 		t.Fatalf("submitblock error: %v", err)
 	}
@@ -466,8 +466,8 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	}
 
 	// Try to submit (will fail)
-	var submitRes interface{}
-	err = rpc.callCtx(context.Background(), "submitblock", []interface{}{blockHex}, &submitRes)
+	var submitRes any
+	err = rpc.callCtx(context.Background(), "submitblock", []any{blockHex}, &submitRes)
 	if err == nil {
 		t.Fatal("expected submitblock to fail, but it succeeded")
 	}

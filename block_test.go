@@ -207,10 +207,7 @@ func TestDualVsSinglePayoutBlocks(t *testing.T) {
 	}
 
 	// Verify split matches the same logic used in serializeDualCoinbaseTx.
-	poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
-	if poolFee < 0 {
-		poolFee = 0
-	}
+	poolFee := max(int64(math.Round(float64(totalValue)*feePercent/100.0)), 0)
 	if poolFee > totalValue {
 		poolFee = totalValue
 	}

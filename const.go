@@ -46,7 +46,7 @@ const (
 	defaultMaxConns = 50000
 
 	// Ban thresholds.
-	defaultNTimeForwardSlackSeconds      = 7000
+	defaultShareNTimeMaxForwardSeconds   = 7000
 	defaultBanInvalidSubmissionsAfter    = 40
 	defaultBanInvalidSubmissionsWindow   = 5 * time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
@@ -88,7 +88,7 @@ const (
 	defaultPeerCleanupMinPeers  = 30
 
 	// VarDiff defaults.
-	defaultVarDiffTargetSharesPerMin = 10
+	defaultVarDiffTargetSharesPerMin = 15
 	defaultVarDiffAdjustmentWindow   = 60 * time.Second
 	defaultVarDiffStep               = 2
 	defaultVarDiffDampingFactor      = 0.7
@@ -122,7 +122,7 @@ const (
 	startupDiffPrimingFactor     = 0.75
 	startupDiffPrimingMinFactor  = 0.60
 
-	defaultHashrateEMATauSeconds = 300.0
+	defaultHashrateEMATauSeconds = 450.0
 	initialHashrateEMATau        = 45 * time.Second
 	// statusWindowIdleReset bounds stale status-window carryover after long
 	// no-share gaps; it is intentionally independent from vardiff retargeting.
@@ -153,4 +153,10 @@ const (
 
 	forceClerkLoginUIForTesting = false
 	clerkDevSessionTokenTTL     = 12 * time.Hour // localhost dev sessions only
+)
+
+const (
+	shareJobFreshnessOff = iota
+	shareJobFreshnessJobID
+	shareJobFreshnessJobIDPrev
 )

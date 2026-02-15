@@ -10,7 +10,7 @@ import (
 // to maximize the chance of winning the propagation race. It retries every
 // 100ms until either submitblock succeeds, a newer job height is observed,
 // or a safety window elapses.
-func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blockHex string, submitRes *interface{}) error {
+func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blockHex string, submitRes *any) error {
 	const (
 		retryInterval = 100 * time.Millisecond
 		// rpcCallTimeout bounds each individual RPC call so a hung bitcoind
@@ -40,7 +40,7 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 			Confirmations int64 `json:"confirmations"`
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), confirmTimeout)
-		err := mc.rpc.callCtx(ctx, "getblockheader", []interface{}{hashHex, true}, &header)
+		err := mc.rpc.callCtx(ctx, "getblockheader", []any{hashHex, true}, &header)
 		cancel()
 		// Only treat as success when the block is in the best chain.
 		// (Orphaned blocks can still be "known" but will have confirmations=-1.)
@@ -53,7 +53,7 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 		// Use a per-call timeout to prevent indefinite hangs on unresponsive RPC.
 		// The retry loop continues regardless; we just don't want one call to block forever.
 		callCtx, cancel := context.WithTimeout(context.Background(), rpcCallTimeout)
-		err := mc.rpc.callCtx(callCtx, "submitblock", []interface{}{blockHex}, submitRes)
+		err := mc.rpc.callCtx(callCtx, "submitblock", []any{blockHex}, submitRes)
 		cancel()
 
 		if err == nil {

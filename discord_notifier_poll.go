@@ -100,10 +100,7 @@ func (n *discordNotifier) pollBatch(budget, tick, targetFullScan time.Duration) 
 	n.stateMu.Lock()
 	linkCount := len(n.links)
 	n.stateMu.Unlock()
-	perTick := n.usersPerTick(linkCount, tick, targetFullScan)
-	if perTick < 1 {
-		perTick = 1
-	}
+	perTick := max(n.usersPerTick(linkCount, tick, targetFullScan), 1)
 	deadline := time.Now().Add(budget)
 	checked := 0
 	for checked < perTick && time.Now().Before(deadline) {
@@ -271,7 +268,7 @@ func formatNotifyThresholdLabel(d time.Duration) string {
 
 func (n *discordNotifier) updateWorkerStates(userID string, current map[string]bool, now time.Time) (offlineOverdue, onlineOverdue []string) {
 	// Use one sustained threshold to reduce flapping notifications and require
-	// meaningful state changes (tunable via tuning.toml).
+	// meaningful state changes (configured via services.toml/policy.toml/performance.toml).
 	offlineThreshold := n.workerNotifyThreshold()
 	onlineBeforeOfflineThreshold := offlineThreshold
 	recoveryThreshold := offlineThreshold
@@ -309,10 +306,7 @@ func (n *discordNotifier) updateWorkerStates(userID string, current map[string]b
 			// Compute how long we were in the previous state (best-effort).
 			prevDuration := time.Duration(0)
 			if !st.Since.IsZero() {
-				prevDuration = now.Sub(st.Since)
-				if prevDuration < 0 {
-					prevDuration = 0
-				}
+				prevDuration = max(now.Sub(st.Since), 0)
 			}
 			wasOnline := st.Online
 

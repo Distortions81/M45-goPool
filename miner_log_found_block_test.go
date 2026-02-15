@@ -38,7 +38,7 @@ func flushFoundBlockLogger(t *testing.T) {
 
 // readLastFoundBlockRecord polls the sqlite state DB in dir and returns the
 // last JSON object written. It is used to verify logFoundBlock behaviour.
-func readLastFoundBlockRecord(t *testing.T, dir string) map[string]interface{} {
+func readLastFoundBlockRecord(t *testing.T, dir string) map[string]any {
 	t.Helper()
 	flushFoundBlockLogger(t)
 	dbPath := stateDBPathFromDataDir(dir)
@@ -46,7 +46,7 @@ func readLastFoundBlockRecord(t *testing.T, dir string) map[string]interface{} {
 	for {
 		db, err := openStateDB(dbPath)
 		if err == nil {
-			var rec map[string]interface{}
+			var rec map[string]any
 			var line string
 			if err := db.QueryRow("SELECT json FROM found_blocks_log ORDER BY id DESC LIMIT 1").Scan(&line); err == nil && line != "" {
 				_ = db.Close()
@@ -224,10 +224,7 @@ func TestLogFoundBlock_NoFallbackDifferentAddress(t *testing.T) {
 	if feePct > 99.99 {
 		feePct = 99.99
 	}
-	expectedPoolFee := int64(math.Round(float64(total) * feePct / 100.0))
-	if expectedPoolFee < 0 {
-		expectedPoolFee = 0
-	}
+	expectedPoolFee := max(int64(math.Round(float64(total)*feePct/100.0)), 0)
 	if expectedPoolFee > total {
 		expectedPoolFee = total
 	}

@@ -100,10 +100,7 @@ func computeCoinbasePayouts(plan coinbasePayoutPlan) ([]coinbasePayoutOutput, *c
 			feePct = 99.99
 		}
 
-		feeTotal := int64(math.Round(float64(plan.TotalValue) * feePct / 100.0))
-		if feeTotal < 0 {
-			feeTotal = 0
-		}
+		feeTotal := max(int64(math.Round(float64(plan.TotalValue)*feePct/100.0)), 0)
 		if feeTotal > remaining {
 			feeTotal = remaining
 		}
@@ -124,10 +121,7 @@ func computeCoinbasePayouts(plan coinbasePayoutPlan) ([]coinbasePayoutOutput, *c
 				subPct = 100
 			}
 
-			subAmt := int64(math.Round(float64(feeTotal) * subPct / 100.0))
-			if subAmt < 0 {
-				subAmt = 0
-			}
+			subAmt := max(int64(math.Round(float64(feeTotal)*subPct/100.0)), 0)
 			if subAmt > feeRemaining {
 				subAmt = feeRemaining
 			}
@@ -205,10 +199,7 @@ func buildCoinbaseOutputs(commitmentScript []byte, payouts []coinbasePayoutOutpu
 // outputs plus an optional witness commitment output. Payout outputs are
 // encoded largest-to-smallest by value.
 func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2 []byte, templateExtraNonce2Size int, payouts []coinbasePayoutOutput, commitmentScript []byte, flagsBytes []byte, coinbaseMsg string, scriptTime int64) ([]byte, []byte, error) {
-	padLen := templateExtraNonce2Size - len(extranonce2)
-	if padLen < 0 {
-		padLen = 0
-	}
+	padLen := max(templateExtraNonce2Size-len(extranonce2), 0)
 	placeholderLen := len(extranonce1) + len(extranonce2) + padLen
 	extraNoncePlaceholder := bytes.Repeat([]byte{0x00}, placeholderLen)
 
@@ -395,10 +386,7 @@ func coinbaseScriptSigFixedLen(height int64, scriptTime int64, coinbaseFlags str
 	if templateExtraNonce2Size < extranonce2Size {
 		templateExtraNonce2Size = extranonce2Size
 	}
-	padLen := templateExtraNonce2Size - extranonce2Size
-	if padLen < 0 {
-		padLen = 0
-	}
+	padLen := max(templateExtraNonce2Size-extranonce2Size, 0)
 	partLen := len(serializeNumberScript(height)) + len(flagsBytes) + len(serializeNumberScript(scriptTime)) + 1
 	return partLen + padLen + coinbaseExtranonce1Size + extranonce2Size, nil
 }

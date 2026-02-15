@@ -293,10 +293,7 @@ func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, f
 
 	now := time.Now()
 	if !force && !s.lastAttemptAt.IsZero() && now.Sub(s.lastAttemptAt) < s.interval {
-		wait := s.interval - now.Sub(s.lastAttemptAt)
-		if wait < 0 {
-			wait = 0
-		}
+		wait := max(s.interval-now.Sub(s.lastAttemptAt), 0)
 		if logger.Enabled(logLevelDebug) {
 			logger.Debug("backblaze backup skipped (interval not elapsed)",
 				"reason", reason,

@@ -87,9 +87,7 @@ func (s *workerListStore) startBestDiffWorker(flushInterval time.Duration) {
 	}
 	s.bestDiffCh = make(chan bestDiffUpdate, 4096)
 	s.bestDiffStop = make(chan struct{})
-	s.bestDiffWg.Add(1)
-	go func() {
-		defer s.bestDiffWg.Done()
+	s.bestDiffWg.Go(func() {
 		ticker := time.NewTicker(flushInterval)
 		defer ticker.Stop()
 		for {
@@ -113,7 +111,7 @@ func (s *workerListStore) startBestDiffWorker(flushInterval time.Duration) {
 				s.flushBestDiffPending()
 			}
 		}
-	}()
+	})
 }
 
 func (s *workerListStore) flushBestDiffPending() {

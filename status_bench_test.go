@@ -190,7 +190,7 @@ func benchmarkStatusServerWithConns(connCount int) *StatusServer {
 	reg := NewMinerRegistry()
 	metrics := NewPoolMetrics()
 
-	for i := 0; i < connCount; i++ {
+	for i := range connCount {
 		mc := &MinerConn{
 			cfg:         cfg,
 			vardiff:     defaultVarDiff,

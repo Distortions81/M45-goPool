@@ -23,14 +23,17 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 
 ## Configuration overview
 
-- `data/config/config.toml` controls listener ports, branding, RPC credentials, fee percentages, and most runtime behavior.
+- `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.
 - TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
 - `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). First run writes helper examples to `data/config/examples/`.
-- `data/config/tuning.toml` lets you override advanced limits (rate limits, bans, EMA windows, etc.) while `data/config/secrets.toml` holds sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
-  - Notable tuning knobs: `rate_limits.stratum_messages_per_minute` (messages/min before disconnect + 1h ban), `difficulty.default_difficulty` (initial fallback when no suggestion is received), and `difficulty.min_difficulty`/`difficulty.max_difficulty` (0 disables a clamp; out-of-range miner-suggested difficulty is only banned/disconnected when `difficulty.enforce_suggested_difficulty_limits = true`).
-- `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. goPool writes `password_sha256` on startup and clears the plaintext password after the first successful login; subsequent logins use the hash. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + `tuning.toml`, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
+- Optional split files:
+  - `data/config/services.toml` for service/integration settings (`auth`, `backblaze_backup`, `discord`, `status` links).
+  - `data/config/policy.toml` for submit-policy/version/bans/timeouts.
+  - `data/config/performance.toml` for rate limits, vardiff, EMA tuning, and peer-cleaning controls.
+  - `data/config/secrets.toml` for sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
+- `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. goPool writes `password_sha256` on startup and clears the plaintext password after the first successful login; subsequent logins use the hash. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + split override files, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
 - `[logging].level` controls runtime verbosity (`debug`, `info`, `warn`, `error`) and gates features like `net-debug.log`; override it temporarily with `-log-level <level>`.
-- Enable `[mining].check_duplicate_shares = true` to pull shared duplication checks into solo-mode (this setting lives only in the config).
+- `share_*` validation toggles live in `data/config/policy.toml` `[mining]` (for example `share_check_duplicate`).
 
 Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the corresponding config file values for a single run—they are not written back to `config.toml`.
 

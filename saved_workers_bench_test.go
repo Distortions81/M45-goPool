@@ -27,7 +27,7 @@ func BenchmarkSavedWorkersJSON_15Saved(b *testing.B) {
 	cfg := defaultConfig()
 
 	// Simulate 10/15 saved workers online with one connection each.
-	for i := 0; i < savedPerUser; i++ {
+	for i := range savedPerUser {
 		name := fmt.Sprintf("worker-%d", i)
 		if err := store.Add(userID, name); err != nil {
 			b.Fatalf("store.Add(%q): %v", name, err)

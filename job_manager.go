@@ -322,7 +322,7 @@ func (jm *JobManager) Start(ctx context.Context) {
 	// Use runtime.NumCPU() workers to handle fanout efficiently across available cores
 	numWorkers := runtime.NumCPU()
 	jm.notifyWg = sizedwaitgroup.New(numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		jm.notifyWg.Add()
 		go jm.notificationWorker(ctx, i)
 	}

@@ -314,7 +314,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 			if s.rpc != nil && hash != "" {
 				var hdr blockHeader
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				err := s.rpc.callCtx(ctx, "getblockheader", []interface{}{hash, true}, &hdr)
+				err := s.rpc.callCtx(ctx, "getblockheader", []any{hash, true}, &hdr)
 				cancel()
 				if err == nil {
 					// Normalize orphan/stale confirmations (-1) to 0 for display.

@@ -31,7 +31,7 @@ func BenchmarkFmtSprintfSimple(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		id := i
-		_ = []byte(fmt.Sprintf("{\"id\":%d%s", id, cannedSuffix))
+		_ = fmt.Appendf(nil, "{\"id\":%d%s", id, cannedSuffix)
 	}
 }
 

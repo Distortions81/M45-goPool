@@ -205,4 +205,3 @@ func TestSerializeCoinbaseTxPayoutsPredecoded_PaymentCountsAndOrdering(t *testin
 		})
 	}
 }
-

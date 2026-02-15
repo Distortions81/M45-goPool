@@ -188,10 +188,7 @@ func (mc *MinerConn) effectiveInvalidSubsLocked(threshold int) int {
 		return 0
 	}
 	forgiveUnits := mc.validSubsForBan / banInvalidForgiveSharesPerUnit
-	maxForgive := int(float64(threshold) * banInvalidForgiveCapFraction)
-	if maxForgive < 1 {
-		maxForgive = 1
-	}
+	maxForgive := max(int(float64(threshold)*banInvalidForgiveCapFraction), 1)
 	if forgiveUnits > maxForgive {
 		forgiveUnits = maxForgive
 	}
@@ -329,10 +326,7 @@ func (mc *MinerConn) hashrateControlTau() time.Duration {
 		return initialHashrateEMATau
 	}
 	slow := mc.hashrateEMATau()
-	fast := time.Duration(float64(slow) * hashrateControlTauFactor)
-	if fast < hashrateControlTauMin {
-		fast = hashrateControlTauMin
-	}
+	fast := max(time.Duration(float64(slow)*hashrateControlTauFactor), hashrateControlTauMin)
 	if fast > slow {
 		fast = slow
 	}
@@ -531,7 +525,7 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastClean = clean
 
 	// Evict oldest jobs if we exceed the max limit
-	dupEnabled := mc.cfg.CheckDuplicateShares
+	dupEnabled := mc.cfg.ShareCheckDuplicate
 	now := time.Time{}
 	for len(mc.jobOrder) > mc.maxRecentJobs && len(mc.jobOrder) > 0 {
 		oldest := mc.jobOrder[0]
@@ -656,7 +650,7 @@ func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 
 func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce string, version uint32) bool {
 	// Skip duplicate checking if disabled (default for solo pools)
-	if !mc.cfg.CheckDuplicateShares {
+	if !mc.cfg.ShareCheckDuplicate {
 		return false
 	}
 
@@ -692,8 +686,9 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce string, v
 }
 
 func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
+	varDiffEnabled := mc.cfg.VarDiffEnabled || mc.cfg.TargetSharesPerMin <= 0
 	// If this connection is locked to a static difficulty, skip VarDiff.
-	if mc.lockDifficulty {
+	if !varDiffEnabled || mc.lockDifficulty {
 		return false
 	}
 
@@ -1058,10 +1053,7 @@ func (mc *MinerConn) timeoutRiskDownshift(now time.Time, currentDiff float64, la
 	if timeout <= 0 {
 		return 0
 	}
-	quietThreshold := time.Duration(float64(timeout) * vardiffTimeoutGuardThreshold)
-	if quietThreshold < vardiffTimeoutGuardMinQuiet {
-		quietThreshold = vardiffTimeoutGuardMinQuiet
-	}
+	quietThreshold := max(time.Duration(float64(timeout)*vardiffTimeoutGuardThreshold), vardiffTimeoutGuardMinQuiet)
 	maxQuiet := timeout - vardiffTimeoutGuardLead
 	if maxQuiet > 0 && quietThreshold > maxQuiet {
 		quietThreshold = maxQuiet
@@ -1265,10 +1257,10 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 		)
 	}
 
-	msg := map[string]interface{}{
+	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_difficulty",
-		"params": []interface{}{diff},
+		"params": []any{diff},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("difficulty write error", "remote", mc.id, "error", err)
@@ -1304,10 +1296,10 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 }
 
 func (mc *MinerConn) sendVersionMask() {
-	msg := map[string]interface{}{
+	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_version_mask",
-		"params": []interface{}{fmt.Sprintf("%08x", mc.versionMask)},
+		"params": []any{fmt.Sprintf("%08x", mc.versionMask)},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("version mask write error", "remote", mc.id, "error", err)
@@ -1371,10 +1363,10 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 }
 
 func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
-	msg := map[string]interface{}{
+	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_extranonce",
-		"params": []interface{}{ex1, en2Size},
+		"params": []any{ex1, en2Size},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("set_extranonce write error", "remote", mc.id, "error", err)

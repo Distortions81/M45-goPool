@@ -6,11 +6,11 @@ func TestApplyTuningConfig_TargetSharesPerMin(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.TargetSharesPerMin = 5
 
-	override := tuningFileConfig{}
+	override := fileOverrideConfig{}
 	value := 7.5
 	override.Difficulty.TargetSharesPerMin = &value
 
-	applyTuningConfig(&cfg, override)
+	applyFileOverrides(&cfg, override)
 	if cfg.TargetSharesPerMin != value {
 		t.Fatalf("TargetSharesPerMin=%v want %v", cfg.TargetSharesPerMin, value)
 	}

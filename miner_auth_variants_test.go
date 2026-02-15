@@ -64,7 +64,7 @@ func TestParseSuggestedDifficultyVariants(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		value interface{}
+		value any
 		diff  float64
 		ok    bool
 	}{
@@ -100,9 +100,9 @@ func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	req := &StratumRequest{
 		ID:     1,
 		Method: "mining.configure",
-		Params: []interface{}{
+		Params: []any{
 			"version_rolling, suggest_difficulty",
-			map[string]interface{}{
+			map[string]any{
 				"version_rolling_mask":          "1fffe000",
 				"version_rolling_min_bit_count": "2",
 			},

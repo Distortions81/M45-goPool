@@ -10,7 +10,9 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	if start.IsZero() {
 		start = time.Now()
 	}
-	defer mc.recordSubmitRTT(time.Since(start))
+	defer func() {
+		mc.recordSubmitRTT(time.Since(start))
+	}()
 
 	workerName := task.workerName
 	jobID := task.jobID
@@ -31,7 +33,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
-	if mc.cfg.RelaxedSubmitValidation {
+	if !mc.useStrictSubmitPath() {
 		ctx, ok := mc.prepareShareContextSolo(task)
 		if !ok {
 			return
@@ -70,7 +72,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 		return
 	}
 
-	if !ctx.isBlock && mc.cfg.CheckDuplicateShares && mc.isDuplicateShare(jobID, extranonce2, ntime, nonce, task.useVersion) {
+	if !ctx.isBlock && mc.cfg.ShareCheckDuplicate && mc.isDuplicateShare(jobID, extranonce2, ntime, nonce, task.useVersion) {
 		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
 		return
@@ -117,7 +119,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 			mc.writeResponse(StratumResponse{
 				ID:     reqID,
 				Result: false,
-				Error:  []interface{}{23, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", ctx.shareDiff, assignedDiff), nil},
+				Error:  []any{23, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", ctx.shareDiff, assignedDiff), nil},
 			})
 		}
 		return

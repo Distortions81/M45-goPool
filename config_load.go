@@ -20,11 +20,12 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 
 	var configFileExisted bool
 	var needsRewrite bool
+	var needsServicesMigration bool
 	if bc, ok, err := loadBaseConfigFile(configPath); err != nil {
 		fatal("config file", err, "path", configPath)
 	} else if ok {
 		configFileExisted = true
-		needsRewrite = applyBaseConfig(&cfg, *bc)
+		needsRewrite, needsServicesMigration = applyBaseConfig(&cfg, *bc)
 	} else {
 		examplePath := filepath.Join(cfg.DataDir, "config", "examples", "config.toml.example")
 		ensureExampleFiles(cfg.DataDir)
@@ -72,19 +73,31 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 		applySecretsConfig(&cfg, *sc)
 	}
 
-	// Optional advanced/tuning overlay: if data_dir/config/tuning.toml exists,
-	// load it as a second config file and apply it on top of the main config.
-	// This lets operators keep advanced knobs separate and delete the file to
-	// fall back to defaults.
-	tuningPath := filepath.Join(cfg.DataDir, "config", "tuning.toml")
-	var tuningOverrides tuningFileConfig
-	var tuningConfigLoaded bool
-	if tf, ok, err := loadTuningFile(tuningPath); err != nil {
-		fatal("tuning config file", err, "path", tuningPath)
+	// Optional advanced overlays. These files are intentionally absent by default.
+	configDir := filepath.Join(cfg.DataDir, "config")
+	servicesPath := filepath.Join(configDir, "services.toml")
+	policyPath := filepath.Join(configDir, "policy.toml")
+	performancePath := filepath.Join(configDir, "performance.toml")
+	var runtimeOverrides fileOverrideConfig
+	var performanceConfigLoaded bool
+	var servicesConfigLoaded bool
+	if sf, ok, err := loadServicesFile(servicesPath); err != nil {
+		fatal("services config file", err, "path", servicesPath)
 	} else if ok {
-		applyTuningConfig(&cfg, *tf)
-		tuningConfigLoaded = ok
-		tuningOverrides = *tf
+		applyServicesConfig(&cfg, *sf)
+		servicesConfigLoaded = true
+	}
+	if pf, ok, err := loadPolicyFile(policyPath); err != nil {
+		fatal("policy config file", err, "path", policyPath)
+	} else if ok {
+		applyPolicyConfig(&cfg, *pf)
+	}
+	if pf, ok, err := loadPerformanceFile(performancePath); err != nil {
+		fatal("performance config file", err, "path", performancePath)
+	} else if ok {
+		applyPerformanceConfig(&cfg, *pf)
+		performanceConfigLoaded = true
+		runtimeOverrides.RateLimits = pf.RateLimits
 	}
 
 	// Sanitize payout address to strip stray whitespace or unexpected
@@ -95,7 +108,15 @@ func loadConfig(configPath, secretsPath string) (Config, string) {
 	// Auto-configure accept rate limits based on max_conns if they weren't
 	// explicitly set in the config file. This ensures miners can reconnect
 	// smoothly after pool restarts without hitting rate limits.
-	autoConfigureAcceptRateLimits(&cfg, tuningOverrides, tuningConfigLoaded)
+	autoConfigureAcceptRateLimits(&cfg, runtimeOverrides, performanceConfigLoaded)
+
+	if needsServicesMigration && !servicesConfigLoaded && configFileExisted {
+		if err := rewriteServicesFile(servicesPath, cfg); err != nil {
+			logger.Warn("rewrite services file", "path", servicesPath, "error", err)
+		} else {
+			logger.Warn("migrated legacy settings into services.toml", "path", servicesPath)
+		}
+	}
 
 	return cfg, secretsPath
 }
@@ -121,8 +142,16 @@ func loadBaseConfigFile(path string) (*baseFileConfigRead, bool, error) {
 	return loadTOMLFile[baseFileConfigRead](path)
 }
 
-func loadTuningFile(path string) (*tuningFileConfig, bool, error) {
-	return loadTOMLFile[tuningFileConfig](path)
+func loadPolicyFile(path string) (*policyFileConfig, bool, error) {
+	return loadTOMLFile[policyFileConfig](path)
+}
+
+func loadServicesFile(path string) (*servicesFileConfig, bool, error) {
+	return loadTOMLFile[servicesFileConfig](path)
+}
+
+func loadPerformanceFile(path string) (*performanceFileConfig, bool, error) {
+	return loadTOMLFile[performanceFileConfig](path)
 }
 
 func loadSecretsFile(path string) (*secretsConfig, bool, error) {
@@ -153,7 +182,7 @@ func ensureSecretFilePermissions(path string) {
 	logger.Warn("secrets file permissions tightened", "path", path, "mode", "0600")
 }
 
-func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
+func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool, migratedServices bool) {
 	if fc.Server.PoolListen != "" {
 		cfg.ListenAddr = fc.Server.PoolListen
 	}
@@ -187,18 +216,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Branding.PoolDonationAddress != "" {
 		cfg.PoolDonationAddress = strings.TrimSpace(fc.Branding.PoolDonationAddress)
 	}
-	if fc.Branding.DiscordURL != "" {
-		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
-	}
-	if fc.Branding.DiscordServerID != "" {
-		cfg.DiscordServerID = strings.TrimSpace(fc.Branding.DiscordServerID)
-	}
-	if fc.Branding.DiscordNotifyChannelID != "" {
-		cfg.DiscordNotifyChannelID = strings.TrimSpace(fc.Branding.DiscordNotifyChannelID)
-	}
-	if fc.Branding.GitHubURL != "" {
-		cfg.GitHubURL = strings.TrimSpace(fc.Branding.GitHubURL)
-	}
 	if fc.Branding.ServerLocation != "" {
 		cfg.ServerLocation = strings.TrimSpace(fc.Branding.ServerLocation)
 	}
@@ -216,27 +233,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 		cfg.StratumPassword = ""
 	}
 	cfg.StratumPasswordPublic = fc.Stratum.StratumPasswordPublic
-	if fc.Auth.ClerkIssuerURL != "" {
-		cfg.ClerkIssuerURL = strings.TrimSpace(fc.Auth.ClerkIssuerURL)
-	}
-	if fc.Auth.ClerkJWKSURL != "" {
-		cfg.ClerkJWKSURL = strings.TrimSpace(fc.Auth.ClerkJWKSURL)
-	}
-	if fc.Auth.ClerkSignInURL != "" {
-		cfg.ClerkSignInURL = strings.TrimSpace(fc.Auth.ClerkSignInURL)
-	}
-	if fc.Auth.ClerkCallbackPath != "" {
-		cfg.ClerkCallbackPath = strings.TrimSpace(fc.Auth.ClerkCallbackPath)
-	}
-	if fc.Auth.ClerkFrontendAPIURL != "" {
-		cfg.ClerkFrontendAPIURL = strings.TrimSpace(fc.Auth.ClerkFrontendAPIURL)
-	}
-	if fc.Auth.ClerkSessionCookieName != "" {
-		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
-	}
-	if fc.Auth.ClerkSessionAudience != "" {
-		cfg.ClerkSessionAudience = strings.TrimSpace(fc.Auth.ClerkSessionAudience)
-	}
 	if fc.Node.RPCURL != "" {
 		cfg.RPCURL = fc.Node.RPCURL
 	}
@@ -263,9 +259,6 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if cookiePath != "" {
 		cfg.RPCCookiePath = cookiePath
 	}
-	if fc.Node.AllowPublicRPC {
-		cfg.AllowPublicRPC = true
-	}
 	if fc.Mining.PoolFeePercent != nil {
 		cfg.PoolFeePercent = *fc.Mining.PoolFeePercent
 	}
@@ -281,41 +274,107 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Mining.OperatorDonationURL != "" {
 		cfg.OperatorDonationURL = strings.TrimSpace(fc.Mining.OperatorDonationURL)
 	}
-	if fc.Mining.Extranonce2Size != nil {
-		cfg.Extranonce2Size = *fc.Mining.Extranonce2Size
-	}
-	if fc.Mining.TemplateExtraNonce2Size != nil {
-		cfg.TemplateExtraNonce2Size = *fc.Mining.TemplateExtraNonce2Size
-	}
 	if fc.Mining.PoolEntropy != nil {
 		cfg.PoolEntropy = *fc.Mining.PoolEntropy
 	}
 	if fc.Mining.PoolTagPrefix != "" {
 		cfg.PoolTagPrefix = filterAlphanumeric(strings.TrimSpace(fc.Mining.PoolTagPrefix))
 	}
-	if fc.Mining.JobEntropy != nil {
-		cfg.JobEntropy = *fc.Mining.JobEntropy
-	}
-	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
-		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
-	}
-	if fc.Mining.RelaxedSubmitValidation != nil {
-		cfg.RelaxedSubmitValidation = *fc.Mining.RelaxedSubmitValidation
-	}
-	if fc.Mining.SubmitWorkerNameMatch != nil {
-		cfg.SubmitWorkerNameMatch = *fc.Mining.SubmitWorkerNameMatch
-	}
-	if fc.Mining.DirectSubmitProcessing != nil {
-		cfg.DirectSubmitProcessing = *fc.Mining.DirectSubmitProcessing
-	}
-	if fc.Mining.CheckDuplicateShares != nil {
-		cfg.CheckDuplicateShares = *fc.Mining.CheckDuplicateShares
-	}
-	if fc.Mining.RejectNoJobID != nil {
-		cfg.RejectNoJobID = *fc.Mining.RejectNoJobID
-	}
 	if fc.Logging.Level != "" {
 		cfg.LogLevel = strings.ToLower(strings.TrimSpace(fc.Logging.Level))
+	}
+
+	// Legacy config.toml -> services.toml migration:
+	// old [auth], [backblaze_backup], and [branding].discord_* fields.
+	if fc.Auth.ClerkIssuerURL != "" {
+		cfg.ClerkIssuerURL = strings.TrimSpace(fc.Auth.ClerkIssuerURL)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkJWKSURL != "" {
+		cfg.ClerkJWKSURL = strings.TrimSpace(fc.Auth.ClerkJWKSURL)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkSignInURL != "" {
+		cfg.ClerkSignInURL = strings.TrimSpace(fc.Auth.ClerkSignInURL)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkCallbackPath != "" {
+		cfg.ClerkCallbackPath = strings.TrimSpace(fc.Auth.ClerkCallbackPath)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkFrontendAPIURL != "" {
+		cfg.ClerkFrontendAPIURL = strings.TrimSpace(fc.Auth.ClerkFrontendAPIURL)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkSessionCookieName != "" {
+		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
+		migratedServices = true
+	}
+	if fc.Auth.ClerkSessionAudience != "" {
+		cfg.ClerkSessionAudience = strings.TrimSpace(fc.Auth.ClerkSessionAudience)
+		migratedServices = true
+	}
+	if fc.Backblaze.Enabled || strings.TrimSpace(fc.Backblaze.Bucket) != "" || strings.TrimSpace(fc.Backblaze.Prefix) != "" || fc.Backblaze.IntervalSeconds != nil || fc.Backblaze.KeepLocalCopy != nil || fc.Backblaze.ForceEveryInterval != nil || strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
+		cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
+		if fc.Backblaze.Bucket != "" {
+			cfg.BackblazeBucket = strings.TrimSpace(fc.Backblaze.Bucket)
+		}
+		if fc.Backblaze.Prefix != "" {
+			cfg.BackblazePrefix = strings.TrimSpace(fc.Backblaze.Prefix)
+		}
+		if fc.Backblaze.IntervalSeconds != nil && *fc.Backblaze.IntervalSeconds > 0 {
+			cfg.BackblazeBackupIntervalSeconds = *fc.Backblaze.IntervalSeconds
+		}
+		if fc.Backblaze.KeepLocalCopy != nil {
+			cfg.BackblazeKeepLocalCopy = *fc.Backblaze.KeepLocalCopy
+		}
+		if fc.Backblaze.ForceEveryInterval != nil {
+			cfg.BackblazeForceEveryInterval = *fc.Backblaze.ForceEveryInterval
+		}
+		if strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
+			cfg.BackupSnapshotPath = strings.TrimSpace(fc.Backblaze.SnapshotPath)
+		}
+		migratedServices = true
+	}
+	if fc.Branding.DiscordURL != "" {
+		cfg.DiscordURL = strings.TrimSpace(fc.Branding.DiscordURL)
+		migratedServices = true
+	}
+	if fc.Branding.DiscordServerID != "" {
+		cfg.DiscordServerID = strings.TrimSpace(fc.Branding.DiscordServerID)
+		migratedServices = true
+	}
+	if fc.Branding.DiscordNotifyChannelID != "" {
+		cfg.DiscordNotifyChannelID = strings.TrimSpace(fc.Branding.DiscordNotifyChannelID)
+		migratedServices = true
+	}
+	if migratedServices {
+		logger.Warn("legacy services settings detected in config.toml; migrate them to services.toml")
+	}
+	return migrated, migratedServices
+}
+
+func applyServicesConfig(cfg *Config, fc servicesFileConfig) {
+	if fc.Auth.ClerkIssuerURL != "" {
+		cfg.ClerkIssuerURL = strings.TrimSpace(fc.Auth.ClerkIssuerURL)
+	}
+	if fc.Auth.ClerkJWKSURL != "" {
+		cfg.ClerkJWKSURL = strings.TrimSpace(fc.Auth.ClerkJWKSURL)
+	}
+	if fc.Auth.ClerkSignInURL != "" {
+		cfg.ClerkSignInURL = strings.TrimSpace(fc.Auth.ClerkSignInURL)
+	}
+	if fc.Auth.ClerkCallbackPath != "" {
+		cfg.ClerkCallbackPath = strings.TrimSpace(fc.Auth.ClerkCallbackPath)
+	}
+	if fc.Auth.ClerkFrontendAPIURL != "" {
+		cfg.ClerkFrontendAPIURL = strings.TrimSpace(fc.Auth.ClerkFrontendAPIURL)
+	}
+	if fc.Auth.ClerkSessionCookieName != "" {
+		cfg.ClerkSessionCookieName = strings.TrimSpace(fc.Auth.ClerkSessionCookieName)
+	}
+	if fc.Auth.ClerkSessionAudience != "" {
+		cfg.ClerkSessionAudience = strings.TrimSpace(fc.Auth.ClerkSessionAudience)
 	}
 	cfg.BackblazeBackupEnabled = fc.Backblaze.Enabled
 	if fc.Backblaze.Bucket != "" {
@@ -336,10 +395,27 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if strings.TrimSpace(fc.Backblaze.SnapshotPath) != "" {
 		cfg.BackupSnapshotPath = strings.TrimSpace(fc.Backblaze.SnapshotPath)
 	}
-	return migrated
+	if fc.Discord.DiscordURL != "" {
+		cfg.DiscordURL = strings.TrimSpace(fc.Discord.DiscordURL)
+	}
+	if fc.Discord.DiscordServerID != "" {
+		cfg.DiscordServerID = strings.TrimSpace(fc.Discord.DiscordServerID)
+	}
+	if fc.Discord.DiscordNotifyChannelID != "" {
+		cfg.DiscordNotifyChannelID = strings.TrimSpace(fc.Discord.DiscordNotifyChannelID)
+	}
+	if fc.Discord.WorkerNotifyThresholdSeconds != nil && *fc.Discord.WorkerNotifyThresholdSeconds > 0 {
+		cfg.DiscordWorkerNotifyThresholdSeconds = *fc.Discord.WorkerNotifyThresholdSeconds
+	}
+	if strings.TrimSpace(fc.Status.MempoolAddressURL) != "" {
+		cfg.MempoolAddressURL = strings.TrimSpace(fc.Status.MempoolAddressURL)
+	}
+	if strings.TrimSpace(fc.Status.GitHubURL) != "" {
+		cfg.GitHubURL = strings.TrimSpace(fc.Status.GitHubURL)
+	}
 }
 
-func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
+func applyFileOverrides(cfg *Config, fc fileOverrideConfig) {
 	if fc.RateLimits.MaxConns != nil {
 		cfg.MaxConns = *fc.RateLimits.MaxConns
 	}
@@ -391,6 +467,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Difficulty.TargetSharesPerMin != nil && *fc.Difficulty.TargetSharesPerMin > 0 {
 		cfg.TargetSharesPerMin = *fc.Difficulty.TargetSharesPerMin
 	}
+	if fc.Difficulty.VarDiffEnabled != nil {
+		cfg.VarDiffEnabled = *fc.Difficulty.VarDiffEnabled
+	}
 	if fc.Difficulty.LockSuggestedDifficulty != nil {
 		cfg.LockSuggestedDifficulty = *fc.Difficulty.LockSuggestedDifficulty
 	}
@@ -402,20 +481,26 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		// the suffix builder (which is gated on JobEntropy > 0).
 		cfg.JobEntropy = 0
 	}
+	if fc.Mining.Extranonce2Size != nil {
+		cfg.Extranonce2Size = *fc.Mining.Extranonce2Size
+	}
+	if fc.Mining.TemplateExtraNonce2Size != nil {
+		cfg.TemplateExtraNonce2Size = *fc.Mining.TemplateExtraNonce2Size
+	}
+	if fc.Mining.JobEntropy != nil {
+		cfg.JobEntropy = *fc.Mining.JobEntropy
+	}
+	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
+		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
+	}
 	if fc.Mining.DifficultyStepGranularity != nil && *fc.Mining.DifficultyStepGranularity > 0 {
 		cfg.DifficultyStepGranularity = *fc.Mining.DifficultyStepGranularity
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
 	}
-	if fc.Hashrate.NTimeForwardSlackSeconds != nil && *fc.Hashrate.NTimeForwardSlackSeconds > 0 {
-		cfg.NTimeForwardSlackSeconds = *fc.Hashrate.NTimeForwardSlackSeconds
-	}
-	if fc.Discord.WorkerNotifyThresholdSeconds != nil && *fc.Discord.WorkerNotifyThresholdSeconds > 0 {
-		cfg.DiscordWorkerNotifyThresholdSeconds = *fc.Discord.WorkerNotifyThresholdSeconds
-	}
-	if fc.Status.MempoolAddressURL != nil {
-		cfg.MempoolAddressURL = strings.TrimSpace(*fc.Status.MempoolAddressURL)
+	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
+		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
 	}
 	if fc.PeerCleaning.Enabled != nil {
 		cfg.PeerCleanupEnabled = *fc.PeerCleaning.Enabled
@@ -453,9 +538,64 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	if fc.Version.MinVersionBits != nil {
 		cfg.MinVersionBits = *fc.Version.MinVersionBits
 	}
-	if fc.Version.IgnoreMinVersionBits != nil {
-		cfg.IgnoreMinVersionBits = *fc.Version.IgnoreMinVersionBits
+	if fc.Version.ShareAllowDegradedVersionBits != nil {
+		cfg.ShareAllowDegradedVersionBits = *fc.Version.ShareAllowDegradedVersionBits
 	}
+}
+
+func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
+	if fc.Mining.ShareJobFreshnessMode != nil {
+		mode := normalizeShareJobFreshnessMode(*fc.Mining.ShareJobFreshnessMode)
+		if mode >= 0 {
+			cfg.ShareJobFreshnessMode = mode
+		}
+	}
+	if fc.Mining.ShareCheckNTimeWindow != nil {
+		cfg.ShareCheckNTimeWindow = *fc.Mining.ShareCheckNTimeWindow
+	}
+	if fc.Mining.ShareCheckVersionRolling != nil {
+		cfg.ShareCheckVersionRolling = *fc.Mining.ShareCheckVersionRolling
+	}
+	if fc.Mining.ShareRequireAuthorizedConnection != nil {
+		cfg.ShareRequireAuthorizedConnection = *fc.Mining.ShareRequireAuthorizedConnection
+	}
+	if fc.Mining.ShareCheckParamFormat != nil {
+		cfg.ShareCheckParamFormat = *fc.Mining.ShareCheckParamFormat
+	}
+	if fc.Mining.ShareRequireWorkerMatch != nil {
+		cfg.ShareRequireWorkerMatch = *fc.Mining.ShareRequireWorkerMatch
+	}
+	if fc.Mining.SubmitProcessInline != nil {
+		cfg.SubmitProcessInline = *fc.Mining.SubmitProcessInline
+	}
+	if fc.Mining.ShareCheckDuplicate != nil {
+		cfg.ShareCheckDuplicate = *fc.Mining.ShareCheckDuplicate
+	}
+	if fc.Mining.ShareRequireJobID != nil {
+		cfg.ShareRequireJobID = *fc.Mining.ShareRequireJobID
+	}
+	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
+		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
+	}
+	t := fileOverrideConfig{
+		Version:  fc.Version,
+		Bans:     fc.Bans,
+		Timeouts: fc.Timeouts,
+	}
+	applyFileOverrides(cfg, t)
+}
+
+func applyPerformanceConfig(cfg *Config, fc performanceFileConfig) {
+	t := fileOverrideConfig{
+		RateLimits:   fc.RateLimits,
+		Difficulty:   fc.Difficulty,
+		Mining:       fc.Mining,
+		PeerCleaning: fc.PeerCleaning,
+		Hashrate: hashrateTuning{
+			HashrateEMATauSeconds: fc.Hashrate.HashrateEMATauSeconds,
+		},
+	}
+	applyFileOverrides(cfg, t)
 }
 
 func applySecretsConfig(cfg *Config, sc secretsConfig) {

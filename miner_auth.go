@@ -114,8 +114,8 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 
 	mc.writeResponse(StratumResponse{
 		ID: req.ID,
-		Result: []interface{}{
-			[][]interface{}{
+		Result: []any{
+			[][]any{
 				{"mining.set_difficulty", "1"},
 				{"mining.notify", "1"},
 			},
@@ -137,7 +137,7 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	}
 	if initialJob == nil {
 		status := mc.jobMgr.FeedStatus()
-		fields := []interface{}{"remote", mc.id, "reason", "no job available"}
+		fields := []any{"remote", mc.id, "reason", "no job available"}
 		if status.LastError != nil {
 			fields = append(fields, "job_error", status.LastError.Error())
 		}
@@ -383,7 +383,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	mc.applySuggestedDifficulty(diff)
 }
 
-func parseSuggestedDifficulty(value interface{}) (float64, bool) {
+func parseSuggestedDifficulty(value any) (float64, bool) {
 	switch v := value.(type) {
 	case float64:
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -555,9 +555,9 @@ func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
 	mc.maybeSendCleanJobAfterSuggest()
 }
 
-func parseConfigureExtensions(value interface{}) ([]string, bool) {
+func parseConfigureExtensions(value any) ([]string, bool) {
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
 			s, ok := item.(string)
@@ -601,12 +601,12 @@ func parseConfigureExtensions(value interface{}) ([]string, bool) {
 	}
 }
 
-func parseConfigureOptions(value interface{}) map[string]interface{} {
+func parseConfigureOptions(value any) map[string]any {
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return v
-	case map[interface{}]interface{}:
-		out := make(map[string]interface{}, len(v))
+	case map[any]any:
+		out := make(map[string]any, len(v))
 		for key, val := range v {
 			ks, ok := key.(string)
 			if !ok {
@@ -620,7 +620,7 @@ func parseConfigureOptions(value interface{}) map[string]interface{} {
 	}
 }
 
-func optionValueByAliases(opts map[string]interface{}, aliases ...string) (interface{}, bool) {
+func optionValueByAliases(opts map[string]any, aliases ...string) (any, bool) {
 	if len(opts) == 0 {
 		return nil, false
 	}
@@ -641,7 +641,7 @@ func optionValueByAliases(opts map[string]interface{}, aliases ...string) (inter
 	return nil, false
 }
 
-func parseUint32Hexish(value interface{}) (uint32, bool) {
+func parseUint32Hexish(value any) (uint32, bool) {
 	switch v := value.(type) {
 	case string:
 		s := strings.TrimSpace(v)
@@ -690,7 +690,7 @@ func parseUint32Hexish(value interface{}) (uint32, bool) {
 	}
 }
 
-func parsePositiveInt(value interface{}) (int, bool) {
+func parsePositiveInt(value any) (int, bool) {
 	diff, ok := parseSuggestedDifficulty(value)
 	if !ok || diff <= 0 || diff > float64(math.MaxInt) {
 		return 0, false
@@ -813,12 +813,12 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(20, "invalid params")})
 		return
 	}
-	var opts map[string]interface{}
+	var opts map[string]any
 	if len(req.Params) > 1 {
 		opts = parseConfigureOptions(req.Params[1])
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	shouldSendVersionMask := false
 	for _, ext := range rawExts {
 		name := strings.TrimSpace(ext)
@@ -1021,7 +1021,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	bitsBE := job.Template.Bits // bits is already a raw hex string, don't reverse it
 	ntimeBE := uint32ToBEHex(uint32(job.Template.CurTime))
 
-	params := []interface{}{
+	params := []any{
 		job.JobID,
 		prevhashLE,
 		coinb1,
@@ -1052,7 +1052,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		)
 	}
 
-	if err := mc.writeJSON(map[string]interface{}{
+	if err := mc.writeJSON(map[string]any{
 		"id":     nil,
 		"method": "mining.notify",
 		"params": params,

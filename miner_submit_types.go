@@ -20,7 +20,7 @@ type shareContext struct {
 }
 
 func uint256BELessOrEqual(a [32]byte, b [32]byte) bool {
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		if a[i] < b[i] {
 			return true
 		}

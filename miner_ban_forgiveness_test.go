@@ -14,7 +14,7 @@ func TestNoteInvalidSubmit_ValidSharesReduceEffectiveInvalids(t *testing.T) {
 		},
 	}
 	// 4 invalids would normally ban at threshold=4.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if banned, _ := mc.noteInvalidSubmit(now.Add(time.Duration(i)*time.Second), rejectInvalidNonce); banned {
 			t.Fatalf("unexpected early ban at invalid %d", i+1)
 		}
@@ -38,12 +38,12 @@ func TestNoteInvalidSubmit_ForgivenessIsCapped(t *testing.T) {
 		},
 	}
 	// Large amount of valid shares should not erase more than cap (50%).
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		mc.noteValidSubmit(now.Add(time.Duration(i) * time.Second))
 	}
 	// With threshold 10 and cap 50%, effective forgiveness maxes at 5.
 	// So 15 invalids should still ban.
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		if banned, _ := mc.noteInvalidSubmit(now.Add(time.Duration(300+i)*time.Second), rejectInvalidNonce); banned {
 			t.Fatalf("unexpected early ban at invalid %d", i+1)
 		}

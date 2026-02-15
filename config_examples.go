@@ -21,7 +21,9 @@ func ensureExampleFiles(dataDir string) {
 	configExamplePath := filepath.Join(examplesDir, "config.toml.example")
 	ensureExampleFile(configExamplePath, exampleConfigBytes())
 	ensureExampleFile(filepath.Join(examplesDir, "secrets.toml.example"), secretsConfigExample)
-	ensureExampleFile(filepath.Join(examplesDir, "tuning.toml.example"), exampleTuningConfigBytes())
+	ensureExampleFile(filepath.Join(examplesDir, "services.toml.example"), exampleServicesConfigBytes())
+	ensureExampleFile(filepath.Join(examplesDir, "policy.toml.example"), examplePolicyConfigBytes())
+	ensureExampleFile(filepath.Join(examplesDir, "performance.toml.example"), examplePerformanceConfigBytes())
 }
 
 func ensureExampleFile(path string, contents []byte) {
@@ -47,7 +49,7 @@ func withPrependedTOMLComments(data []byte, parts ...[]byte) []byte {
 }
 
 func exampleHeader(text string) []byte {
-	return []byte(fmt.Sprintf("# Generated %s example (copy to a real config and edit as needed)\n\n", text))
+	return fmt.Appendf(nil, "# Generated %s example (copy to a real config and edit as needed)\n\n", text)
 }
 
 func generatedConfigFileHeader() []byte {
@@ -58,10 +60,26 @@ func generatedConfigFileHeader() []byte {
 `)
 }
 
-func generatedTuningFileHeader() []byte {
-	return []byte(`# goPool tuning.toml
-# Optional advanced overrides loaded after config.toml on startup.
-# goPool may rewrite it when you use the admin panel "Save to disk".
+func generatedPolicyFileHeader() []byte {
+	return []byte(`# goPool policy.toml
+# Optional policy/security overrides loaded after config.toml on startup.
+# Keep this file absent unless you need to override defaults.
+#
+`)
+}
+
+func generatedServicesFileHeader() []byte {
+	return []byte(`# goPool services.toml
+# Optional services/integrations settings loaded after config.toml on startup.
+# Keep this file absent unless you need to override defaults.
+#
+`)
+}
+
+func generatedPerformanceFileHeader() []byte {
+	return []byte(`# goPool performance.toml
+# Optional performance/capacity overrides loaded after config.toml on startup.
+# Keep this file absent unless you need to override defaults.
 #
 `)
 }
@@ -77,22 +95,25 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
-# Mining behavior
-# - [mining].relaxed_submit_validation: Uses relaxed submit policy (skips strict prevhash/nTime/version-rolling policy rejects; still enforces auth, bans, stale-job and basic field validation; requires restart).
-# - [mining].submit_worker_name_match: Enforce submitted worker name equals authorized worker identity (requires restart).
-# - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
-# - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
-# - [mining].reject_no_job_id: Reject submits with empty job_id during basic field validation (default false; requires restart).
-#
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
 #
-# Advanced settings (rate limits, bans, peer cleaning, difficulty clamps) live in tuning.toml.
+# Advanced settings can be split across services.toml, policy.toml, and performance.toml.
 #
 `)
 }
 
-func tuningConfigDocComments() []byte {
+func servicesConfigDocComments() []byte {
+	return []byte(`# Services / Integrations
+# - [auth]: Clerk/OIDC endpoints and session cookie settings.
+# - [backblaze_backup]: Cloud backup service toggle, bucket, prefix, and cadence.
+# - [discord]: Discord integration endpoints/channels and worker notification threshold.
+# - [status]: UI external links (mempool_address_url, github_url).
+#
+`)
+}
+
+func performanceConfigDocComments() []byte {
 	return []byte(`# Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
 # - disable_connect_rate_limits: Disable accept/connect throttling entirely (intended for local-only pools on trusted networks; requires restart).
@@ -107,9 +128,6 @@ func tuningConfigDocComments() []byte {
 # - accept_steady_state_reconnect_window: Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).
 # - stratum_messages_per_minute: Per-connection Stratum messages/min before disconnect (0 disables; requires restart).
 #
-# Timeouts ([timeouts])
-# - connection_timeout_seconds: Disconnect idle miner connections (requires restart).
-#
 # Difficulty ([difficulty])
 # - default_difficulty: Fallback difficulty if no suggest_* arrives during the startup delay; 0 means "use min_difficulty" (or the built-in minimum if min_difficulty=0).
 # - target_shares_per_min: VarDiff target share cadence used for difficulty adjustment and hashrate EMA sample window sizing.
@@ -118,26 +136,43 @@ func tuningConfigDocComments() []byte {
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
+# - extranonce2_size: Per-share extranonce2 byte length used for submit parsing and validation (requires restart).
+# - template_extra_nonce2_size: Template extranonce2 byte length used in generated jobs (requires restart).
+# - job_entropy: Entropy bytes added to per-job coinbase tags (requires restart).
+# - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (requires restart).
 # - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
-# Status UI ([status])
-# - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
+# Peer cleaning ([peer_cleaning])
+# - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.
+#
+#
+`)
+}
+
+func policyConfigDocComments() []byte {
+	return []byte(`# Mining policy ([mining])
+# - share_job_freshness_mode: 0=off, 1=job_id, 2=job_id+prevhash.
+# - share_check_ntime_window: Enforce nTime policy window.
+# - share_check_version_rolling: Enforce version-rolling policy.
+# - share_require_authorized_connection: Require authorized connection for submit.
+# - share_check_param_format: Enforce submit parameter format checks.
+# - share_require_worker_match: Require submit worker matches authorized worker.
+# - submit_process_inline: Process mining.submit inline on connection goroutine.
+# - share_check_duplicate: Enable duplicate share checks.
+# - share_require_job_id: Require non-empty job_id.
+#
+# Hashrate policy ([hashrate])
+# - share_ntime_max_forward_seconds: max allowed forward nTime skew.
+#
+# Version policy ([version])
+# - min_version_bits
+# - share_allow_degraded_version_bits
+#
+# Timeouts ([timeouts])
+# - connection_timeout_seconds
 #
 # Bans ([bans])
-# - clean_expired_on_startup: Remove expired bans from disk on startup (startup-only).
-# - ban_invalid_submissions_after: Ban a worker after N invalid submissions within the window (0 disables; requires restart).
-# - ban_invalid_submissions_window_seconds: Window size (seconds) for invalid submission counting (requires restart).
-# - ban_invalid_submissions_duration_seconds: Ban duration (seconds) when threshold is hit (requires restart).
-# - reconnect_ban_threshold: Ban a host after N reconnects within the window (0 disables; requires restart).
-# - reconnect_ban_window_seconds: Reconnect ban counting window (seconds; requires restart).
-# - reconnect_ban_duration_seconds: Reconnect ban duration (seconds; requires restart).
-# - banned_miner_types: List of miner client names or full IDs to disconnect on subscribe (requires restart).
-#   Prefer data_dir/config/miner_blacklist.json for managing this list; it overrides this field when present.
-#
-# Peer cleaning ([peer_cleaning])
-# - enabled: If true, goPool may disconnect high-latency peers while refreshing node status.
-# - max_ping_ms: Peers above this ping (ms) are candidates for disconnect.
-# - min_peers: Minimum number of peers to keep connected.
+# - invalid-submit and reconnect ban thresholds/windows.
 #
 `)
 }
@@ -156,15 +191,37 @@ func exampleConfigBytes() []byte {
 	return withPrependedTOMLComments(data, exampleHeader("base config"), baseConfigDocComments())
 }
 
-func exampleTuningConfigBytes() []byte {
+func examplePerformanceConfigBytes() []byte {
 	cfg := defaultConfig()
-	tf := buildTuningFileConfig(cfg)
-	data, err := toml.Marshal(tf)
+	pf := buildPerformanceFileConfig(cfg)
+	data, err := toml.Marshal(pf)
 	if err != nil {
-		logger.Warn("encode tuning config example failed", "error", err)
+		logger.Warn("encode performance config example failed", "error", err)
 		return nil
 	}
-	return withPrependedTOMLComments(data, exampleHeader("tuning config"), tuningConfigDocComments())
+	return withPrependedTOMLComments(data, exampleHeader("performance config"), performanceConfigDocComments())
+}
+
+func examplePolicyConfigBytes() []byte {
+	cfg := defaultConfig()
+	pf := buildPolicyFileConfig(cfg)
+	data, err := toml.Marshal(pf)
+	if err != nil {
+		logger.Warn("encode policy config example failed", "error", err)
+		return nil
+	}
+	return withPrependedTOMLComments(data, exampleHeader("policy config"), policyConfigDocComments())
+}
+
+func exampleServicesConfigBytes() []byte {
+	cfg := defaultConfig()
+	sf := buildServicesFileConfig(cfg)
+	data, err := toml.Marshal(sf)
+	if err != nil {
+		logger.Warn("encode services config example failed", "error", err)
+		return nil
+	}
+	return withPrependedTOMLComments(data, exampleHeader("services config"), servicesConfigDocComments())
 }
 
 func rewriteConfigFile(path string, cfg Config) error {

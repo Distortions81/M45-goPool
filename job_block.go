@@ -123,7 +123,7 @@ func buildBlockHeaderFromHex(version int32, prevhash string, merkleRootBE []byte
 	}
 
 	// Reverse merkle root in place
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		merkleReversed[i] = merkleRootBE[31-i]
 	}
 
@@ -141,7 +141,7 @@ func buildBlockHeaderFromHex(version int32, prevhash string, merkleRootBE []byte
 
 	// Foundation/template.serializeHeader reverses the entire header buffer
 	// before hashing; mirror that here. Reverse in place.
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		hdr[i], hdr[79-i] = hdr[79-i], hdr[i]
 	}
 
@@ -181,7 +181,7 @@ func (job *Job) buildBlockHeader(merkleRootBE []byte, ntimeHex string, nonceHex 
 	}
 
 	// Reverse merkle root in place
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		merkleReversed[i] = merkleRootBE[31-i]
 	}
 
@@ -197,7 +197,7 @@ func (job *Job) buildBlockHeader(merkleRootBE []byte, ntimeHex string, nonceHex 
 	hdr[78] = byte(uver >> 8)
 	hdr[79] = byte(uver)
 
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		hdr[i], hdr[79-i] = hdr[79-i], hdr[i]
 	}
 
@@ -219,7 +219,7 @@ func (job *Job) buildBlockHeaderU32(merkleRootBE []byte, ntime uint32, nonce uin
 	binary.BigEndian.PutUint32(ntimeBytes[:], ntime)
 	binary.BigEndian.PutUint32(nonceBytes[:], nonce)
 
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		merkleReversed[i] = merkleRootBE[31-i]
 	}
 
@@ -234,7 +234,7 @@ func (job *Job) buildBlockHeaderU32(merkleRootBE []byte, ntime uint32, nonce uin
 	hdr[78] = byte(uver >> 8)
 	hdr[79] = byte(uver)
 
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		hdr[i], hdr[79-i] = hdr[79-i], hdr[i]
 	}
 

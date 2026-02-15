@@ -50,7 +50,7 @@ func TestWorkerLookupRateLimiterCapsEntries(t *testing.T) {
 	// Seed the limiter with more entries than the configured cap, all with
 	// reset times in the future so they are not removed as expired.
 	l.mu.Lock()
-	for i := 0; i < workerLookupMaxEntries+16; i++ {
+	for i := range workerLookupMaxEntries + 16 {
 		key := "key-" + strconv.Itoa(i)
 		l.entries[key] = &workerLookupEntry{
 			reset: now.Add(2 * l.window),

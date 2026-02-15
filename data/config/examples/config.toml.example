@@ -10,43 +10,14 @@
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
-# Mining behavior
-# - [mining].relaxed_submit_validation: Uses relaxed submit policy (skips strict prevhash/nTime/version-rolling policy rejects; still enforces auth, bans, stale-job and basic field validation; requires restart).
-# - [mining].submit_worker_name_match: Enforce submitted worker name equals authorized worker identity (requires restart).
-# - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
-# - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
-# - [mining].reject_no_job_id: Reject submits with empty job_id during basic field validation (default false; requires restart).
-#
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
 #
-# Advanced settings (rate limits, bans, peer cleaning, difficulty clamps) live in tuning.toml.
+# Advanced settings can be split across services.toml, policy.toml, and performance.toml.
 #
 
-[auth]
-  clerk_callback_path = "/clerk/callback"
-  clerk_frontend_api_url = ""
-  clerk_issuer_url = "https://clerk.clerk.dev"
-  clerk_jwks_url = "https://clerk.clerk.dev/.well-known/jwks.json"
-  clerk_session_audience = ""
-  clerk_session_cookie_name = "__session"
-  clerk_signin_url = "https://auth.clerk.dev/sign-in"
-
-[backblaze_backup]
-  bucket = ""
-  enabled = false
-  force_every_interval = false
-  interval_seconds = 43200
-  keep_local_copy = true
-  prefix = ""
-  snapshot_path = ""
-
 [branding]
-  discord_notify_channel_id = ""
-  discord_server_id = ""
-  discord_url = ""
   fiat_currency = "usd"
-  github_url = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
   pool_donation_address = "OPTIONAL_POOL_DONATION_WALLET"
   server_location = ""
   status_brand_domain = ""
@@ -59,24 +30,14 @@
   level = "warn"
 
 [mining]
-  check_duplicate_shares = false
-  coinbase_scriptsig_max_bytes = 100
-  direct_submit_processing = false
-  extranonce2_size = 4
-  job_entropy = 4
   operator_donation_address = ""
   operator_donation_name = ""
   operator_donation_percent = 0.0
   operator_donation_url = ""
   pool_fee_percent = 2.0
   pooltag_prefix = ""
-  reject_no_job_id = false
-  relaxed_submit_validation = true
-  submit_worker_name_match = false
-  template_extra_nonce2_size = 8
 
 [node]
-  allow_public_rpc = false
   payout_address = "YOUR_POOL_WALLET_ADDRESS_HERE"
   rpc_cookie_path = ""
   rpc_url = "http://127.0.0.1:8332"
