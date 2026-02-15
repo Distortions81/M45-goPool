@@ -9,6 +9,10 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 
 > **Downloads:** Pre-built binaries are available on GitHub Releases (see [documentation/RELEASES.md](documentation/RELEASES.md)).
 
+<p align="center">
+  <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
+</p>
+
 ## Quick start
 
 1. Install Go 1.26 or later and ZeroMQ (`libzmq3-dev` or equivalent depending on your platform).
