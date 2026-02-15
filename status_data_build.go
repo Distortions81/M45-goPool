@@ -245,14 +245,15 @@ func (s *StatusServer) buildStatusData() StatusData {
 	recentWork := make([]RecentWorkView, 0, len(workers))
 	for _, w := range workers {
 		recentWork = append(recentWork, RecentWorkView{
-			Name:            w.Name,
-			DisplayName:     w.DisplayName,
-			RollingHashrate: w.RollingHashrate,
-			Difficulty:      w.Difficulty,
-			Vardiff:         w.Vardiff,
-			ShareRate:       w.ShareRate,
-			Accepted:        w.Accepted,
-			ConnectionID:    w.ConnectionID,
+			Name:             w.Name,
+			DisplayName:      w.DisplayName,
+			RollingHashrate:  w.RollingHashrate,
+			HashrateAccuracy: w.HashrateAccuracy,
+			Difficulty:       w.Difficulty,
+			Vardiff:          w.Vardiff,
+			ShareRate:        w.ShareRate,
+			Accepted:         w.Accepted,
+			ConnectionID:     w.ConnectionID,
 		})
 	}
 
@@ -474,7 +475,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	if expectedGenesis != "" && genesisHash != "" && !genesisMatch {
 		warnings = append(warnings, "Connected node's genesis hash does not match the expected Bitcoin genesis for network "+nodeNetwork+". Verify the node is on the genuine Bitcoin chain, not a fork or alt network.")
 	}
-	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
+	if !s.Config().DisableConnectRateLimits && s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 

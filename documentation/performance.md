@@ -97,7 +97,7 @@ like memory, goroutines, open sockets, TLS, and the kernel/network stack.
 Even if the *average* CPU is fine, very large worker counts can cause the
 dashboard rebuild to take tens of milliseconds when it runs. For a UI that
 “feels instant”, the rebuild budgets in the section above are the more useful
-guide (e.g. ~`5k` workers @ `10ms`).
+documentation (e.g. ~`5k` workers @ `10ms`).
 
 ## Re-running these numbers on your hardware
 

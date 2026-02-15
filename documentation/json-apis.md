@@ -79,6 +79,76 @@ Authenticated endpoints rely on a session cookie (name is configured via `[auth]
 
 ## Endpoint catalog
 
+Removed in this branch on **2026-02-14**:
+
+- `GET /api/pool` was removed and is no longer served.
+- Use these endpoints instead:
+  - `GET /api/overview` for headline miner/hashrate values
+  - `GET /api/pool-page` for pool RPC/share diagnostics
+  - `GET /api/server` for process/system diagnostics
+  - `GET /api/pool-hashrate` for fast hashrate + block timer telemetry
+  - `GET /api/blocks` for recent found blocks
+
+### `/api/pool` quick migration map (find/replace)
+
+Use these path replacements when migrating old `/api/pool` consumers:
+
+- `api_version` -> `/api/overview.api_version` (or any new endpoint `api_version`)
+- `active_miners` -> `/api/overview.active_miners`
+- `pool_hashrate` -> `/api/pool-hashrate.pool_hashrate` (or `/api/overview.pool_hashrate`)
+- `blocks_accepted` -> `/api/pool-page.blocks_accepted`
+- `blocks_errored` -> `/api/pool-page.blocks_errored`
+- `uptime` -> `/api/server.uptime`
+- `btc_price_fiat` -> `/api/overview.btc_price_fiat`
+- `btc_price_updated_at` -> `/api/overview.btc_price_updated_at`
+- `fiat_currency` -> `/api/overview.fiat_currency`
+- `job_feed.last_error` -> `/api/server.job_feed.last_error`
+- `job_feed.last_error_at` -> `/api/server.job_feed.last_error_at`
+- `job_feed.error_history` -> `/api/server.job_feed.error_history`
+- `job_feed.zmq_healthy` -> `/api/server.job_feed.zmq_healthy`
+- `job_feed.zmq_disconnects` -> `/api/server.job_feed.zmq_disconnects`
+- `job_feed.zmq_reconnects` -> `/api/server.job_feed.zmq_reconnects`
+- `job_feed.last_raw_block_at` -> `/api/server.job_feed.last_raw_block_at`
+- `job_feed.last_raw_block_bytes` -> `/api/server.job_feed.last_raw_block_bytes`
+- `job_feed.block_hash` -> `/api/server.job_feed.block_hash`
+- `job_feed.block_height` -> `/api/pool-hashrate.block_height` (or `/api/server.job_feed.block_height`)
+- `job_feed.block_difficulty` -> `/api/pool-hashrate.block_difficulty` (or `/api/server.job_feed.block_difficulty`)
+- `job_feed.block_time` -> `/api/server.job_feed.block_time`
+- `job_feed.block_bits` -> `/api/server.job_feed.block_bits`
+
+Old `/api/pool` keys with no direct replacement JSON path:
+
+- `brand_name`
+- `brand_domain`
+- `server_location`
+- `listen_addr`
+- `stratum_tls_listen`
+- `pool_software`
+- `build_version`
+- `build_time`
+- `shares_per_second`
+- `accepted`
+- `rejected`
+- `stale_shares`
+- `low_diff_shares`
+- `reject_reasons`
+- `window_accepted`
+- `window_submissions`
+- `window_start`
+- `vardiff_up`
+- `vardiff_down`
+- `min_difficulty`
+- `max_difficulty`
+- `pool_fee_percent`
+- `operator_donation_percent`
+- `operator_donation_name`
+- `operator_donation_url`
+- `job_created`
+- `template_time`
+- `job_feed.ready`
+- `job_feed.last_success`
+- `warnings`
+
 Public (no auth):
 
 - `GET /api/overview` — overview page snapshot (default refresh ~10s)
@@ -86,7 +156,6 @@ Public (no auth):
 - `GET /api/node` — node info snapshot (default refresh ~10s)
 - `GET /api/server` — server diagnostics snapshot (default refresh ~10s)
 - `GET /api/pool-hashrate` — fast pool hashrate/block timer snapshot (default refresh ~5s)
-- `GET /api/pool` — pool stats snapshot (default refresh ~10s)
 - `GET /api/blocks` — recent blocks list (default refresh ~3s; supports `?limit=`)
 
 Clerk-authenticated:
@@ -119,7 +188,6 @@ Response object: `OverviewPageData`
 - `workers` (array of `RecentWorkView`, censored)
 - `banned_workers` (array of `WorkerView`, censored and truncated)
 - `best_shares` (array of `BestShare`, censored)
-- `found_blocks` (array of `FoundBlockView`, censored; optional)
 - `miner_types` (array of `MinerTypeView`; optional)
 
 Types referenced:
@@ -128,6 +196,7 @@ Types referenced:
   - `name` (string; censored)
   - `display_name` (string; censored)
   - `rolling_hashrate` (number)
+  - `hashrate_accuracy` (string; optional; currently `"≈"` when hashrate is estimated and not fully settled)
   - `difficulty` (number)
   - `vardiff` (number)
   - `share_rate` (number)
@@ -148,19 +217,6 @@ Types referenced:
   - `hash` (string; censored; optional)
   - `display_worker` (string; optional)
   - `display_hash` (string; optional)
-
-- `FoundBlockView`
-  - `height` (integer)
-  - `hash` (string; censored)
-  - `display_hash` (string; censored)
-  - `worker` (string; censored)
-  - `display_worker` (string; censored)
-  - `timestamp` (string; RFC3339)
-  - `share_diff` (number)
-  - `pool_fee_sats` (integer; optional)
-  - `worker_payout_sats` (integer; optional)
-  - `confirmations` (integer; optional)
-  - `result` (string; optional; `"possible"`, `"winning"`, or `"stale"`)
 
 Example:
 
@@ -292,13 +348,20 @@ curl -sS https://STATUS_HOST/api/server | jq .
 
 Fast “headline stats” endpoint used for the hashrate UI and block timer.
 
+Query parameters:
+
+- `include_history` (optional; set to `1` to include `pool_hashrate_history` for initial chart priming)
+
 Response object:
 
 - `api_version` (string)
 - `pool_hashrate` (number)
+- `pool_hashrate_history` (array of `PoolHashrateHistoryPoint`; optional; returned when `include_history=1`)
 - `block_height` (integer)
 - `block_difficulty` (number)
-- `block_time_left_sec` (integer; seconds; `-1` means “block timer not started yet”)
+- `block_time_left_sec` (integer; signed seconds)
+  - `-1` means “block timer not started yet”
+  - `<0` (other values) means the target interval has been exceeded (overdue)
 - `recent_block_times` (array of string; RFC3339)
 - `next_difficulty_retarget` (object; optional)
   - `height` (integer)
@@ -308,79 +371,16 @@ Response object:
 - `template_updated_at` (string; optional; RFC3339)
 - `updated_at` (string; RFC3339)
 
+`PoolHashrateHistoryPoint`:
+
+- `at` (string; RFC3339)
+- `hashrate` (number)
+- `block_height` (integer; optional)
+
 Example:
 
 ```bash
 curl -sS https://STATUS_HOST/api/pool-hashrate | jq .
-```
-
-### GET /api/pool
-
-Public pool stats endpoint (similar to what the HTML UI shows, but without worker-level details).
-
-Response object: `PoolStatsData`
-
-- `api_version` (string)
-- `brand_name` (string)
-- `brand_domain` (string)
-- `server_location` (string; optional)
-- `listen_addr` (string)
-- `stratum_tls_listen` (string; optional)
-- `pool_software` (string)
-- `build_version` (string; optional)
-- `build_time` (string)
-- `uptime` (int; duration nanoseconds)
-- `active_miners` (integer)
-- `pool_hashrate` (number)
-- `shares_per_second` (number)
-- `accepted` (integer)
-- `rejected` (integer)
-- `stale_shares` (integer)
-- `low_diff_shares` (integer)
-- `reject_reasons` (map string→integer; optional)
-- `window_accepted` (integer)
-- `window_submissions` (integer)
-- `window_start` (string)
-- `vardiff_up` (integer)
-- `vardiff_down` (integer)
-- `blocks_accepted` (integer)
-- `blocks_errored` (integer)
-- `min_difficulty` (number)
-- `max_difficulty` (number)
-- `pool_fee_percent` (number)
-- `operator_donation_percent` (number; optional)
-- `operator_donation_name` (string; optional)
-- `operator_donation_url` (string; optional)
-- `job_created` (string)
-- `template_time` (string)
-- `job_feed` (object `JobFeedView`)
-- `btc_price_fiat` (number; optional)
-- `btc_price_updated_at` (string; optional; RFC3339)
-- `fiat_currency` (string; optional)
-- `warnings` (array of string; optional)
-
-`JobFeedView`:
-
-- `ready` (boolean)
-- `last_success` (string; RFC3339)
-- `last_error` (string; optional)
-- `last_error_at` (string; optional; RFC3339)
-- `error_history` (array of string; optional)
-- `zmq_healthy` (boolean)
-- `zmq_disconnects` (integer)
-- `zmq_reconnects` (integer)
-- `last_raw_block_at` (string; optional; RFC3339)
-- `last_raw_block_bytes` (integer; optional)
-- `block_hash` (string; optional)
-- `block_height` (integer; optional)
-- `block_time` (string; optional; RFC3339)
-- `block_bits` (string; optional)
-- `block_difficulty` (number; optional)
-
-Example:
-
-```bash
-curl -sS https://STATUS_HOST/api/pool | jq .
 ```
 
 ### GET /api/blocks
@@ -391,7 +391,21 @@ Query parameters:
 
 - `limit` (optional int; `1..100`; default `10`)
 
-Response: JSON array of `FoundBlockView` objects (see `/api/overview` for fields). Values are censored for safe display.
+Response: JSON array of `FoundBlockView` objects. Values are censored for safe display.
+
+`FoundBlockView`:
+
+- `height` (integer)
+- `hash` (string; censored)
+- `display_hash` (string; censored)
+- `worker` (string; censored)
+- `display_worker` (string; censored)
+- `timestamp` (string; RFC3339)
+- `share_diff` (number)
+- `pool_fee_sats` (integer; optional)
+- `worker_payout_sats` (integer; optional)
+- `confirmations` (integer; optional)
+- `result` (string; optional; `"possible"`, `"winning"`, or `"stale"`)
 
 Example:
 
@@ -450,10 +464,17 @@ Each worker entry:
 - `last_online_at` (string; RFC3339; optional)
 - `last_share` (string; RFC3339; optional)
 - `hashrate` (number)
+- `hashrate_accuracy` (string; optional; currently `"≈"` for estimated/settling values)
 - `shares_per_minute` (number)
 - `accepted` (integer)
 - `rejected` (integer)
 - `difficulty` (number)
+- `estimated_ping_p50_ms` (number; optional; only when available)
+- `estimated_ping_p95_ms` (number; optional; only when available)
+- `notify_to_first_share_ms` (number; optional; only when available)
+- `notify_to_first_share_p50_ms` (number; optional; only when available)
+- `notify_to_first_share_p95_ms` (number; optional; only when available)
+- `notify_to_first_share_samples` (integer; optional; only when available)
 - `connection_seq` (integer; optional; only when online)
 - `connection_duration_seconds` (number; optional; only when online)
 

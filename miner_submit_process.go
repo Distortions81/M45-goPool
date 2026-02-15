@@ -1,8 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func (mc *MinerConn) processSubmissionTask(task submissionTask) {
+	start := task.receivedAt
+	if start.IsZero() {
+		start = time.Now()
+	}
+	defer mc.recordSubmitRTT(time.Since(start))
+
 	workerName := task.workerName
 	jobID := task.jobID
 	extranonce2 := task.extranonce2
@@ -22,7 +31,7 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
-	if mc.cfg.SoloMode {
+	if mc.cfg.RelaxedSubmitValidation {
 		ctx, ok := mc.prepareShareContextSolo(task)
 		if !ok {
 			return
@@ -121,12 +130,14 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	if ctx.isBlock {
+		mc.noteValidSubmit(now)
 		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
 	}
 
+	mc.noteValidSubmit(now)
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
@@ -175,12 +186,14 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 	}
 
 	if ctx.isBlock {
+		mc.noteValidSubmit(now)
 		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
 	}
 
+	mc.noteValidSubmit(now)
 	shareHash := ctx.hashHex
 	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, nil, now)
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)

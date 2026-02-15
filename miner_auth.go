@@ -161,9 +161,15 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	}
 
 	worker := ""
+	pass := ""
 	if len(req.Params) > 0 {
 		if w, ok := req.Params[0].(string); ok {
 			worker = strings.TrimSpace(w)
+		}
+	}
+	if len(req.Params) > 1 {
+		if p, ok := req.Params[1].(string); ok {
+			pass = p
 		}
 	}
 
@@ -190,13 +196,7 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 	}
 
 	if mc.cfg.StratumPasswordEnabled {
-		pass := ""
-		if len(req.Params) > 1 {
-			if p, ok := req.Params[1].(string); ok {
-				pass = p
-			}
-		}
-		if strings.TrimSpace(pass) != mc.cfg.StratumPassword {
+		if !authorizePasswordMatches(pass, mc.cfg.StratumPassword) {
 			logger.Warn("authorize rejected: invalid stratum password", "remote", mc.id)
 			mc.writeResponse(StratumResponse{
 				ID:     req.ID,
@@ -262,6 +262,32 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 		mc.registerWorker(workerName)
 	}
 
+	passwordDiff, hasPasswordDiff := parsePasswordDifficultyHint(pass)
+	if hasPasswordDiff {
+		min := mc.cfg.MinDifficulty
+		max := mc.cfg.MaxDifficulty
+		if min > 0 && max > 0 && max < min {
+			max = min
+		}
+		outOfRange := (min > 0 && passwordDiff < min) || (max > 0 && passwordDiff > max)
+		if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
+			reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", passwordDiff)
+			if min > 0 && passwordDiff < min {
+				reason = "Miner too slow"
+			} else if max > 0 && passwordDiff > max {
+				reason = "Miner too fast"
+			}
+			mc.banFor(reason, time.Hour, workerName)
+			mc.writeResponse(StratumResponse{
+				ID:     req.ID,
+				Result: false,
+				Error:  newStratumError(24, "banned"),
+			})
+			mc.Close(reason)
+			return
+		}
+	}
+
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
@@ -287,10 +313,17 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 		go mc.listenJobs()
 	}
 
+	if hasPasswordDiff {
+		mc.applySuggestedDifficulty(passwordDiff)
+	}
+
 	// Now that the worker is authorized and its wallet-style ID is known
 	// to be valid, schedule initial difficulty and a job so hashing can start.
 	// We delay very briefly to give miners a chance to send suggest_* first.
 	mc.scheduleInitialWork()
+	if profiler := getMinerProfileCollector(); profiler != nil {
+		profiler.ObserveAuthorize(mc, workerName)
+	}
 }
 
 func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
@@ -347,6 +380,159 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 	// Only process the first mining.suggest_difficulty during initialization.
 	// Subsequent requests (from miner keepalive/reconnection) are ignored to
 	// prevent disrupting vardiff adjustments and grace period windows.
+	mc.applySuggestedDifficulty(diff)
+}
+
+func parseSuggestedDifficulty(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return 0, false
+		}
+		return v, true
+	case string:
+		f, ok := parseSuggestedDifficultyString(v)
+		if !ok || math.IsNaN(f) || math.IsInf(f, 0) {
+			return 0, false
+		}
+		return f, true
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		f := float64(v)
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return 0, false
+		}
+		return f, true
+	case jsonNumber:
+		f, err := v.Float64()
+		if err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
+			return f, true
+		}
+		f, ok := parseSuggestedDifficultyString(v.String())
+		if !ok || math.IsNaN(f) || math.IsInf(f, 0) {
+			return 0, false
+		}
+		return f, true
+	default:
+		return 0, false
+	}
+}
+
+func parseSuggestedDifficultyString(raw string) (float64, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
+		return f, true
+	}
+	if u, err := strconv.ParseUint(s, 0, 64); err == nil {
+		f = float64(u)
+		if !math.IsNaN(f) && !math.IsInf(f, 0) {
+			return f, true
+		}
+	}
+	return 0, false
+}
+
+func normalizeOptionKey(key string) string {
+	k := strings.ToLower(strings.TrimSpace(key))
+	k = strings.ReplaceAll(k, "-", "")
+	k = strings.ReplaceAll(k, "_", "")
+	return k
+}
+
+func splitOptionToken(token string) (string, string, bool) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", "", false
+	}
+	for i := 0; i < len(token); i++ {
+		switch token[i] {
+		case '=', ':':
+			key := strings.TrimSpace(token[:i])
+			val := strings.TrimSpace(token[i+1:])
+			if key == "" || val == "" {
+				return "", "", false
+			}
+			return key, val, true
+		}
+	}
+	return "", "", false
+}
+
+func splitPasswordTokens(pass string) []string {
+	return strings.FieldsFunc(pass, func(r rune) bool {
+		switch r {
+		case ',', ';', '|', '&', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func authorizePasswordMatches(pass, expected string) bool {
+	expected = strings.TrimSpace(expected)
+	pass = strings.TrimSpace(pass)
+	if pass == expected {
+		return true
+	}
+	for _, token := range splitPasswordTokens(pass) {
+		if strings.TrimSpace(token) == expected {
+			return true
+		}
+		key, val, ok := splitOptionToken(token)
+		if !ok {
+			continue
+		}
+		switch normalizeOptionKey(key) {
+		case "p", "pass", "password":
+			if strings.TrimSpace(val) == expected {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func parsePasswordDifficultyHint(pass string) (float64, bool) {
+	for _, token := range splitPasswordTokens(pass) {
+		key, val, ok := splitOptionToken(token)
+		if !ok {
+			continue
+		}
+		switch normalizeOptionKey(key) {
+		case "d", "diff", "difficulty", "sd", "suggestdiff", "suggestdifficulty":
+			diff, ok := parseSuggestedDifficultyString(val)
+			if !ok || diff <= 0 {
+				return 0, false
+			}
+			return diff, true
+		}
+	}
+	return 0, false
+}
+
+func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
 	if mc.suggestDiffProcessed {
 		logger.Debug("suggest_difficulty ignored (already processed once)", "remote", mc.id)
 		return
@@ -364,33 +550,152 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		// Lock this miner to the requested difficulty (within min/max).
 		mc.lockDifficulty = true
 	}
-	mc.setDifficulty(diff)
+	mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 	mc.maybeSendInitialWork()
 	mc.maybeSendCleanJobAfterSuggest()
 }
 
-func parseSuggestedDifficulty(value interface{}) (float64, bool) {
+func parseConfigureExtensions(value interface{}) ([]string, bool) {
 	switch v := value.(type) {
-	case float64:
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return 0, false
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
 		}
-		return v, true
+		return out, true
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s := strings.TrimSpace(item)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, true
 	case string:
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return nil, false
+		}
+		if strings.Contains(s, ",") {
+			parts := strings.Split(s, ",")
+			out := make([]string, 0, len(parts))
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part != "" {
+					out = append(out, part)
+				}
+			}
+			return out, len(out) > 0
+		}
+		return []string{s}, true
+	default:
+		return nil, false
+	}
+}
+
+func parseConfigureOptions(value interface{}) map[string]interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		return v
+	case map[interface{}]interface{}:
+		out := make(map[string]interface{}, len(v))
+		for key, val := range v {
+			ks, ok := key.(string)
+			if !ok {
+				continue
+			}
+			out[ks] = val
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func optionValueByAliases(opts map[string]interface{}, aliases ...string) (interface{}, bool) {
+	if len(opts) == 0 {
+		return nil, false
+	}
+	for _, alias := range aliases {
+		if v, ok := opts[alias]; ok {
+			return v, true
+		}
+	}
+	for key, value := range opts {
+		keyNorm := normalizeOptionKey(strings.ReplaceAll(key, ".", ""))
+		for _, alias := range aliases {
+			aliasNorm := normalizeOptionKey(strings.ReplaceAll(alias, ".", ""))
+			if keyNorm == aliasNorm {
+				return value, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func parseUint32Hexish(value interface{}) (uint32, bool) {
+	switch v := value.(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		s = strings.TrimPrefix(s, "0x")
+		s = strings.TrimPrefix(s, "0X")
+		if s == "" {
 			return 0, false
 		}
-		return f, true
+		n, err := strconv.ParseUint(s, 16, 32)
+		if err != nil {
+			return 0, false
+		}
+		return uint32(n), true
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > math.MaxUint32 {
+			return 0, false
+		}
+		return uint32(v), true
+	case int:
+		if v < 0 {
+			return 0, false
+		}
+		return uint32(v), true
+	case int64:
+		if v < 0 || v > math.MaxUint32 {
+			return 0, false
+		}
+		return uint32(v), true
+	case uint32:
+		return v, true
+	case uint64:
+		if v > math.MaxUint32 {
+			return 0, false
+		}
+		return uint32(v), true
 	case jsonNumber:
-		f, err := v.Float64()
-		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-			return 0, false
+		if n, err := strconv.ParseUint(v.String(), 0, 32); err == nil {
+			return uint32(n), true
 		}
-		return f, true
+		if f, ok := parseSuggestedDifficultyString(v.String()); ok && f >= 0 && f <= math.MaxUint32 {
+			return uint32(f), true
+		}
+		return 0, false
 	default:
 		return 0, false
 	}
+}
+
+func parsePositiveInt(value interface{}) (int, bool) {
+	diff, ok := parseSuggestedDifficulty(value)
+	if !ok || diff <= 0 || diff > float64(math.MaxInt) {
+		return 0, false
+	}
+	return int(diff), true
 }
 
 func (mc *MinerConn) suggestTarget(req *StratumRequest) {
@@ -453,22 +758,7 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 	mc.writeResponse(resp)
 
 	// Only process the first suggest_target during initialization (same as suggest_difficulty).
-	if mc.suggestDiffProcessed {
-		logger.Debug("suggest_target ignored (already processed once)", "remote", mc.id)
-		return
-	}
-	mc.suggestDiffProcessed = true
-
-	if mc.restoredRecentDiff {
-		return
-	}
-
-	if mc.cfg.LockSuggestedDifficulty {
-		mc.lockDifficulty = true
-	}
-	mc.setDifficulty(diff)
-	mc.maybeSendInitialWork()
-	mc.maybeSendCleanJobAfterSuggest()
+	mc.applySuggestedDifficulty(diff)
 }
 
 // maybeSendCleanJobAfterSuggest sends a clean notify if initial work was already sent.
@@ -518,27 +808,22 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		return
 	}
 
-	rawExts, ok := req.Params[0].([]interface{})
+	rawExts, ok := parseConfigureExtensions(req.Params[0])
 	if !ok {
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(20, "invalid params")})
 		return
 	}
 	var opts map[string]interface{}
 	if len(req.Params) > 1 {
-		if o, ok := req.Params[1].(map[string]interface{}); ok {
-			opts = o
-		}
+		opts = parseConfigureOptions(req.Params[1])
 	}
 
 	result := make(map[string]interface{})
 	shouldSendVersionMask := false
 	for _, ext := range rawExts {
-		name, ok := ext.(string)
-		if !ok {
-			continue
-		}
-		switch name {
-		case "version-rolling":
+		name := strings.TrimSpace(ext)
+		switch normalizeOptionKey(name) {
+		case "versionrolling":
 			// BIP310 version-rolling negotiation (docs/protocols/bip-0310.mediawiki).
 			if mc.poolMask == 0 {
 				result["version-rolling"] = false
@@ -546,13 +831,25 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			}
 			requestMask := mc.poolMask
 			if opts != nil {
-				if maskStr, ok := opts["version-rolling.mask"].(string); ok {
-					if parsed, err := strconv.ParseUint(maskStr, 16, 32); err == nil {
-						requestMask = uint32(parsed)
+				if rawMask, found := optionValueByAliases(opts,
+					"version-rolling.mask",
+					"version_rolling.mask",
+					"version-rolling-mask",
+					"version_rolling_mask",
+				); found {
+					if parsed, ok := parseUint32Hexish(rawMask); ok {
+						requestMask = parsed
 					}
 				}
-				if minBits, ok := opts["version-rolling.min-bit-count"].(float64); ok && int(minBits) > 0 {
-					mc.minVerBits = int(minBits)
+				if rawMinBits, found := optionValueByAliases(opts,
+					"version-rolling.min-bit-count",
+					"version_rolling.min_bit_count",
+					"version-rolling-min-bit-count",
+					"version_rolling_min_bit_count",
+				); found {
+					if minBits, ok := parsePositiveInt(rawMinBits); ok {
+						mc.minVerBits = minBits
+					}
 				}
 			}
 			mask := requestMask & mc.poolMask
@@ -581,7 +878,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			// JSON-RPC response. If we send an unsolicited notification before
 			// the response, they may treat configure as failed and reconnect.
 			shouldSendVersionMask = true
-		case "suggest-difficulty", "suggest_difficulty":
+		case "suggestdifficulty":
 			// Non-standard extension some miners use to confirm support for
 			// mining.suggest_difficulty before sending it.
 			result[name] = true
@@ -755,11 +1052,15 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		)
 	}
 
-	_ = mc.writeJSON(map[string]interface{}{
+	if err := mc.writeJSON(map[string]interface{}{
 		"id":     nil,
 		"method": "mining.notify",
 		"params": params,
-	})
+	}); err != nil {
+		logger.Error("notify write error", "remote", mc.id, "error", err)
+		return
+	}
+	mc.recordNotifySent(time.Now())
 }
 
 // computeMerkleRootBE rebuilds the merkle root (big-endian) from coinb1/coinb2 and branches.

@@ -92,6 +92,7 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 		AdminConfigPath:     s.adminConfigPath,
 		AdminNotice:         adminNoticeMessage(noticeKey),
 		AdminPerPageOptions: adminPerPageOptions,
+		AdminLogSources:     adminLogSourceKeys(),
 	}
 	cfg, err := loadAdminConfigFile(s.adminConfigPath)
 	if err != nil {
@@ -103,8 +104,95 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	data.AdminEnabled = cfg.Enabled
 	data.LoggedIn = s.isAdminAuthenticated(r)
 	data.Settings = buildAdminSettingsData(s.Config())
+	data.OperatorStats = s.buildAdminOperatorStats(s.statusDataView(), data.Settings)
 	data.AdminSection = "settings"
+	if r != nil {
+		data.AdminLogSource = normalizeAdminLogSource(r.URL.Query().Get("source"))
+	}
+	if data.AdminLogSource == "" {
+		data.AdminLogSource = defaultAdminLogSource
+	}
 	return data, cfg, nil
+}
+
+func (s *StatusServer) buildAdminOperatorStats(status StatusData, settings AdminSettingsData) AdminOperatorStatsData {
+	adminSessions := s.activeAdminSessionCount()
+	now := time.Now()
+	stats := AdminOperatorStatsData{
+		GeneratedAt: now,
+		Pool: AdminOperatorPoolStats{
+			ActiveMiners:        status.ActiveMiners,
+			PoolHashrate:        status.PoolHashrate,
+			SharesPerSecond:     status.SharesPerSecond,
+			ActiveAdminSessions: adminSessions,
+		},
+		Currency: AdminOperatorCurrencyStats{
+			FiatCurrency: strings.ToUpper(strings.TrimSpace(settings.FiatCurrency)),
+			CacheTTL:     priceCacheTTL,
+		},
+		Clerk: AdminOperatorClerkStats{
+			Configured:          clerkConfigured(s.Config()),
+			ActiveAdminSessions: adminSessions,
+		},
+	}
+	if stats.Currency.FiatCurrency == "" {
+		stats.Currency.FiatCurrency = "USD"
+	}
+
+	if s.priceSvc != nil {
+		priceSnap := s.priceSvc.Snapshot()
+		stats.Currency.LastPrice = priceSnap.LastPrice
+		stats.Currency.LastFetchAt = priceSnap.LastFetch
+		stats.Currency.LastError = priceSnap.LastErr
+		if fiat := strings.ToUpper(strings.TrimSpace(priceSnap.LastFiat)); fiat != "" {
+			stats.Currency.FiatCurrency = fiat
+		}
+	}
+
+	if s.clerk != nil {
+		clerkSnap := s.clerk.Snapshot()
+		stats.Clerk.VerifierReady = clerkSnap.LoadedKeys > 0
+		stats.Clerk.Issuer = clerkSnap.Issuer
+		stats.Clerk.JWKSURL = clerkSnap.JWKSURL
+		stats.Clerk.CallbackPath = clerkSnap.CallbackPath
+		stats.Clerk.SignInURL = clerkSnap.SignInURL
+		stats.Clerk.SessionCookieName = clerkSnap.SessionCookieName
+		stats.Clerk.LastKeyRefresh = clerkSnap.LastKeyRefresh
+		stats.Clerk.KeyRefreshInterval = clerkSnap.KeyRefreshLimit
+		stats.Clerk.LoadedVerificationKeys = clerkSnap.LoadedKeys
+	}
+	if s.workerLists != nil {
+		users, err := s.workerLists.ListAllClerkUsers()
+		if err != nil {
+			stats.Clerk.KnownUsersLoadError = err.Error()
+		} else {
+			stats.Clerk.KnownUsers = len(users)
+		}
+	}
+
+	if s.backupSvc != nil {
+		backupSnap := s.backupSvc.Snapshot()
+		stats.Backups.Enabled = true
+		stats.Backups.B2Enabled = backupSnap.B2Enabled
+		stats.Backups.BucketConfigured = backupSnap.BucketConfigured
+		stats.Backups.BucketName = backupSnap.BucketName
+		stats.Backups.BucketReachable = backupSnap.BucketReachable
+		stats.Backups.Interval = backupSnap.Interval
+		stats.Backups.ForceEveryInterval = backupSnap.ForceEveryInterval
+		stats.Backups.LastAttemptAt = backupSnap.LastAttemptAt
+		stats.Backups.LastSnapshotAt = backupSnap.LastSnapshotAt
+		stats.Backups.LastSnapshotVersion = backupSnap.LastSnapshotVersion
+		stats.Backups.LastUploadAt = backupSnap.LastUploadAt
+		stats.Backups.LastUploadVersion = backupSnap.LastUploadVersion
+		stats.Backups.SnapshotPath = backupSnap.SnapshotPath
+		if backupSnap.LastB2InitMsg != "" && backupSnap.LastB2InitLogAt.After(backupSnap.LastSkipLogAt) {
+			stats.Backups.LastError = backupSnap.LastB2InitMsg
+		} else if backupSnap.LastSkipMsg != "" {
+			stats.Backups.LastError = backupSnap.LastSkipMsg
+		}
+	}
+
+	return stats
 }
 
 func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, data AdminPageData) {
@@ -112,7 +200,7 @@ func (s *StatusServer) renderAdminPage(w http.ResponseWriter, r *http.Request, d
 }
 
 func (s *StatusServer) renderAdminPageTemplate(w http.ResponseWriter, r *http.Request, data AdminPageData, templateName string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, templateName, data); err != nil {
 		logger.Error("admin template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
@@ -133,7 +221,7 @@ func adminNoticeMessage(key string) string {
 	case "ui_reloaded":
 		return "UI templates and static assets reloaded."
 	case "logged_in":
-		return "Admin session unlocked."
+		return ""
 	case "logged_out":
 		return "Admin session cleared."
 	case "miner_disconnected":
@@ -183,6 +271,7 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		MaxConns:                             cfg.MaxConns,
 		MaxAcceptsPerSecond:                  cfg.MaxAcceptsPerSecond,
 		MaxAcceptBurst:                       cfg.MaxAcceptBurst,
+		DisableConnectRateLimits:             cfg.DisableConnectRateLimits,
 		AutoAcceptRateLimits:                 cfg.AutoAcceptRateLimits,
 		AcceptReconnectWindow:                cfg.AcceptReconnectWindow,
 		AcceptBurstWindow:                    cfg.AcceptBurstWindow,
@@ -193,11 +282,16 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ConnectionTimeoutSeconds:             timeoutSec,
 		MinDifficulty:                        cfg.MinDifficulty,
 		MaxDifficulty:                        cfg.MaxDifficulty,
+		DefaultDifficulty:                    cfg.DefaultDifficulty,
 		TargetSharesPerMin:                   cfg.TargetSharesPerMin,
+		DifficultyStepGranularity:            cfg.DifficultyStepGranularity,
 		LockSuggestedDifficulty:              cfg.LockSuggestedDifficulty,
-		SoloMode:                             cfg.SoloMode,
+		EnforceSuggestedDifficultyLimits:     cfg.EnforceSuggestedDifficultyLimits,
+		RelaxedSubmitValidation:              cfg.RelaxedSubmitValidation,
+		SubmitWorkerNameMatch:                cfg.SubmitWorkerNameMatch,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
 		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
+		RejectNoJobID:                        cfg.RejectNoJobID,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
 		PeerCleanupMaxPingMs:                 cfg.PeerCleanupMaxPingMs,
 		PeerCleanupMinPeers:                  cfg.PeerCleanupMinPeers,
@@ -209,9 +303,17 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ReconnectBanWindowSeconds:            cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
 		LogLevel:                             cfg.LogLevel,
+		StratumMessagesPerMinute:             cfg.StratumMessagesPerMinute,
+		MaxRecentJobs:                        cfg.MaxRecentJobs,
+		Extranonce2Size:                      cfg.Extranonce2Size,
+		TemplateExtraNonce2Size:              cfg.TemplateExtraNonce2Size,
+		JobEntropy:                           cfg.JobEntropy,
+		CoinbaseScriptSigMaxBytes:            cfg.CoinbaseScriptSigMaxBytes,
 		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
 		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSeconds:             cfg.NTimeForwardSlackSeconds,
+		MinVersionBits:                       cfg.MinVersionBits,
+		IgnoreMinVersionBits:                 cfg.IgnoreMinVersionBits,
 	}
 }
 
@@ -541,6 +643,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxConns < adminMinConnsLimit || next.MaxConns > adminMaxConnsLimit {
 		return fmt.Errorf("max_conns must be between %d and %d", adminMinConnsLimit, adminMaxConnsLimit)
 	}
+	next.DisableConnectRateLimits = getBool("disable_connect_rate_limits")
 	next.AutoAcceptRateLimits = getBool("auto_accept_rate_limits")
 	if next.MaxAcceptsPerSecond, err = parseInt("max_accepts_per_second", next.MaxAcceptsPerSecond); err != nil {
 		return err
@@ -572,6 +675,24 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.AcceptSteadyStateReconnectWindow, err = parseInt("accept_steady_state_reconnect_window", next.AcceptSteadyStateReconnectWindow); err != nil {
 		return err
 	}
+	if next.StratumMessagesPerMinute, err = parseInt("stratum_messages_per_minute", next.StratumMessagesPerMinute); err != nil {
+		return err
+	}
+	if next.StratumMessagesPerMinute < 0 {
+		return fmt.Errorf("stratum_messages_per_minute must be >= 0")
+	}
+	if next.StratumMessagesPerMinute > 0 && next.StratumMessagesPerMinute < adminMinStratumMessagesPerMinute {
+		return fmt.Errorf("stratum_messages_per_minute must be 0 (disabled) or >= %d", adminMinStratumMessagesPerMinute)
+	}
+	if next.StratumMessagesPerMinute > adminMaxStratumMessagesPerMinute {
+		return fmt.Errorf("stratum_messages_per_minute must be <= %d", adminMaxStratumMessagesPerMinute)
+	}
+	if next.MaxRecentJobs, err = parseInt("max_recent_jobs", next.MaxRecentJobs); err != nil {
+		return err
+	}
+	if next.MaxRecentJobs < adminMinMaxRecentJobs || next.MaxRecentJobs > adminMaxMaxRecentJobs {
+		return fmt.Errorf("max_recent_jobs must be between %d and %d", adminMinMaxRecentJobs, adminMaxMaxRecentJobs)
+	}
 
 	timeoutSec, err := parseInt("connection_timeout_seconds", int(next.ConnectionTimeout/time.Second))
 	if err != nil {
@@ -588,36 +709,75 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.MaxDifficulty, err = parseFloat("max_difficulty", next.MaxDifficulty); err != nil {
 		return err
 	}
+	if next.DefaultDifficulty, err = parseFloat("default_difficulty", next.DefaultDifficulty); err != nil {
+		return err
+	}
 	if next.TargetSharesPerMin, err = parseFloat("target_shares_per_min", next.TargetSharesPerMin); err != nil {
 		return err
 	}
-	if next.TargetSharesPerMin <= 0 {
-		return fmt.Errorf("target_shares_per_min must be > 0")
+	if next.TargetSharesPerMin < adminMinTargetSharesPerMin || next.TargetSharesPerMin > adminMaxTargetSharesPerMin {
+		return fmt.Errorf("target_shares_per_min must be between %.1f and %.1f", adminMinTargetSharesPerMin, adminMaxTargetSharesPerMin)
+	}
+	if next.DifficultyStepGranularity, err = parseInt("difficulty_step_granularity", next.DifficultyStepGranularity); err != nil {
+		return err
+	}
+	if next.DifficultyStepGranularity < 1 {
+		return fmt.Errorf("difficulty_step_granularity must be >= 1")
+	}
+	if next.MaxDifficulty > 0 && next.MinDifficulty > next.MaxDifficulty {
+		return fmt.Errorf("min_difficulty must be <= max_difficulty when max_difficulty is set")
+	}
+	if next.DefaultDifficulty > 0 {
+		if next.MinDifficulty > 0 && next.DefaultDifficulty < next.MinDifficulty {
+			return fmt.Errorf("default_difficulty must be >= min_difficulty when min_difficulty is set")
+		}
+		if next.MaxDifficulty > 0 && next.DefaultDifficulty > next.MaxDifficulty {
+			return fmt.Errorf("default_difficulty must be <= max_difficulty when max_difficulty is set")
+		}
 	}
 	next.LockSuggestedDifficulty = getBool("lock_suggested_difficulty")
+	next.EnforceSuggestedDifficultyLimits = getBool("enforce_suggested_difficulty_limits")
 
 	next.CleanExpiredBansOnStartup = getBool("clean_expired_on_startup")
 	if next.BanInvalidSubmissionsAfter, err = parseInt("ban_invalid_submissions_after", next.BanInvalidSubmissionsAfter); err != nil {
 		return err
 	}
+	if next.BanInvalidSubmissionsAfter < adminMinBanThreshold || next.BanInvalidSubmissionsAfter > adminMaxBanThreshold {
+		return fmt.Errorf("ban_invalid_submissions_after must be between %d and %d", adminMinBanThreshold, adminMaxBanThreshold)
+	}
 	windowSec, err := parseInt("ban_invalid_submissions_window_seconds", int(next.BanInvalidSubmissionsWindow/time.Second))
 	if err != nil {
 		return err
+	}
+	if windowSec < adminMinBanWindowSeconds || windowSec > adminMaxBanWindowSeconds {
+		return fmt.Errorf("ban_invalid_submissions_window_seconds must be between %d and %d", adminMinBanWindowSeconds, adminMaxBanWindowSeconds)
 	}
 	next.BanInvalidSubmissionsWindow = time.Duration(windowSec) * time.Second
 	durSec, err := parseInt("ban_invalid_submissions_duration_seconds", int(next.BanInvalidSubmissionsDuration/time.Second))
 	if err != nil {
 		return err
 	}
+	if durSec < adminMinBanDurationSeconds || durSec > adminMaxBanDurationSeconds {
+		return fmt.Errorf("ban_invalid_submissions_duration_seconds must be between %d and %d", adminMinBanDurationSeconds, adminMaxBanDurationSeconds)
+	}
 	next.BanInvalidSubmissionsDuration = time.Duration(durSec) * time.Second
 	if next.ReconnectBanThreshold, err = parseInt("reconnect_ban_threshold", next.ReconnectBanThreshold); err != nil {
 		return err
 	}
+	if next.ReconnectBanThreshold < adminMinReconnectBanThreshold || next.ReconnectBanThreshold > adminMaxReconnectBanThreshold {
+		return fmt.Errorf("reconnect_ban_threshold must be between %d and %d", adminMinReconnectBanThreshold, adminMaxReconnectBanThreshold)
+	}
 	if next.ReconnectBanWindowSeconds, err = parseInt("reconnect_ban_window_seconds", next.ReconnectBanWindowSeconds); err != nil {
 		return err
 	}
+	if next.ReconnectBanWindowSeconds < adminMinReconnectBanWindowSecs || next.ReconnectBanWindowSeconds > adminMaxReconnectBanWindowSecs {
+		return fmt.Errorf("reconnect_ban_window_seconds must be between %d and %d", adminMinReconnectBanWindowSecs, adminMaxReconnectBanWindowSecs)
+	}
 	if next.ReconnectBanDurationSeconds, err = parseInt("reconnect_ban_duration_seconds", next.ReconnectBanDurationSeconds); err != nil {
 		return err
+	}
+	if next.ReconnectBanDurationSeconds < adminMinReconnectBanDurationSecs || next.ReconnectBanDurationSeconds > adminMaxReconnectBanDurationSecs {
+		return fmt.Errorf("reconnect_ban_duration_seconds must be between %d and %d", adminMinReconnectBanDurationSecs, adminMaxReconnectBanDurationSecs)
 	}
 
 	next.PeerCleanupEnabled = getBool("peer_cleanup_enabled")
@@ -628,12 +788,43 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return err
 	}
 
-	next.SoloMode = getBool("solo_mode")
+	next.RelaxedSubmitValidation = getBool("relaxed_submit_validation")
+	next.SubmitWorkerNameMatch = getBool("submit_worker_name_match")
 	next.DirectSubmitProcessing = getBool("direct_submit_processing")
 	next.CheckDuplicateShares = getBool("check_duplicate_shares")
+	next.RejectNoJobID = getBool("reject_no_job_id")
+	next.IgnoreMinVersionBits = getBool("ignore_min_version_bits")
+
+	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {
+		return err
+	}
+	if next.Extranonce2Size < adminMinExtranonce2Size || next.Extranonce2Size > adminMaxExtranonce2Size {
+		return fmt.Errorf("extranonce2_size must be between %d and %d", adminMinExtranonce2Size, adminMaxExtranonce2Size)
+	}
+	if next.TemplateExtraNonce2Size, err = parseInt("template_extranonce2_size", next.TemplateExtraNonce2Size); err != nil {
+		return err
+	}
+	if next.TemplateExtraNonce2Size < adminMinTemplateExtranonce2Size || next.TemplateExtraNonce2Size > adminMaxTemplateExtranonce2Size {
+		return fmt.Errorf("template_extranonce2_size must be between %d and %d", adminMinTemplateExtranonce2Size, adminMaxTemplateExtranonce2Size)
+	}
+	if next.TemplateExtraNonce2Size < next.Extranonce2Size {
+		return fmt.Errorf("template_extranonce2_size must be >= extranonce2_size")
+	}
+	if next.JobEntropy, err = parseInt("job_entropy", next.JobEntropy); err != nil {
+		return err
+	}
+	if next.CoinbaseScriptSigMaxBytes, err = parseInt("coinbase_scriptsig_max_bytes", next.CoinbaseScriptSigMaxBytes); err != nil {
+		return err
+	}
+	if next.MinVersionBits, err = parseInt("min_version_bits", next.MinVersionBits); err != nil {
+		return err
+	}
 
 	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
 		next.LogLevel = lvl
+	}
+	if _, err := parseLogLevel(next.LogLevel); err != nil {
+		return err
 	}
 
 	if next.DiscordWorkerNotifyThresholdSeconds, err = parseInt("discord_worker_notify_threshold_seconds", next.DiscordWorkerNotifyThresholdSeconds); err != nil {

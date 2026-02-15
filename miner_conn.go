@@ -38,6 +38,11 @@ func (mc *MinerConn) cleanup() {
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
+		mc.vardiffWindowStart = time.Time{}
+		mc.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffWindowAccepted = 0
+		mc.vardiffWindowSubmissions = 0
+		mc.vardiffWindowDifficulty = 0
 		mc.lastHashrateUpdate = time.Time{}
 		mc.rollingHashrateValue = 0
 		mc.statsMu.Unlock()
@@ -289,27 +294,6 @@ func (mc *MinerConn) handle() {
 			case "mining.ping":
 				mc.writePongResponse(sniffedID)
 				continue
-			case "mining.get_transactions":
-				mc.writeEmptySliceResponse(sniffedID)
-				continue
-			case "mining.capabilities":
-				mc.writeTrueResponse(sniffedID)
-				continue
-			case "mining.extranonce.subscribe":
-				mc.handleExtranonceSubscribe(&StratumRequest{ID: sniffedID})
-				continue
-			case "mining.subscribe":
-				if params, ok := sniffStratumStringParams(line, 1); ok {
-					req := buildStringRequest(sniffedID, sniffedMethod, params)
-					mc.handleSubscribe(&req)
-					continue
-				}
-			case "mining.authorize":
-				if params, ok := sniffStratumStringParams(line, 2); ok {
-					req := buildStringRequest(sniffedID, sniffedMethod, params)
-					mc.handleAuthorize(&req)
-					continue
-				}
 			case "mining.submit":
 				// Fast-path: most mining.submit payloads are small and string-only.
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
@@ -434,7 +418,7 @@ func (mc *MinerConn) sendInitialWork() {
 			}
 		}
 		if diff > 0 {
-			mc.setDifficulty(diff)
+			mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 		}
 	}
 

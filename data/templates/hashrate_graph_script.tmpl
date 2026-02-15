@@ -23,14 +23,78 @@
 		ctx = resizeCanvas();
 		drawGraph();
 	});
-	const maxDataPoints = 60; // 5 minutes at 5-second intervals
+	const sampleIntervalMS = 5000;
+	const historyWindowMS = 6 * 60 * 1000;
+	const maxDataPoints = Math.floor(historyWindowMS / sampleIntervalMS); // 6 minutes at 5-second intervals
 	const hashrateData = [];
 	const timestamps = [];
 	const blockHeights = [];
 	let smoothedHashrate = null;
 	let lastBlockHeight = null;
+	let historyPrimed = false;
 
-	function drawGraph() {
+	function trimHistory() {
+		const cutoff = Date.now() - historyWindowMS;
+		while (timestamps.length > 0) {
+			const ts = timestamps[0];
+			if (!(ts instanceof Date) || Number.isNaN(ts.getTime()) || ts.getTime() < cutoff) {
+				hashrateData.shift();
+				timestamps.shift();
+				blockHeights.shift();
+				continue;
+			}
+			break;
+		}
+		while (hashrateData.length > maxDataPoints) {
+			hashrateData.shift();
+			timestamps.shift();
+			blockHeights.shift();
+		}
+	}
+
+	function primeHashrateGraphHistory(history) {
+		if (!Array.isArray(history) || historyPrimed) {
+			return false;
+		}
+		const cutoff = Date.now() - historyWindowMS;
+		const rows = history
+			.map(row => {
+				const hashrate = Number(row && row.hashrate);
+				const ts = Date.parse(row && row.at);
+				const blockHeight = Number(row && row.block_height);
+				return {
+					hashrate,
+					timestamp: ts,
+					blockHeight: Number.isFinite(blockHeight) && blockHeight > 0 ? blockHeight : null,
+				};
+			})
+			.filter(row => Number.isFinite(row.hashrate) && row.hashrate > 0 && Number.isFinite(row.timestamp) && row.timestamp >= cutoff)
+			.sort((a, b) => a.timestamp - b.timestamp);
+
+		if (rows.length === 0) {
+			return false;
+		}
+		hashrateData.length = 0;
+		timestamps.length = 0;
+		blockHeights.length = 0;
+		rows.forEach(row => {
+			hashrateData.push(row.hashrate);
+			timestamps.push(new Date(row.timestamp));
+			blockHeights.push(row.blockHeight);
+			if (row.blockHeight) {
+				lastBlockHeight = row.blockHeight;
+			}
+		});
+		trimHistory();
+		if (hashrateData.length > 0) {
+			smoothedHashrate = hashrateData[hashrateData.length - 1];
+		}
+		historyPrimed = true;
+		drawGraph();
+		return true;
+	}
+
+		function drawGraph() {
 		// Use display dimensions (logical pixels) for drawing
 		const rect = canvas.getBoundingClientRect();
 		const width = rect.width;
@@ -39,8 +103,21 @@
 		const paddingRight = 20;
 		const paddingTop = 20;
 		const paddingBottom = 30;
-		const graphWidth = width - paddingLeft - paddingRight;
-		const graphHeight = height - paddingTop - paddingBottom;
+			const graphWidth = width - paddingLeft - paddingRight;
+			const graphHeight = height - paddingTop - paddingBottom;
+			const nowMillis = Date.now();
+			const windowStartMillis = nowMillis - historyWindowMS;
+			const windowSpan = historyWindowMS;
+
+			function xForPoint(index) {
+				const ts = timestamps[index];
+				if (!(ts instanceof Date) || Number.isNaN(ts.getTime())) {
+					const denom = Math.max(1, maxDataPoints - 1);
+					return paddingLeft + (graphWidth / denom) * index;
+				}
+				const ratio = Math.max(0, Math.min(1, (ts.getTime() - windowStartMillis) / windowSpan));
+				return paddingLeft + ratio * graphWidth;
+			}
 
 		// Clear canvas
 		ctx.clearRect(0, 0, width, height);
@@ -95,13 +172,13 @@
 			ctx.lineWidth = 1;
 			ctx.setLineDash([4, 3]);
 			ctx.font = '11px monospace';
-			for (let i = 1; i < blockHeights.length; i++) {
+				for (let i = 1; i < blockHeights.length; i++) {
 				const prev = blockHeights[i - 1];
 				const cur = blockHeights[i];
 				if (!prev || !cur || cur === prev) {
 					continue;
 				}
-				const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
+					const x = xForPoint(i);
 				ctx.beginPath();
 				ctx.moveTo(x, paddingTop);
 				ctx.lineTo(x, height - paddingBottom);
@@ -125,15 +202,15 @@
 		}
 
 		// Draw the line graph
-		ctx.strokeStyle = '#4a9eff';
-		ctx.lineWidth = 2;
-		ctx.beginPath();
-		hashrateData.forEach((hashrate, index) => {
-			const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
-			const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
-			if (index === 0) ctx.moveTo(x, y);
-			else ctx.lineTo(x, y);
-		});
+			ctx.strokeStyle = '#4a9eff';
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			hashrateData.forEach((hashrate, index) => {
+				const x = xForPoint(index);
+				const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
+				if (index === 0) ctx.moveTo(x, y);
+				else ctx.lineTo(x, y);
+			});
 		ctx.stroke();
 
 		// Draw X-axis tick marks (no labels)
@@ -159,12 +236,12 @@
 		ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
 
 		// Draw data points
-		ctx.fillStyle = '#4a9eff';
-		hashrateData.forEach((hashrate, index) => {
-			const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * index;
-			const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
-			ctx.beginPath();
-			ctx.arc(x, y, 2, 0, Math.PI * 2);
+			ctx.fillStyle = '#4a9eff';
+			hashrateData.forEach((hashrate, index) => {
+				const x = xForPoint(index);
+				const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
+				ctx.beginPath();
+				ctx.arc(x, y, 2, 0, Math.PI * 2);
 			ctx.fill();
 		});
 	}
@@ -180,33 +257,32 @@
 		return val.toFixed(1) + ' ' + units[idx];
 	}
 
-	function updateHashrateGraph(newHashrate, blockHeight) {
-		if (!newHashrate || newHashrate <= 0) return;
+		function updateHashrateGraph(newHashrate, blockHeight) {
+			if (!newHashrate || newHashrate <= 0) return;
 
 		const effectiveBlockHeight = typeof blockHeight === 'number' && blockHeight > 0 ? blockHeight : lastBlockHeight;
 		if (typeof blockHeight === 'number' && blockHeight > 0) {
 			lastBlockHeight = blockHeight;
 		}
 
-		// Apply a small client-side EMA so the graph transitions smoothly
-		// between backend updates instead of stepping sharply each poll.
-		if (smoothedHashrate === null) {
-			smoothedHashrate = newHashrate;
-		} else {
-			const alpha = 0.25; // smoothing factor (0..1); lower = smoother
-			smoothedHashrate = smoothedHashrate + alpha * (newHashrate - smoothedHashrate);
-		}
+			let nextHashrate = newHashrate;
+			if (!historyPrimed) {
+				// Before server-side history is primed, apply a light EMA so
+				// early points don't jump sharply between polls.
+				if (smoothedHashrate === null) {
+					smoothedHashrate = newHashrate;
+				} else {
+					const alpha = 0.25; // smoothing factor (0..1); lower = smoother
+					smoothedHashrate = smoothedHashrate + alpha * (newHashrate - smoothedHashrate);
+				}
+				nextHashrate = smoothedHashrate;
+			}
 
-		hashrateData.push(smoothedHashrate);
+			hashrateData.push(nextHashrate);
 		timestamps.push(new Date());
 		blockHeights.push(effectiveBlockHeight || null);
 
-		// Keep only last maxDataPoints
-		if (hashrateData.length > maxDataPoints) {
-			hashrateData.shift();
-			timestamps.shift();
-			blockHeights.shift();
-		}
+		trimHistory();
 
 		drawGraph();
 	}
@@ -216,6 +292,7 @@
 
 	// Expose update function globally so auto-refresh can call it
 	window.updateHashrateGraph = updateHashrateGraph;
+	window.primeHashrateGraphHistory = primeHashrateGraphHistory;
 
 	// Redraw on window resize
 	window.addEventListener('resize', drawGraph);

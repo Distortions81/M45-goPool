@@ -50,6 +50,25 @@ type backblazeBackupService struct {
 	lastSkipMsg   string
 }
 
+type backblazeBackupSnapshot struct {
+	B2Enabled           bool
+	BucketConfigured    bool
+	BucketName          string
+	BucketReachable     bool
+	Interval            time.Duration
+	ForceEveryInterval  bool
+	LastAttemptAt       time.Time
+	LastSnapshotAt      time.Time
+	LastSnapshotVersion int64
+	LastUploadAt        time.Time
+	LastUploadVersion   int64
+	SnapshotPath        string
+	LastB2InitLogAt     time.Time
+	LastB2InitMsg       string
+	LastSkipLogAt       time.Time
+	LastSkipMsg         string
+}
+
 const lastBackupStampFilename = "last_backup"
 const backupLocalCopySuffix = ".bak"
 const (
@@ -154,6 +173,32 @@ func (s *backblazeBackupService) warnB2InitThrottled(msg string, attrs ...any) {
 	s.lastB2InitMsg = msg
 	s.lastB2InitLogAt = now
 	logger.Warn(msg, attrs...)
+}
+
+func (s *backblazeBackupService) Snapshot() backblazeBackupSnapshot {
+	if s == nil {
+		return backblazeBackupSnapshot{}
+	}
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	return backblazeBackupSnapshot{
+		B2Enabled:           s.b2Enabled,
+		BucketConfigured:    s.b2AccountID != "" && s.b2AppKey != "" && s.b2BucketName != "",
+		BucketName:          s.b2BucketName,
+		BucketReachable:     s.bucket != nil,
+		Interval:            s.interval,
+		ForceEveryInterval:  s.forceInterval,
+		LastAttemptAt:       s.lastAttemptAt,
+		LastSnapshotAt:      s.lastSnapshotAt,
+		LastSnapshotVersion: s.lastSnapshotVersion,
+		LastUploadAt:        s.lastUploadAt,
+		LastUploadVersion:   s.lastUploadVersion,
+		SnapshotPath:        s.snapshotPath,
+		LastB2InitLogAt:     s.lastB2InitLogAt,
+		LastB2InitMsg:       s.lastB2InitMsg,
+		LastSkipLogAt:       s.lastSkipLogAt,
+		LastSkipMsg:         s.lastSkipMsg,
+	}
 }
 
 func (s *backblazeBackupService) infoSkipThrottled(msg string, attrs ...any) {

@@ -23,6 +23,13 @@ type PriceService struct {
 	client    *http.Client
 }
 
+type PriceServiceSnapshot struct {
+	LastFetch time.Time
+	LastPrice float64
+	LastFiat  string
+	LastErr   string
+}
+
 func NewPriceService() *PriceService {
 	return &PriceService{
 		client: &http.Client{
@@ -122,4 +129,21 @@ func (p *PriceService) LastUpdate() time.Time {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.lastFetch
+}
+
+func (p *PriceService) Snapshot() PriceServiceSnapshot {
+	if p == nil {
+		return PriceServiceSnapshot{}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	snap := PriceServiceSnapshot{
+		LastFetch: p.lastFetch,
+		LastPrice: p.lastPrice,
+		LastFiat:  p.lastFiat,
+	}
+	if p.lastErr != nil {
+		snap.LastErr = p.lastErr.Error()
+	}
+	return snap
 }

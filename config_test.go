@@ -221,6 +221,31 @@ func TestAutoConfigureAcceptRateLimits_DisabledWhenMaxConnsZero(t *testing.T) {
 	}
 }
 
+func TestAutoConfigureAcceptRateLimits_DisabledWhenConnectRateLimitsDisabled(t *testing.T) {
+	cfg := &Config{
+		MaxConns:                  1000,
+		MaxAcceptsPerSecond:       defaultMaxAcceptsPerSecond,
+		MaxAcceptBurst:            defaultMaxAcceptBurst,
+		AcceptSteadyStateRate:     defaultAcceptSteadyStateRate,
+		DisableConnectRateLimits:  true,
+		AcceptReconnectWindow:     15,
+		AcceptBurstWindow:         5,
+		AcceptSteadyStateWindow:   100,
+		AcceptSteadyStateReconnectPercent: 5,
+		AcceptSteadyStateReconnectWindow:  60,
+	}
+	autoConfigureAcceptRateLimits(cfg, tuningFileConfig{}, false)
+	if cfg.MaxAcceptsPerSecond != defaultMaxAcceptsPerSecond {
+		t.Fatalf("MaxAcceptsPerSecond changed: got %d, want %d", cfg.MaxAcceptsPerSecond, defaultMaxAcceptsPerSecond)
+	}
+	if cfg.MaxAcceptBurst != defaultMaxAcceptBurst {
+		t.Fatalf("MaxAcceptBurst changed: got %d, want %d", cfg.MaxAcceptBurst, defaultMaxAcceptBurst)
+	}
+	if cfg.AcceptSteadyStateRate != defaultAcceptSteadyStateRate {
+		t.Fatalf("AcceptSteadyStateRate changed: got %d, want %d", cfg.AcceptSteadyStateRate, defaultAcceptSteadyStateRate)
+	}
+}
+
 func TestAutoConfigureAcceptRateLimits_SmallPool(t *testing.T) {
 	cfg := &Config{
 		MaxConns:              50,

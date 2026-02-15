@@ -75,3 +75,24 @@ func TestDiff1TargetMatchesCompact(t *testing.T) {
 		t.Fatalf("diff1Target mismatch: got %x, want %x", diff1Target, &n)
 	}
 }
+
+func TestQuantizeDifficultyGranularity(t *testing.T) {
+	tests := []struct {
+		name        string
+		diff        float64
+		granularity int
+		want        float64
+	}{
+		{name: "pow2_only", diff: 2.3, granularity: 1, want: 2.0},
+		{name: "half_steps", diff: 2.3, granularity: 2, want: 2.0},
+		{name: "quarter_steps_default", diff: 2.3, granularity: 4, want: 2.378414230005442},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := quantizeDifficulty(tc.diff, 1, 0, tc.granularity)
+			if !almostEqualFloat64(got, tc.want, 1e-12) {
+				t.Fatalf("quantizeDifficulty(%.8f, gran=%d) got %.16g want %.16g", tc.diff, tc.granularity, got, tc.want)
+			}
+		})
+	}
+}

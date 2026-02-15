@@ -95,6 +95,17 @@ type ClerkVerifier struct {
 	keyRefreshLimit time.Duration
 }
 
+type ClerkVerifierSnapshot struct {
+	JWKSURL           string
+	Issuer            string
+	CallbackPath      string
+	SignInURL         string
+	SessionCookieName string
+	LastKeyRefresh    time.Time
+	KeyRefreshLimit   time.Duration
+	LoadedKeys        int
+}
+
 func NewClerkVerifier(cfg Config) (*ClerkVerifier, error) {
 	jwksURL := strings.TrimSpace(cfg.ClerkJWKSURL)
 	if jwksURL == "" {
@@ -185,6 +196,24 @@ func (v *ClerkVerifier) keyFor(kid string) *rsa.PublicKey {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	return v.keys[kid]
+}
+
+func (v *ClerkVerifier) Snapshot() ClerkVerifierSnapshot {
+	if v == nil {
+		return ClerkVerifierSnapshot{}
+	}
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return ClerkVerifierSnapshot{
+		JWKSURL:           v.jwksURL,
+		Issuer:            v.issuer,
+		CallbackPath:      v.callbackPath,
+		SignInURL:         v.signInURL,
+		SessionCookieName: v.sessionCookie,
+		LastKeyRefresh:    v.lastKeyRefresh,
+		KeyRefreshLimit:   v.keyRefreshLimit,
+		LoadedKeys:        len(v.keys),
+	}
 }
 
 func (v *ClerkVerifier) Verify(token string) (*ClerkSessionClaims, error) {

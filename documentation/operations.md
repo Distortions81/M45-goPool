@@ -1,8 +1,8 @@
-# goPool Operations Guide
+# goPool Operations Documentation
 
-> **Quick start reminder:** the [main README](../README.md) gives a concise walk-through; this guide expands every section into the operational context that running goPool day-to-day requires.
+> **Quick start reminder:** the [main README](../README.md) gives a concise walk-through; this document expands each section into the operational context needed to run goPool day-to-day.
 
-goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This guide covers every step operators usually repeat in production, from building binaries to tuning performance; refer to the sibling documents (`guide/performance.md`, `guide/RELEASES.md`, `guide/TESTING.md`) for capacity planning, release bundles, and testing recipes.
+goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production, from building binaries to tuning performance; refer to sibling documents (`documentation/performance.md`, `documentation/RELEASES.md`, `documentation/TESTING.md`) for capacity planning, release bundles, and testing recipes.
 
 ## Building
 
@@ -115,7 +115,7 @@ The `data/config/tuning.toml` file overrides fine-grained limits without touchin
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, `stratum_messages_per_minute` (messages/min before disconnect + 1h ban), and whether to auto-calculate throttles from `max_conns`.
 - `[timeouts]`: `connection_timeout_seconds`.
 - `[difficulty]`: `default_difficulty` fallback when no suggestion arrives, `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits). The first `mining.suggest_*` is honored once per connection, triggers a clean notify, and subsequent suggests are ignored.
-- `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `vardiff_fine` to enable half-step VarDiff adjustments without power-of-two snapping.
+- `[mining]`: `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix, and `difficulty_step_granularity` to control difficulty quantization precision (`1` power-of-two, `2` half-step, `3` third-step, `4` quarter-step default).
 - `[hashrate]`: `hashrate_ema_tau_seconds`, `ntime_forward_slack_seconds`.
 - `[discord]`: Worker notification thresholds for Discord alerts.
 - `[status]`: `mempool_address_url` controls the external explorer link prefix used by the worker status UI.
@@ -215,10 +215,11 @@ Because the admin login is intentionally simple, bind this UI to trusted network
 - `mining.pool_fee_percent`, `operator_donation_percent`, and `operator_donation_address` determine how rewards are split.
 - `pooltag_prefix` customizes the `/goPool/` coinbase tag (only letters/digits).
 - `job_entropy` and `pool_entropy` help make each template unique; disable the suffix with `[tuning.mining] disable_pool_job_entropy = true`.
-- `solo_mode` defaults to `true` (lighter validation). Set to `false` to enforce stricter duplicate detection and low-difficulty checks.
-- `check_duplicate_shares` enables duplicate share detection when `solo_mode = true`; set it to `true` to apply the same checks used in multi-worker pools.
+- `relaxed_submit_validation` defaults to `true` (lighter validation). Set to `false` to enforce stricter duplicate detection and low-difficulty checks.
+- `check_duplicate_shares` enables duplicate share detection when `relaxed_submit_validation = true`; set it to `true` to apply the same checks used in multi-worker pools.
+- `reject_no_job_id` defaults to `false`; set it to `true` to hard-reject empty `job_id` (`invalid params` path) instead of allowing it to fall through to stale-job handling.
 - `direct_submit_processing` lets each stratum connection process `mining.submit` inline instead of via the worker queue; useful for low-latency environments but eases backpressure.
-- `solo_mode` skips several policy guards that multi-worker pools still perform:
+- `relaxed_submit_validation` skips several policy guards that multi-worker pools still perform:
   - worker-mismatch validation (the connection’s authorized worker name is trusted once you authenticate),
   - strict stale-job/prevhash checks, tight `ntime` window enforcement, and BIP320 version/mask requirements,
   - duplicate-share filtering and low-difficulty rejection.
@@ -308,8 +309,8 @@ Each tuning value logs when set, so goPool operators can audit what changed via 
 
 ## Related guides
 
-- **`guide/performance.md`** – Capacity planning, CPU/latency breakdowns, and network bandwidth ballparks.
-- **`guide/RELEASES.md`** – Packaging, verifying release checksums, upgrade steps, and release workflow details.
-- **`guide/TESTING.md`** – How to run and extend the test suite, including fuzz targets and benchmarks.
+- **`documentation/performance.md`** – Capacity planning, CPU/latency breakdowns, and network bandwidth ballparks.
+- **`documentation/RELEASES.md`** – Packaging, verifying release checksums, upgrade steps, and release workflow details.
+- **`documentation/TESTING.md`** – How to run and extend the test suite, including fuzz targets and benchmarks.
 
-Refer back to the concise [main README](../README.md) for quick start instructions, and keep this guide nearby for reference while you tune your deployment.
+Refer back to the concise [main README](../README.md) for quick start instructions, and keep this document nearby while you tune your deployment.

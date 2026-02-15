@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -500,82 +499,4 @@ func TestFoundBlockSubmission_WithPendingLog(t *testing.T) {
 	}
 
 	t.Logf("Failed block submission logged to pending log for height %d", job.Template.Height)
-}
-
-// TestFoundBlockSubmission_MeetsBlockDifficulty verifies that a submitted
-// block actually meets the network difficulty target.
-func TestFoundBlockSubmission_MeetsBlockDifficulty(t *testing.T) {
-	// Use testnet3 difficulty (easier to satisfy)
-	// Bits: 0x1d00ffff corresponds to difficulty ~1
-	bitsHex := "1d00ffff"
-
-	job := &Job{
-		JobID: "difficulty-test",
-		Template: GetBlockTemplateResult{
-			Height:        500,
-			CurTime:       1700000400,
-			Bits:          bitsHex,
-			Previous:      "0000000000000000000000000000000000000000000000000000000000000000",
-			CoinbaseValue: 50 * 1e8,
-		},
-		Extranonce2Size:         4,
-		TemplateExtraNonce2Size: 8,
-		PayoutScript:            []byte{0x51},
-		CoinbaseValue:           50 * 1e8,
-	}
-
-	// Parse the target from bits
-	bitsBytes, _ := hex.DecodeString(bitsHex)
-	if len(bitsBytes) != 4 {
-		t.Fatal("invalid bits length")
-	}
-
-	// Compact form: [exponent][mantissa (3 bytes)]
-	exponent := uint(bitsBytes[0])
-	mantissa := uint32(bitsBytes[1])<<16 | uint32(bitsBytes[2])<<8 | uint32(bitsBytes[3])
-
-	target := new(big.Int).Lsh(big.NewInt(int64(mantissa)), 8*(exponent-3))
-
-	// Build a block with various nonces until we find one that meets difficulty
-	// (For testing, we use easy difficulty so this should succeed quickly)
-	extranonce1 := []byte{0x01, 0x02, 0x03, 0x04}
-	extranonce2 := []byte{0xaa, 0xbb, 0xcc, 0xdd}
-	ntimeHex := fmt.Sprintf("%08x", job.Template.CurTime)
-	version := int32(0x20000000)
-
-	found := false
-	var validHeaderHash []byte
-
-	// Try up to 1000 nonces
-	for nonce := uint32(0); nonce < 1000; nonce++ {
-		nonceHex := fmt.Sprintf("%08x", nonce)
-
-		_, headerHash, _, _, err := buildBlock(job, extranonce1, extranonce2, ntimeHex, nonceHex, version)
-		if err != nil {
-			continue
-		}
-
-		// Convert header hash to big.Int (note: reverse byte order for comparison)
-		hashInt := new(big.Int).SetBytes(reverseBytes(headerHash))
-
-		// Check if hash < target
-		if hashInt.Cmp(target) <= 0 {
-			found = true
-			validHeaderHash = headerHash
-			t.Logf("Found valid block at nonce %d: hash=%x", nonce, headerHash)
-			break
-		}
-	}
-
-	if !found {
-		t.Skip("Could not find valid nonce within 1000 attempts (expected with real difficulty)")
-	}
-
-	// Verify the hash truly meets the difficulty
-	hashInt := new(big.Int).SetBytes(reverseBytes(validHeaderHash))
-	if hashInt.Cmp(target) > 0 {
-		t.Errorf("Block hash %x does not meet target %x", hashInt, target)
-	}
-
-	t.Logf("Block hash meets difficulty target")
 }

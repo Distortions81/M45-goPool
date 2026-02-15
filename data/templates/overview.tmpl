@@ -7,6 +7,20 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Overview</title>
 	<link rel="stylesheet" href="/style.css">
+	<style>
+		.hashrate-warming {
+			opacity: 0.72;
+		}
+		.hashrate-settling {
+			opacity: 0.82;
+		}
+		.hashrate-near-stable {
+			opacity: 0.92;
+		}
+		.hashrate-solid {
+			opacity: 1;
+		}
+	</style>
 </head>
 <body>
 	{{template "header" .}}
@@ -18,16 +32,18 @@
 				</p>
 			</div>
 		</noscript>
-		<div class="overview-banner" id="overview-banner" data-host="{{.BrandDomain}}">
-			<div class="connect-panel">
-				<div class="connect-panel-header">
-					<div class="connect-panel-intro">
-						<p class="connect-panel-title">
-							Connect your miner{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
-						</p>
+			<div class="overview-banner" id="overview-banner" data-host="{{.BrandDomain}}">
+				<div class="connect-panel">
+					<div class="connect-panel-header">
+						<div class="connect-panel-intro">
+							<p class="connect-panel-title">
+								How to connect your miner!
+									<button type="button" class="connect-panel-fold" id="connect-panel-fold-toggle" aria-controls="connect-panel-body" aria-expanded="false">show info</button>
+								{{if .ConnectMinerTitleExtra}}{{if .ConnectMinerTitleExtraURL}} -- <a href="{{.ConnectMinerTitleExtraURL}}">{{.ConnectMinerTitleExtra}}</a>{{else}} -- {{.ConnectMinerTitleExtra}}{{end}}{{end}}
+							</p>
+						</div>
 					</div>
-					</div>
-
+					<div class="connect-panel-body" id="connect-panel-body">
 					<div class="connect-steps">
 					<div class="connect-step">
 						<div class="connect-step-head">
@@ -116,8 +132,9 @@
 					{{end}}
 
 					<p class="text-sm connect-note">
-						By connecting you confirm that you accept the <a href="/terms">Terms of Use</a> and should review our <a href="/privacy">Privacy Policy</a> before mining.
+						By connecting you confirm that you accept the <a href="/terms">Terms of Use</a> and should review our <a href="/privacy">Privacy Policy</a> (Last Updated: February 14, 2026) before mining.
 					</p>
+					</div>
 				</div>
 		</div>
 		{{template "status_boxes" .}}
@@ -128,6 +145,9 @@
 
 		<h2 id="workers">Recent work</h2>
 		<div class="card">
+			<p class="text-sm" style="color:var(--text-muted); margin-top:0;">
+				Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, <span class="mono">≈+</span> near-stable, <span class="mono">✓</span> stable.
+			</p>
 			<div style="overflow-x:auto;">
 				<table class="table" id="status-workers-table">
 					<thead>
@@ -239,6 +259,74 @@
 		const REFRESH_INTERVAL = 10000; // 10 seconds
 		const BLOCKS_REFRESH_INTERVAL = 3000; // 3 seconds
 		const FIAT_CURRENCY = '{{.FiatCurrency}}';
+		const workerHashrateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerHashrateFallback = new Map();
+		const workerShareRateFallbackMaxAgeMS = 2 * 60 * 1000;
+		const workerShareRateFallback = new Map();
+
+		function workerHashrateKey(worker) {
+			const connectionId = String(worker?.connection_id ?? '').trim();
+			if (connectionId) {
+				return `conn:${connectionId}`;
+			}
+			const name = String(worker?.name || worker?.display_name || '').trim();
+			if (name) {
+				return `name:${name}`;
+			}
+			return '';
+		}
+
+		function pruneWorkerHashrateFallback(nowMillis) {
+			for (const [key, sample] of workerHashrateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerHashrateFallbackMaxAgeMS) {
+					workerHashrateFallback.delete(key);
+				}
+			}
+		}
+
+		function pruneWorkerShareRateFallback(nowMillis) {
+			for (const [key, sample] of workerShareRateFallback.entries()) {
+				if (!sample || !Number.isFinite(sample.value) || sample.value <= 0 || !Number.isFinite(sample.at) || nowMillis-sample.at > workerShareRateFallbackMaxAgeMS) {
+					workerShareRateFallback.delete(key);
+				}
+			}
+		}
+
+		function effectiveWorkerHashrate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.rolling_hashrate);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerHashrateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerHashrateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerHashrateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
+
+		function effectiveWorkerShareRate(worker, nowMillis) {
+			const key = workerHashrateKey(worker);
+			const raw = Number(worker?.share_rate);
+			if (Number.isFinite(raw) && raw > 0) {
+				if (key) {
+					workerShareRateFallback.set(key, { value: raw, at: nowMillis });
+				}
+				return raw;
+			}
+			if (key) {
+				const sample = workerShareRateFallback.get(key);
+				if (sample && Number.isFinite(sample.value) && sample.value > 0 && Number.isFinite(sample.at) && nowMillis-sample.at <= workerShareRateFallbackMaxAgeMS) {
+					return sample.value;
+				}
+			}
+			return 0;
+		}
 
 		function normalizeFiatCurrency(cur) {
 			const s = String(cur ?? '').trim();
@@ -266,6 +354,22 @@
 				idx++;
 			}
 			return val.toFixed(2) + ' ' + units[idx];
+		}
+
+		function hashrateClassForAccuracy(accuracy) {
+			const marker = String(accuracy || '').trim();
+			if (marker === '~') return 'hashrate-warming';
+			if (marker === '≈') return 'hashrate-settling';
+			if (marker === '≈+') return 'hashrate-near-stable';
+			if (marker === '✓') return 'hashrate-solid';
+			return '';
+		}
+
+		function formatWorkerHashrate(h, accuracy) {
+			const base = formatHashrate(h);
+			if (base === '---') return '—';
+			const marker = String(accuracy || '').trim();
+			return marker ? `${marker} ${base}` : base;
 		}
 
 		function formatShareRate(rate) {
@@ -386,17 +490,23 @@
 					tbody.innerHTML = '<tr><td colspan="6" class="text-sm">No worker stats yet.</td></tr>';
 					return;
 				}
+				const nowMillis = Date.now();
+				pruneWorkerHashrateFallback(nowMillis);
+				pruneWorkerShareRateFallback(nowMillis);
 				const rows = workers.map(worker => {
 					const name = worker.display_name || worker.name || '—';
 					const suffix = workerSuffix(name);
-					const shareRate = typeof worker.share_rate === 'number' ? worker.share_rate.toFixed(1) : '0.0';
+					const shareRate = effectiveWorkerShareRate(worker, nowMillis).toFixed(1);
+					const hashrate = effectiveWorkerHashrate(worker, nowMillis);
+					const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(worker.hashrate_accuracy) : '';
+					const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, worker.hashrate_accuracy) : '—';
 					let connectionId = worker.connection_id ?? '—';
 					if (connectionId === '') connectionId = '0';
 					return `
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
 							<td class="mono">${connectionId}</td>
-							<td>${formatHashrate(worker.rolling_hashrate)}</td>
+								<td class="${hashrateClass}">${hashrateText}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
 							<td>${shareRate}</td>
 							<td>${worker.accepted || 0}</td>
@@ -565,9 +675,6 @@
 					case 'Estimated pool hashrate':
 					case 'Pool hashrate':
 						valueEl.textContent = formatHashrate(newData.pool_hashrate);
-						if (window.updateHashrateGraph && newData.pool_hashrate) {
-							window.updateHashrateGraph(newData.pool_hashrate);
-						}
 						break;
 				}
 			});
@@ -698,6 +805,7 @@
 		const blockChanceEl = document.getElementById('status-block-chance');
 		const templateTxFeesEl = document.getElementById('status-template-tx-fees');
 		const templateTxFeesUpdatedEl = document.getElementById('status-template-tx-fees-updated');
+		let poolHashrateIncludeHistory = true;
 		let blockTimeLeftSec = null;
 		let blockTimeOverdueSec = 0;
 		let isBlockTimeOverdue = false;
@@ -942,17 +1050,24 @@
 		}
 
 		function fetchHashrate() {
-			fetch('/api/pool-hashrate')
+			const endpoint = poolHashrateIncludeHistory ? '/api/pool-hashrate?include_history=1' : '/api/pool-hashrate';
+			fetch(endpoint)
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					return response.json().then(data => ({ data, updatedAt }));
 				})
 					.then(({ data, updatedAt }) => {
+						if (poolHashrateIncludeHistory) {
+							poolHashrateIncludeHistory = false;
+						}
+						const primedFromHistory = !!(window.primeHashrateGraphHistory &&
+							Array.isArray(data?.pool_hashrate_history) &&
+							window.primeHashrateGraphHistory(data.pool_hashrate_history));
 						const heightForGraph = typeof data?.block_height === 'number' && data.block_height > 0 ? data.block_height : null;
 						if (data && typeof data.pool_hashrate === 'number') {
 							updateHashrateDisplay(data.pool_hashrate);
-							if (window.updateHashrateGraph && data.pool_hashrate > 0) {
+							if (window.updateHashrateGraph && data.pool_hashrate > 0 && !primedFromHistory) {
 								window.updateHashrateGraph(data.pool_hashrate, heightForGraph);
 							}
 						}
@@ -1080,16 +1195,36 @@
 	})();
 	</script>
 	<script>
-	;(function () {
-		const banner = document.getElementById("overview-banner");
-		if (!banner) {
-			return;
-		}
+			;(function () {
+				const banner = document.getElementById("overview-banner");
+				if (!banner) {
+					return;
+				}
+				const connectPanel = banner.querySelector(".connect-panel");
+				const foldToggle = document.getElementById("connect-panel-fold-toggle");
 
-		const host = banner.dataset.host || window.location.hostname || "localhost";
-		banner.querySelectorAll("[data-stratum-host]").forEach(el => {
-			el.textContent = host;
-		});
+				function applyFoldState(folded) {
+					if (!connectPanel || !foldToggle) {
+						return;
+					}
+					connectPanel.dataset.folded = folded ? "true" : "false";
+					foldToggle.textContent = folded ? "show info" : "hide info";
+					foldToggle.setAttribute("aria-expanded", folded ? "false" : "true");
+					foldToggle.setAttribute("aria-label", folded ? "Expand connect steps" : "Collapse connect steps");
+				}
+
+				if (connectPanel && foldToggle) {
+					applyFoldState(true);
+					foldToggle.addEventListener("click", () => {
+						const nextFolded = connectPanel.dataset.folded !== "true";
+						applyFoldState(nextFolded);
+					});
+				}
+
+			const host = banner.dataset.host || window.location.hostname || "localhost";
+			banner.querySelectorAll("[data-stratum-host]").forEach(el => {
+				el.textContent = host;
+			});
 
 		const feedbackTimers = new WeakMap();
 		const FEEDBACK_DURATION = 3400;

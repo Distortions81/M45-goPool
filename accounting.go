@@ -24,53 +24,64 @@ type banEntry struct {
 
 // WorkerView is the subset of worker data that is exposed to the status UI.
 type WorkerView struct {
-	Name                string       `json:"name"`
-	DisplayName         string       `json:"display_name"`
-	WorkerSHA256        string       `json:"worker_sha256,omitempty"`
-	Accepted            uint64       `json:"accepted"`
-	Rejected            uint64       `json:"rejected"`
-	BalanceSats         int64        `json:"balance_sats"`
-	WalletAddress       string       `json:"wallet_address,omitempty"`
-	WalletScript        string       `json:"wallet_script,omitempty"`
-	MinerType           string       `json:"miner_type,omitempty"`
-	MinerName           string       `json:"miner_name,omitempty"`
-	MinerVersion        string       `json:"miner_version,omitempty"`
-	LastShare           time.Time    `json:"last_share"`
-	LastShareHash       string       `json:"last_share_hash,omitempty"`
-	DisplayLastShare    string       `json:"display_last_share,omitempty"`
-	LastShareAccepted   bool         `json:"last_share_accepted,omitempty"`
-	LastShareDifficulty float64      `json:"last_share_difficulty,omitempty"`
-	LastShareDetail     *ShareDetail `json:"last_share_detail,omitempty"`
-	Difficulty          float64      `json:"difficulty"`
-	Vardiff             float64      `json:"-"`
-	RollingHashrate     float64      `json:"rolling_hashrate"`
-	LastReject          string       `json:"last_reject"`
-	Banned              bool         `json:"banned"`
-	BannedUntil         time.Time    `json:"banned_until,omitempty"`
-	BanReason           string       `json:"ban_reason,omitempty"`
-	WindowStart         time.Time    `json:"window_start"`
-	WindowAccepted      int          `json:"window_accepted"`
-	WindowSubmissions   int          `json:"window_submissions"`
-	WindowDifficulty    float64      `json:"window_difficulty"`
-	ShareRate           float64      `json:"share_rate"`
-	ConnectionID        string       `json:"connection_id,omitempty"`
-	ConnectionSeq       uint64       `json:"connection_seq,omitempty"`
-	ConnectedAt         time.Time    `json:"connected_at,omitempty"`
-	WalletValidated     bool         `json:"wallet_validated,omitempty"`
+	Name                      string       `json:"name"`
+	DisplayName               string       `json:"display_name"`
+	WorkerSHA256              string       `json:"worker_sha256,omitempty"`
+	Accepted                  uint64       `json:"accepted"`
+	Rejected                  uint64       `json:"rejected"`
+	BalanceSats               int64        `json:"balance_sats"`
+	WalletAddress             string       `json:"wallet_address,omitempty"`
+	WalletScript              string       `json:"wallet_script,omitempty"`
+	MinerType                 string       `json:"miner_type,omitempty"`
+	MinerName                 string       `json:"miner_name,omitempty"`
+	MinerVersion              string       `json:"miner_version,omitempty"`
+	LastShare                 time.Time    `json:"last_share"`
+	LastShareHash             string       `json:"last_share_hash,omitempty"`
+	DisplayLastShare          string       `json:"display_last_share,omitempty"`
+	LastShareAccepted         bool         `json:"last_share_accepted,omitempty"`
+	LastShareDifficulty       float64      `json:"last_share_difficulty,omitempty"`
+	LastShareDetail           *ShareDetail `json:"last_share_detail,omitempty"`
+	Difficulty                float64      `json:"difficulty"`
+	Vardiff                   float64      `json:"-"`
+	RollingHashrate           float64      `json:"rolling_hashrate"`
+	LastReject                string       `json:"last_reject"`
+	Banned                    bool         `json:"banned"`
+	BannedUntil               time.Time    `json:"banned_until,omitempty"`
+	BanReason                 string       `json:"ban_reason,omitempty"`
+	WindowStart               time.Time    `json:"window_start"`
+	WindowAccepted            int          `json:"window_accepted"`
+	WindowSubmissions         int          `json:"window_submissions"`
+	WindowDifficulty          float64      `json:"window_difficulty"`
+	ShareRate                 float64      `json:"share_rate"`
+	HashrateAccuracy          string       `json:"hashrate_accuracy,omitempty"`
+	SubmitRTTP50MS            float64      `json:"submit_rtt_p50_ms,omitempty"`
+	SubmitRTTP95MS            float64      `json:"submit_rtt_p95_ms,omitempty"`
+	NotifyToFirstShareMinMS   float64      `json:"notify_to_first_share_min_ms,omitempty"`
+	NotifyToFirstShareMS      float64      `json:"notify_to_first_share_ms,omitempty"`
+	NotifyToFirstShareP50MS   float64      `json:"notify_to_first_share_p50_ms,omitempty"`
+	NotifyToFirstShareP95MS   float64      `json:"notify_to_first_share_p95_ms,omitempty"`
+	NotifyToFirstShareSamples int          `json:"notify_to_first_share_samples,omitempty"`
+	EstimatedPingP50MS        float64      `json:"estimated_ping_p50_ms,omitempty"`
+	EstimatedPingP95MS        float64      `json:"estimated_ping_p95_ms,omitempty"`
+	ConnectionID              string       `json:"connection_id,omitempty"`
+	ConnectionSeq             uint64       `json:"connection_seq,omitempty"`
+	ConnectedAt               time.Time    `json:"connected_at,omitempty"`
+	WalletValidated           bool         `json:"wallet_validated,omitempty"`
 }
 
 // RecentWorkView is a minimal view of worker data for the overview page's
 // "Recent work" table. It only includes fields that are actually displayed
 // to avoid exposing unnecessary worker information.
 type RecentWorkView struct {
-	Name            string  `json:"name"`
-	DisplayName     string  `json:"display_name"`
-	RollingHashrate float64 `json:"rolling_hashrate"`
-	Difficulty      float64 `json:"difficulty"`
-	Vardiff         float64 `json:"vardiff"`
-	ShareRate       float64 `json:"share_rate"`
-	Accepted        uint64  `json:"accepted"`
-	ConnectionID    string  `json:"connection_id"`
+	Name             string  `json:"name"`
+	DisplayName      string  `json:"display_name"`
+	RollingHashrate  float64 `json:"rolling_hashrate"`
+	HashrateAccuracy string  `json:"hashrate_accuracy,omitempty"`
+	Difficulty       float64 `json:"difficulty"`
+	Vardiff          float64 `json:"vardiff"`
+	ShareRate        float64 `json:"share_rate"`
+	Accepted         uint64  `json:"accepted"`
+	ConnectionID     string  `json:"connection_id"`
 }
 
 // ShareDetail holds detailed data for each share, including coinbase transaction details.

@@ -9,6 +9,8 @@ import (
 	"github.com/bytedance/sonic"
 )
 
+const manualReconnectBanDuration = 30 * time.Second
+
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	base := s.baseTemplateData(start)
@@ -42,15 +44,11 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 
 	savedHashes := make(map[string]struct{}, len(data.SavedWorkers))
-	savedNames := make(map[string]struct{}, len(data.SavedWorkers))
 
 	perNameRowsShown := make(map[string]int, 16)
 	for _, saved := range data.SavedWorkers {
 		if hash := strings.ToLower(strings.TrimSpace(saved.Hash)); hash != "" {
 			savedHashes[hash] = struct{}{}
-		}
-		if name := strings.ToLower(strings.TrimSpace(saved.Name)); name != "" {
-			savedNames[name] = struct{}{}
 		}
 		views, lookupHash := s.findSavedWorkerConnections(saved.Name, saved.Hash, now)
 		if lookupHash == "" {
@@ -82,19 +80,27 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 					duration = 0
 				}
 				entry := savedWorkerEntry{
-					Name:              saved.Name,
-					Hash:              view.WorkerSHA256,
-					NotifyEnabled:     saved.NotifyEnabled,
-					BestDifficulty:    saved.BestDifficulty,
-					Hashrate:          hashrate,
-					ShareRate:         view.ShareRate,
-					Accepted:          view.Accepted,
-					Rejected:          view.Rejected,
-					LastShare:         view.LastShare,
-					Difficulty:        view.Difficulty,
-					ConnectedDuration: duration,
-					ConnectionID:      view.ConnectionID,
-					ConnectionSeq:     view.ConnectionSeq,
+					Name:                      saved.Name,
+					Hash:                      view.WorkerSHA256,
+					NotifyEnabled:             saved.NotifyEnabled,
+					BestDifficulty:            saved.BestDifficulty,
+					Hashrate:                  hashrate,
+					HashrateAccuracy:          view.HashrateAccuracy,
+					ShareRate:                 view.ShareRate,
+					Accepted:                  view.Accepted,
+					Rejected:                  view.Rejected,
+					LastShare:                 view.LastShare,
+					Difficulty:                view.Difficulty,
+					EstimatedPingP50MS:        view.EstimatedPingP50MS,
+					EstimatedPingP95MS:        view.EstimatedPingP95MS,
+					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
+					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
+					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
+					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
+					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
+					ConnectedDuration:         duration,
+					ConnectionID:              view.ConnectionID,
+					ConnectionSeq:             view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
 				perNameRowsShown[lookupHash]++
@@ -121,13 +127,6 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 							alreadySaved = true
 						}
 					}
-					if !alreadySaved {
-						if nameKey := strings.ToLower(strings.TrimSpace(view.Name)); nameKey != "" {
-							if _, ok := savedNames[nameKey]; ok {
-								alreadySaved = true
-							}
-						}
-					}
 					data.WalletLookupResults = append(data.WalletLookupResults, walletLookupResult{
 						WorkerView:   view,
 						AlreadySaved: alreadySaved,
@@ -140,7 +139,7 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, "saved_workers", data); err != nil {
 		logger.Error("saved workers template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
@@ -180,10 +179,18 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		LastOnlineAt              string  `json:"last_online_at,omitempty"`
 		LastShare                 string  `json:"last_share,omitempty"`
 		Hashrate                  float64 `json:"hashrate"`
+		HashrateAccuracy          string  `json:"hashrate_accuracy,omitempty"`
 		SharesPerMinute           float64 `json:"shares_per_minute"`
 		Accepted                  uint64  `json:"accepted"`
 		Rejected                  uint64  `json:"rejected"`
 		Difficulty                float64 `json:"difficulty"`
+		EstimatedPingP50MS        float64 `json:"estimated_ping_p50_ms,omitempty"`
+		EstimatedPingP95MS        float64 `json:"estimated_ping_p95_ms,omitempty"`
+		NotifyToFirstShareMinMS   float64 `json:"notify_to_first_share_min_ms,omitempty"`
+		NotifyToFirstShareMS      float64 `json:"notify_to_first_share_ms,omitempty"`
+		NotifyToFirstShareP50MS   float64 `json:"notify_to_first_share_p50_ms,omitempty"`
+		NotifyToFirstShareP95MS   float64 `json:"notify_to_first_share_p95_ms,omitempty"`
+		NotifyToFirstShareSamples int     `json:"notify_to_first_share_samples,omitempty"`
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
@@ -272,10 +279,18 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					NotifyEnabled:             savedEntry.NotifyEnabled,
 					BestDifficulty:            savedEntry.BestDifficulty,
 					Hashrate:                  hashrate,
+					HashrateAccuracy:          view.HashrateAccuracy,
 					SharesPerMinute:           view.ShareRate,
 					Accepted:                  view.Accepted,
 					Rejected:                  view.Rejected,
 					Difficulty:                view.Difficulty,
+					EstimatedPingP50MS:        view.EstimatedPingP50MS,
+					EstimatedPingP95MS:        view.EstimatedPingP95MS,
+					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
+					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
+					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
+					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
+					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
 					LastShare:                 lastShare,
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
@@ -288,8 +303,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("saved workers json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -329,8 +343,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *h
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("one time code json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -378,8 +391,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 		Cleared bool `json:"cleared"`
 	}{Cleared: cleared}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		logger.Error("one time code clear json marshal", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -461,8 +473,7 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 		OK:      true,
 		Enabled: *parsed.Enabled,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -527,8 +538,7 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 		OK:      true,
 		Enabled: *parsed.Enabled,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	setShortJSONCacheHeaders(w, true)
 	if out, err := sonic.Marshal(resp); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -578,15 +588,69 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid submission", http.StatusBadRequest)
 		return
 	}
-	worker := strings.TrimSpace(r.FormValue("worker"))
-	if worker == "" {
+	hash, errMsg := parseSHA256HexStrict(r.FormValue("hash"))
+	if errMsg != "" || hash == "" {
 		http.Redirect(w, r, "/worker", http.StatusSeeOther)
 		return
 	}
 	if s.workerLists != nil {
-		if err := s.workerLists.Remove(user.UserID, worker); err != nil {
-			logger.Warn("remove worker name", "error", err, "user_id", user.UserID)
+		if err := s.workerLists.Remove(user.UserID, hash); err != nil {
+			logger.Warn("remove worker by hash", "error", err, "user_id", user.UserID, "hash", hash)
 		}
+	}
+	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+}
+
+func (s *StatusServer) handleWorkerReconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid submission", http.StatusBadRequest)
+		return
+	}
+	hash, errMsg := parseSHA256HexStrict(r.FormValue("hash"))
+	if errMsg != "" || hash == "" {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+
+	authorized := false
+	if s.workerLists != nil {
+		if list, err := s.workerLists.List(user.UserID); err == nil {
+			for _, saved := range list {
+				if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
+					authorized = true
+					break
+				}
+			}
+		} else {
+			logger.Warn("load saved workers for reconnect", "error", err, "user_id", user.UserID)
+		}
+	}
+	if !authorized {
+		http.Error(w, "worker not saved", http.StatusForbidden)
+		return
+	}
+	if s.workerRegistry == nil {
+		http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
+		return
+	}
+
+	conns := s.workerRegistry.getConnectionsByHash(hash)
+	for _, mc := range conns {
+		if mc == nil {
+			continue
+		}
+		worker := strings.TrimSpace(mc.currentWorker())
+		mc.banFor("manual reconnect reset", manualReconnectBanDuration, worker)
+		mc.Close("manual reconnect reset")
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
 }

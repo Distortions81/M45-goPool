@@ -11,58 +11,12 @@ import (
 	"github.com/hako/durafmt"
 )
 
-// handlePoolStatsJSON returns essential pool statistics
-func (s *StatusServer) handlePoolStatsJSON(w http.ResponseWriter, r *http.Request) {
-	key := "pool_stats"
-	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
-		view := s.statusDataView()
-		data := PoolStatsData{
-			APIVersion:              apiVersion,
-			BrandName:               view.BrandName,
-			BrandDomain:             view.BrandDomain,
-			ServerLocation:          view.ServerLocation,
-			ListenAddr:              view.ListenAddr,
-			StratumTLSListen:        view.StratumTLSListen,
-			PoolSoftware:            view.PoolSoftware,
-			BuildVersion:            view.BuildVersion,
-			BuildTime:               view.BuildTime,
-			Uptime:                  view.Uptime,
-			ActiveMiners:            view.ActiveMiners,
-			PoolHashrate:            view.PoolHashrate,
-			SharesPerSecond:         view.SharesPerSecond,
-			Accepted:                view.Accepted,
-			Rejected:                view.Rejected,
-			StaleShares:             view.StaleShares,
-			LowDiffShares:           view.LowDiffShares,
-			RejectReasons:           view.RejectReasons,
-			WindowAccepted:          view.WindowAccepted,
-			WindowSubmissions:       view.WindowSubmissions,
-			WindowStart:             view.WindowStart,
-			VardiffUp:               view.VardiffUp,
-			VardiffDown:             view.VardiffDown,
-			BlocksAccepted:          view.BlocksAccepted,
-			BlocksErrored:           view.BlocksErrored,
-			MinDifficulty:           view.MinDifficulty,
-			MaxDifficulty:           view.MaxDifficulty,
-			PoolFeePercent:          view.PoolFeePercent,
-			OperatorDonationPercent: view.OperatorDonationPercent,
-			OperatorDonationName:    view.OperatorDonationName,
-			OperatorDonationURL:     view.OperatorDonationURL,
-			CurrentJob:              nil, // Excluded for security
-			JobCreated:              view.JobCreated,
-			TemplateTime:            view.TemplateTime,
-			JobFeed:                 view.JobFeed,
-			BTCPriceFiat:            view.BTCPriceFiat,
-			BTCPriceUpdatedAt:       view.BTCPriceUpdatedAt,
-			FiatCurrency:            view.FiatCurrency,
-			Warnings:                view.Warnings,
-		}
-		return sonic.Marshal(data)
-	})
-}
-
-// handleNodeStatsJSON returns Bitcoin node information
+// handleNodePageJSON returns Bitcoin node information.
 func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	key := "node_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		view := s.statusDataView()
@@ -91,8 +45,12 @@ func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// handleBlocksListJSON returns found blocks
+// handleBlocksListJSON returns found blocks.
 func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	limit := 10
 	if l := strings.TrimSpace(r.URL.Query().Get("limit")); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
@@ -115,8 +73,12 @@ func (s *StatusServer) handleBlocksListJSON(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// handleOverviewPageJSON returns minimal data for the overview page
+// handleOverviewPageJSON returns minimal data for the overview page.
 func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	key := "overview_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		start := time.Now()
@@ -146,11 +108,6 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			bestShares = append(bestShares, censorBestShare(bs))
 		}
 
-		foundBlocks := make([]FoundBlockView, 0, len(view.FoundBlocks))
-		for _, fb := range view.FoundBlocks {
-			foundBlocks = append(foundBlocks, censorFoundBlock(fb))
-		}
-
 		poolTag := displayPoolTagFromCoinbaseMessage(view.CoinbaseMessage)
 
 		// Keep banned-worker payloads bounded; the UI only needs a small sample.
@@ -178,15 +135,18 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			Workers:         recentWork,
 			BannedWorkers:   censoredBanned,
 			BestShares:      bestShares,
-			FoundBlocks:     foundBlocks,
 			MinerTypes:      view.MinerTypes,
 		}
 		return sonic.Marshal(data)
 	})
 }
 
-// handlePoolPageJSON returns pool configuration data for the pool info page
+// handlePoolPageJSON returns pool configuration data for the pool info page.
 func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	key := "pool_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		view := s.statusDataView()
@@ -211,8 +171,12 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// handleServerPageJSON returns combined status and diagnostics for the server page
+// handleServerPageJSON returns combined status and diagnostics for the server page.
 func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	key := "server_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		view := s.statusDataView()
@@ -255,9 +219,20 @@ func (s *StatusServer) handleServerPageJSON(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// handleDiagnosticsJSON returns system diagnostics
+// handlePoolHashrateJSON returns hashrate and block-time telemetry.
 func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	key := "pool_hashrate"
+	includeHistory := false
+	if r != nil {
+		includeHistory = r.URL.Query().Get("include_history") == "1"
+	}
+	if includeHistory {
+		key += "_with_history"
+	}
 	s.serveCachedJSON(w, key, poolHashrateTTL, func() ([]byte, error) {
 		var blockHeight int64
 		var blockDifficulty float64
@@ -321,10 +296,6 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 							blockDifficulty = difficultyFromBits(uint32(bits))
 						}
 					}
-					// Don't calculate time left from template if timer isn't active yet
-					if blockTimeLeftSec < 0 && !fs.Payload.BlockTimerActive && tpl.CurTime > 0 {
-						// Keep blockTimeLeftSec at -1 to indicate timer not started
-					}
 				}
 			}
 			// Get recent block times (formatted as ISO8601)
@@ -350,19 +321,19 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		data := struct {
-			APIVersion             string                  `json:"api_version"`
-			PoolHashrate           float64                 `json:"pool_hashrate"`
-			BlockHeight            int64                   `json:"block_height"`
-			BlockDifficulty        float64                 `json:"block_difficulty"`
-			BlockTimeLeftSec       int64                   `json:"block_time_left_sec"`
-			RecentBlockTimes       []string                `json:"recent_block_times"`
-			NextDifficultyRetarget *nextDifficultyRetarget `json:"next_difficulty_retarget,omitempty"`
-			TemplateTxFeesSats     *int64                  `json:"template_tx_fees_sats,omitempty"`
-			TemplateUpdatedAt      string                  `json:"template_updated_at,omitempty"`
-			UpdatedAt              string                  `json:"updated_at"`
+			APIVersion             string                     `json:"api_version"`
+			PoolHashrate           float64                    `json:"pool_hashrate"`
+			PoolHashrateHistory    []poolHashrateHistoryPoint `json:"pool_hashrate_history,omitempty"`
+			BlockHeight            int64                      `json:"block_height"`
+			BlockDifficulty        float64                    `json:"block_difficulty"`
+			BlockTimeLeftSec       int64                      `json:"block_time_left_sec"`
+			RecentBlockTimes       []string                   `json:"recent_block_times"`
+			NextDifficultyRetarget *nextDifficultyRetarget    `json:"next_difficulty_retarget,omitempty"`
+			TemplateTxFeesSats     *int64                     `json:"template_tx_fees_sats,omitempty"`
+			TemplateUpdatedAt      string                     `json:"template_updated_at,omitempty"`
+			UpdatedAt              string                     `json:"updated_at"`
 		}{
 			APIVersion:             apiVersion,
-			PoolHashrate:           s.computePoolHashrate(),
 			BlockHeight:            blockHeight,
 			BlockDifficulty:        blockDifficulty,
 			BlockTimeLeftSec:       blockTimeLeftSec,
@@ -371,6 +342,19 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			TemplateTxFeesSats:     templateTxFeesSats,
 			TemplateUpdatedAt:      templateUpdatedAt,
 			UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
+		}
+		computedHashrate := s.computePoolHashrate()
+		if computedHashrate > 0 {
+			data.PoolHashrate = computedHashrate
+			s.appendPoolHashrateHistory(computedHashrate, blockHeight, now)
+		} else if fallbackHashrate, fallbackHeight, ok := s.latestPoolHashrateHistorySince(now, poolHashrateDisplayFallbackMaxAge); ok {
+			data.PoolHashrate = fallbackHashrate
+			if data.BlockHeight <= 0 && fallbackHeight > 0 {
+				data.BlockHeight = fallbackHeight
+			}
+		}
+		if includeHistory {
+			data.PoolHashrateHistory = s.poolHashrateHistorySnapshot(now)
 		}
 		return sonic.Marshal(data)
 	})

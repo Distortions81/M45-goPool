@@ -31,6 +31,322 @@ func shareRatePerMinute(stats MinerStats, now time.Time) float64 {
 	return float64(stats.WindowAccepted) / window.Minutes()
 }
 
+func modeledShareRatePerMinute(hashrate, diff float64) float64 {
+	if hashrate <= 0 || diff <= 0 {
+		return 0
+	}
+	return (hashrate / hashPerShare) * 60.0 / diff
+}
+
+func cumulativeHashrateEstimate(stats MinerStats, connectedAt, now time.Time) float64 {
+	if connectedAt.IsZero() || !now.After(connectedAt) || stats.TotalDifficulty <= 0 {
+		return 0
+	}
+	elapsed := now.Sub(connectedAt).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	return (stats.TotalDifficulty * hashPerShare) / elapsed
+}
+
+func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulative float64) float64 {
+	if ema <= 0 {
+		return cumulative
+	}
+	if cumulative <= 0 {
+		return ema
+	}
+	// Favor cumulative estimator as samples grow: it is more accurate over
+	// longer horizons and less sensitive to vardiff/window resets.
+	w := float64(stats.Accepted) / 16.0
+	if w < 0 {
+		w = 0
+	}
+	if w > 1 {
+		w = 1
+	}
+	// Time-based floor: even with noisy/low accepted-share counts, long-lived
+	// steady-state connections should converge toward cumulative hashrate.
+	//
+	// We ramp this floor up gradually to avoid over-weighting cumulative too
+	// early after connect/reconnect.
+	const ageToFullCumulative = 20 * time.Minute
+	if !connectedAt.IsZero() {
+		age := now.Sub(connectedAt)
+		if age > 0 {
+			ageWeight := age.Seconds() / ageToFullCumulative.Seconds()
+			if ageWeight < 0 {
+				ageWeight = 0
+			}
+			if ageWeight > 1 {
+				ageWeight = 1
+			}
+			if ageWeight > w {
+				w = ageWeight
+			}
+		}
+	}
+	if w < 0 {
+		w = 0
+	}
+	if w > 1 {
+		w = 1
+	}
+	return (1-w)*ema + w*cumulative
+}
+
+func blendedShareRatePerMinute(stats MinerStats, now time.Time, rawRate, modeledRate float64) float64 {
+	if rawRate <= 0 {
+		return modeledRate
+	}
+	if modeledRate <= 0 {
+		return rawRate
+	}
+	weight := float64(stats.WindowAccepted) / 16.0
+	if weight < 0 {
+		weight = 0
+	}
+	if weight > 1 {
+		weight = 1
+	}
+	if !stats.WindowStart.IsZero() {
+		if window := now.Sub(stats.WindowStart); window > 0 && window < 45*time.Second {
+			weight *= window.Seconds() / 45.0
+		}
+	}
+	if weight < 0 {
+		weight = 0
+	}
+	if weight > 1 {
+		weight = 1
+	}
+	return weight*rawRate + (1-weight)*modeledRate
+}
+
+func hasReliableRateEstimate(stats MinerStats, now time.Time, modeledRate float64, connectedAt time.Time) bool {
+	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
+	if modeledRate <= 0 {
+		return false
+	}
+	if !stats.WindowStart.IsZero() {
+		window := now.Sub(stats.WindowStart)
+		if window >= minWindow {
+			expected := modeledRate * window.Minutes()
+			if expected > 0 {
+				evidence := float64(stats.WindowAccepted)
+				if expected < evidence {
+					evidence = expected
+				}
+				if evidence >= minEvidence {
+					return true
+				}
+			}
+		}
+	}
+	// Fallback path for frequent vardiff resets: use cumulative accepted shares
+	// and minimum connection age to avoid suppressing useful estimates forever.
+	if stats.Accepted >= minCumulativeAccepted && !connectedAt.IsZero() && now.Sub(connectedAt) >= minConnected {
+		return true
+	}
+	return false
+}
+
+func reliabilityThresholds(modeledRate float64) (minWindow time.Duration, minEvidence float64, minCumulativeAccepted int64, minConnected time.Duration) {
+	// Base target: enough time for ~3 expected shares under modeled cadence.
+	if modeledRate <= 0 {
+		return 60 * time.Second, 4, 6, 90 * time.Second
+	}
+	targetWindow := time.Duration((3.0 / modeledRate) * float64(time.Minute))
+	if targetWindow < 30*time.Second {
+		targetWindow = 30 * time.Second
+	}
+	if targetWindow > 2*time.Minute {
+		targetWindow = 2 * time.Minute
+	}
+	expectedInWindow := modeledRate * targetWindow.Minutes()
+	if expectedInWindow < 2.5 {
+		expectedInWindow = 2.5
+	}
+	if expectedInWindow > 6 {
+		expectedInWindow = 6
+	}
+	minWindow = targetWindow
+	minEvidence = expectedInWindow
+	minCumulativeAccepted = int64(math.Ceil(expectedInWindow))
+	if minCumulativeAccepted < 3 {
+		minCumulativeAccepted = 3
+	}
+	if minCumulativeAccepted > 8 {
+		minCumulativeAccepted = 8
+	}
+	minConnected = targetWindow + 30*time.Second
+	if minConnected < 60*time.Second {
+		minConnected = 60 * time.Second
+	}
+	if minConnected > 4*time.Minute {
+		minConnected = 4 * time.Minute
+	}
+	return minWindow, minEvidence, minCumulativeAccepted, minConnected
+}
+
+func hashrateConfidenceLevel(stats MinerStats, now time.Time, modeledRate, estimatedHashrate float64, connectedAt time.Time) int {
+	if modeledRate <= 0 || estimatedHashrate <= 0 {
+		return 0
+	}
+	if !hasReliableRateEstimate(stats, now, modeledRate, connectedAt) {
+		return 0
+	}
+	settlingWindowAgreement := hashrateAgreementWithinTolerance(stats, now, modeledRate, settlingHashrateMaxRelativeError, settlingHashrateMinExpectedShares)
+	settlingCumulativeAgreement := hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, settlingHashrateCumulativeMaxRelativeError)
+	hasCumulativeEvidence := hashrateHasCumulativeEvidence(stats, now, connectedAt)
+	if !settlingWindowAgreement {
+		// Frequent vardiff resets can keep the current window too short for
+		// window-based agreement checks; allow cumulative agreement to settle
+		// confidence once enough long-horizon evidence exists.
+		if !(hasCumulativeEvidence && settlingCumulativeAgreement) {
+			return 0
+		}
+	}
+	if hasCumulativeEvidence && !settlingCumulativeAgreement {
+		return 0
+	}
+	minWindow, minEvidence, minCumulativeAccepted, minConnected := reliabilityThresholds(modeledRate)
+	highWindow := minWindow * 2
+	if highWindow < 90*time.Second {
+		highWindow = 90 * time.Second
+	}
+	if highWindow > 6*time.Minute {
+		highWindow = 6 * time.Minute
+	}
+	highEvidence := minEvidence * 2
+	if highEvidence < 6 {
+		highEvidence = 6
+	}
+	if highEvidence > 20 {
+		highEvidence = 20
+	}
+	highCum := minCumulativeAccepted * 2
+	if highCum < 8 {
+		highCum = 8
+	}
+	if highCum > 24 {
+		highCum = 24
+	}
+	highConn := minConnected + 2*time.Minute
+	if highConn < 3*time.Minute {
+		highConn = 3 * time.Minute
+	}
+	if highConn > 10*time.Minute {
+		highConn = 10 * time.Minute
+	}
+	if !stats.WindowStart.IsZero() {
+		window := now.Sub(stats.WindowStart)
+		if window >= highWindow {
+			expected := modeledRate * window.Minutes()
+			if expected > 0 {
+				evidence := float64(stats.WindowAccepted)
+				if expected < evidence {
+					evidence = expected
+				}
+				if evidence >= highEvidence {
+					if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+						hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+						if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+							hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+							stats.Accepted >= 32 &&
+							!connectedAt.IsZero() &&
+							now.Sub(connectedAt) >= 20*time.Minute {
+							return 3
+						}
+						return 2
+					}
+					return 1
+				}
+			}
+		}
+	}
+	if stats.Accepted >= highCum && !connectedAt.IsZero() && now.Sub(connectedAt) >= highConn {
+		if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+			hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+			if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+				hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+				stats.Accepted >= 32 &&
+				now.Sub(connectedAt) >= 20*time.Minute {
+				return 3
+			}
+			return 2
+		}
+		return 1
+	}
+	if hashrateAgreementWithinTolerance(stats, now, modeledRate, stableHashrateMaxRelativeError, stableHashrateMinExpectedShares) &&
+		hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, stableHashrateCumulativeMaxRelativeError) {
+		if hashrateAgreementWithinTolerance(stats, now, modeledRate, veryStableHashrateMaxRelativeError, veryStableHashrateMinExpectedShares) &&
+			hashrateEstimateAgreesWithCumulative(stats, now, connectedAt, estimatedHashrate, veryStableHashrateCumulativeMaxRelativeError) &&
+			stats.Accepted >= 32 &&
+			!connectedAt.IsZero() &&
+			now.Sub(connectedAt) >= 20*time.Minute {
+			return 3
+		}
+		return 2
+	}
+	return 1
+}
+
+func hashrateAgreementWithinTolerance(stats MinerStats, now time.Time, modeledRate, maxRelativeError, minExpectedShares float64) bool {
+	if modeledRate <= 0 || maxRelativeError < 0 || minExpectedShares <= 0 || stats.WindowStart.IsZero() {
+		return false
+	}
+	window := now.Sub(stats.WindowStart)
+	if window <= 0 {
+		return false
+	}
+	expectedShares := modeledRate * window.Minutes()
+	if expectedShares < minExpectedShares {
+		return false
+	}
+	observedShares := float64(stats.WindowAccepted)
+	if observedShares <= 0 {
+		return false
+	}
+	relativeError := math.Abs(observedShares-expectedShares) / expectedShares
+	return relativeError <= maxRelativeError
+}
+
+func hashrateHasCumulativeEvidence(stats MinerStats, now, connectedAt time.Time) bool {
+	if connectedAt.IsZero() || !now.After(connectedAt) {
+		return false
+	}
+	if stats.Accepted < hashrateCumulativeAgreementMinAccepted {
+		return false
+	}
+	return now.Sub(connectedAt) >= hashrateCumulativeAgreementMinConnected
+}
+
+func hashrateEstimateAgreesWithCumulative(stats MinerStats, now, connectedAt time.Time, estimateHashrate, maxRelativeError float64) bool {
+	if estimateHashrate <= 0 || maxRelativeError < 0 || connectedAt.IsZero() || !now.After(connectedAt) {
+		return false
+	}
+	cumulative := cumulativeHashrateEstimate(stats, connectedAt, now)
+	if cumulative <= 0 {
+		return false
+	}
+	relativeError := math.Abs(estimateHashrate-cumulative) / cumulative
+	return relativeError <= maxRelativeError
+}
+
+func hashrateAccuracySymbol(level int) string {
+	switch level {
+	case 0:
+		return "~"
+	case 1:
+		return "≈"
+	case 2:
+		return "≈+"
+	default:
+		return "✓"
+	}
+}
+
 func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
 	if view.RollingHashrate > 0 {
 		return view.RollingHashrate
@@ -55,6 +371,10 @@ func workerHashrateEstimate(view WorkerView, now time.Time) float64 {
 }
 
 func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
+	estimatedRTT := estimateConnRTTMS(mc.conn)
+	if estimatedRTT > 0 {
+		mc.recordPingRTT(estimatedRTT)
+	}
 	snap := mc.snapshotShareInfo()
 	stats := snap.Stats
 	name := stats.Worker
@@ -63,15 +383,19 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	}
 	displayName := shortWorkerName(name, workerNamePrefix, workerNameSuffix)
 	workerHash := strings.TrimSpace(stats.WorkerSHA256)
-	accRate := shareRatePerMinute(stats, now)
 	diff := mc.currentDifficulty()
+	rawRate := shareRatePerMinute(stats, now)
 	hashRate := workerHashrateEstimate(WorkerView{
-		RollingHashrate:  snap.RollingHashrate,
+		RollingHashrate:  snap.RollingHashrateDisplay,
 		WindowStart:      stats.WindowStart,
 		WindowDifficulty: stats.WindowDifficulty,
-		ShareRate:        accRate,
+		ShareRate:        rawRate,
 		Difficulty:       diff,
 	}, now)
+	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, cumulativeHashrateEstimate(stats, mc.connectedAt, now))
+	modeledRate := modeledShareRatePerMinute(hashRate, diff)
+	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
+	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)
 	addr, script, valid := mc.workerWalletData(stats.Worker)
 	scriptHex := ""
 	if len(script) > 0 {
@@ -86,40 +410,60 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 	banned := mc.isBanned(now)
 	until, reason, _ := mc.banDetails()
 	minerType, minerName, minerVersion := mc.minerClientInfo()
+	estPingP50 := snap.PingRTTP50MS
+	estPingP95 := snap.PingRTTP95MS
+	if estPingP95 <= 0 {
+		estPingP50 = snap.SubmitRTTP50MS
+		estPingP95 = snap.SubmitRTTP95MS
+	}
+	if estPingP95 <= 0 && estimatedRTT > 0 {
+		estPingP50 = estimatedRTT
+		estPingP95 = estimatedRTT
+	}
 	return WorkerView{
-		Name:                name,
-		DisplayName:         displayName,
-		WorkerSHA256:        workerHash,
-		Accepted:            uint64(stats.Accepted),
-		Rejected:            uint64(stats.Rejected),
-		BalanceSats:         0,
-		WalletAddress:       addr,
-		WalletScript:        scriptHex,
-		MinerType:           minerType,
-		MinerName:           minerName,
-		MinerVersion:        minerVersion,
-		LastShare:           stats.LastShare,
-		LastShareHash:       lastShareHash,
-		DisplayLastShare:    displayHash,
-		LastShareAccepted:   snap.LastShareAccepted,
-		LastShareDifficulty: snap.LastShareDifficulty,
-		LastShareDetail:     snap.LastShareDetail,
-		Difficulty:          diff,
-		Vardiff:             vardiff,
-		RollingHashrate:     hashRate,
-		LastReject:          snap.LastReject,
-		Banned:              banned,
-		BannedUntil:         until,
-		BanReason:           reason,
-		WindowStart:         stats.WindowStart,
-		WindowAccepted:      stats.WindowAccepted,
-		WindowSubmissions:   stats.WindowSubmissions,
-		WindowDifficulty:    stats.WindowDifficulty,
-		ShareRate:           accRate,
-		ConnectionID:        mc.connectionIDString(),
-		ConnectionSeq:       atomic.LoadUint64(&mc.connectionSeq),
-		ConnectedAt:         mc.connectedAt,
-		WalletValidated:     valid,
+		Name:                      name,
+		DisplayName:               displayName,
+		WorkerSHA256:              workerHash,
+		Accepted:                  uint64(stats.Accepted),
+		Rejected:                  uint64(stats.Rejected),
+		BalanceSats:               0,
+		WalletAddress:             addr,
+		WalletScript:              scriptHex,
+		MinerType:                 minerType,
+		MinerName:                 minerName,
+		MinerVersion:              minerVersion,
+		LastShare:                 stats.LastShare,
+		LastShareHash:             lastShareHash,
+		DisplayLastShare:          displayHash,
+		LastShareAccepted:         snap.LastShareAccepted,
+		LastShareDifficulty:       snap.LastShareDifficulty,
+		LastShareDetail:           snap.LastShareDetail,
+		Difficulty:                diff,
+		Vardiff:                   vardiff,
+		RollingHashrate:           hashRate,
+		LastReject:                snap.LastReject,
+		Banned:                    banned,
+		BannedUntil:               until,
+		BanReason:                 reason,
+		WindowStart:               stats.WindowStart,
+		WindowAccepted:            stats.WindowAccepted,
+		WindowSubmissions:         stats.WindowSubmissions,
+		WindowDifficulty:          stats.WindowDifficulty,
+		ShareRate:                 accRate,
+		HashrateAccuracy:          hashrateAccuracySymbol(conf),
+		SubmitRTTP50MS:            snap.SubmitRTTP50MS,
+		SubmitRTTP95MS:            snap.SubmitRTTP95MS,
+		NotifyToFirstShareMinMS:   snap.NotifyToFirstShareMinMS,
+		NotifyToFirstShareMS:      snap.NotifyToFirstShareMS,
+		NotifyToFirstShareP50MS:   snap.NotifyToFirstShareP50MS,
+		NotifyToFirstShareP95MS:   snap.NotifyToFirstShareP95MS,
+		NotifyToFirstShareSamples: snap.NotifyToFirstShareSamples,
+		EstimatedPingP50MS:        estPingP50,
+		EstimatedPingP95MS:        estPingP95,
+		ConnectionID:              mc.connectionIDString(),
+		ConnectionSeq:             atomic.LoadUint64(&mc.connectionSeq),
+		ConnectedAt:               mc.connectedAt,
+		WalletValidated:           valid,
 	}
 }
 
@@ -164,6 +508,33 @@ func mergeWorkerViewsByHash(views []WorkerView) []WorkerView {
 		current.WindowSubmissions += w.WindowSubmissions
 		current.WindowDifficulty += w.WindowDifficulty
 		current.ShareRate += w.ShareRate
+		if w.SubmitRTTP50MS > current.SubmitRTTP50MS {
+			current.SubmitRTTP50MS = w.SubmitRTTP50MS
+		}
+		if w.SubmitRTTP95MS > current.SubmitRTTP95MS {
+			current.SubmitRTTP95MS = w.SubmitRTTP95MS
+		}
+		if w.NotifyToFirstShareMS > current.NotifyToFirstShareMS {
+			current.NotifyToFirstShareMS = w.NotifyToFirstShareMS
+		}
+		if w.NotifyToFirstShareMinMS > 0 && (current.NotifyToFirstShareMinMS <= 0 || w.NotifyToFirstShareMinMS < current.NotifyToFirstShareMinMS) {
+			current.NotifyToFirstShareMinMS = w.NotifyToFirstShareMinMS
+		}
+		if w.NotifyToFirstShareP50MS > current.NotifyToFirstShareP50MS {
+			current.NotifyToFirstShareP50MS = w.NotifyToFirstShareP50MS
+		}
+		if w.NotifyToFirstShareP95MS > current.NotifyToFirstShareP95MS {
+			current.NotifyToFirstShareP95MS = w.NotifyToFirstShareP95MS
+		}
+		if w.NotifyToFirstShareSamples > current.NotifyToFirstShareSamples {
+			current.NotifyToFirstShareSamples = w.NotifyToFirstShareSamples
+		}
+		if w.EstimatedPingP50MS > current.EstimatedPingP50MS {
+			current.EstimatedPingP50MS = w.EstimatedPingP50MS
+		}
+		if w.EstimatedPingP95MS > current.EstimatedPingP95MS {
+			current.EstimatedPingP95MS = w.EstimatedPingP95MS
+		}
 		if w.LastShare.After(current.LastShare) {
 			current.LastShare = w.LastShare
 			current.LastShareHash = w.LastShareHash
@@ -261,6 +632,27 @@ func formatHashrateValue(h float64) string {
 	return fmt.Sprintf("%.3f %s", val, unit)
 }
 
+func formatLatencyMS(ms float64) string {
+	if ms <= 0 || math.IsNaN(ms) || math.IsInf(ms, 0) {
+		return "—"
+	}
+	if ms < 1 {
+		us := math.Round(ms * 1000)
+		if us < 1 {
+			us = 1
+		}
+		return fmt.Sprintf("%.0fus", us)
+	}
+	if ms < 1000 {
+		return fmt.Sprintf("%.0fms", math.Round(ms))
+	}
+	sec := ms / 1000
+	if sec < 60 {
+		return fmt.Sprintf("%.1fs", sec)
+	}
+	return fmt.Sprintf("%.1fm", sec/60)
+}
+
 // buildTemplateFuncs returns the template.FuncMap used for all HTML templates.
 func buildTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
@@ -278,6 +670,27 @@ func buildTemplateFuncs() template.FuncMap {
 			return strings.Join(ss, sep)
 		},
 		"formatHashrate": formatHashrateValue,
+		"formatWorkerHashrate": func(h float64, accuracy string) string {
+			if h <= 0 {
+				return "—"
+			}
+			base := formatHashrateValue(h)
+			marker := strings.TrimSpace(accuracy)
+			if marker == "" {
+				return base
+			}
+			return marker + " " + base
+		},
+		"formatLatencyMS": formatLatencyMS,
+		"formatWorkStartLatencyMS": func(minMS, p50MS, lastMS float64) string {
+			if minMS > 0 {
+				return formatLatencyMS(minMS)
+			}
+			if p50MS > 0 {
+				return formatLatencyMS(p50MS)
+			}
+			return formatLatencyMS(lastMS)
+		},
 		"formatDiff": func(d float64) string {
 			if d <= 0 {
 				return "0"
@@ -343,20 +756,6 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			return port
 		},
-		"formatBytes": func(b uint64) string {
-			const unit = 1024.0
-			if b == 0 {
-				return "0 B"
-			}
-			val := float64(b)
-			units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-			u := units[0]
-			for i := 0; i < len(units)-1 && val >= unit; i++ {
-				val /= unit
-				u = units[i+1]
-			}
-			return fmt.Sprintf("%.2f %s", val, u)
-		},
 		"formatShareRate": func(r float64) string {
 			if r < 0 {
 				r = 0
@@ -373,13 +772,6 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.2f %s", val, unit)
 		},
-		"formatBTC": func(sats int64) string {
-			if sats == 0 {
-				return "0 BTC"
-			}
-			btc := float64(sats) / 1e8
-			return fmt.Sprintf("%.8f BTC", btc)
-		},
 		"formatBTCShort": func(sats int64) string {
 			btc := float64(sats) / 1e8
 			return fmt.Sprintf("%.8f BTC", btc)
@@ -395,16 +787,6 @@ func buildTemplateFuncs() template.FuncMap {
 				cur = "USD"
 			}
 			return fmt.Sprintf("≈ %.2f %s", amt, cur)
-		},
-		"formatRenderDuration": func(d time.Duration) string {
-			if d <= 0 {
-				return "0s"
-			}
-			if d < time.Millisecond {
-				return "<1ms"
-			}
-			ms := float64(d) / float64(time.Millisecond)
-			return fmt.Sprintf("%.0fms", ms)
 		},
 	}
 }
@@ -434,6 +816,8 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	adminMinersPath := filepath.Join(dataDir, "templates", "admin_miners.tmpl")
 	adminLoginsPath := filepath.Join(dataDir, "templates", "admin_logins.tmpl")
 	adminBansPath := filepath.Join(dataDir, "templates", "admin_bans.tmpl")
+	adminOperatorPath := filepath.Join(dataDir, "templates", "admin_operator.tmpl")
+	adminLogsPath := filepath.Join(dataDir, "templates", "admin_logs.tmpl")
 	errorPath := filepath.Join(dataDir, "templates", "error.tmpl")
 
 	// Load template files
@@ -513,6 +897,14 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load admin bans template: %w", err)
 	}
+	adminOperatorHTML, err := os.ReadFile(adminOperatorPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin operator template: %w", err)
+	}
+	adminLogsHTML, err := os.ReadFile(adminLogsPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin logs template: %w", err)
+	}
 	errorHTML, err := os.ReadFile(errorPath)
 	if err != nil {
 		return nil, fmt.Errorf("load error template: %w", err)
@@ -577,6 +969,12 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if _, err := tmpl.New("admin_bans").Parse(string(adminBansHTML)); err != nil {
 		return nil, fmt.Errorf("parse admin bans template: %w", err)
 	}
+	if _, err := tmpl.New("admin_operator").Parse(string(adminOperatorHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin operator template: %w", err)
+	}
+	if _, err := tmpl.New("admin_logs").Parse(string(adminLogsHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin logs template: %w", err)
+	}
 	if _, err := tmpl.New("error").Parse(string(errorHTML)); err != nil {
 		return nil, fmt.Errorf("parse error template: %w", err)
 	}
@@ -611,6 +1009,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		workerLists:         workerLists,
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
+		poolHashrateHistory: make([]poolHashrateHistorySample, 0, int(poolHashrateHistoryWindow/poolHashrateTTL)+1),
 		configPath:          configPath,
 		adminConfigPath:     adminConfigPath,
 		tuningPath:          tuningPath,

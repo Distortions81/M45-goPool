@@ -143,6 +143,7 @@ func ensureStateTables(db *sql.DB) error {
 			user_id TEXT NOT NULL,
 			worker TEXT NOT NULL,
 			worker_hash TEXT,
+			worker_display TEXT,
 			notify_enabled INTEGER NOT NULL DEFAULT 1,
 			best_difficulty REAL NOT NULL DEFAULT 0,
 			PRIMARY KEY(user_id, worker)
@@ -157,6 +158,9 @@ func ensureStateTables(db *sql.DB) error {
 		return err
 	}
 	if err := addSavedWorkersBestDifficultyColumn(db); err != nil {
+		return err
+	}
+	if err := addSavedWorkersDisplayColumn(db); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS saved_workers_hash_idx ON saved_workers (user_id, worker_hash)`); err != nil {

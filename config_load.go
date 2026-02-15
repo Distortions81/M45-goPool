@@ -299,14 +299,20 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Mining.CoinbaseScriptSigMaxBytes != nil {
 		cfg.CoinbaseScriptSigMaxBytes = *fc.Mining.CoinbaseScriptSigMaxBytes
 	}
-	if fc.Mining.SoloMode != nil {
-		cfg.SoloMode = *fc.Mining.SoloMode
+	if fc.Mining.RelaxedSubmitValidation != nil {
+		cfg.RelaxedSubmitValidation = *fc.Mining.RelaxedSubmitValidation
+	}
+	if fc.Mining.SubmitWorkerNameMatch != nil {
+		cfg.SubmitWorkerNameMatch = *fc.Mining.SubmitWorkerNameMatch
 	}
 	if fc.Mining.DirectSubmitProcessing != nil {
 		cfg.DirectSubmitProcessing = *fc.Mining.DirectSubmitProcessing
 	}
 	if fc.Mining.CheckDuplicateShares != nil {
 		cfg.CheckDuplicateShares = *fc.Mining.CheckDuplicateShares
+	}
+	if fc.Mining.RejectNoJobID != nil {
+		cfg.RejectNoJobID = *fc.Mining.RejectNoJobID
 	}
 	if fc.Logging.Level != "" {
 		cfg.LogLevel = strings.ToLower(strings.TrimSpace(fc.Logging.Level))
@@ -342,6 +348,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 	}
 	if fc.RateLimits.MaxAcceptBurst != nil {
 		cfg.MaxAcceptBurst = *fc.RateLimits.MaxAcceptBurst
+	}
+	if fc.RateLimits.DisableConnectRateLimits != nil {
+		cfg.DisableConnectRateLimits = *fc.RateLimits.DisableConnectRateLimits
 	}
 	if fc.RateLimits.AutoAcceptRateLimits != nil {
 		cfg.AutoAcceptRateLimits = *fc.RateLimits.AutoAcceptRateLimits
@@ -393,8 +402,8 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		// the suffix builder (which is gated on JobEntropy > 0).
 		cfg.JobEntropy = 0
 	}
-	if fc.Mining.VardiffFine != nil {
-		cfg.VardiffFine = *fc.Mining.VardiffFine
+	if fc.Mining.DifficultyStepGranularity != nil && *fc.Mining.DifficultyStepGranularity > 0 {
+		cfg.DifficultyStepGranularity = *fc.Mining.DifficultyStepGranularity
 	}
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds

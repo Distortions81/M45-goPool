@@ -47,12 +47,16 @@ const (
 
 	// Ban thresholds.
 	defaultNTimeForwardSlackSeconds      = 7000
-	defaultBanInvalidSubmissionsAfter    = 60
+	defaultBanInvalidSubmissionsAfter    = 40
 	defaultBanInvalidSubmissionsWindow   = 5 * time.Minute
 	defaultBanInvalidSubmissionsDuration = 15 * time.Minute
-	defaultReconnectBanThreshold         = 60
-	defaultReconnectBanWindowSeconds     = 60
-	defaultReconnectBanDurationSeconds   = 3600
+	// Accepted-share forgiveness for invalid-submission bans:
+	// every N accepted shares reduce effective invalid count by 1, up to a cap.
+	banInvalidForgiveSharesPerUnit     = 2
+	banInvalidForgiveCapFraction       = 0.5
+	defaultReconnectBanThreshold       = 60
+	defaultReconnectBanWindowSeconds   = 60
+	defaultReconnectBanDurationSeconds = 3600
 
 	defaultDiscordWorkerNotifyThresholdSeconds = 300
 
@@ -72,25 +76,57 @@ const (
 	defaultZMQReconnectMax        = 10 * time.Second
 	defaultZMQRecreateBackoffMin  = 500 * time.Millisecond
 	defaultZMQRecreateBackoffMax  = 10 * time.Second
-	defaultInitialDifficultyDelay = 250 * time.Millisecond
+	defaultInitialDifficultyDelay = 2 * time.Second
 	defaultZMQHashBlockAddr       = "tcp://127.0.0.1:28334"
 	defaultZMQRawBlockAddr        = "tcp://127.0.0.1:28332"
 
 	defaultAutoAcceptRateLimits    = true
 	defaultOperatorDonationPercent = 0.0
 
-	defaultPeerCleanupEnabled   = true
-	defaultPeerCleanupMaxPingMs = 150
-	defaultPeerCleanupMinPeers  = 20
+	defaultPeerCleanupEnabled   = false
+	defaultPeerCleanupMaxPingMs = 250
+	defaultPeerCleanupMinPeers  = 30
 
 	// VarDiff defaults.
-	defaultVarDiffTargetSharesPerMin = 7
-	defaultVarDiffAdjustmentWindow   = 120 * time.Second
+	defaultVarDiffTargetSharesPerMin = 10
+	defaultVarDiffAdjustmentWindow   = 60 * time.Second
 	defaultVarDiffStep               = 2
-	defaultVarDiffDampingFactor      = 0.4
+	defaultVarDiffDampingFactor      = 0.7
+	defaultVarDiffRetargetDelay      = 30 * time.Second
+	defaultDifficultyStepGranularity = 4
+	vardiffAdaptiveMinWindow         = 30 * time.Second
+	vardiffAdaptiveMaxWindow         = 4 * time.Minute
+	vardiffAdaptiveHighShareCount    = 24.0
+	vardiffAdaptiveLowShareCount     = 6.0
+	vardiffLowHashrateExpectedShares = 8.0
+	vardiffLowHashrateMinAccepted    = 3
+	// Safety rails for vardiff decisions to avoid extreme share cadences.
+	// - below min shares/min can cause long no-share gaps and miner timeouts.
+	// - above max shares/min can spam submits and overload the pool.
+	vardiffSafetyMinSharesPerMin = 2.0
+	vardiffSafetyMaxSharesPerMin = 30.0
+	vardiffLargeUpJumpFactor     = 4.0
+	vardiffLargeUpCooldown       = 2 * time.Minute
+	vardiffHighWarmupP95MS       = 12000.0
+	vardiffHighWarmupSamplesMin  = 8
+	vardiffHighWarmupStreakNeed  = 3
+	vardiffWarmupDownwardBias    = 0.93
+	vardiffTimeoutGuardMinQuiet  = 20 * time.Second
+	vardiffTimeoutGuardLead      = 5 * time.Second
+	vardiffTimeoutGuardThreshold = 0.7
+	vardiffTimeoutGuardMaxPZero  = 0.01
+	vardiffUncertaintyAbsRatio   = 2.0
+	vardiffUncertaintyMinSamples = 4
+	hashrateControlTauFactor     = 0.35
+	hashrateControlTauMin        = 45 * time.Second
+	startupDiffPrimingFactor     = 0.75
+	startupDiffPrimingMinFactor  = 0.60
 
 	defaultHashrateEMATauSeconds = 300.0
 	initialHashrateEMATau        = 45 * time.Second
+	// statusWindowIdleReset bounds stale status-window carryover after long
+	// no-share gaps; it is intentionally independent from vardiff retargeting.
+	statusWindowIdleReset = 15 * time.Minute
 	// When anchoring a fresh sampling window after reset, place WindowStart at
 	// this percent of the elapsed time from reset to first share (0-100).
 	windowStartLagPercent = 55
@@ -103,7 +139,7 @@ const (
 	// Grace periods for new/changing connections.
 	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
 	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
-	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 2
+	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 4
 	stratumFloodLimitMultiplier = 2
 
 	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60

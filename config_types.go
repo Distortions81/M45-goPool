@@ -113,6 +113,7 @@ type Config struct {
 	// Accept rate limiting (auto-configured from MaxConns when AutoAcceptRateLimits=true).
 	MaxAcceptsPerSecond               int
 	MaxAcceptBurst                    int
+	DisableConnectRateLimits          bool
 	AutoAcceptRateLimits              bool
 	AcceptReconnectWindow             int     // seconds for all miners to reconnect after restart
 	AcceptBurstWindow                 int     // seconds of burst before sustained rate kicks in
@@ -135,14 +136,16 @@ type Config struct {
 
 	LockSuggestedDifficulty          bool    // keep suggested difficulty instead of vardiff
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
-	VardiffFine                      bool    // use half-step vardiff adjustments (tuning.toml only)
+	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
 	NTimeForwardSlackSeconds         int     // max seconds ntime can roll forward
 	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
+	RejectNoJobID                    bool    // reject empty job_id in mining.submit (default false)
 
-	SoloMode               bool   // light validation for solo pools (default true)
-	DirectSubmitProcessing bool   // process submits on connection goroutine (bypass worker pool)
-	LogLevel               string // log level: debug, info, warn, error
+	RelaxedSubmitValidation bool   // skip worker-mismatch + selected policy checks (default true)
+	SubmitWorkerNameMatch   bool   // enforce submit worker name must match authorized worker
+	DirectSubmitProcessing  bool   // process submits on connection goroutine (bypass worker pool)
+	LogLevel                string // log level: debug, info, warn, error
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
@@ -212,6 +215,7 @@ type EffectiveConfig struct {
 	MaxConns                          int      `json:"max_conns,omitempty"`
 	MaxAcceptsPerSecond               int      `json:"max_accepts_per_second,omitempty"`
 	MaxAcceptBurst                    int      `json:"max_accept_burst,omitempty"`
+	DisableConnectRateLimits          bool     `json:"disable_connect_rate_limits,omitempty"`
 	AutoAcceptRateLimits              bool     `json:"auto_accept_rate_limits,omitempty"`
 	AcceptReconnectWindow             int      `json:"accept_reconnect_window,omitempty"`
 	AcceptBurstWindow                 int      `json:"accept_burst_window,omitempty"`
@@ -229,12 +233,14 @@ type EffectiveConfig struct {
 	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
 	TargetSharesPerMin                float64  `json:"target_shares_per_min,omitempty"`
 	LockSuggestedDifficulty           bool     `json:"lock_suggested_difficulty,omitempty"`
-	VardiffFine                       bool     `json:"vardiff_fine,omitempty"`
-	SoloMode                          bool     `json:"solo_mode"`
+	DifficultyStepGranularity         int      `json:"difficulty_step_granularity,omitempty"`
+	RelaxedSubmitValidation           bool     `json:"relaxed_submit_validation"`
+	SubmitWorkerNameMatch             bool     `json:"submit_worker_name_match"`
 	DirectSubmitProcessing            bool     `json:"direct_submit_processing"`
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
 	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
 	CheckDuplicateShares              bool     `json:"check_duplicate_shares,omitempty"`
+	RejectNoJobID                     bool     `json:"reject_no_job_id,omitempty"`
 	LogLevel                          string   `json:"log_level,omitempty"`
 	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`
 	BanInvalidSubmissionsAfter        int      `json:"ban_invalid_submissions_after,omitempty"`

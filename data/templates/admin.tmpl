@@ -1,12 +1,14 @@
 {{/* Admin control panel template */}}
-{{define "restart-required"}}<span class="restart-required" title="Requires restart">↻</span>{{end}}
-{{define "sensitive"}}<span class="sensitive" title="Sensitive setting (edit config.toml)">[LOCKED]</span>{{end}}
+{{define "restart-required"}}<span class="restart-required">↻</span>{{end}}
+{{define "sensitive"}}<span class="sensitive">[PROTECTED]</span>{{end}}
 {{define "admin-nav"}}
 <div class="admin-tabs">
 	<a class="admin-tab {{if eq .AdminSection "settings"}}active{{end}}" href="/admin">Live settings</a>
 	<a class="admin-tab {{if eq .AdminSection "miners"}}active{{end}}" href="/admin/miners">Connected miners</a>
 	<a class="admin-tab {{if eq .AdminSection "logins"}}active{{end}}" href="/admin/logins">Accounts</a>
 	<a class="admin-tab {{if eq .AdminSection "bans"}}active{{end}}" href="/admin/bans">Bans</a>
+	<a class="admin-tab {{if eq .AdminSection "operator"}}active{{end}}" href="/admin/operator">Operator stats</a>
+	<a class="admin-tab {{if eq .AdminSection "logs"}}active{{end}}" href="/admin/logs">Logs</a>
 </div>
 {{end}}
 <!DOCTYPE html>
@@ -61,8 +63,8 @@
 				<div class="label">Live settings</div>
 				<p class="text-sm" style="margin:4px 0 10px 0;">
 					This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
-					Hover over field labels to see tooltips with extra detail. <span class="restart-required" title="Requires restart">↻</span> indicates a restart is required.
-					Fields marked <span class="sensitive" title="Sensitive setting (edit config.toml)">[LOCKED]</span> are read-only in the admin panel and must be edited in config files.
+					Each field includes a note with extra detail. <span class="restart-required">↻</span> indicates a restart is required.
+					Fields marked <span class="sensitive">[PROTECTED]</span> are intentionally read-only for security and can only be changed in config files.
 				</p>
 				{{if .AdminApplyError}}
 				<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
@@ -71,271 +73,377 @@
 				<h3 style="margin:0 0 8px 0;">Branding</h3>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Shown across the status UI as the pool name.">Brand name {{template "sensitive" .}}</div>
-						<input name="status_brand_name" type="text" class="textfield" value="{{.Settings.StatusBrandName}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="The hostname shown in the UI and used for copy/paste Stratum URLs (usually your public domain).">Brand domain {{template "sensitive" .}}</div>
-						<input name="status_brand_domain" type="text" class="textfield" value="{{.Settings.StatusBrandDomain}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Short one-line description shown on the overview page.">Tagline</div>
+						<div class="label">Tagline<div class="label-note">Short one-line description shown on the overview page.</div></div>
 						<input name="status_tagline" type="text" class="textfield" value="{{.Settings.StatusTagline}}">
 					</div>
 					<div>
-						<div class="label" title="Extra headline shown in the Connect Miner panel (optional).">Connect miner title extra</div>
+						<div class="label">Connect miner title extra<div class="label-note">Extra headline shown in the Connect Miner panel (optional).</div></div>
 						<input name="status_connect_miner_title_extra" type="text" class="textfield" value="{{.Settings.StatusConnectMinerTitleExtra}}">
 					</div>
 					<div>
-						<div class="label" title="Optional link associated with the connect miner headline.">Connect miner title URL</div>
+						<div class="label">Connect miner title URL<div class="label-note">Optional link associated with the connect miner headline.</div></div>
 						<input name="status_connect_miner_title_extra_url" type="text" class="textfield" value="{{.Settings.StatusConnectMinerTitleExtraURL}}">
 					</div>
 					<div>
-						<div class="label" title="Fiat currency code used for price conversions (e.g. usd, eur).">Fiat currency</div>
+						<div class="label">Fiat currency<div class="label-note">Fiat currency code used for price conversions (e.g. usd, eur).</div></div>
 						<input name="fiat_currency" type="text" class="textfield" value="{{.Settings.FiatCurrency}}">
 					</div>
 					<div>
-						<div class="label" title="Link shown in the header (optional).">GitHub URL</div>
+						<div class="label">GitHub URL<div class="label-note">Link shown in the header (optional).</div></div>
 						<input name="github_url" type="text" class="textfield" value="{{.Settings.GitHubURL}}">
 					</div>
 					<div>
-						<div class="label" title="Link shown in the header (optional).">Discord URL</div>
+						<div class="label">Discord URL<div class="label-note">Link shown in the header (optional).</div></div>
 						<input name="discord_url" type="text" class="textfield" value="{{.Settings.DiscordURL}}">
 					</div>
 					<div>
-						<div class="label" title="Explorer base URL used to build address links (defaults to mempool.space).">Mempool address URL</div>
+						<div class="label">Mempool address URL<div class="label-note">Explorer base URL used to build address links (defaults to mempool.space).</div></div>
 						<input name="mempool_address_url" type="text" class="textfield" value="{{.Settings.MempoolAddressURL}}">
 					</div>
 					<div>
-						<div class="label" title="Optional donation address shown in the footer.">Pool donation address</div>
+						<div class="label">Pool donation address<div class="label-note">Optional donation address shown in the footer.</div></div>
 						<input name="pool_donation_address" type="text" class="textfield" value="{{.Settings.PoolDonationAddress}}">
-					</div>
-					<div>
-						<div class="label" title="Pool payout address used for coinbase outputs.">payout_address {{template "sensitive" .}}</div>
-						<input name="payout_address" type="text" class="textfield" value="{{.Settings.PayoutAddress}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Pool fee percent used when constructing coinbase payouts.">pool_fee_percent {{template "sensitive" .}}</div>
-						<input name="pool_fee_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.PoolFeePercent}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Operator donation percent used when enabled.">operator_donation_percent {{template "sensitive" .}}</div>
-						<input name="operator_donation_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.OperatorDonationPercent}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Pool entropy tag (used in coinbase).">pool_entropy {{template "sensitive" .}}</div>
-						<input name="pool_entropy" type="text" class="textfield" value="{{.Settings.PoolEntropy}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Pool tag prefix for coinbase data.">pool_tag_prefix {{template "sensitive" .}}</div>
-						<input name="pool_tag_prefix" type="text" class="textfield" value="{{.Settings.PoolTagPrefix}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Donation name shown on the status page when operator donation is enabled.">Operator donation name {{template "sensitive" .}}</div>
-						<input name="operator_donation_name" type="text" class="textfield" value="{{.Settings.OperatorDonationName}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Donation link shown on the status page when operator donation is enabled.">Operator donation URL {{template "sensitive" .}}</div>
-						<input name="operator_donation_url" type="text" class="textfield" value="{{.Settings.OperatorDonationURL}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Shown on the status UI (optional).">Server location {{template "sensitive" .}}</div>
-						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.">status_public_url {{template "sensitive" .}}</div>
-						<input name="status_public_url" type="text" class="textfield" value="{{.Settings.StatusPublicURL}}" disabled>
-					</div>
-				</div>
-
-				<h3 style="margin:18px 0 8px 0;">Listeners</h3>
-				<div class="grid admin-grid">
-					<div>
-						<div class="label" title="Stratum TCP listener for miners (requires restart to change).">pool_listen {{template "restart-required" .}} {{template "sensitive" .}}</div>
-						<input name="pool_listen" type="text" class="textfield" value="{{.Settings.ListenAddr}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Status UI HTTP listener. When TLS is enabled, HTTP redirects to HTTPS (requires restart to change).">status_listen (http) {{template "restart-required" .}} {{template "sensitive" .}}</div>
-						<input name="status_listen" type="text" class="textfield" value="{{.Settings.StatusAddr}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Status UI HTTPS listener (requires restart to change).">status_tls_listen (https) {{template "restart-required" .}} {{template "sensitive" .}}</div>
-						<input name="status_tls_listen" type="text" class="textfield" value="{{.Settings.StatusTLSAddr}}" disabled>
-					</div>
-					<div>
-						<div class="label" title="Optional Stratum TLS listener for miners that support TLS (requires restart to change).">stratum_tls_listen {{template "restart-required" .}} {{template "sensitive" .}}</div>
-						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}" disabled>
 					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Limits</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					These controls affect how quickly new miner connections are accepted and how much reconnect pressure the pool will tolerate after restarts.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Maximum simultaneous Stratum connections allowed (checked on accept; requires restart to take effect).">max_conns {{template "restart-required" .}}</div>
-						<input name="max_conns" type="number" min="0" max="1000000" class="textfield" value="{{.Settings.MaxConns}}">
+						<div class="label">max_conns {{template "restart-required" .}}<div class="label-note">Maximum simultaneous Stratum connections allowed (checked on accept).</div></div>
+						<input name="max_conns" type="number" min="10" max="1000000" class="textfield" value="{{.Settings.MaxConns}}">
 					</div>
 					<div>
-						<div class="label" title="When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).">auto_accept_rate_limits {{template "restart-required" .}}</div>
+						<div class="label">disable_connect_rate_limits {{template "restart-required" .}}<div class="label-note">Disable connect/accept rate limiting entirely (intended for local-only pools on trusted networks).</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="disable_connect_rate_limits" value="1" {{if .Settings.DisableConnectRateLimits}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">auto_accept_rate_limits {{template "restart-required" .}}<div class="label-note">When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; ignored when disable_connect_rate_limits is enabled).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="auto_accept_rate_limits" value="1" {{if .Settings.AutoAcceptRateLimits}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Connection accept throttle (accepts/sec) for the initial restart/reconnect window (requires restart).">max_accepts_per_second {{template "restart-required" .}}</div>
-						<input name="max_accepts_per_second" type="number" min="0" max="100000" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
+						<div class="label">max_accepts_per_second {{template "restart-required" .}}<div class="label-note">Connection accept throttle (accepts/sec) for the initial restart/reconnect window.</div></div>
+						<input name="max_accepts_per_second" type="number" min="1" max="100000" class="textfield" value="{{.Settings.MaxAcceptsPerSecond}}">
 					</div>
 					<div>
-						<div class="label" title="Burst size for accept limiter (token bucket). Allows short spikes (requires restart).">max_accept_burst {{template "restart-required" .}}</div>
-						<input name="max_accept_burst" type="number" min="0" max="500000" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
+						<div class="label">max_accept_burst {{template "restart-required" .}}<div class="label-note">Burst size for accept limiter (token bucket). Allows short spikes.</div></div>
+						<input name="max_accept_burst" type="number" min="1" max="500000" class="textfield" value="{{.Settings.MaxAcceptBurst}}">
 					</div>
 					<div>
-						<div class="label" title="Target seconds for all miners to reconnect after a restart (used for auto_accept_rate_limits).">accept_reconnect_window {{template "restart-required" .}}</div>
+						<div class="label">accept_reconnect_window {{template "restart-required" .}}<div class="label-note">Target seconds for all miners to reconnect after a restart (used for auto_accept_rate_limits).</div></div>
 						<input name="accept_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptReconnectWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Initial burst window (seconds) after restart (used for auto_accept_rate_limits).">accept_burst_window {{template "restart-required" .}}</div>
+						<div class="label">accept_burst_window {{template "restart-required" .}}<div class="label-note">Initial burst window (seconds) after restart (used for auto_accept_rate_limits).</div></div>
 						<input name="accept_burst_window" type="number" class="textfield" value="{{.Settings.AcceptBurstWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Seconds after startup before switching accept throttles to steady-state (requires restart).">accept_steady_state_window {{template "restart-required" .}}</div>
+						<div class="label">accept_steady_state_window {{template "restart-required" .}}<div class="label-note">Seconds after startup before switching accept throttles to steady-state.</div></div>
 						<input name="accept_steady_state_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateWindow}}">
 					</div>
 					<div>
-						<div class="label" title="Accepts/sec limit once steady-state mode activates (requires restart).">accept_steady_state_rate {{template "restart-required" .}}</div>
+						<div class="label">accept_steady_state_rate {{template "restart-required" .}}<div class="label-note">Accepts/sec limit once steady-state mode activates.</div></div>
 						<input name="accept_steady_state_rate" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateRate}}">
 					</div>
 					<div>
-						<div class="label" title="Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits; requires restart).">steady_state_reconnect_percent {{template "restart-required" .}}</div>
+						<div class="label">steady_state_reconnect_percent {{template "restart-required" .}}<div class="label-note">Expected % of miners reconnecting during normal operation (used for auto_accept_rate_limits).</div></div>
 						<input name="accept_steady_state_reconnect_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.AcceptSteadyStateReconnectPercent}}">
 					</div>
 					<div>
-						<div class="label" title="Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits; requires restart).">steady_state_reconnect_window {{template "restart-required" .}}</div>
+						<div class="label">steady_state_reconnect_window {{template "restart-required" .}}<div class="label-note">Seconds to spread expected steady-state reconnects across (used for auto_accept_rate_limits).</div></div>
 						<input name="accept_steady_state_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateReconnectWindow}}">
+					</div>
+					<div>
+						<div class="label">stratum_messages_per_minute {{template "restart-required" .}}<div class="label-note">Per-connection Stratum message cap per minute (0 disables; otherwise minimum 10).</div></div>
+						<input name="stratum_messages_per_minute" type="number" min="0" max="1000000" class="textfield" value="{{.Settings.StratumMessagesPerMinute}}">
+					</div>
+					<div>
+						<div class="label">max_recent_jobs {{template "restart-required" .}}<div class="label-note">Recent job IDs cached per miner for stale-share handling and duplicate checks.</div></div>
+						<input name="max_recent_jobs" type="number" min="8" max="10000" class="textfield" value="{{.Settings.MaxRecentJobs}}">
 					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Difficulty</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					These settings control VarDiff behavior and share cadence, which directly affects miner submit frequency, stale rate, and pool-side load.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Minimum VarDiff target difficulty for miner connections (0 disables the minimum clamp; requires restart).">min_difficulty {{template "restart-required" .}}</div>
+						<div class="label">min_difficulty {{template "restart-required" .}}<div class="label-note">Minimum VarDiff target difficulty for miner connections (0 disables the minimum clamp).</div></div>
 						<input name="min_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MinDifficulty}}">
 					</div>
 					<div>
-						<div class="label" title="Maximum VarDiff target difficulty for miner connections (0 disables the maximum clamp; requires restart).">max_difficulty {{template "restart-required" .}}</div>
+						<div class="label">max_difficulty {{template "restart-required" .}}<div class="label-note">Maximum VarDiff target difficulty for miner connections (0 disables the maximum clamp).</div></div>
 						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>
-						<div class="label" title="When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff; requires restart).">lock_suggested_difficulty {{template "restart-required" .}}</div>
+						<div class="label">default_difficulty {{template "restart-required" .}}<div class="label-note">Starting difficulty before VarDiff has enough evidence (0 uses min_difficulty).</div></div>
+						<input name="default_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.DefaultDifficulty}}">
+					</div>
+					<div>
+						<div class="label">target_shares_per_min {{template "restart-required" .}}<div class="label-note">VarDiff target share cadence in shares per minute.</div></div>
+						<input name="target_shares_per_min" type="number" min="0.1" max="120" step="0.1" class="textfield" value="{{printf "%.4f" .Settings.TargetSharesPerMin}}">
+					</div>
+					<div>
+						<div class="label">lock_suggested_difficulty {{template "restart-required" .}}<div class="label-note">When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
+					<div>
+						<div class="label">enforce_suggested_difficulty_limits {{template "restart-required" .}}<div class="label-note">Reject/ban suggested difficulties outside configured min/max bounds.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="enforce_suggested_difficulty_limits" value="1" {{if .Settings.EnforceSuggestedDifficultyLimits}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">difficulty_step_granularity {{template "restart-required" .}}<div class="label-note">Difficulty quantization granularity for mining.set_difficulty (1=power-of-two, 2=half, 3=third, 4=quarter).</div></div>
+						<input name="difficulty_step_granularity" type="number" min="1" class="textfield" value="{{.Settings.DifficultyStepGranularity}}">
+					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Bans</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					These protections decide when noisy or abusive miners/hosts are temporarily blocked to protect pool stability.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="When enabled, expired bans are removed from disk at startup (startup-only).">clean_expired_on_startup {{template "restart-required" .}}</div>
+						<div class="label">clean_expired_on_startup {{template "restart-required" .}}<div class="label-note">When enabled, expired bans are removed from disk at startup (startup-only).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="clean_expired_on_startup" value="1" {{if .Settings.CleanExpiredBansOnStartup}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Ban a worker after this many invalid submissions within the window (0 disables; requires restart).">ban_invalid_submissions_after {{template "restart-required" .}}</div>
-						<input name="ban_invalid_submissions_after" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsAfter}}">
+						<div class="label">ban_invalid_submissions_after {{template "restart-required" .}}<div class="label-note">Ban a worker after this many invalid submissions within the window (minimum 3).</div></div>
+						<input name="ban_invalid_submissions_after" type="number" min="3" max="10000" class="textfield" value="{{.Settings.BanInvalidSubmissionsAfter}}">
 					</div>
 					<div>
-						<div class="label" title="Window size (seconds) for invalid submission counting (requires restart).">ban_invalid_submissions_window_seconds {{template "restart-required" .}}</div>
-						<input name="ban_invalid_submissions_window_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsWindowSeconds}}">
+						<div class="label">ban_invalid_submissions_window_seconds {{template "restart-required" .}}<div class="label-note">Window size (seconds) for invalid submission counting.</div></div>
+						<input name="ban_invalid_submissions_window_seconds" type="number" min="10" max="86400" class="textfield" value="{{.Settings.BanInvalidSubmissionsWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Ban duration (seconds) once the invalid threshold is hit (requires restart).">ban_invalid_submissions_duration_seconds {{template "restart-required" .}}</div>
-						<input name="ban_invalid_submissions_duration_seconds" type="number" class="textfield" value="{{.Settings.BanInvalidSubmissionsDurationSeconds}}">
+						<div class="label">ban_invalid_submissions_duration_seconds {{template "restart-required" .}}<div class="label-note">Ban duration (seconds) once the invalid threshold is hit.</div></div>
+						<input name="ban_invalid_submissions_duration_seconds" type="number" min="10" max="604800" class="textfield" value="{{.Settings.BanInvalidSubmissionsDurationSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Ban a host after this many reconnects within the window (0 disables; requires restart).">reconnect_ban_threshold {{template "restart-required" .}}</div>
-						<input name="reconnect_ban_threshold" type="number" class="textfield" value="{{.Settings.ReconnectBanThreshold}}">
+						<div class="label">reconnect_ban_threshold {{template "restart-required" .}}<div class="label-note">Ban a host after this many reconnects within the window (minimum 3).</div></div>
+						<input name="reconnect_ban_threshold" type="number" min="3" max="10000" class="textfield" value="{{.Settings.ReconnectBanThreshold}}">
 					</div>
 					<div>
-						<div class="label" title="Reconnect ban counting window (seconds; requires restart).">reconnect_ban_window_seconds {{template "restart-required" .}}</div>
-						<input name="reconnect_ban_window_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanWindowSeconds}}">
+						<div class="label">reconnect_ban_window_seconds {{template "restart-required" .}}<div class="label-note">Reconnect ban counting window (seconds).</div></div>
+						<input name="reconnect_ban_window_seconds" type="number" min="10" max="86400" class="textfield" value="{{.Settings.ReconnectBanWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Reconnect ban duration (seconds) once threshold is hit (requires restart).">reconnect_ban_duration_seconds {{template "restart-required" .}}</div>
-						<input name="reconnect_ban_duration_seconds" type="number" class="textfield" value="{{.Settings.ReconnectBanDurationSeconds}}">
+						<div class="label">reconnect_ban_duration_seconds {{template "restart-required" .}}<div class="label-note">Reconnect ban duration (seconds) once threshold is hit.</div></div>
+						<input name="reconnect_ban_duration_seconds" type="number" min="10" max="604800" class="textfield" value="{{.Settings.ReconnectBanDurationSeconds}}">
 					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Peer cleaning</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					These options affect Bitcoin node peer hygiene only; they do not directly disconnect miners.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Enable best-effort pruning of high-latency peers (applies to node-info display and warnings).">peer_cleanup_enabled</div>
+						<div class="label">peer_cleanup_enabled<div class="label-note">Enable best-effort pruning of high-latency peers (applies to node-info display and warnings).</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="peer_cleanup_enabled" value="1" {{if .Settings.PeerCleanupEnabled}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Max peer ping (ms) above which peers are considered unhealthy.">peer_cleanup_max_ping_ms</div>
+						<div class="label">peer_cleanup_max_ping_ms<div class="label-note">Max peer ping (ms) above which peers are considered unhealthy.</div></div>
 						<input name="peer_cleanup_max_ping_ms" type="text" class="textfield" value="{{printf "%.2f" .Settings.PeerCleanupMaxPingMs}}">
 					</div>
 					<div>
-						<div class="label" title="Minimum number of peers to keep connected before pruning.">peer_cleanup_min_peers</div>
+						<div class="label">peer_cleanup_min_peers<div class="label-note">Minimum number of peers to keep connected before pruning.</div></div>
 						<input name="peer_cleanup_min_peers" type="number" class="textfield" value="{{.Settings.PeerCleanupMinPeers}}">
 					</div>
 				</div>
 
-				<h3 style="margin:18px 0 8px 0;">Other</h3>
+				<h3 style="margin:18px 0 8px 0;">Main config runtime</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					Miscellaneous runtime behavior: connection timeout, logging verbosity, and submit-validation policy toggles.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Miner connection idle timeout (seconds; requires restart).">connection_timeout_seconds {{template "restart-required" .}}</div>
+						<div class="label">connection_timeout_seconds {{template "restart-required" .}}<div class="label-note">Miner connection idle timeout (seconds).</div></div>
 						<input name="connection_timeout_seconds" type="number" min="30" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Logging verbosity for goPool (debug, info, warn, error; requires restart).">log_level {{template "restart-required" .}}</div>
-						<input name="log_level" type="text" class="textfield" value="{{.Settings.LogLevel}}">
+						<div class="label">log_level<div class="label-note">Logging verbosity for goPool (applies live immediately and is persisted on save-to-disk).</div></div>
+						<select name="log_level" class="textfield">
+							<option value="debug" {{if eq .Settings.LogLevel "debug"}}selected{{end}}>debug</option>
+							<option value="info" {{if eq .Settings.LogLevel "info"}}selected{{end}}>info</option>
+							<option value="warn" {{if or (eq .Settings.LogLevel "warn") (eq .Settings.LogLevel "")}}selected{{end}}>warn</option>
+							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
+						</select>
 					</div>
-					<div>
-						<div class="label" title="Solo mode uses lighter submit validation (skips worker-mismatch + some policy checks; requires restart).">solo_mode {{template "restart-required" .}}</div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="solo_mode" value="1" {{if .Settings.SoloMode}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
-					</div>
-					<div>
-						<div class="label" title="Process mining.submit on the connection goroutine (lower latency; can block reads; requires restart).">direct_submit_processing {{template "restart-required" .}}</div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
+						<div>
+							<div class="label">relaxed_submit_validation {{template "restart-required" .}}<div class="label-note">Uses the relaxed submit path: skips strict policy rejections for prevhash mismatch, nTime window policy, and version-rolling policy checks. Authorization, ban checks, stale-job checks, and basic submit field validation are still enforced.</div></div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+								<input type="checkbox" name="relaxed_submit_validation" value="1" {{if .Settings.RelaxedSubmitValidation}}checked{{end}}>
+								<span style="margin-left:8px;">Enabled</span>
+							</label>
+						</div>
+						<div>
+							<div class="label">submit_worker_name_match {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the submitted worker name does not match the worker authorized on this connection.</div></div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
+								<input type="checkbox" name="submit_worker_name_match" value="1" {{if .Settings.SubmitWorkerNameMatch}}checked{{end}}>
+								<span style="margin-left:8px;">Enabled</span>
+							</label>
+						</div>
+						<div>
+							<div class="label">direct_submit_processing {{template "restart-required" .}}<div class="label-note">Processes mining.submit inline on the miner connection goroutine instead of a worker queue. Reduces queue latency, but heavy submit work can block reads/writes on that connection.</div></div>
+							<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="direct_submit_processing" value="1" {{if .Settings.DirectSubmitProcessing}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
 					<div>
-						<div class="label" title="Enable duplicate share detection (keeps a per-connection cache; requires restart).">check_duplicate_shares {{template "restart-required" .}}</div>
+						<div class="label">check_duplicate_shares {{template "restart-required" .}}<div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection.</div></div>
 						<label class="label" style="font-weight:500;margin-top:10px;">
 							<input type="checkbox" name="check_duplicate_shares" value="1" {{if .Settings.CheckDuplicateShares}}checked{{end}}>
 							<span style="margin-left:8px;">Enabled</span>
 						</label>
 					</div>
+					<div>
+						<div class="label">reject_no_job_id {{template "restart-required" .}}<div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="reject_no_job_id" value="1" {{if .Settings.RejectNoJobID}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">extranonce2_size {{template "restart-required" .}}<div class="label-note">Per-share extranonce2 byte length for submitted shares.</div></div>
+						<input name="extranonce2_size" type="number" min="1" max="8" class="textfield" value="{{.Settings.Extranonce2Size}}">
+					</div>
+					<div>
+						<div class="label">template_extranonce2_size {{template "restart-required" .}}<div class="label-note">Template extranonce2 byte length used in generated jobs.</div></div>
+						<input name="template_extranonce2_size" type="number" min="1" max="16" class="textfield" value="{{.Settings.TemplateExtraNonce2Size}}">
+					</div>
+					<div>
+						<div class="label">job_entropy {{template "restart-required" .}}<div class="label-note">Entropy bytes added to per-job tags in coinbase.</div></div>
+						<input name="job_entropy" type="number" min="0" class="textfield" value="{{.Settings.JobEntropy}}">
+					</div>
+					<div>
+						<div class="label">coinbase_scriptsig_max_bytes {{template "restart-required" .}}<div class="label-note">Maximum allowed coinbase scriptSig size in bytes.</div></div>
+						<input name="coinbase_scriptsig_max_bytes" type="number" min="2" class="textfield" value="{{.Settings.CoinbaseScriptSigMaxBytes}}">
+					</div>
 				</div>
 
 				<h3 style="margin:18px 0 8px 0;">Tuning</h3>
+				<p class="text-sm" style="margin:0 0 8px 0;">
+					Performance and protocol tuning for notifications, hashrate smoothing, nTime slack, and version-rolling checks.
+				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label" title="Minimum seconds online/offline before Discord worker notifications are sent (requires restart).">discord_worker_notify_threshold_seconds {{template "restart-required" .}}</div>
+						<div class="label">discord_worker_notify_threshold_seconds {{template "restart-required" .}}<div class="label-note">Minimum seconds online/offline before Discord worker notifications are sent.</div></div>
 						<input name="discord_worker_notify_threshold_seconds" type="number" min="0" max="86400" class="textfield" value="{{.Settings.DiscordWorkerNotifyThresholdSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="EMA time constant for hashrate smoothing (seconds; requires restart).">hashrate_ema_tau_seconds {{template "restart-required" .}}</div>
+						<div class="label">hashrate_ema_tau_seconds {{template "restart-required" .}}<div class="label-note">EMA time constant for hashrate smoothing (seconds).</div></div>
 						<input name="hashrate_ema_tau_seconds" type="number" min="1" step="1" class="textfield" value="{{printf "%.0f" .Settings.HashrateEMATauSeconds}}">
 					</div>
 					<div>
-						<div class="label" title="Maximum seconds a miner can roll nTime forward (requires restart).">ntime_forward_slack_seconds {{template "restart-required" .}}</div>
+						<div class="label">ntime_forward_slack_seconds {{template "restart-required" .}}<div class="label-note">Maximum seconds a miner can roll nTime forward.</div></div>
 						<input name="ntime_forward_slack_seconds" type="number" min="1" class="textfield" value="{{.Settings.NTimeForwardSlackSeconds}}">
 					</div>
+					<div>
+						<div class="label">min_version_bits {{template "restart-required" .}}<div class="label-note">Minimum number of version-rolling bits required when version mask is active.</div></div>
+						<input name="min_version_bits" type="number" min="0" class="textfield" value="{{.Settings.MinVersionBits}}">
+					</div>
+					<div>
+						<div class="label">ignore_min_version_bits {{template "restart-required" .}}<div class="label-note">Allow version rolling even when miners advertise fewer bits than required.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="ignore_min_version_bits" value="1" {{if .Settings.IgnoreMinVersionBits}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
 				</div>
+
+				<details class="admin-protected">
+					<summary class="admin-protected-summary">
+						<span class="admin-protected-title">Protected (config-file only)</span>
+						<span class="admin-protected-hint">Click to expand</span>
+					</summary>
+					<p class="text-sm" style="margin:8px 0 8px 0;">
+						Read-only values shown here for reference. Update them in config files and reboot.
+					</p>
+					<div class="grid admin-grid">
+					<div>
+						<div class="label">Brand name {{template "sensitive" .}}<div class="label-note">Shown across the status UI as the pool name.</div></div>
+						<input name="status_brand_name" type="text" class="textfield" value="{{.Settings.StatusBrandName}}" disabled>
+					</div>
+					<div>
+						<div class="label">Brand domain {{template "sensitive" .}}<div class="label-note">The hostname shown in the UI and used for copy/paste Stratum URLs (usually your public domain).</div></div>
+						<input name="status_brand_domain" type="text" class="textfield" value="{{.Settings.StatusBrandDomain}}" disabled>
+					</div>
+					<div>
+						<div class="label">Server location {{template "sensitive" .}}<div class="label-note">Shown on the status UI (optional).</div></div>
+						<input name="server_location" type="text" class="textfield" value="{{.Settings.ServerLocation}}" disabled>
+					</div>
+					<div>
+						<div class="label">status_public_url {{template "sensitive" .}}<div class="label-note">Canonical public URL used for redirects and cookies (include https:// and host). Leave blank to auto-detect.</div></div>
+						<input name="status_public_url" type="text" class="textfield" value="{{.Settings.StatusPublicURL}}" disabled>
+					</div>
+					<div>
+						<div class="label">payout_address {{template "sensitive" .}}<div class="label-note">Pool payout address used for coinbase outputs.</div></div>
+						<input name="payout_address" type="text" class="textfield" value="{{.Settings.PayoutAddress}}" disabled>
+					</div>
+					<div>
+						<div class="label">pool_fee_percent {{template "sensitive" .}}<div class="label-note">Pool fee percent used when constructing coinbase payouts.</div></div>
+						<input name="pool_fee_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.PoolFeePercent}}" disabled>
+					</div>
+					<div>
+						<div class="label">operator_donation_percent {{template "sensitive" .}}<div class="label-note">Operator donation percent used when enabled.</div></div>
+						<input name="operator_donation_percent" type="text" class="textfield" value="{{printf "%.4f" .Settings.OperatorDonationPercent}}" disabled>
+					</div>
+					<div>
+						<div class="label">Operator donation name {{template "sensitive" .}}<div class="label-note">Donation name shown on the status page when operator donation is enabled.</div></div>
+						<input name="operator_donation_name" type="text" class="textfield" value="{{.Settings.OperatorDonationName}}" disabled>
+					</div>
+					<div>
+						<div class="label">Operator donation URL {{template "sensitive" .}}<div class="label-note">Donation link shown on the status page when operator donation is enabled.</div></div>
+						<input name="operator_donation_url" type="text" class="textfield" value="{{.Settings.OperatorDonationURL}}" disabled>
+					</div>
+					<div>
+						<div class="label">pool_entropy {{template "sensitive" .}}<div class="label-note">Pool entropy tag (used in coinbase).</div></div>
+						<input name="pool_entropy" type="text" class="textfield" value="{{.Settings.PoolEntropy}}" disabled>
+					</div>
+					<div>
+						<div class="label">pool_tag_prefix {{template "sensitive" .}}<div class="label-note">Pool tag prefix for coinbase data.</div></div>
+						<input name="pool_tag_prefix" type="text" class="textfield" value="{{.Settings.PoolTagPrefix}}" disabled>
+					</div>
+					<div>
+						<div class="label">pool_listen {{template "restart-required" .}} {{template "sensitive" .}}<div class="label-note">Stratum TCP listener for miners.</div></div>
+						<input name="pool_listen" type="text" class="textfield" value="{{.Settings.ListenAddr}}" disabled>
+					</div>
+					<div>
+						<div class="label">status_listen (http) {{template "restart-required" .}} {{template "sensitive" .}}<div class="label-note">Status UI HTTP listener. When TLS is enabled, HTTP redirects to HTTPS.</div></div>
+						<input name="status_listen" type="text" class="textfield" value="{{.Settings.StatusAddr}}" disabled>
+					</div>
+					<div>
+						<div class="label">status_tls_listen (https) {{template "restart-required" .}} {{template "sensitive" .}}<div class="label-note">Status UI HTTPS listener.</div></div>
+						<input name="status_tls_listen" type="text" class="textfield" value="{{.Settings.StatusTLSAddr}}" disabled>
+					</div>
+					<div>
+						<div class="label">stratum_tls_listen {{template "restart-required" .}} {{template "sensitive" .}}<div class="label-note">Optional Stratum TLS listener for miners that support TLS.</div></div>
+						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}" disabled>
+					</div>
+					</div>
+				</details>
 
 				<label class="label" for="apply-password" style="margin-top:16px;">Admin password (required)</label>
 				<p class="text-sm" style="margin:4px 0 0 0;color:rgba(255,255,255,0.72);">

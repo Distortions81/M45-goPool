@@ -38,7 +38,7 @@ func (mc *MinerConn) prepareSubmissionTaskStringParams(id interface{}, params []
 	if !ok {
 		return submissionTask{}, false
 	}
-	if mc.cfg.SoloMode {
+	if mc.cfg.RelaxedSubmitValidation {
 		return mc.prepareSubmissionTaskSoloParsed(id, parsed, now)
 	}
 	return mc.prepareSubmissionTaskStrictParsed(id, parsed, now)

@@ -48,7 +48,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	if s.Config().PoolFeePercent > 10 {
 		warnings = append(warnings, "Pool fee is configured above 10%. Verify this is intentional and clearly disclosed to miners.")
 	}
-	if s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
+	if !s.Config().DisableConnectRateLimits && s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
 

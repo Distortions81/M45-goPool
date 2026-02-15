@@ -205,12 +205,16 @@ func (l *simpleLogger) writeEntry(evt logEvent) {
 		if debugWriter != nil {
 			_, _ = debugWriter.Write([]byte(line))
 		}
+	case logLevelError:
+		if errWriter != nil {
+			_, _ = errWriter.Write([]byte(line))
+		} else if pool != nil {
+			// Fallback to pool writer if error writer is unavailable.
+			_, _ = pool.Write([]byte(line))
+		}
 	default:
 		if evt.level >= logLevelInfo && pool != nil {
 			_, _ = pool.Write([]byte(line))
-		}
-		if evt.level >= logLevelError && errWriter != nil {
-			_, _ = errWriter.Write([]byte(line))
 		}
 	}
 }

@@ -7,7 +7,7 @@
 
 goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and ships with a status UI + JSON APIs for monitoring.
 
-> **Downloads:** Pre-built binaries are available on GitHub Releases (see [guide/RELEASES.md](guide/RELEASES.md)).
+> **Downloads:** Pre-built binaries are available on GitHub Releases (see [documentation/RELEASES.md](documentation/RELEASES.md)).
 
 ## Quick start
 
@@ -25,7 +25,7 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 
 - `data/config/config.toml` controls listener ports, branding, RPC credentials, fee percentages, and most runtime behavior.
 - TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
-- `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). The first run writes helper examples to `data/config/examples/`.
+- `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). First run writes helper examples to `data/config/examples/`.
 - `data/config/tuning.toml` lets you override advanced limits (rate limits, bans, EMA windows, etc.) while `data/config/secrets.toml` holds sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
   - Notable tuning knobs: `rate_limits.stratum_messages_per_minute` (messages/min before disconnect + 1h ban), `difficulty.default_difficulty` (initial fallback when no suggestion is received), and `difficulty.min_difficulty`/`difficulty.max_difficulty` (0 disables a clamp; out-of-range miner-suggested difficulty is only banned/disconnected when `difficulty.enforce_suggested_difficulty_limits = true`).
 - `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. goPool writes `password_sha256` on startup and clears the plaintext password after the first successful login; subsequent logins use the hash. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + `tuning.toml`, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
@@ -36,21 +36,23 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
 
 ## Building & releases
 
-- Build directly with `go build -o goPool`. Use hardware-acceleration tags such as `noavx` or `nojsonsimd` only when necessary; see [guide/operations.md](guide/operations.md) for guidance.
+- Build directly with `go build -o goPool`. Use hardware-acceleration tags such as `noavx` or `nojsonsimd` only when necessary; see [documentation/operations.md](documentation/operations.md) for guidance.
 - Release builds already embed `build_time`/`build_version` via `-ldflags`. For a local build, pass the same metadata manually:
 
   ```bash
   go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=v0.0.0-dev" -o goPool
   ```
-- Downloaded releases bundle everything under `data/` plus `guide/` documentation—see [guide/RELEASES.md](guide/RELEASES.md) for upgrade guidance, checksums, and release mechanics.
+- Downloaded releases bundle everything under `data/` plus `documentation/` docs—see [documentation/RELEASES.md](documentation/RELEASES.md) for upgrade guidance, checksums, and release mechanics.
 
 ## Documentation & resources
 
-- **`guide/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
-- **`guide/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
-- **`guide/performance.md`** – Capacity planning, benchmark data, and CPU/network ballparks.
-- **`guide/TESTING.md`** – Test suite instructions and how to add or run existing tests.
-- **`guide/RELEASES.md`** – Release package contents, verification, and upgrade steps.
+- **`documentation/README.md`** - Documentation index.
+- **`documentation/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
+- **`documentation/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
+- **`documentation/performance.md`** – Capacity planning, benchmark data, and CPU/network ballparks.
+- **`documentation/TESTING.md`** – Test suite instructions and how to add or run existing tests.
+- **`documentation/RELEASES.md`** – Release package contents, verification, and upgrade steps.
+- **`documentation/changes/`** – Changelog-style branch summaries.
 - **`LICENSE`** – Legal terms for using goPool.
 
-Need help? Open an issue on GitHub or refer to the documentation in `guide/` before asking for assistance.
+Need help? Open an issue on GitHub or refer to the documentation in `documentation/` before asking for assistance.

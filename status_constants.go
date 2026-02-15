@@ -30,7 +30,20 @@ const hashPerShare = float64(1 << 32)
 
 const overviewRefreshInterval = defaultRefreshInterval
 const poolHashrateTTL = 5 * time.Second
+const poolHashrateHistoryWindow = 6 * time.Minute
+const poolHashrateDisplayFallbackMaxAge = 2 * time.Minute
 const blocksRefreshInterval = 3 * time.Second
+const settlingHashrateMaxRelativeError = 0.20
+const settlingHashrateMinExpectedShares = 8.0
+const stableHashrateMaxRelativeError = 0.10
+const stableHashrateMinExpectedShares = 16.0
+const veryStableHashrateMaxRelativeError = 0.05
+const veryStableHashrateMinExpectedShares = 32.0
+const settlingHashrateCumulativeMaxRelativeError = 0.20
+const stableHashrateCumulativeMaxRelativeError = 0.10
+const veryStableHashrateCumulativeMaxRelativeError = 0.05
+const hashrateCumulativeAgreementMinAccepted = 16
+const hashrateCumulativeAgreementMinConnected = 6 * time.Minute
 
 // apiVersion is a short, human-readable version identifier included in all
 // JSON API responses so power users can detect schema changes.

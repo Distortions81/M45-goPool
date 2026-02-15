@@ -2,6 +2,7 @@
 
 # Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
+# - disable_connect_rate_limits: Disable accept/connect throttling entirely (intended for local-only pools on trusted networks; requires restart).
 # - auto_accept_rate_limits: When true, computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).
 # - max_accepts_per_second: Accepts/sec during the initial restart/reconnect window (requires restart).
 # - max_accept_burst: Token bucket burst size for accepts (requires restart).
@@ -24,7 +25,7 @@
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
-# - vardiff_fine: Enable half-step VarDiff adjustments and disable power-of-two snapping (requires restart).
+# - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
 # Status UI ([status])
 # - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").
@@ -47,7 +48,7 @@
 #
 
 [bans]
-  ban_invalid_submissions_after = 60
+  ban_invalid_submissions_after = 40
   ban_invalid_submissions_duration_seconds = 900
   ban_invalid_submissions_window_seconds = 300
   banned_miner_types = []
@@ -62,7 +63,7 @@
   lock_suggested_difficulty = false
   max_difficulty = 0.0
   min_difficulty = 256.0
-  target_shares_per_min = 7.0
+  target_shares_per_min = 10.0
 
 [discord]
   worker_notify_threshold_seconds = 300
@@ -72,13 +73,13 @@
   ntime_forward_slack_seconds = 7000
 
 [mining]
+  difficulty_step_granularity = 4
   disable_pool_job_entropy = false
-  vardiff_fine = false
 
 [peer_cleaning]
-  enabled = true
-  max_ping_ms = 150.0
-  min_peers = 20
+  enabled = false
+  max_ping_ms = 250.0
+  min_peers = 30
 
 [rate_limits]
   accept_burst_window = 5
@@ -88,10 +89,11 @@
   accept_steady_state_reconnect_window = 60
   accept_steady_state_window = 100
   auto_accept_rate_limits = true
+  disable_connect_rate_limits = false
   max_accept_burst = 1000
   max_accepts_per_second = 500
   max_conns = 50000
-  stratum_messages_per_minute = 240
+  stratum_messages_per_minute = 0
 
 [status]
   mempool_address_url = "https://mempool.space/address/"

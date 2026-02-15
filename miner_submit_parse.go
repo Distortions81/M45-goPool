@@ -47,7 +47,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		return out, false
 	}
 	// Validate job ID length
-	if len(jobID) == 0 {
+	if len(jobID) == 0 && mc.cfg.RejectNoJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id required")})
 		return out, false
@@ -140,7 +140,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id interface{}, params []string, n
 	}
 
 	jobID := params[1]
-	if len(jobID) == 0 {
+	if len(jobID) == 0 && mc.cfg.RejectNoJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "job id required")})
 		return out, false
@@ -196,7 +196,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id interface{}, params []string, n
 // still exercising the core share-processing path without extra goroutine
 // scheduling noise.
 func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (submissionTask, bool) {
-	if mc.cfg.SoloMode {
+	if mc.cfg.RelaxedSubmitValidation {
 		return mc.prepareSubmissionTaskSolo(req, now)
 	}
 	return mc.prepareSubmissionTaskStrict(req, now)
@@ -360,7 +360,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID interface{}, params
 
 	authorizedWorker := strings.TrimSpace(mc.currentWorker())
 	submitWorker := strings.TrimSpace(worker)
-	if authorizedWorker != "" && submitWorker != authorizedWorker {
+	if mc.cfg.SubmitWorkerNameMatch && authorizedWorker != "" && submitWorker != authorizedWorker {
 		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
 		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
 		if mc.metrics != nil {

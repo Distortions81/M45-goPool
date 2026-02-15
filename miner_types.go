@@ -31,7 +31,10 @@ type VarDiffConfig struct {
 	MaxDiff            float64
 	TargetSharesPerMin float64
 	AdjustmentWindow   time.Duration
-	Step               float64
+	// RetargetDelay is a minimum cooldown between vardiff decisions so miners
+	// have time to refill work queues and settle clocks after changes.
+	RetargetDelay time.Duration
+	Step          float64
 	// DampingFactor controls how aggressively vardiff moves toward target.
 	// 1.0 = full correction (old behavior), 0.5 = move halfway, etc.
 	// Lower values reduce overshoot. Typical range: 0.5-0.85.
@@ -79,8 +82,9 @@ var defaultVarDiff = VarDiffConfig{
 	MaxDiff:            defaultMaxDifficulty,
 	TargetSharesPerMin: defaultVarDiffTargetSharesPerMin, // aim for roughly one share every 12s
 	AdjustmentWindow:   defaultVarDiffAdjustmentWindow,
+	RetargetDelay:      defaultVarDiffRetargetDelay,
 	Step:               defaultVarDiffStep,
-	DampingFactor:      defaultVarDiffDampingFactor, // move 50% toward target to reduce overshoot
+	DampingFactor:      defaultVarDiffDampingFactor, // move 70% toward target for faster convergence
 }
 
 type MinerConn struct {
@@ -131,6 +135,7 @@ type MinerConn struct {
 	banReason            string
 	lastPenalty          time.Time
 	invalidSubs          int
+	validSubsForBan      int
 	lastProtoViolation   time.Time
 	protoViolations      int
 	versionRoll          bool
@@ -154,6 +159,17 @@ type MinerConn struct {
 	// vardiffAdjustments counts applied VarDiff difficulty changes for this
 	// connection so startup can use larger initial correction steps.
 	vardiffAdjustments atomic.Int32
+	// vardiffPendingDirection/vardiffPendingCount debounce retarget decisions
+	// after bootstrap so random share noise does not cause constant churn.
+	// direction: -1 down, +1 up, 0 unset.
+	vardiffPendingDirection atomic.Int32
+	vardiffPendingCount     atomic.Int32
+	// vardiffUpwardCooldownUntil blocks repeat upward retargets for a short
+	// cooldown after a large upward jump to avoid stacked overshoots.
+	vardiffUpwardCooldownUntil atomic.Int64
+	// vardiffWarmupHighLatencyStreak tracks persistent windows where work-start
+	// latency p95 is high; used for a small downward difficulty bias.
+	vardiffWarmupHighLatencyStreak atomic.Int32
 	// bootstrapDone tracks whether we've already performed the initial
 	// "bootstrap" vardiff move for this connection.
 	bootstrapDone bool
@@ -182,6 +198,27 @@ type MinerConn struct {
 	hashrateSampleCount int
 	// hashrateAccumulatedDiff accumulates credited difficulties between samples.
 	hashrateAccumulatedDiff float64
+	// submitRTTSamplesMs keeps a small rolling window of submit processing RTT
+	// estimates (server-side receive -> response write complete), in ms.
+	submitRTTSamplesMs [64]float64
+	submitRTTCount     int
+	submitRTTIndex     int
+	// notifySentAt / notifyAwaitingFirstShare track notify->first-share latency.
+	notifySentAt             time.Time
+	notifyAwaitingFirstShare bool
+	lastNotifyToFirstShareMs float64
+	notifyToFirstSamplesMs   [64]float64
+	notifyToFirstCount       int
+	notifyToFirstIndex       int
+	// recentSubmissionKinds tracks a rolling stale-reject ratio for VarDiff.
+	// 0 = accepted/other reject, 1 = stale reject.
+	recentSubmissionKinds  [128]uint8
+	recentSubmissionCount  int
+	recentSubmissionIndex  int
+	recentStaleRejectCount int
+	pingRTTSamplesMs       [64]float64
+	pingRTTCount           int
+	pingRTTIndex           int
 	// jobDifficulty records the difficulty in effect when each job notify
 	// was sent to this miner so we can credit shares with the assigned
 	// target even if vardiff changes before the share arrives.
@@ -189,6 +226,8 @@ type MinerConn struct {
 	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
 	// for this connection, derived from accepted work over time.
 	rollingHashrateValue float64
+	// rollingHashrateControl is a faster EMA used by VarDiff control decisions.
+	rollingHashrateControl float64
 	// initialEMAWindowDone marks that the first (bootstrap) EMA window has
 	// completed; after this, configured tau is used.
 	initialEMAWindowDone atomic.Bool
@@ -196,6 +235,13 @@ type MinerConn struct {
 	// the first post-reset share can anchor WindowStart midway between reset
 	// time and first-share time.
 	windowResetAnchor time.Time
+	// vardiffWindow* tracks a short-horizon retarget window used only for
+	// difficulty control; status/confidence windows are kept separate.
+	vardiffWindowStart       time.Time
+	vardiffWindowResetAnchor time.Time
+	vardiffWindowAccepted    int
+	vardiffWindowSubmissions int
+	vardiffWindowDifficulty  float64
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64

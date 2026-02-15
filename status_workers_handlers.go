@@ -25,8 +25,13 @@ func (s *StatusServer) handleWorkerStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.executeTemplate(w, "worker_login", data); err != nil {
+	if err := s.serveCachedHTML(w, "page_worker_login", func() ([]byte, error) {
+		var buf bytes.Buffer
+		if err := s.executeTemplate(&buf, "worker_login", data); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}); err != nil {
 		logger.Error("worker login template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
 			"Worker login page error",
@@ -71,7 +76,7 @@ func (s *StatusServer) handleWorkerWalletSearch(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, "worker_wallet_search", data); err != nil {
 		logger.Error("worker wallet search template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
@@ -186,7 +191,26 @@ func (s *StatusServer) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		AfterSignUpURL:      redirect,
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Cache the default sign-in page persistently; alternate redirects are
+	// rendered on demand to avoid unbounded cache keys from query params.
+	if redirect == "/saved-workers" {
+		if err := s.serveCachedHTML(w, "page_sign_in_default", func() ([]byte, error) {
+			var buf bytes.Buffer
+			if err := s.executeTemplate(&buf, "sign_in", data); err != nil {
+				return nil, err
+			}
+			return buf.Bytes(), nil
+		}); err != nil {
+			logger.Error("sign in template error", "error", err)
+			s.renderErrorPage(w, r, http.StatusInternalServerError,
+				"Sign-in page error",
+				"We couldn't render the sign-in page.",
+				"Template error while rendering sign-in.")
+		}
+		return
+	}
+
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, "sign_in", data); err != nil {
 		logger.Error("sign in template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,
@@ -300,7 +324,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 			if entry, ok := s.workerPageCache[cacheKey]; ok && now.Before(entry.expiresAt) {
 				payload := entry.payload
 				s.workerPageMu.RUnlock()
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				setShortHTMLCacheHeaders(w, true)
 				_, _ = w.Write(payload)
 				return
 			}
@@ -344,7 +368,7 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	// Render into a buffer so we can cache the HTML on success without
 	// risking partial writes on template errors.
 	var buf bytes.Buffer
@@ -467,7 +491,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 		data.Error = "worker not found"
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setShortHTMLCacheHeaders(w, true)
 	if err := s.executeTemplate(w, "worker_status", data); err != nil {
 		logger.Error("worker status template error", "error", err)
 		s.renderErrorPage(w, r, http.StatusInternalServerError,

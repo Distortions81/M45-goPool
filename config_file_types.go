@@ -84,9 +84,11 @@ type miningConfig struct {
 	PoolEntropy               *string  `toml:"pool_entropy"`
 	PoolTagPrefix             string   `toml:"pooltag_prefix"`
 	CoinbaseScriptSigMaxBytes *int     `toml:"coinbase_scriptsig_max_bytes"`
-	SoloMode                  *bool    `toml:"solo_mode"`
+	RelaxedSubmitValidation   *bool    `toml:"relaxed_submit_validation"`
+	SubmitWorkerNameMatch     *bool    `toml:"submit_worker_name_match"`
 	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
 	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
+	RejectNoJobID             *bool    `toml:"reject_no_job_id"`
 }
 
 type baseFileConfig struct {
@@ -115,6 +117,7 @@ type rateLimitTuning struct {
 	MaxConns                          *int     `toml:"max_conns"`
 	MaxAcceptsPerSecond               *int     `toml:"max_accepts_per_second"`
 	MaxAcceptBurst                    *int     `toml:"max_accept_burst"`
+	DisableConnectRateLimits          *bool    `toml:"disable_connect_rate_limits"`
 	AutoAcceptRateLimits              *bool    `toml:"auto_accept_rate_limits"`
 	AcceptReconnectWindow             *int     `toml:"accept_reconnect_window"`
 	AcceptBurstWindow                 *int     `toml:"accept_burst_window"`
@@ -139,8 +142,8 @@ type difficultyTuning struct {
 }
 
 type miningTuning struct {
-	DisablePoolJobEntropy *bool `toml:"disable_pool_job_entropy"`
-	VardiffFine           *bool `toml:"vardiff_fine"`
+	DisablePoolJobEntropy     *bool `toml:"disable_pool_job_entropy"`
+	DifficultyStepGranularity *int  `toml:"difficulty_step_granularity"`
 }
 
 type hashrateTuning struct {

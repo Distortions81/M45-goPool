@@ -78,9 +78,11 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
 #
 # Mining behavior
-# - [mining].solo_mode: Lighter submit validation for solo pools (skips worker-mismatch + some policy checks; requires restart).
+# - [mining].relaxed_submit_validation: Uses relaxed submit policy (skips strict prevhash/nTime/version-rolling policy rejects; still enforces auth, bans, stale-job and basic field validation; requires restart).
+# - [mining].submit_worker_name_match: Enforce submitted worker name equals authorized worker identity (requires restart).
 # - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
 # - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
+# - [mining].reject_no_job_id: Reject submits with empty job_id during basic field validation (default false; requires restart).
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
@@ -93,6 +95,7 @@ func baseConfigDocComments() []byte {
 func tuningConfigDocComments() []byte {
 	return []byte(`# Rate limits ([rate_limits])
 # - max_conns: Maximum simultaneous Stratum connections allowed (checked on accept; requires restart).
+# - disable_connect_rate_limits: Disable accept/connect throttling entirely (intended for local-only pools on trusted networks; requires restart).
 # - auto_accept_rate_limits: When true, computes accept throttles from max_conns on startup (overrides explicit accept_* values; requires restart).
 # - max_accepts_per_second: Accepts/sec during the initial restart/reconnect window (requires restart).
 # - max_accept_burst: Token bucket burst size for accepts (requires restart).
@@ -115,7 +118,7 @@ func tuningConfigDocComments() []byte {
 # - enforce_suggested_difficulty_limits: If true, ban/disconnect when miner-suggested difficulty is outside min_difficulty/max_difficulty.
 #
 # Mining ([mining])
-# - vardiff_fine: Enable half-step VarDiff adjustments and disable power-of-two snapping (requires restart).
+# - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
 # Status UI ([status])
 # - mempool_address_url: URL prefix used for external address links in the worker status UI (defaults to "https://mempool.space/address/").

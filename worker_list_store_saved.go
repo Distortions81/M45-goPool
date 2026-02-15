@@ -34,10 +34,23 @@ func (s *workerListStore) Add(userID, worker string) error {
 	}
 
 	hash := workerNameHash(worker)
-	if _, err := tx.Exec("INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, notify_enabled) VALUES (?, ?, ?, 1)", userID, worker, hash); err != nil {
+	if hash == "" {
+		return nil
+	}
+	display := shortWorkerName(worker, workerNamePrefix, workerNameSuffix)
+	if display == "" {
+		display = shortDisplayID(hash, workerNamePrefix, workerNameSuffix)
+	}
+	if _, err := tx.Exec(
+		"INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, worker_display, notify_enabled) VALUES (?, ?, ?, ?, 1)",
+		userID, hash, hash, display,
+	); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ? AND (worker_hash IS NULL OR worker_hash = '')", hash, userID, worker); err != nil {
+	if _, err := tx.Exec(
+		"UPDATE saved_workers SET worker = ?, worker_hash = ?, worker_display = ? WHERE user_id = ? AND worker_hash = ?",
+		hash, hash, display, userID, hash,
+	); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -51,17 +64,17 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	if userID == "" {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT worker, COALESCE(worker_hash, ''), notify_enabled, best_difficulty FROM saved_workers WHERE user_id = ? ORDER BY worker COLLATE NOCASE", userID)
+	rows, err := s.db.Query(`
+		SELECT COALESCE(worker_display, ''), COALESCE(worker_hash, ''), notify_enabled, best_difficulty
+		FROM saved_workers
+		WHERE user_id = ?
+		ORDER BY worker_display COLLATE NOCASE
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	var workers []SavedWorkerEntry
-	type hashBackfill struct {
-		worker string
-		hash   string
-	}
-	var backfills []hashBackfill
 	for rows.Next() {
 		var entry SavedWorkerEntry
 		var notifyEnabledInt int
@@ -71,18 +84,13 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 		}
 		entry.NotifyEnabled = notifyEnabledInt != 0
 		entry.BestDifficulty = best.Float64
-		entry.Hash = strings.TrimSpace(entry.Hash)
+		entry.Name = strings.TrimSpace(entry.Name)
+		entry.Hash = strings.ToLower(strings.TrimSpace(entry.Hash))
 		if entry.Hash == "" {
-			entry.Hash = workerNameHash(entry.Name)
-			if entry.Hash != "" {
-				backfills = append(backfills, hashBackfill{worker: entry.Name, hash: entry.Hash})
-			}
-		} else {
-			lower := strings.ToLower(entry.Hash)
-			if lower != entry.Hash {
-				entry.Hash = lower
-				backfills = append(backfills, hashBackfill{worker: entry.Name, hash: entry.Hash})
-			}
+			continue
+		}
+		if entry.Name == "" {
+			entry.Name = shortDisplayID(entry.Hash, workerNamePrefix, workerNameSuffix)
 		}
 		workers = append(workers, entry)
 	}
@@ -93,22 +101,6 @@ func (s *workerListStore) List(userID string) ([]SavedWorkerEntry, error) {
 	}
 	if closeErr != nil {
 		return nil, closeErr
-	}
-
-	if len(backfills) > 0 {
-		if tx, err := s.db.Begin(); err == nil {
-			stmt, prepErr := tx.Prepare("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?")
-			if prepErr == nil {
-				for _, bf := range backfills {
-					if strings.TrimSpace(bf.worker) == "" || strings.TrimSpace(bf.hash) == "" {
-						continue
-					}
-					_, _ = stmt.Exec(bf.hash, userID, bf.worker)
-				}
-				_ = stmt.Close()
-			}
-			_ = tx.Commit()
-		}
 	}
 
 	s.bestDiffMu.Lock()
@@ -137,18 +129,16 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT user_id, worker, COALESCE(worker_hash, ''), notify_enabled, best_difficulty FROM saved_workers ORDER BY user_id COLLATE NOCASE, worker COLLATE NOCASE")
+	rows, err := s.db.Query(`
+		SELECT user_id, COALESCE(worker_display, ''), COALESCE(worker_hash, ''), notify_enabled, best_difficulty
+		FROM saved_workers
+		ORDER BY user_id COLLATE NOCASE, worker_display COLLATE NOCASE
+	`)
 	if err != nil {
 		return nil, err
 	}
 
 	var records []SavedWorkerRecord
-	type hashBackfill struct {
-		userID string
-		worker string
-		hash   string
-	}
-	var backfills []hashBackfill
 	for rows.Next() {
 		var (
 			userID    string
@@ -161,24 +151,14 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 		}
 		userID = strings.TrimSpace(userID)
 		entry.Name = strings.TrimSpace(entry.Name)
-		entry.Hash = strings.TrimSpace(entry.Hash)
+		entry.Hash = strings.ToLower(strings.TrimSpace(entry.Hash))
 		entry.NotifyEnabled = notifyInt != 0
 		entry.BestDifficulty = best.Float64
-		if entry.Hash == "" {
-			entry.Hash = workerNameHash(entry.Name)
-			if entry.Hash != "" {
-				backfills = append(backfills, hashBackfill{userID: userID, worker: entry.Name, hash: entry.Hash})
-			}
-		}
-		if entry.Hash != "" {
-			lower := strings.ToLower(entry.Hash)
-			if lower != entry.Hash {
-				entry.Hash = lower
-				backfills = append(backfills, hashBackfill{userID: userID, worker: entry.Name, hash: entry.Hash})
-			}
-		}
-		if userID == "" {
+		if userID == "" || entry.Hash == "" {
 			continue
+		}
+		if entry.Name == "" {
+			entry.Name = shortDisplayID(entry.Hash, workerNamePrefix, workerNameSuffix)
 		}
 		records = append(records, SavedWorkerRecord{
 			UserID:           userID,
@@ -192,22 +172,6 @@ func (s *workerListStore) ListAllSavedWorkers() ([]SavedWorkerRecord, error) {
 	}
 	if closeErr != nil {
 		return nil, closeErr
-	}
-
-	if len(backfills) > 0 {
-		if tx, err := s.db.Begin(); err == nil {
-			stmt, prepErr := tx.Prepare("UPDATE saved_workers SET worker_hash = ? WHERE user_id = ? AND worker = ?")
-			if prepErr == nil {
-				for _, bf := range backfills {
-					if strings.TrimSpace(bf.userID) == "" || strings.TrimSpace(bf.worker) == "" || strings.TrimSpace(bf.hash) == "" {
-						continue
-					}
-					_, _ = stmt.Exec(bf.hash, bf.userID, bf.worker)
-				}
-				_ = stmt.Close()
-			}
-			_ = tx.Commit()
-		}
 	}
 
 	s.bestDiffMu.Lock()
@@ -269,16 +233,15 @@ func (s *workerListStore) ListNotifiedUsersForWorker(worker string) ([]SavedWork
 	hash := workerNameHash(worker)
 
 	rows, err := s.db.Query(`
-		SELECT user_id, worker, COALESCE(worker_hash, '')
+		SELECT user_id, COALESCE(worker_display, ''), COALESCE(worker_hash, '')
 		FROM saved_workers
-		WHERE notify_enabled = 1 AND (worker_hash = ? OR worker = ?)
-	`, strings.ToLower(strings.TrimSpace(hash)), worker)
+		WHERE notify_enabled = 1 AND worker_hash = ?
+	`, strings.ToLower(strings.TrimSpace(hash)))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	seen := make(map[string]struct{}, 8)
 	out := make([]SavedWorkerRecord, 0, 8)
 	for rows.Next() {
 		var (
@@ -292,20 +255,15 @@ func (s *workerListStore) ListNotifiedUsersForWorker(worker string) ([]SavedWork
 		userID = strings.TrimSpace(userID)
 		name = strings.TrimSpace(name)
 		h = strings.TrimSpace(h)
-		if userID == "" || name == "" {
+		if userID == "" {
 			continue
 		}
-		// Dedupe by (userID, worker) to avoid duplicates if both hash and name match.
-		key := userID + "\x00" + name
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-
+		h = strings.ToLower(h)
 		if h == "" {
-			h = workerNameHash(name)
-		} else {
-			h = strings.ToLower(h)
+			continue
+		}
+		if name == "" {
+			name = shortDisplayID(h, workerNamePrefix, workerNameSuffix)
 		}
 		out = append(out, SavedWorkerRecord{
 			UserID: userID,
@@ -325,24 +283,16 @@ func (s *workerListStore) ListNotifiedUsersForWorker(worker string) ([]SavedWork
 	return out, nil
 }
 
-func (s *workerListStore) Remove(userID, worker string) error {
+func (s *workerListStore) Remove(userID, workerHash string) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
 	userID = strings.TrimSpace(userID)
-	worker = strings.TrimSpace(worker)
-	if userID == "" || worker == "" {
+	workerHash, errMsg := parseSHA256HexStrict(workerHash)
+	if userID == "" || workerHash == "" || errMsg != "" {
 		return nil
 	}
-	if len(worker) > workerLookupMaxBytes {
-		return nil
-	}
-	hash := workerNameHash(worker)
-	if hash != "" {
-		_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker_hash = ?", userID, hash)
-		return err
-	}
-	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker = ?", userID, worker)
+	_, err := s.db.Exec("DELETE FROM saved_workers WHERE user_id = ? AND worker_hash = ?", userID, workerHash)
 	return err
 }
 
