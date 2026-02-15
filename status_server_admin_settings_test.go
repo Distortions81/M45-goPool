@@ -131,3 +131,38 @@ func TestApplyAdminSettingsForm_DisableConnectRateLimitsToggle(t *testing.T) {
 		t.Fatalf("expected disable_connect_rate_limits to be disabled when omitted")
 	}
 }
+
+func TestApplyAdminSettingsForm_RejectNoJobIDToggle(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.RejectNoJobID = false
+
+	form := url.Values{}
+	form.Set("status_tagline", cfg.StatusTagline)
+	form.Set("reject_no_job_id", "1")
+	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
+	}
+	if !cfg.RejectNoJobID {
+		t.Fatalf("expected reject_no_job_id to be enabled")
+	}
+
+	form = url.Values{}
+	form.Set("status_tagline", cfg.StatusTagline)
+	// Intentionally omit reject_no_job_id to model an unchecked checkbox.
+	r = httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+	if err := applyAdminSettingsForm(&cfg, r); err != nil {
+		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
+	}
+	if cfg.RejectNoJobID {
+		t.Fatalf("expected reject_no_job_id to be disabled when omitted")
+	}
+}

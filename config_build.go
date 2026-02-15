@@ -58,6 +58,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			SubmitWorkerNameMatch:     boolPtr(cfg.SubmitWorkerNameMatch),
 			DirectSubmitProcessing:    boolPtr(cfg.DirectSubmitProcessing),
 			CheckDuplicateShares:      boolPtr(cfg.CheckDuplicateShares),
+			RejectNoJobID:             boolPtr(cfg.RejectNoJobID),
 		},
 		Auth: authConfig{
 			ClerkIssuerURL:         cfg.ClerkIssuerURL,
@@ -224,6 +225,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		HashrateEMATauSeconds:         cfg.HashrateEMATauSeconds,
 		NTimeForwardSlackSec:          cfg.NTimeForwardSlackSeconds,
 		CheckDuplicateShares:          cfg.CheckDuplicateShares,
+		RejectNoJobID:                 cfg.RejectNoJobID,
 		LogLevel:                      cfg.LogLevel,
 		CleanExpiredBansOnStartup:     cfg.CleanExpiredBansOnStartup,
 		BanInvalidSubmissionsAfter:    cfg.BanInvalidSubmissionsAfter,

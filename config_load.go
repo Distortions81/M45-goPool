@@ -311,6 +311,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (migrated bool) {
 	if fc.Mining.CheckDuplicateShares != nil {
 		cfg.CheckDuplicateShares = *fc.Mining.CheckDuplicateShares
 	}
+	if fc.Mining.RejectNoJobID != nil {
+		cfg.RejectNoJobID = *fc.Mining.RejectNoJobID
+	}
 	if fc.Logging.Level != "" {
 		cfg.LogLevel = strings.ToLower(strings.TrimSpace(fc.Logging.Level))
 	}

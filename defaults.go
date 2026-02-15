@@ -71,6 +71,7 @@ func defaultConfig() Config {
 		LogLevel:                            "warn",
 		RelaxedSubmitValidation:             true,
 		SubmitWorkerNameMatch:               false,
+		RejectNoJobID:                       false,
 		BanInvalidSubmissionsAfter:          defaultBanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:         defaultBanInvalidSubmissionsWindow,
 		BanInvalidSubmissionsDuration:       defaultBanInvalidSubmissionsDuration,

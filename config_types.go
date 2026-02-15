@@ -140,6 +140,7 @@ type Config struct {
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
 	NTimeForwardSlackSeconds         int     // max seconds ntime can roll forward
 	CheckDuplicateShares             bool    // enable duplicate detection (off by default for solo)
+	RejectNoJobID                    bool    // reject empty job_id in mining.submit (default false)
 
 	RelaxedSubmitValidation bool   // skip worker-mismatch + selected policy checks (default true)
 	SubmitWorkerNameMatch   bool   // enforce submit worker name must match authorized worker
@@ -239,6 +240,7 @@ type EffectiveConfig struct {
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
 	NTimeForwardSlackSec              int      `json:"ntime_forward_slack_seconds,omitempty"`
 	CheckDuplicateShares              bool     `json:"check_duplicate_shares,omitempty"`
+	RejectNoJobID                     bool     `json:"reject_no_job_id,omitempty"`
 	LogLevel                          string   `json:"log_level,omitempty"`
 	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`
 	BanInvalidSubmissionsAfter        int      `json:"ban_invalid_submissions_after,omitempty"`
