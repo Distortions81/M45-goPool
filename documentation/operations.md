@@ -7,7 +7,7 @@ goPool ships as a self-contained pool daemon that connects directly to Bitcoin C
 ## Building
 
 Requirements:
-* **Go 1.24.11+** — install from https://go.dev/dl/ for matching ABI guarantees.
+* **Go 1.26.0+** — install from https://go.dev/dl/ for matching ABI guarantees.
 * **ZeroMQ headers** (`libzmq3-dev`, `zeromq`, etc.) to satisfy `github.com/pebbe/zmq4`. On Debian/Ubuntu run `sudo apt install -y libzmq3-dev`; other distros follow their package manager.
 
 Clone and build:
