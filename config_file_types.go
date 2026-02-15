@@ -88,6 +88,7 @@ type miningConfig struct {
 	SubmitWorkerNameMatch     *bool    `toml:"submit_worker_name_match"`
 	DirectSubmitProcessing    *bool    `toml:"direct_submit_processing"`
 	CheckDuplicateShares      *bool    `toml:"check_duplicate_shares"`
+	RejectNoJobID             *bool    `toml:"reject_no_job_id"`
 }
 
 type baseFileConfig struct {

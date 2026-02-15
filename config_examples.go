@@ -82,6 +82,7 @@ func baseConfigDocComments() []byte {
 # - [mining].submit_worker_name_match: Enforce submitted worker name equals authorized worker identity (requires restart).
 # - [mining].direct_submit_processing: Run mining.submit on the connection goroutine (lower latency; can block reads; requires restart).
 # - [mining].check_duplicate_shares: Enable duplicate share detection (keeps a per-connection cache; requires restart).
+# - [mining].reject_no_job_id: Reject submits with empty job_id during basic field validation (default false; requires restart).
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).

@@ -319,6 +319,13 @@
 						</label>
 					</div>
 					<div>
+						<div class="label">reject_no_job_id {{template "restart-required" .}}<div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="reject_no_job_id" value="1" {{if .Settings.RejectNoJobID}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
 						<div class="label">extranonce2_size {{template "restart-required" .}}<div class="label-note">Per-share extranonce2 byte length for submitted shares.</div></div>
 						<input name="extranonce2_size" type="number" min="1" max="8" class="textfield" value="{{.Settings.Extranonce2Size}}">
 					</div>

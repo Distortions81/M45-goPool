@@ -227,3 +227,43 @@ func TestHandleSubmit_CheckDuplicateSharesMode(t *testing.T) {
 		}
 	})
 }
+
+func TestPrepareSubmissionTask_RejectNoJobIDToggle(t *testing.T) {
+	t.Run("disabled allows empty job id to reach stale-job rejection", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		mc.cfg.RelaxedSubmitValidation = true
+		mc.cfg.RejectNoJobID = false
+
+		conn := &recordConn{}
+		mc.conn = conn
+		mc.writer = bufio.NewWriterSize(conn, 4096)
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[1] = ""
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected empty job id submit to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "job not found") {
+			t.Fatalf("expected stale-job rejection when reject_no_job_id is disabled, got: %q", out)
+		}
+	})
+
+	t.Run("enabled rejects empty job id during parse validation", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		mc.cfg.RelaxedSubmitValidation = true
+		mc.cfg.RejectNoJobID = true
+
+		conn := &recordConn{}
+		mc.conn = conn
+		mc.writer = bufio.NewWriterSize(conn, 4096)
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[1] = ""
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected empty job id submit to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "job id required") {
+			t.Fatalf("expected parse-time empty-job-id rejection when reject_no_job_id is enabled, got: %q", out)
+		}
+	})
+}

@@ -291,6 +291,7 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		SubmitWorkerNameMatch:                cfg.SubmitWorkerNameMatch,
 		DirectSubmitProcessing:               cfg.DirectSubmitProcessing,
 		CheckDuplicateShares:                 cfg.CheckDuplicateShares,
+		RejectNoJobID:                        cfg.RejectNoJobID,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
 		PeerCleanupMaxPingMs:                 cfg.PeerCleanupMaxPingMs,
 		PeerCleanupMinPeers:                  cfg.PeerCleanupMinPeers,
@@ -791,6 +792,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	next.SubmitWorkerNameMatch = getBool("submit_worker_name_match")
 	next.DirectSubmitProcessing = getBool("direct_submit_processing")
 	next.CheckDuplicateShares = getBool("check_duplicate_shares")
+	next.RejectNoJobID = getBool("reject_no_job_id")
 	next.IgnoreMinVersionBits = getBool("ignore_min_version_bits")
 
 	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {

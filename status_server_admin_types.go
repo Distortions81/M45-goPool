@@ -144,6 +144,7 @@ type AdminSettingsData struct {
 	SubmitWorkerNameMatch            bool
 	DirectSubmitProcessing           bool
 	CheckDuplicateShares             bool
+	RejectNoJobID                    bool
 
 	// Peer cleanup
 	PeerCleanupEnabled   bool

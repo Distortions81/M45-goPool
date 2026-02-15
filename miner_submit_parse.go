@@ -47,7 +47,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		return out, false
 	}
 	// Validate job ID length
-	if len(jobID) == 0 {
+	if len(jobID) == 0 && mc.cfg.RejectNoJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id required")})
 		return out, false
@@ -140,7 +140,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id interface{}, params []string, n
 	}
 
 	jobID := params[1]
-	if len(jobID) == 0 {
+	if len(jobID) == 0 && mc.cfg.RejectNoJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "job id required")})
 		return out, false
