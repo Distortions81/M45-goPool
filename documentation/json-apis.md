@@ -89,6 +89,66 @@ Removed in this branch on **2026-02-14**:
   - `GET /api/pool-hashrate` for fast hashrate + block timer telemetry
   - `GET /api/blocks` for recent found blocks
 
+### `/api/pool` quick migration map (find/replace)
+
+Use these path replacements when migrating old `/api/pool` consumers:
+
+- `api_version` -> `/api/overview.api_version` (or any new endpoint `api_version`)
+- `active_miners` -> `/api/overview.active_miners`
+- `pool_hashrate` -> `/api/pool-hashrate.pool_hashrate` (or `/api/overview.pool_hashrate`)
+- `blocks_accepted` -> `/api/pool-page.blocks_accepted`
+- `blocks_errored` -> `/api/pool-page.blocks_errored`
+- `uptime` -> `/api/server.uptime`
+- `btc_price_fiat` -> `/api/overview.btc_price_fiat`
+- `btc_price_updated_at` -> `/api/overview.btc_price_updated_at`
+- `fiat_currency` -> `/api/overview.fiat_currency`
+- `job_feed.last_error` -> `/api/server.job_feed.last_error`
+- `job_feed.last_error_at` -> `/api/server.job_feed.last_error_at`
+- `job_feed.error_history` -> `/api/server.job_feed.error_history`
+- `job_feed.zmq_healthy` -> `/api/server.job_feed.zmq_healthy`
+- `job_feed.zmq_disconnects` -> `/api/server.job_feed.zmq_disconnects`
+- `job_feed.zmq_reconnects` -> `/api/server.job_feed.zmq_reconnects`
+- `job_feed.last_raw_block_at` -> `/api/server.job_feed.last_raw_block_at`
+- `job_feed.last_raw_block_bytes` -> `/api/server.job_feed.last_raw_block_bytes`
+- `job_feed.block_hash` -> `/api/server.job_feed.block_hash`
+- `job_feed.block_height` -> `/api/pool-hashrate.block_height` (or `/api/server.job_feed.block_height`)
+- `job_feed.block_difficulty` -> `/api/pool-hashrate.block_difficulty` (or `/api/server.job_feed.block_difficulty`)
+- `job_feed.block_time` -> `/api/server.job_feed.block_time`
+- `job_feed.block_bits` -> `/api/server.job_feed.block_bits`
+
+Old `/api/pool` keys with no direct replacement JSON path:
+
+- `brand_name`
+- `brand_domain`
+- `server_location`
+- `listen_addr`
+- `stratum_tls_listen`
+- `pool_software`
+- `build_version`
+- `build_time`
+- `shares_per_second`
+- `accepted`
+- `rejected`
+- `stale_shares`
+- `low_diff_shares`
+- `reject_reasons`
+- `window_accepted`
+- `window_submissions`
+- `window_start`
+- `vardiff_up`
+- `vardiff_down`
+- `min_difficulty`
+- `max_difficulty`
+- `pool_fee_percent`
+- `operator_donation_percent`
+- `operator_donation_name`
+- `operator_donation_url`
+- `job_created`
+- `template_time`
+- `job_feed.ready`
+- `job_feed.last_success`
+- `warnings`
+
 Public (no auth):
 
 - `GET /api/overview` — overview page snapshot (default refresh ~10s)
