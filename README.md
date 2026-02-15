@@ -25,6 +25,33 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 3. Run `./goPool` once to generate example config files under `data/config/examples/`, then copy the base example into `data/config/config.toml` and edit it.
 4. Set the required `node.payout_address`, `node.rpc_url`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to run RPC/longpoll-only) before restarting the pool.
 
+## Codebase size
+
+- **Go source:** 44,896 lines spread across the `.go` files (core logic, services, status handlers, etc.).
+- **HTML/template:** 8,232 lines (status/admin UI templates, static fragments, helpers).
+- **CSS:** 2,126 lines for the dashboard/admin skin and helpers.
+
+Counts above were collected on February 15, 2026. Re-run the scan locally with this snippet if you want to refresh the numbers:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+root = Path('.')
+totals = {'go': 0, 'html': 0, 'css': 0}
+for path in root.rglob('*'):
+    if not path.is_file():
+        continue
+    ext = path.suffix.lower()
+    if ext == '.go':
+        totals['go'] += sum(1 for _ in path.open('r', encoding='utf-8', errors='ignore'))
+    elif ext in ('.html', '.tmpl', '.tpl'):
+        totals['html'] += sum(1 for _ in path.open('r', encoding='utf-8', errors='ignore'))
+    elif ext == '.css':
+        totals['css'] += sum(1 for _ in path.open('r', encoding='utf-8', errors='ignore'))
+print(totals)
+PY
+```
+
 ## Configuration overview
 
 - `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.
