@@ -1,0 +1,29 @@
+manifestVersion: 1
+id: gopool
+category: bitcoin
+name: goPool
+version: "0.2.2"
+tagline: Solo Bitcoin mining pool powered by Bitcoin Core
+icon: https://raw.githubusercontent.com/Distortions81/M45-Core-goPool/main/logo.png
+description: >-
+  goPool is a self-hosted solo Bitcoin mining pool that connects directly to
+  Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1, and provides a web
+  status dashboard with JSON APIs.
+
+  License: GNU AGPLv3 (https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
+releaseNotes: ""
+developer: Distortions81
+website: https://github.com/Distortions81/M45-Core-goPool
+dependencies:
+  - bitcoin
+repo: https://github.com/Distortions81/M45-Core-goPool
+support: https://github.com/Distortions81/M45-Core-goPool/issues
+port: 8080
+gallery:
+  - 1.png
+  - 2.png
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: Distortions81
+submission: ""

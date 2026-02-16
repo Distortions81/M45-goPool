@@ -1,0 +1,29 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: gopool_web_1
+      APP_PORT: 8080
+
+  web:
+    image: ghcr.io/distortions81/gopool-umbrel:v0.1.0@sha256:5cab409b0138736f2f0e6adaaf93223e95b8c397280913f32a33774d244dfda1
+    restart: on-failure
+    stop_grace_period: 1m
+    command:
+      - goPool
+      - -bind
+      - 0.0.0.0
+      - -network
+      - ${APP_BITCOIN_NETWORK}
+    ports:
+      - "3333:3333"
+    volumes:
+      - ${APP_DATA_DIR}/data:/app/data
+      - ${APP_BITCOIN_DATA_DIR}:/bitcoin:ro
+    environment:
+      APP_BITCOIN_NODE_IP: ${APP_BITCOIN_NODE_IP}
+      APP_BITCOIN_RPC_PORT: ${APP_BITCOIN_RPC_PORT}
+      APP_BITCOIN_ZMQ_RAWBLOCK_PORT: ${APP_BITCOIN_ZMQ_RAWBLOCK_PORT}
+      APP_BITCOIN_ZMQ_HASHBLOCK_PORT: ${APP_BITCOIN_ZMQ_HASHBLOCK_PORT}
+      APP_BITCOIN_NETWORK: ${APP_BITCOIN_NETWORK}

@@ -1,0 +1,39 @@
+[branding]
+fiat_currency = "usd"
+pool_donation_address = ""
+server_location = ""
+status_brand_domain = ""
+status_brand_name = ""
+status_connect_miner_title_extra = ""
+status_connect_miner_title_extra_url = ""
+status_tagline = "Umbrel M45-goPool"
+
+[logging]
+level = "warn"
+
+[mining]
+operator_donation_address = ""
+operator_donation_name = ""
+operator_donation_percent = 0.0
+operator_donation_url = ""
+pool_fee_percent = 2.0
+pooltag_prefix = ""
+
+[node]
+payout_address = "3B86bWqfjdQeLEr8nkeeWU6ygksc2K7MoL"
+rpc_cookie_path = "/bitcoin/.cookie"
+rpc_url = "http://10.21.21.8:8332"
+zmq_hashblock_addr = "tcp://10.21.21.8:28334"
+zmq_rawblock_addr = "tcp://10.21.21.8:28332"
+
+[server]
+pool_listen = ":3333"
+status_listen = ":8080"
+status_public_url = ""
+status_tls_listen = ""
+
+[stratum]
+stratum_password = ""
+stratum_password_enabled = false
+stratum_password_public = false
+stratum_tls_listen = ""
