@@ -9,7 +9,8 @@ Each release includes pre-built binaries for multiple platforms, packaged with a
 ### Included in Each Package
 
 - **Binary** - Pre-compiled goPool executable
-- **Documentation** - `../README.md`, `operations.md`, `performance.md`, `TESTING.md`, `LICENSE`
+- **Documentation** - `README.md` and `documentation/` guides
+- **Licenses** - `LICENSE`, `LICENSES/`, and `THIRD_PARTY_NOTICES.md`
 - **Templates** - All HTML templates in `data/templates/`
 - **Web Assets** - CSS, images, and static files in `data/www/`
 - **Config Examples** - Example configuration files in `data/config/examples/`
