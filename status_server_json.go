@@ -11,6 +11,19 @@ import (
 	"github.com/hako/durafmt"
 )
 
+type fourStatsWidgetItem struct {
+	Title   string `json:"title"`
+	Text    string `json:"text"`
+	Subtext string `json:"subtext,omitempty"`
+}
+
+type fourStatsWidgetResponse struct {
+	Type    string                `json:"type"`
+	Refresh string                `json:"refresh,omitempty"`
+	Link    string                `json:"link"`
+	Items   []fourStatsWidgetItem `json:"items"`
+}
+
 // handleNodePageJSON returns Bitcoin node information.
 func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -138,6 +151,108 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			MinerTypes:      view.MinerTypes,
 		}
 		return sonic.Marshal(data)
+	})
+}
+
+func widgetBestShareDifficulty(bestShares []BestShare) float64 {
+	best := 0.0
+	for _, share := range bestShares {
+		if share.Difficulty > best {
+			best = share.Difficulty
+		}
+	}
+	return best
+}
+
+func formatWidgetNumber(value float64) string {
+	if value <= 0 {
+		return "0"
+	}
+	precision := 2
+	switch {
+	case value >= 100:
+		precision = 0
+	case value >= 10:
+		precision = 1
+	}
+	out := strconv.FormatFloat(value, 'f', precision, 64)
+	out = strings.TrimRight(out, "0")
+	out = strings.TrimRight(out, ".")
+	if out == "" {
+		return "0"
+	}
+	return out
+}
+
+func formatWidgetDifficulty(diff float64) (string, string) {
+	if diff <= 0 {
+		return "0", "diff"
+	}
+	units := []string{"", "K", "M", "B", "T", "P", "E"}
+	scaled := diff
+	unit := 0
+	for scaled >= 1000 && unit < len(units)-1 {
+		scaled /= 1000
+		unit++
+	}
+	subtext := "diff"
+	if units[unit] != "" {
+		subtext = units[unit] + " diff"
+	}
+	return formatWidgetNumber(scaled), subtext
+}
+
+func splitWidgetValueAndUnit(formatted string) (string, string) {
+	parts := strings.Fields(strings.TrimSpace(formatted))
+	if len(parts) == 0 {
+		return "0", ""
+	}
+	value := parts[0]
+	if parsed, err := strconv.ParseFloat(value, 64); err == nil {
+		value = formatWidgetNumber(parsed)
+	}
+	if len(parts) == 1 {
+		return value, ""
+	}
+	return value, strings.Join(parts[1:], " ")
+}
+
+// handleWidgetStatsJSON returns an Umbrel four-stats widget payload.
+func (s *StatusServer) handleWidgetStatsJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	key := "widget_stats"
+	s.serveCachedJSON(w, key, poolHashrateTTL, func() ([]byte, error) {
+		view := s.statusDataView()
+		now := time.Now()
+
+		poolHashrate := s.computePoolHashrate()
+		if poolHashrate <= 0 {
+			poolHashrate = view.PoolHashrate
+		}
+		if poolHashrate <= 0 {
+			if fallbackHashrate, _, ok := s.latestPoolHashrateHistorySince(now, poolHashrateDisplayFallbackMaxAge); ok {
+				poolHashrate = fallbackHashrate
+			}
+		}
+
+		hashrateText, hashrateUnit := splitWidgetValueAndUnit(formatHashrateValue(poolHashrate))
+		bestShareText, bestShareUnit := formatWidgetDifficulty(widgetBestShareDifficulty(view.BestShares))
+
+		widget := fourStatsWidgetResponse{
+			Type:    "four-stats",
+			Refresh: "5s",
+			Link:    "",
+			Items: []fourStatsWidgetItem{
+				{Title: "goPool Hashrate", Text: hashrateText, Subtext: hashrateUnit},
+				{Title: "Miner Count", Text: strconv.Itoa(max(view.ActiveMiners, 0))},
+				{Title: "Best Share", Text: bestShareText, Subtext: bestShareUnit},
+				{Title: "Share Rate", Text: formatWidgetNumber(view.SharesPerMinute), Subtext: "shares/min"},
+			},
+		}
+		return sonic.Marshal(widget)
 	})
 }
 

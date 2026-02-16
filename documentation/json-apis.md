@@ -156,6 +156,7 @@ Public (no auth):
 - `GET /api/node` — node info snapshot (default refresh ~10s)
 - `GET /api/server` — server diagnostics snapshot (default refresh ~10s)
 - `GET /api/pool-hashrate` — fast pool hashrate/block timer snapshot (default refresh ~5s)
+- `GET /api/widget/stats` — Umbrel widget payload (default refresh ~5s)
 - `GET /api/blocks` — recent blocks list (default refresh ~3s; supports `?limit=`)
 
 Clerk-authenticated:
@@ -381,6 +382,33 @@ Example:
 
 ```bash
 curl -sS https://STATUS_HOST/api/pool-hashrate | jq .
+```
+
+### GET /api/widget/stats
+
+Umbrel `four-stats` widget payload for quick app-home metrics.
+
+Response object:
+
+- `type` (string; always `"four-stats"`)
+- `refresh` (string; widget refresh interval)
+- `link` (string; currently empty)
+- `items` (array; exactly 4 items)
+  - `title` (string)
+  - `text` (string)
+  - `subtext` (string; optional)
+
+Current items are:
+
+- `goPool Hashrate` — pool hashrate for the whole pool
+- `Miner Count` — active miner count
+- `Best Share` — highest observed share difficulty
+- `Share Rate` — pool-wide shares per minute
+
+Example:
+
+```bash
+curl -sS https://STATUS_HOST/api/widget/stats | jq .
 ```
 
 ### GET /api/blocks

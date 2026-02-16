@@ -19,6 +19,27 @@ dependencies:
 repo: https://github.com/Distortions81/M45-Core-goPool
 support: https://github.com/Distortions81/M45-Core-goPool/issues
 port: 8080
+widgets:
+  - id: "stats"
+    type: "four-stats"
+    refresh: "5s"
+    endpoint: "web:8080/api/widget/stats"
+    link: ""
+    example:
+      type: "four-stats"
+      link: ""
+      items:
+        - title: "goPool Hashrate"
+          text: "1.75"
+          subtext: "TH/s"
+        - title: "Miner Count"
+          text: "7"
+        - title: "Best Share"
+          text: "2.25"
+          subtext: "M diff"
+        - title: "Share Rate"
+          text: "18.8"
+          subtext: "shares/min"
 gallery:
   - 1.png
   - 2.png

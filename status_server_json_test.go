@@ -32,6 +32,13 @@ func newStatusServerForJSONTests() *StatusServer {
 				Worker: "bc1qthirdlongworkercomponent.worker03",
 			},
 		},
+		ActiveMiners:    7,
+		SharesPerMinute: 18.75,
+		PoolHashrate:    1_750_000_000_000,
+		BestShares: []BestShare{
+			{Difficulty: 2_250_000},
+			{Difficulty: 1_100_000},
+		},
 	}
 	s.lastStatusBuild = time.Now()
 	s.statusMu.Unlock()
@@ -50,6 +57,7 @@ func TestJSONEndpoints_MethodNotAllowed(t *testing.T) {
 		{name: "node", path: "/api/node", handler: s.handleNodePageJSON},
 		{name: "server", path: "/api/server", handler: s.handleServerPageJSON},
 		{name: "pool-hashrate", path: "/api/pool-hashrate", handler: s.handlePoolHashrateJSON},
+		{name: "widget-stats", path: "/api/widget/stats", handler: s.handleWidgetStatsJSON},
 		{name: "blocks", path: "/api/blocks", handler: s.handleBlocksListJSON},
 	}
 
@@ -144,5 +152,52 @@ func TestHandlePoolHashrateJSON_IncludeHistoryToggle(t *testing.T) {
 	}
 	if len(payloadWithHistory.PoolHashrateHistory) == 0 {
 		t.Fatalf("expected non-empty pool_hashrate_history with include_history=1")
+	}
+}
+
+func TestHandleWidgetStatsJSON_ReturnsFourStats(t *testing.T) {
+	s := newStatusServerForJSONTests()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/widget/stats", nil)
+	rr := httptest.NewRecorder()
+	s.handleWidgetStatsJSON(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var payload struct {
+		Type  string `json:"type"`
+		Items []struct {
+			Title   string `json:"title"`
+			Text    string `json:"text"`
+			Subtext string `json:"subtext"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode widget response: %v", err)
+	}
+	if payload.Type != "four-stats" {
+		t.Fatalf("widget type got %q want %q", payload.Type, "four-stats")
+	}
+	if len(payload.Items) != 4 {
+		t.Fatalf("widget items got %d want 4", len(payload.Items))
+	}
+
+	expectedTitles := []string{
+		"goPool Hashrate",
+		"Miner Count",
+		"Best Share",
+		"Share Rate",
+	}
+	for i, title := range expectedTitles {
+		if payload.Items[i].Title != title {
+			t.Fatalf("item %d title got %q want %q", i, payload.Items[i].Title, title)
+		}
+		if payload.Items[i].Text == "" {
+			t.Fatalf("item %d text should not be empty", i)
+		}
+	}
+	if payload.Items[1].Text != "7" {
+		t.Fatalf("miner count got %q want %q", payload.Items[1].Text, "7")
 	}
 }
