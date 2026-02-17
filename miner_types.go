@@ -128,6 +128,8 @@ type MinerConn struct {
 	shareCache           map[string]*duplicateShareSet
 	evictedShareCache    map[string]*evictedCacheEntry
 	lastJob              *Job
+	lastJobPrevHash      string
+	lastJobHeight        int64
 	lastClean            bool
 	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
 	jobScriptTime        map[string]int64

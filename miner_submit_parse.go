@@ -57,6 +57,9 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid worker")})
 		return out, false
 	}
+	if validateFields {
+		worker = strings.TrimSpace(worker)
+	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "worker name required")})
@@ -74,6 +77,9 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		mc.recordShare(worker, false, 0, 0, "invalid job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid job id")})
 		return out, false
+	}
+	if validateFields {
+		jobID = strings.TrimSpace(jobID)
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
@@ -157,6 +163,9 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	}
 
 	worker := params[0]
+	if validateFields {
+		worker = strings.TrimSpace(worker)
+	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "worker name required")})
@@ -170,6 +179,9 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	}
 
 	jobID := params[1]
+	if validateFields {
+		jobID = strings.TrimSpace(jobID)
+	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "job id required")})
@@ -279,7 +291,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		return submissionTask{}, false
 	}
 
-	job, curLast, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -401,8 +413,8 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		return submissionTask{}, false
 	}
 
-	authorizedWorker := strings.TrimSpace(mc.currentWorker())
-	submitWorker := strings.TrimSpace(worker)
+	authorizedWorker := mc.currentWorker()
+	submitWorker := worker
 	if mc.cfg.ShareRequireAuthorizedConnection && mc.cfg.ShareRequireWorkerMatch && authorizedWorker != "" && submitWorker != authorizedWorker {
 		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
 		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
@@ -427,7 +439,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		return submissionTask{}, false
 	}
 
-	job, curLast, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, curPrevHash, curHeight, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -449,8 +461,8 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
 	policyReject := submitPolicyReject{reason: rejectUnknown}
-	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && curLast.Template.Previous != job.Template.Previous {
-		logger.Warn("submit: stale job prevhash mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "current_prev", curLast.Template.Previous)
+	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
+		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
 	}
 

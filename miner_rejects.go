@@ -522,6 +522,8 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	// shares after difficulty changes, wasting miner work.
 	mc.activeJobs[job.JobID] = job
 	mc.lastJob = job
+	mc.lastJobPrevHash = job.Template.Previous
+	mc.lastJobHeight = job.Template.Height
 	mc.lastClean = clean
 
 	// Evict oldest jobs if we exceed the max limit
@@ -584,14 +586,14 @@ func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {
 // jobForIDWithLast returns the job for the given ID along with the current lastJob
 // and the scriptTime used when this job was notified to this connection, all
 // under a single lock acquisition to avoid race conditions.
-func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, scriptTime int64, ok bool) {
+func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, lastPrevHash string, lastHeight int64, scriptTime int64, ok bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
 	job, ok = mc.activeJobs[jobID]
 	if mc.jobScriptTime != nil {
 		scriptTime = mc.jobScriptTime[jobID]
 	}
-	return job, mc.lastJob, scriptTime, ok
+	return job, mc.lastJob, mc.lastJobPrevHash, mc.lastJobHeight, scriptTime, ok
 }
 
 func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
@@ -645,7 +647,7 @@ func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 	if mc.lastJob == nil {
 		return true
 	}
-	return mc.lastJob.Template.Previous != job.Template.Previous || mc.lastJob.Template.Height != job.Template.Height
+	return mc.lastJobPrevHash != job.Template.Previous || mc.lastJobHeight != job.Template.Height
 }
 
 func (mc *MinerConn) isDuplicateShare(jobID string, extranonce2 []byte, ntime, nonce uint32, version uint32) bool {
