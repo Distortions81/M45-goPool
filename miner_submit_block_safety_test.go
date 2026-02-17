@@ -76,7 +76,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 
 	// Seed the duplicate cache with the exact share key. If duplicate detection
 	// were applied to winning blocks, this would cause an incorrect rejection.
-	if dup := mc.isDuplicateShare(jobID, task.extranonce2, task.ntime, task.nonce, task.useVersion); dup {
+	if dup := mc.isDuplicateShare(jobID, (&task).extranonce2Decoded(), task.ntimeVal, task.nonceVal, task.useVersion); dup {
 		t.Fatalf("unexpected duplicate when seeding cache")
 	}
 
