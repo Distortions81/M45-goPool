@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -461,10 +462,22 @@ func main() {
 	mux.HandleFunc("/app/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/app")
 	})
-	// Some clients incorrectly encode hash-routes into the URL path.
-	// Support: /%23/app/{worker} (i.e. "#/app/{worker}" URL-escaped into a path).
-	mux.HandleFunc("/%23/app/", func(w http.ResponseWriter, r *http.Request) {
-		statusServer.handleWorkerLookup(w, r, "/%23/app")
+	// Some clients incorrectly encode hash-routes into the URL path (e.g. "/%23/app/{worker}").
+	// net/http decodes %23 to '#', so we register the decoded form and redirect to the
+	// canonical SHA256 worker lookup endpoint.
+	mux.HandleFunc("/#/app/", func(w http.ResponseWriter, r *http.Request) {
+		worker := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/#/app/"))
+		if worker == "" {
+			http.Redirect(w, r, "/worker", http.StatusSeeOther)
+			return
+		}
+		workerHash := workerNameHashTrimmed(worker)
+		if workerHash == "" {
+			http.Redirect(w, r, "/worker", http.StatusSeeOther)
+			return
+		}
+		target := "/worker/sha256?hash=" + workerHash + "&worker=" + url.QueryEscape(worker)
+		http.Redirect(w, r, target, http.StatusSeeOther)
 	})
 	// Catch-all: try static files first, fall back to status server
 	// Use os.OpenRoot for secure, chroot-like file serving that prevents path traversal.

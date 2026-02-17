@@ -305,47 +305,40 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 		} else if _, err := hex.DecodeString(workerHash); err != nil {
 			data.Error = "invalid hash value"
 		} else {
-			data.QueriedWorker = workerHash
 			data.QueriedWorkerHash = workerHash
-
-			// Cache HTML for this worker/privacymode keyed by SHA so repeated
-			// refreshes avoid rebuilding the page. This is a best-effort cache:
-			// failures simply fall back to on-demand rendering.
-			cacheKey := workerHash
-			if privacyMode {
-				cacheKey = cacheKey + "|priv"
-			}
-			// Include the current job ID in the cache key so the worker page
-			// updates immediately when new work arrives (coinbase changes per job).
-			if curJob != nil && strings.TrimSpace(curJob.JobID) != "" {
-				cacheKey = cacheKey + "|job:" + strings.TrimSpace(curJob.JobID)
-			}
-			s.workerPageMu.RLock()
-			if entry, ok := s.workerPageCache[cacheKey]; ok && now.Before(entry.expiresAt) {
-				payload := entry.payload
-				s.workerPageMu.RUnlock()
-				setShortHTMLCacheHeaders(w, true)
-				_, _ = w.Write(payload)
-				return
-			}
-			s.workerPageMu.RUnlock()
-
-			if wv, ok := s.findWorkerViewByHash(workerHash); ok {
-				setWorkerStatusView(&data, wv)
-				s.setWorkerCurrentJobCoinbase(&data, curJob, wv)
-				if data.BTCPriceFiat > 0 {
-					cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
-					if cur == "" {
-						cur = "USD"
-					}
-					base := fmt.Sprintf("Approximate fiat values (%s) use 1 BTC ≈ %.2f", cur, data.BTCPriceFiat)
-					if data.BTCPriceUpdatedAt != "" {
-						base += " (price updated " + data.BTCPriceUpdatedAt + ")"
-					}
-					data.FiatNote = base + "; payouts are always made in BTC."
+			data.QueriedWorker = workerHash
+			if workerValue != "" {
+				if len(workerValue) > workerLookupMaxBytes {
+					data.Error = "worker id too long"
+				} else {
+					data.QueriedWorker = workerValue
 				}
-			} else if s.accounting != nil {
-				if wv, ok := s.accounting.WorkerViewBySHA256(workerHash); ok {
+			}
+
+			if data.Error == "" {
+				// Cache HTML for this worker/privacymode keyed by SHA so repeated
+				// refreshes avoid rebuilding the page. This is a best-effort cache:
+				// failures simply fall back to on-demand rendering.
+				cacheKey := workerHash
+				if privacyMode {
+					cacheKey = cacheKey + "|priv"
+				}
+				// Include the current job ID in the cache key so the worker page
+				// updates immediately when new work arrives (coinbase changes per job).
+				if curJob != nil && strings.TrimSpace(curJob.JobID) != "" {
+					cacheKey = cacheKey + "|job:" + strings.TrimSpace(curJob.JobID)
+				}
+				s.workerPageMu.RLock()
+				if entry, ok := s.workerPageCache[cacheKey]; ok && now.Before(entry.expiresAt) {
+					payload := entry.payload
+					s.workerPageMu.RUnlock()
+					setShortHTMLCacheHeaders(w, true)
+					_, _ = w.Write(payload)
+					return
+				}
+				s.workerPageMu.RUnlock()
+
+				if wv, ok := s.findWorkerViewByHash(workerHash); ok {
 					setWorkerStatusView(&data, wv)
 					s.setWorkerCurrentJobCoinbase(&data, curJob, wv)
 					if data.BTCPriceFiat > 0 {
@@ -359,11 +352,27 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 						}
 						data.FiatNote = base + "; payouts are always made in BTC."
 					}
+				} else if s.accounting != nil {
+					if wv, ok := s.accounting.WorkerViewBySHA256(workerHash); ok {
+						setWorkerStatusView(&data, wv)
+						s.setWorkerCurrentJobCoinbase(&data, curJob, wv)
+						if data.BTCPriceFiat > 0 {
+							cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
+							if cur == "" {
+								cur = "USD"
+							}
+							base := fmt.Sprintf("Approximate fiat values (%s) use 1 BTC ≈ %.2f", cur, data.BTCPriceFiat)
+							if data.BTCPriceUpdatedAt != "" {
+								base += " (price updated " + data.BTCPriceUpdatedAt + ")"
+							}
+							data.FiatNote = base + "; payouts are always made in BTC."
+						}
+					} else {
+						data.Error = "worker not found"
+					}
 				} else {
 					data.Error = "worker not found"
 				}
-			} else {
-				data.Error = "worker not found"
 			}
 		}
 	}
