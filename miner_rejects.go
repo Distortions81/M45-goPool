@@ -525,7 +525,7 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastJobPrevHash = job.Template.Previous
 	mc.lastJobHeight = job.Template.Height
 	mc.lastClean = clean
-	if mc.jobNTimeBounds != nil {
+	if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
 		minNTime := job.Template.CurTime
 		if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
 			minNTime = job.Template.Mintime

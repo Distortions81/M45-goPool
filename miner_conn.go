@@ -195,7 +195,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
 		jobScriptTime:     make(map[string]int64, maxRecentJobs),
 		jobNotifyCoinbase: make(map[string]notifiedCoinbaseParts, maxRecentJobs),
-		jobNTimeBounds:    make(map[string]jobNTimeBounds, maxRecentJobs),
+		jobNTimeBounds:    nil,
 		shareCache:        shareCache,
 		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,
@@ -209,6 +209,9 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		isTLSConnection:   isTLS,
 		statsUpdates:      make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
 		workerWallets:     make(map[string]workerWalletState, 4),
+	}
+	if cfg.ShareCheckNTimeWindow {
+		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, maxRecentJobs)
 	}
 
 	// Initialize atomic fields
@@ -246,12 +249,12 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-			line, err := mc.reader.ReadSlice('\n')
-			now = time.Now()
-			if err != nil {
-				if errors.Is(err, bufio.ErrBufferFull) {
-					logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
-					if banned, count := mc.noteProtocolViolation(now); banned {
+		line, err := mc.reader.ReadSlice('\n')
+		now = time.Now()
+		if err != nil {
+			if errors.Is(err, bufio.ErrBufferFull) {
+				logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
+				if banned, count := mc.noteProtocolViolation(now); banned {
 					mc.logBan("oversized stratum message", mc.currentWorker(), count)
 				}
 				return
@@ -268,8 +271,8 @@ func (mc *MinerConn) handle() {
 			}
 			return
 		}
-			logNetMessage("recv", line)
-			line = bytes.TrimSpace(line)
+		logNetMessage("recv", line)
+		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
@@ -287,27 +290,27 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-			if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
-				switch sniffedMethod {
-				case "mining.ping":
-					mc.writePongResponse(sniffedID)
-					continue
-				case "mining.authorize":
-					// Fast-path: mining.authorize typically uses string params.
-					// Avoid full JSON unmarshal on the connection goroutine.
-					if params, ok := sniffStratumStringParams(line, 2); ok && len(params) > 0 {
-						worker := params[0]
-						pass := ""
-						if len(params) > 1 {
-							pass = params[1]
-						}
-						mc.handleAuthorizeID(sniffedID, worker, pass)
-						continue
+		if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
+			switch sniffedMethod {
+			case "mining.ping":
+				mc.writePongResponse(sniffedID)
+				continue
+			case "mining.authorize":
+				// Fast-path: mining.authorize typically uses string params.
+				// Avoid full JSON unmarshal on the connection goroutine.
+				if params, ok := sniffStratumStringParams(line, 2); ok && len(params) > 0 {
+					worker := params[0]
+					pass := ""
+					if len(params) > 1 {
+						pass = params[1]
 					}
-				case "mining.subscribe":
-					// Fast-path: mining.subscribe only needs the request ID and (optionally)
-					// a string client identifier in params[0].
-					params, ok := sniffStratumStringParams(line, 1)
+					mc.handleAuthorizeID(sniffedID, worker, pass)
+					continue
+				}
+			case "mining.subscribe":
+				// Fast-path: mining.subscribe only needs the request ID and (optionally)
+				// a string client identifier in params[0].
+				params, ok := sniffStratumStringParams(line, 1)
 				if ok {
 					clientID := ""
 					haveClientID := false
