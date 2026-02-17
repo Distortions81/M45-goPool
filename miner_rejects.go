@@ -550,16 +550,16 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		if mc.jobScriptTime != nil {
 			delete(mc.jobScriptTime, oldest)
 		}
-			if mc.jobNotifyCoinbase != nil {
-				delete(mc.jobNotifyCoinbase, oldest)
-			}
-			if mc.jobNTimeBounds != nil {
-				delete(mc.jobNTimeBounds, oldest)
-			}
-			if dupEnabled {
-				if cache := mc.shareCache[oldest]; cache != nil {
-					if now.IsZero() {
-						now = time.Now()
+		if mc.jobNotifyCoinbase != nil {
+			delete(mc.jobNotifyCoinbase, oldest)
+		}
+		if mc.jobNTimeBounds != nil {
+			delete(mc.jobNTimeBounds, oldest)
+		}
+		if dupEnabled {
+			if cache := mc.shareCache[oldest]; cache != nil {
+				if now.IsZero() {
+					now = time.Now()
 				}
 				if mc.evictedShareCache == nil {
 					mc.evictedShareCache = make(map[string]*evictedCacheEntry)
@@ -607,7 +607,7 @@ func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, las
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
 	job, ok = mc.activeJobs[jobID]
-	if mc.jobNTimeBounds != nil {
+	if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
 		ntimeBounds = mc.jobNTimeBounds[jobID]
 	}
 	if mc.jobScriptTime != nil {
