@@ -5,7 +5,20 @@ import (
 	"math/bits"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+func trimSpaceFast(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	first := s[0]
+	last := s[len(s)-1]
+	if first < utf8.RuneSelf && last < utf8.RuneSelf && first > ' ' && last > ' ' {
+		return s
+	}
+	return strings.TrimSpace(s)
+}
 
 func decodeExtranonce2Hex(extranonce2 string, validateFields bool, expectedSize int) ([32]byte, uint16, []byte, error) {
 	var small [32]byte
@@ -58,7 +71,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		return out, false
 	}
 	if validateFields {
-		worker = strings.TrimSpace(worker)
+		worker = trimSpaceFast(worker)
 	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
@@ -79,7 +92,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		return out, false
 	}
 	if validateFields {
-		jobID = strings.TrimSpace(jobID)
+		jobID = trimSpaceFast(jobID)
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
@@ -164,7 +177,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 
 	worker := params[0]
 	if validateFields {
-		worker = strings.TrimSpace(worker)
+		worker = trimSpaceFast(worker)
 	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
@@ -180,7 +193,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 
 	jobID := params[1]
 	if validateFields {
-		jobID = strings.TrimSpace(jobID)
+		jobID = trimSpaceFast(jobID)
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
