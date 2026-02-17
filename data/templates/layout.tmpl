@@ -75,13 +75,34 @@
 	</div>
 <p class="text-sm" style="margin-top:8px;color:#646b86;text-align:center;">
 	By connecting mining device(s) or software to this pool, you acknowledge and agree to be bound by the <a href="/terms" style="color:inherit;text-decoration:underline;">Terms of Use</a> and acknowledge that you have reviewed the <a href="/privacy" style="color:inherit;text-decoration:underline;">Privacy Policy</a> (Last Updated: February 14, 2026).
-</p>
-<script>
-// Theme switcher - maintains theme preference across page loads
-(function() {
-	const themeToggle = document.getElementById('themeToggle');
-	const themeIcon = document.getElementById('themeToggleIcon');
-	const themedIcons = document.querySelectorAll('.themed-icon');
+	</p>
+	<script>
+	// Support hash-based worker deep links used by some UIs/QR codes:
+	//   #/app/<stratum user>  ->  /app/<stratum user>
+	(function() {
+		try {
+			const hash = window.location.hash || '';
+			const prefix = '#/app/';
+			if (!hash.startsWith(prefix)) return;
+
+			const rest = hash.slice(prefix.length);
+			if (!rest) return;
+
+			const qIndex = rest.indexOf('?');
+			const workerPart = qIndex >= 0 ? rest.slice(0, qIndex) : rest;
+			const queryPart = qIndex >= 0 ? rest.slice(qIndex) : '';
+
+			const worker = decodeURIComponent(workerPart);
+			const target = '/app/' + encodeURIComponent(worker) + queryPart;
+			window.location.replace(target);
+		} catch (_) {}
+	})();
+
+	// Theme switcher - maintains theme preference across page loads
+	(function() {
+		const themeToggle = document.getElementById('themeToggle');
+		const themeIcon = document.getElementById('themeToggleIcon');
+		const themedIcons = document.querySelectorAll('.themed-icon');
 
 	// Get saved theme or default to dark
 	const savedTheme = localStorage.getItem('theme') || 'dark';
