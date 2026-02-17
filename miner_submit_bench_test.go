@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -86,7 +85,6 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 	mc.setWorkerWallet(benchWorker, benchWallet, benchScript)
 
 	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
 	return mc
 }
 

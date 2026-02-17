@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -82,7 +81,6 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	}
 
 	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
 	mc.processSubmissionTask(task)
 	flushFoundBlockLog(t)
 
@@ -213,12 +211,11 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		receivedAt:       time.Unix(1700000000, 0),
-	}
+		}
 
-	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
-	mc.processSubmissionTask(task)
-	flushFoundBlockLog(t)
+		mc.conn = nopConn{}
+		mc.processSubmissionTask(task)
+		flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {
@@ -259,12 +256,11 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		// should not prevent submitting a real block.
 		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"},
 		receivedAt:   time.Unix(1700000000, 0),
-	}
+		}
 
-	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
-	mc.processSubmissionTask(task)
-	flushFoundBlockLog(t)
+		mc.conn = nopConn{}
+		mc.processSubmissionTask(task)
+		flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {

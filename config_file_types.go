@@ -39,6 +39,10 @@ type stratumConfig struct {
 	StratumPasswordEnabled bool   `toml:"stratum_password_enabled"`
 	StratumPassword        string `toml:"stratum_password"`
 	StratumPasswordPublic  bool   `toml:"stratum_password_public"`
+	FastDecodeEnabled      *bool  `toml:"fast_decode_enabled"`
+	FastEncodeEnabled      *bool  `toml:"fast_encode_enabled"`
+	TCPReadBufferBytes     *int   `toml:"tcp_read_buffer_bytes"`
+	TCPWriteBufferBytes    *int   `toml:"tcp_write_buffer_bytes"`
 }
 
 type authConfig struct {

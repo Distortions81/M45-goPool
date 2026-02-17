@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"strings"
 	"testing"
 )
@@ -93,7 +92,6 @@ func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	mc := &MinerConn{
 		id:       "configure-variants",
 		conn:     conn,
-		writer:   bufio.NewWriterSize(conn, 4096),
 		poolMask: 0x1fffe000,
 	}
 

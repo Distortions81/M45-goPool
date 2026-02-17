@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -88,7 +87,6 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	// Provide a no-op conn/writer so handleBlockShare can emit responses
 	// without panicking on a nil connection.
 	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriter(mc.conn)
 
 	// Parameters matching the job template.
 	en2 := []byte{0xaa, 0xbb, 0xcc, 0xdd}

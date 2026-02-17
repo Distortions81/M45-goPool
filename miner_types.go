@@ -91,13 +91,14 @@ type MinerConn struct {
 	id                   string
 	ctx                  context.Context
 	conn                 net.Conn
-	writer               *bufio.Writer
 	writeMu              sync.Mutex
+	writeScratch         []byte
 	reader               *bufio.Reader
 	jobMgr               *JobManager
 	rpc                  rpcCaller
 	cfg                  Config
 	extranonce1          []byte
+	extranonce1Hex       string
 	jobCh                chan *Job
 	difficulty           atomic.Uint64 // float64 stored as bits
 	previousDifficulty   atomic.Uint64 // float64 stored as bits

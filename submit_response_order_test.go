@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"net"
 	"strings"
@@ -64,7 +63,6 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 		id:          "submit-order-miner",
 		cfg:         Config{PoolFeePercent: 0},
 		conn:        conn,
-		writer:      bufio.NewWriterSize(conn, 4096),
 		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 		vardiff:     defaultVarDiff,
 		authorized:  true,

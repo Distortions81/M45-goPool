@@ -705,12 +705,13 @@ func main() {
 				}
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
-			}
-			disableTCPNagle(conn)
-			remote := conn.RemoteAddr().String()
-			if reconnectLimiter != nil {
-				host, _, errSplit := net.SplitHostPort(remote)
-				if errSplit != nil {
+				}
+				disableTCPNagle(conn)
+				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+				remote := conn.RemoteAddr().String()
+				if reconnectLimiter != nil {
+					host, _, errSplit := net.SplitHostPort(remote)
+					if errSplit != nil {
 					host = remote
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {
@@ -805,6 +806,24 @@ func main() {
 func disableTCPNagle(conn net.Conn) {
 	if tcp := findTCPConn(conn); tcp != nil {
 		_ = tcp.SetNoDelay(true)
+	}
+}
+
+func setTCPBuffers(conn net.Conn, readBytes, writeBytes int) {
+	if readBytes <= 0 && writeBytes <= 0 {
+		return
+	}
+	if tcp := findTCPConn(conn); tcp != nil {
+		if readBytes > 0 {
+			if err := tcp.SetReadBuffer(readBytes); err != nil && debugLogging {
+				logger.Debug("set tcp read buffer failed", "error", err, "bytes", readBytes)
+			}
+		}
+		if writeBytes > 0 {
+			if err := tcp.SetWriteBuffer(writeBytes); err != nil && debugLogging {
+				logger.Debug("set tcp write buffer failed", "error", err, "bytes", writeBytes)
+			}
+		}
 	}
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"net"
@@ -37,7 +36,6 @@ func TestSuggestDifficultyOutOfRangeBansAndDisconnects(t *testing.T) {
 		id:           "suggest-ban-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -72,7 +70,6 @@ func TestSuggestDifficultyAboveMaxBansAndDisconnects(t *testing.T) {
 		id:           "suggest-ban-fast-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -107,7 +104,6 @@ func TestSuggestDifficultyInRangeDoesNotBan(t *testing.T) {
 		id:           "suggest-ok-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -133,7 +129,6 @@ func TestSuggestDifficultyOutOfRangeDoesNotBanWhenEnforcementDisabled(t *testing
 		id:           "suggest-noban-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: false},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -163,7 +158,6 @@ func TestSuggestDifficultyZeroIsIgnoredAndDoesNotBan(t *testing.T) {
 		id:           "suggest-zero-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -196,7 +190,6 @@ func TestSuggestDifficultyNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
 		id:           "suggest-noparams-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -226,7 +219,6 @@ func TestSuggestTargetOutOfRangeBansAndDisconnects(t *testing.T) {
 		id:           "suggest-target-ban-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -257,7 +249,6 @@ func TestSuggestTargetAboveMaxBansAndDisconnects(t *testing.T) {
 		id:           "suggest-target-ban-fast-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -288,7 +279,6 @@ func TestSuggestTargetNoParamsIsIgnoredAndDoesNotBan(t *testing.T) {
 		id:           "suggest-target-noparams-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -318,7 +308,6 @@ func TestSuggestTargetEmptyIsIgnoredAndDoesNotBan(t *testing.T) {
 		id:           "suggest-target-empty-miner",
 		cfg:          Config{MinDifficulty: 1.0, MaxDifficulty: 2.0, EnforceSuggestedDifficultyLimits: true},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		statsUpdates: make(chan statsUpdate),
 	}
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,7 +31,6 @@ func TestHandleAuthorizeRejectsPersistedWorkerBan(t *testing.T) {
 		id:           "banned-miner",
 		cfg:          Config{},
 		conn:         conn,
-		writer:       bufio.NewWriterSize(conn, 4096),
 		accounting:   accounting,
 		subscribed:   true,
 		statsUpdates: make(chan statsUpdate),
