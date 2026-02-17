@@ -461,13 +461,8 @@ func main() {
 	mux.HandleFunc("/app/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/app")
 	})
-	// Some non-browser clients incorrectly encode hash-routes into the URL path.
-	// Support both the decoded and escaped variants:
-	// - /#/app/{worker}
-	// - /%23/app/{worker}
-	mux.HandleFunc("/#/app/", func(w http.ResponseWriter, r *http.Request) {
-		statusServer.handleWorkerLookup(w, r, "/#/app")
-	})
+	// Some clients incorrectly encode hash-routes into the URL path.
+	// Support: /%23/app/{worker} (i.e. "#/app/{worker}" URL-escaped into a path).
 	mux.HandleFunc("/%23/app/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/%23/app")
 	})
