@@ -195,6 +195,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
 		jobScriptTime:     make(map[string]int64, maxRecentJobs),
 		jobNotifyCoinbase: make(map[string]notifiedCoinbaseParts, maxRecentJobs),
+		jobNTimeBounds:    make(map[string]jobNTimeBounds, maxRecentJobs),
 		shareCache:        shareCache,
 		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,

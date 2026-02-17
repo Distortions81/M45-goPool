@@ -525,6 +525,20 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastJobPrevHash = job.Template.Previous
 	mc.lastJobHeight = job.Template.Height
 	mc.lastClean = clean
+	if mc.jobNTimeBounds != nil {
+		minNTime := job.Template.CurTime
+		if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
+			minNTime = job.Template.Mintime
+		}
+		slack := mc.cfg.ShareNTimeMaxForwardSeconds
+		if slack <= 0 {
+			slack = defaultShareNTimeMaxForwardSeconds
+		}
+		mc.jobNTimeBounds[job.JobID] = jobNTimeBounds{
+			min: minNTime,
+			max: minNTime + int64(slack),
+		}
+	}
 
 	// Evict oldest jobs if we exceed the max limit
 	dupEnabled := mc.cfg.ShareCheckDuplicate
@@ -536,13 +550,16 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		if mc.jobScriptTime != nil {
 			delete(mc.jobScriptTime, oldest)
 		}
-		if mc.jobNotifyCoinbase != nil {
-			delete(mc.jobNotifyCoinbase, oldest)
-		}
-		if dupEnabled {
-			if cache := mc.shareCache[oldest]; cache != nil {
-				if now.IsZero() {
-					now = time.Now()
+			if mc.jobNotifyCoinbase != nil {
+				delete(mc.jobNotifyCoinbase, oldest)
+			}
+			if mc.jobNTimeBounds != nil {
+				delete(mc.jobNTimeBounds, oldest)
+			}
+			if dupEnabled {
+				if cache := mc.shareCache[oldest]; cache != nil {
+					if now.IsZero() {
+						now = time.Now()
 				}
 				if mc.evictedShareCache == nil {
 					mc.evictedShareCache = make(map[string]*evictedCacheEntry)
@@ -586,14 +603,17 @@ func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {
 // jobForIDWithLast returns the job for the given ID along with the current lastJob
 // and the scriptTime used when this job was notified to this connection, all
 // under a single lock acquisition to avoid race conditions.
-func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, lastPrevHash string, lastHeight int64, scriptTime int64, ok bool) {
+func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, lastPrevHash string, lastHeight int64, ntimeBounds jobNTimeBounds, scriptTime int64, ok bool) {
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
 	job, ok = mc.activeJobs[jobID]
+	if mc.jobNTimeBounds != nil {
+		ntimeBounds = mc.jobNTimeBounds[jobID]
+	}
 	if mc.jobScriptTime != nil {
 		scriptTime = mc.jobScriptTime[jobID]
 	}
-	return job, mc.lastJob, mc.lastJobPrevHash, mc.lastJobHeight, scriptTime, ok
+	return job, mc.lastJob, mc.lastJobPrevHash, mc.lastJobHeight, ntimeBounds, scriptTime, ok
 }
 
 func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
