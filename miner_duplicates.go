@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"sync"
 	"time"
 )
@@ -73,15 +72,37 @@ func makeDuplicateShareKeyDecoded(dst *duplicateShareKey, extranonce2 []byte, nt
 	*dst = duplicateShareKey{}
 
 	writeBytes := func(b []byte) {
-		for i := 0; i < len(b) && int(dst.n) < maxDuplicateShareKeyBytes; i++ {
-			dst.buf[dst.n] = b[i]
-			dst.n++
+		if int(dst.n) >= maxDuplicateShareKeyBytes {
+			return
 		}
+		remain := maxDuplicateShareKeyBytes - int(dst.n)
+		if len(b) > remain {
+			b = b[:remain]
+		}
+		n := copy(dst.buf[dst.n:], b)
+		dst.n += uint8(n)
 	}
 	writeU32 := func(v uint32) {
-		var tmp [4]byte
-		binary.BigEndian.PutUint32(tmp[:], v)
-		writeBytes(tmp[:])
+		remain := maxDuplicateShareKeyBytes - int(dst.n)
+		if remain <= 0 {
+			return
+		}
+		if remain >= 4 {
+			i := dst.n
+			dst.buf[i+0] = byte(v >> 24)
+			dst.buf[i+1] = byte(v >> 16)
+			dst.buf[i+2] = byte(v >> 8)
+			dst.buf[i+3] = byte(v)
+			dst.n += 4
+			return
+		}
+		shift := uint(24)
+		for remain > 0 {
+			dst.buf[dst.n] = byte(v >> shift)
+			dst.n++
+			remain--
+			shift -= 8
+		}
 	}
 
 	writeBytes(extranonce2)
