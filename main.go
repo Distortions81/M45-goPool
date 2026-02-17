@@ -461,6 +461,16 @@ func main() {
 	mux.HandleFunc("/app/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/app")
 	})
+	// Some non-browser clients incorrectly encode hash-routes into the URL path.
+	// Support both the decoded and escaped variants:
+	// - /#/app/{worker}
+	// - /%23/app/{worker}
+	mux.HandleFunc("/#/app/", func(w http.ResponseWriter, r *http.Request) {
+		statusServer.handleWorkerLookup(w, r, "/#/app")
+	})
+	mux.HandleFunc("/%23/app/", func(w http.ResponseWriter, r *http.Request) {
+		statusServer.handleWorkerLookup(w, r, "/%23/app")
+	})
 	// Catch-all: try static files first, fall back to status server
 	// Use os.OpenRoot for secure, chroot-like file serving that prevents path traversal.
 	wwwRoot, err := os.OpenRoot(wwwDir)
@@ -705,13 +715,13 @@ func main() {
 				}
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
-				}
-				disableTCPNagle(conn)
-				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
-				remote := conn.RemoteAddr().String()
-				if reconnectLimiter != nil {
-					host, _, errSplit := net.SplitHostPort(remote)
-					if errSplit != nil {
+			}
+			disableTCPNagle(conn)
+			setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+			remote := conn.RemoteAddr().String()
+			if reconnectLimiter != nil {
+				host, _, errSplit := net.SplitHostPort(remote)
+				if errSplit != nil {
 					host = remote
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {

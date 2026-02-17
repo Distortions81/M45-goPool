@@ -1,15 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"encoding/hex"
 	"strings"
 )
 
-func workerNameHash(name string) string {
-	name = strings.TrimSpace(name)
+func workerNameHashTrimmed(name string) string {
 	if name == "" {
 		return ""
 	}
 	sum := sha256Sum([]byte(name))
-	return fmt.Sprintf("%x", sum[:])
+	return hex.EncodeToString(sum[:])
+}
+
+func workerNameHash(name string) string {
+	name = strings.TrimSpace(name)
+	return workerNameHashTrimmed(name)
 }

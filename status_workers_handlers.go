@@ -461,8 +461,7 @@ func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	hashSum := sha256Sum([]byte(workerID))
-	data.QueriedWorkerHash = fmt.Sprintf("%x", hashSum[:])
+	data.QueriedWorkerHash = workerNameHashTrimmed(workerID)
 
 	data.QueriedWorker = workerID
 	found := false
