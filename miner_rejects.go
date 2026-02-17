@@ -654,34 +654,41 @@ func (mc *MinerConn) isDuplicateShare(jobID, extranonce2, ntime, nonce string, v
 		return false
 	}
 
+	// Build the key outside the connection lock to minimize contention.
+	var dk duplicateShareKey
+	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, version)
+
 	mc.jobMu.Lock()
-	defer mc.jobMu.Unlock()
 
 	if mc.shareCache == nil {
 		// Allocate lazily so disabling duplicate checks avoids per-connection maps.
 		mc.shareCache = make(map[string]*duplicateShareSet, mc.maxRecentJobs)
 	}
 	if mc.evictedShareCache == nil {
-		mc.evictedShareCache = make(map[string]*evictedCacheEntry)
+		mc.evictedShareCache = make(map[string]*evictedCacheEntry, mc.maxRecentJobs)
 	}
-
-	var dk duplicateShareKey
-	makeDuplicateShareKey(&dk, extranonce2, ntime, nonce, version)
 
 	// Check active job cache first
 	cache := mc.shareCache[jobID]
 	if cache != nil {
+		mc.jobMu.Unlock()
 		return cache.seenOrAdd(dk)
 	}
 
 	// Check evicted job cache (for late shares on evicted jobs)
 	if entry := mc.evictedShareCache[jobID]; entry != nil {
-		return entry.cache.seenOrAdd(dk)
+		cache = entry.cache
+		mc.jobMu.Unlock()
+		return cache.seenOrAdd(dk)
 	}
 
 	// No cache exists - create new one in active cache
-	cache = &duplicateShareSet{}
+	cache = &duplicateShareSet{
+		m:     make(map[duplicateShareKey]struct{}, duplicateShareHistory),
+		order: make([]duplicateShareKey, 0, duplicateShareHistory),
+	}
 	mc.shareCache[jobID] = cache
+	mc.jobMu.Unlock()
 	return cache.seenOrAdd(dk)
 }
 

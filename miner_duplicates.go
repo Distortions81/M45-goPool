@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // duplicateShareKey is a compact, comparable representation of a share
 // submission used for duplicate detection. It stores a bounded prefix of
@@ -13,6 +16,7 @@ type duplicateShareKey struct {
 // duplicateShareSet is a hash-based duplicate detection cache with bounded size.
 // Uses LRU eviction to remove oldest entries when at capacity.
 type duplicateShareSet struct {
+	mu    sync.Mutex
 	m     map[duplicateShareKey]struct{}
 	order []duplicateShareKey // Track insertion order for LRU eviction
 }
@@ -67,6 +71,9 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce str
 // seenOrAdd reports whether key has already been seen, and records it if not.
 // O(1) lookup via hash map. Uses LRU eviction when reaching capacity.
 func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.m == nil {
 		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
 		s.order = make([]duplicateShareKey, 0, duplicateShareHistory)

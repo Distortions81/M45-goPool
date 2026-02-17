@@ -37,7 +37,9 @@ type submissionTask struct {
 	jobID            string
 	workerName       string
 	extranonce2      string
-	extranonce2Bytes []byte
+	extranonce2Len   uint16
+	extranonce2Bytes [32]byte
+	extranonce2Large []byte
 	ntime            string
 	ntimeVal         uint32
 	nonce            string
@@ -47,6 +49,23 @@ type submissionTask struct {
 	scriptTime       int64
 	policyReject     submitPolicyReject
 	receivedAt       time.Time
+}
+
+func (t *submissionTask) extranonce2Decoded() []byte {
+	if t == nil {
+		return nil
+	}
+	if t.extranonce2Large != nil {
+		return t.extranonce2Large
+	}
+	n := int(t.extranonce2Len)
+	if n <= 0 {
+		return nil
+	}
+	if n > len(t.extranonce2Bytes) {
+		n = len(t.extranonce2Bytes)
+	}
+	return t.extranonce2Bytes[:n]
 }
 
 type submitPolicyReject struct {

@@ -101,18 +101,18 @@ func BenchmarkProcessSubmissionTaskAcceptedShare(b *testing.B) {
 		mc := benchmarkMinerConnForSubmit(metrics)
 		mc.jobDifficulty[job.JobID] = 1e-12
 
-		task := submissionTask{
-			mc:               mc,
-			reqID:            1,
-			job:              job,
-			jobID:            job.JobID,
-			workerName:       "worker1",
-			extranonce2:      "00000000",
-			extranonce2Bytes: []byte{0, 0, 0, 0},
-			ntime:            ntimeHex,
-			ntimeVal:         uint32(job.Template.CurTime),
-			nonce:            "00000000",
-			nonceVal:         0,
+			task := submissionTask{
+				mc:               mc,
+				reqID:            1,
+				job:              job,
+				jobID:            job.JobID,
+				workerName:       "worker1",
+				extranonce2:      "00000000",
+				extranonce2Large: []byte{0, 0, 0, 0},
+				ntime:            ntimeHex,
+				ntimeVal:         uint32(job.Template.CurTime),
+				nonce:            "00000000",
+				nonceVal:         0,
 			versionHex:       "00000001",
 			useVersion:       1,
 			scriptTime:       job.ScriptTime,

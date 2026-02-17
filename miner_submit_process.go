@@ -133,7 +133,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
@@ -189,7 +189,7 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, task.extranonce2Bytes, task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return

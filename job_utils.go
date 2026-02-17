@@ -7,6 +7,39 @@ import (
 	"strings"
 )
 
+func decodeHexToFixedBytes(dst []byte, src string) error {
+	if len(src) != len(dst)*2 {
+		return fmt.Errorf("expected %d hex characters, got %d", len(dst)*2, len(src))
+	}
+	for i := range dst {
+		hi := src[i*2]
+		lo := src[i*2+1]
+		var hn, ln byte
+		switch {
+		case hi >= '0' && hi <= '9':
+			hn = hi - '0'
+		case hi >= 'a' && hi <= 'f':
+			hn = hi - 'a' + 10
+		case hi >= 'A' && hi <= 'F':
+			hn = hi - 'A' + 10
+		default:
+			return fmt.Errorf("invalid hex digit %q in %q", hi, src)
+		}
+		switch {
+		case lo >= '0' && lo <= '9':
+			ln = lo - '0'
+		case lo >= 'a' && lo <= 'f':
+			ln = lo - 'a' + 10
+		case lo >= 'A' && lo <= 'F':
+			ln = lo - 'A' + 10
+		default:
+			return fmt.Errorf("invalid hex digit %q in %q", lo, src)
+		}
+		dst[i] = (hn << 4) | ln
+	}
+	return nil
+}
+
 func parseUint32BEHex(hexStr string) (uint32, error) {
 	if len(hexStr) != 8 {
 		return 0, fmt.Errorf("expected 8 hex characters, got %d", len(hexStr))

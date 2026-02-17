@@ -16,9 +16,15 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	nonceVal := task.nonceVal
 	useVersion := task.useVersion
 	scriptTime := task.scriptTime
-	en2 := task.extranonce2Bytes
+	en2 := (&task).extranonce2Decoded()
 	reqID := task.reqID
 	now := task.receivedAt
+	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
+		logger.Warn("submit bad extranonce2", "remote", mc.id)
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		return shareContext{}, false
+	}
 
 	if scriptTime == 0 {
 		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)
@@ -142,9 +148,15 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 	nonceVal := task.nonceVal
 	useVersion := task.useVersion
 	scriptTime := task.scriptTime
-	en2 := task.extranonce2Bytes
+	en2 := (&task).extranonce2Decoded()
 	reqID := task.reqID
 	now := task.receivedAt
+	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
+		logger.Warn("submit bad extranonce2", "remote", mc.id)
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		return shareContext{}, false
+	}
 
 	if scriptTime == 0 {
 		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)

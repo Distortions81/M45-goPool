@@ -1,12 +1,34 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	"math/bits"
 	"strings"
 	"time"
 )
+
+func decodeExtranonce2Hex(extranonce2 string, validateFields bool, expectedSize int) ([32]byte, uint16, []byte, error) {
+	var small [32]byte
+	if validateFields && expectedSize > 0 && len(extranonce2) != expectedSize*2 {
+		return small, 0, nil, fmt.Errorf("expected extranonce2 len %d, got %d", expectedSize*2, len(extranonce2))
+	}
+	if len(extranonce2)%2 != 0 {
+		return small, 0, nil, fmt.Errorf("odd-length extranonce2 hex")
+	}
+	size := len(extranonce2) / 2
+	if size <= len(small) {
+		dst := small[:size]
+		if err := decodeHexToFixedBytes(dst, extranonce2); err != nil {
+			return small, 0, nil, err
+		}
+		return small, uint16(size), nil, nil
+	}
+	large := make([]byte, size)
+	if err := decodeHexToFixedBytes(large, extranonce2); err != nil {
+		return small, 0, nil, err
+	}
+	return small, uint16(size), large, nil
+}
 
 func (mc *MinerConn) useStrictSubmitPath() bool {
 	return mc.cfg.ShareRequireWorkerMatch ||
@@ -280,12 +302,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 	// compute PoW/difficulty. We intentionally skip pool policy checks.
 	policyReject := submitPolicyReject{reason: rejectUnknown}
 
-	if validateFields && len(extranonce2) != job.Extranonce2Size*2 {
-		logger.Warn("submit invalid extranonce2 length", "remote", mc.id, "got", len(extranonce2)/2, "expected", job.Extranonce2Size)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
-		return submissionTask{}, false
-	}
-	en2, err := hex.DecodeString(extranonce2)
+	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
 	if err != nil {
 		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
@@ -341,7 +358,9 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		jobID:            jobID,
 		workerName:       workerName,
 		extranonce2:      extranonce2,
-		extranonce2Bytes: en2,
+		extranonce2Len:   en2Len,
+		extranonce2Bytes: en2Small,
+		extranonce2Large: en2Large,
 		ntime:            ntime,
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
@@ -435,12 +454,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
 	}
 
-	if validateFields && len(extranonce2) != job.Extranonce2Size*2 {
-		logger.Warn("submit invalid extranonce2 length", "remote", mc.id, "got", len(extranonce2)/2, "expected", job.Extranonce2Size)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
-		return submissionTask{}, false
-	}
-	en2, err := hex.DecodeString(extranonce2)
+	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
 	if err != nil {
 		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
@@ -548,7 +562,9 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		jobID:            jobID,
 		workerName:       workerName,
 		extranonce2:      extranonce2,
-		extranonce2Bytes: en2,
+		extranonce2Len:   en2Len,
+		extranonce2Bytes: en2Small,
+		extranonce2Large: en2Large,
 		ntime:            ntime,
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
