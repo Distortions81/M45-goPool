@@ -134,6 +134,7 @@ type MinerConn struct {
 	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
 	jobScriptTime        map[string]int64
 	jobNotifyCoinbase    map[string]notifiedCoinbaseParts
+	jobNTimeBounds       map[string]jobNTimeBounds
 	banUntil             time.Time
 	banReason            string
 	lastPenalty          time.Time
@@ -258,4 +259,9 @@ type MinerConn struct {
 
 type rpcCaller interface {
 	callCtx(ctx context.Context, method string, params any, out any) error
+}
+
+type jobNTimeBounds struct {
+	min int64
+	max int64
 }

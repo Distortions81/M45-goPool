@@ -291,7 +291,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		return submissionTask{}, false
 	}
 
-	job, curLast, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, _, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -439,7 +439,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		return submissionTask{}, false
 	}
 
-	job, curLast, curPrevHash, curHeight, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -488,20 +488,13 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	// Tight ntime bounds: require ntime to be >= the template's curtime
 	// (or mintime when provided) and allow it to roll forward only a short
 	// distance from the template.
-	minNTime := job.Template.CurTime
-	if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
-		minNTime = job.Template.Mintime
-	}
-	ntimeForwardSlack := mc.cfg.ShareNTimeMaxForwardSeconds
-	if ntimeForwardSlack <= 0 {
-		ntimeForwardSlack = defaultShareNTimeMaxForwardSeconds
-	}
-	maxNTime := minNTime + int64(ntimeForwardSlack)
-	if mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
-		// Policy-only: for safety we still run the PoW check and, if the share is
-		// a real block, submit it even if ntime violates the pool's tighter window.
-		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
-		if policyReject.reason == rejectUnknown {
+		minNTime := ntimeBounds.min
+		maxNTime := ntimeBounds.max
+		if mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
+			// Policy-only: for safety we still run the PoW check and, if the share is
+			// a real block, submit it even if ntime violates the pool's tighter window.
+			logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
+			if policyReject.reason == rejectUnknown {
 			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"}
 		}
 	}
