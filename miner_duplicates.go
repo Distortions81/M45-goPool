@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"sync"
 	"time"
 )
@@ -66,6 +67,27 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce str
 	if dst.n < maxDuplicateShareKeyBytes {
 		writeUint32Hex(version)
 	}
+}
+
+func makeDuplicateShareKeyDecoded(dst *duplicateShareKey, extranonce2 []byte, ntime, nonce uint32, version uint32) {
+	*dst = duplicateShareKey{}
+
+	writeBytes := func(b []byte) {
+		for i := 0; i < len(b) && int(dst.n) < maxDuplicateShareKeyBytes; i++ {
+			dst.buf[dst.n] = b[i]
+			dst.n++
+		}
+	}
+	writeU32 := func(v uint32) {
+		var tmp [4]byte
+		binary.BigEndian.PutUint32(tmp[:], v)
+		writeBytes(tmp[:])
+	}
+
+	writeBytes(extranonce2)
+	writeU32(ntime)
+	writeU32(nonce)
+	writeU32(version)
 }
 
 // seenOrAdd reports whether key has already been seen, and records it if not.
