@@ -9,6 +9,11 @@ goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over
 
 > **Downloads:** Pre-built binaries are available on GitHub Releases (see [documentation/RELEASES.md](documentation/RELEASES.md)).
 
+Stratum notes:
+
+- goPool accepts both `mining.authorize` and CKPool-style `mining.auth`, and tolerates authorize-before-subscribe (work starts after subscribe completes).
+- On startup and during runtime, Stratum is gated when node updates are degraded (no job, RPC errors, or updates stalled beyond `stratumMaxFeedLag`): new connections are refused and existing miners are disconnected to avoid wasted hashing.
+
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
 </p>

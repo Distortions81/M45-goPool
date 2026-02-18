@@ -155,6 +155,30 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 	mc.writeSubscribeResponseRawID(idRaw, ex1, en2Size, mc.currentSessionID())
 
+	// Support authorize-before-subscribe: if the miner already authorized,
+	// start the listener and schedule initial work now that subscribe is done.
+	if mc.authorized {
+		if !mc.listenerOn {
+			if mc.jobCh != nil {
+				for {
+					select {
+					case <-mc.jobCh:
+					default:
+						goto drained
+					}
+				}
+			}
+		drained:
+			mc.listenerOn = true
+			if mc.jobCh != nil {
+				go mc.listenJobs()
+			}
+		}
+		if mc.jobMgr != nil {
+			mc.scheduleInitialWork()
+		}
+	}
+
 	initialJob := mc.jobMgr.CurrentJob()
 	if initialJob != nil {
 		mc.updateVersionMask(initialJob.VersionMask)
@@ -261,6 +285,30 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 
 	mc.writeSubscribeResponse(id, ex1, en2Size, mc.currentSessionID())
 
+	// Support authorize-before-subscribe: if the miner already authorized,
+	// start the listener and schedule initial work now that subscribe is done.
+	if mc.authorized {
+		if !mc.listenerOn {
+			if mc.jobCh != nil {
+				for {
+					select {
+					case <-mc.jobCh:
+					default:
+						goto drained
+					}
+				}
+			}
+		drained:
+			mc.listenerOn = true
+			if mc.jobCh != nil {
+				go mc.listenJobs()
+			}
+		}
+		if mc.jobMgr != nil {
+			mc.scheduleInitialWork()
+		}
+	}
+
 	initialJob := mc.jobMgr.CurrentJob()
 	if initialJob != nil {
 		mc.updateVersionMask(initialJob.VersionMask)
@@ -304,16 +352,6 @@ func (mc *MinerConn) handleAuthorize(req *StratumRequest) {
 }
 
 func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) {
-	if !mc.subscribed {
-		logger.Warn("authorize rejected: not subscribed", "remote", mc.id)
-		mc.writeResponse(StratumResponse{
-			ID:     id,
-			Result: false,
-			Error:  newStratumError(20, "subscribe required"),
-		})
-		return
-	}
-
 	workerClean, usernameDiff, hasUsernameDiff := parseWorkerDifficultyHint(workerParam)
 	worker := strings.TrimSpace(workerClean)
 
@@ -476,6 +514,13 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	mc.authorized = true
 
 	mc.writeTrueResponse(id)
+
+	// If the miner hasn't subscribed yet, accept authorization but don't start
+	// the job listener or send any pool->miner notifications until subscribe.
+	// Some miners (CKPool-oriented stacks) send authorize/auth before subscribe.
+	if !mc.subscribed {
+		return
+	}
 
 	if !mc.listenerOn {
 		// Drain any buffered notifications that may have accumulated between
@@ -1213,9 +1258,18 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		}
 		mc.sendSetExtranonce(ex1, en2Size)
 	}
+
+	// If initial work is scheduled, send it immediately after configure so
+	// miners that negotiate promptly don't wait out the startup delay.
+	// This preserves the original behavior (short delay to allow negotiation)
+	// for miners that don't send configure/suggest_* during handshake.
+	mc.maybeSendInitialWork()
 }
 
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
+	if !mc.subscribed {
+		return
+	}
 	// Opportunistically adjust difficulty before notifying about the job.
 	// If difficulty changed, force clean so the miner uses the new difficulty.
 	if mc.maybeAdjustDifficulty(time.Now()) {

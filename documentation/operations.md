@@ -4,6 +4,13 @@
 
 goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production, from building binaries to tuning performance; refer to sibling documents (`documentation/performance.md`, `documentation/RELEASES.md`, `documentation/TESTING.md`) for capacity planning, release bundles, and testing recipes.
 
+Operational Stratum notes:
+
+- Stratum is gated (at startup and during runtime) until the job feed is healthy (a job exists, no feed error, and updates are arriving within `stratumMaxFeedLag`). While gated, new miner connections are refused and existing miners are disconnected to avoid idling on stale/no work during node/bootstrap issues.
+- When the node/job feed is stale, the main status page (`/`) displays a dedicated "node unavailable" page instead of the normal overview.
+- Node update health is based on update cadence (`stratumMaxFeedLag`) plus feed error state. If updates stall or the feed reports errors, the pool is treated as degraded.
+- When updates are degraded but basic node RPC calls still work, the node-unavailable page will also show common sync/indexing indicators (IBD flag and blocks/headers) to help diagnose "node indexing" situations.
+
 ## Building
 
 Requirements:

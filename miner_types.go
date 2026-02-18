@@ -272,6 +272,7 @@ type MinerConn struct {
 	// repeated keepalive messages from disrupting vardiff adjustments.
 	suggestDiffProcessed bool
 	initialWorkScheduled bool
+	initialWorkDue       time.Time
 	initialWorkSent      bool
 }
 

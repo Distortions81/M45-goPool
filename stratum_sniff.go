@@ -37,6 +37,7 @@ var (
 
 	stratumMethodMiningPingBytes      = []byte("mining.ping")
 	stratumMethodMiningAuthorizeBytes = []byte("mining.authorize")
+	stratumMethodMiningAuthBytes      = []byte("mining.auth")
 	stratumMethodMiningSubscribeBytes = []byte("mining.subscribe")
 	stratumMethodMiningSubmitBytes    = []byte("mining.submit")
 )
@@ -79,6 +80,9 @@ func sniffStratumMethodIDTagRawID(data []byte) (stratumMethodTag, []byte, bool) 
 			case len("mining.ping"):
 				if bytes.Equal(method, stratumMethodMiningPingBytes) {
 					return stratumMethodMiningPing, idRaw, true
+				}
+				if bytes.Equal(method, stratumMethodMiningAuthBytes) {
+					return stratumMethodMiningAuthorize, idRaw, true
 				}
 			case len("mining.authorize"):
 				if bytes.Equal(method, stratumMethodMiningAuthorizeBytes) {

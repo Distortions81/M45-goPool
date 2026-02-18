@@ -624,6 +624,26 @@ func main() {
 	}
 	jobMgr.Start(ctx)
 
+	// Gate Stratum startup until a job is available and reasonably fresh.
+	//
+	// Rationale:
+	// - If the node/job feed is still bootstrapping, letting miners connect
+	//   immediately causes "connected but no work" idle time (wasted power,
+	//   noisy reconnect loops, confusing UX).
+		// - If we already have a recent-enough template, don't delay Stratum even
+		//   if the feed is temporarily degraded. A large freshness window avoids
+		//   needless gating during transient node hiccups while still preventing
+		//   miners from burning electricity on very stale work.
+	//
+	// Note: this gate only delays listener startup; once Stratum is running,
+	// normal notify/stale-job handling still applies.
+		waitForStratumJobReady(ctx, jobMgr)
+
+		// Once Stratum is live, enforce the same freshness rule at runtime:
+		// - refuse new miner connections while the job feed is stale
+		// - disconnect existing miners so they stop hashing stale work
+		go enforceStratumFreshness(ctx, jobMgr, registry)
+
 	ln, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
 		fatal("listen error", err, "addr", cfg.ListenAddr)
@@ -699,26 +719,39 @@ func main() {
 		}
 	}()
 
-	serveStratum := func(label string, l net.Listener) {
-		for {
-			if !acceptLimiter.wait(ctx) {
-				break
-			}
-			conn, err := l.Accept()
+		serveStratum := func(label string, l net.Listener) {
+			lastRefuseLog := time.Time{}
+			for {
+				if !acceptLimiter.wait(ctx) {
+					break
+				}
+				conn, err := l.Accept()
 			if err != nil {
 				if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 					break
 				}
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
-			}
-			disableTCPNagle(conn)
-			setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
-			remote := conn.RemoteAddr().String()
-			if reconnectLimiter != nil {
-				host, _, errSplit := net.SplitHostPort(remote)
-				if errSplit != nil {
-					host = remote
+				}
+				disableTCPNagle(conn)
+				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+				if h := stratumHealthStatus(jobMgr, time.Now()); !h.Healthy {
+					if time.Since(lastRefuseLog) > 5*time.Second {
+						fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason}
+						if strings.TrimSpace(h.Detail) != "" {
+							fields = append(fields, "detail", h.Detail)
+						}
+						logger.Warn("refusing miner connection: node updates degraded", fields...)
+						lastRefuseLog = time.Now()
+					}
+					_ = conn.Close()
+					continue
+				}
+				remote := conn.RemoteAddr().String()
+				if reconnectLimiter != nil {
+					host, _, errSplit := net.SplitHostPort(remote)
+					if errSplit != nil {
+						host = remote
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {
 					logger.Warn("rejecting miner for reconnect churn",
@@ -813,6 +846,102 @@ func main() {
 		if err := syncFileIfExists(errorLogPath); err != nil {
 			logger.Error("sync error log", "error", err)
 		}
+	}
+}
+
+func waitForStratumJobReady(ctx context.Context, jobMgr *JobManager) {
+	if ctx == nil || jobMgr == nil {
+		return
+	}
+
+	lastLog := time.Time{}
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		if h := stratumHealthStatus(jobMgr, time.Now()); h.Healthy {
+			return
+		}
+		if time.Since(lastLog) > 5*time.Second {
+			fs := jobMgr.FeedStatus()
+			fields := []any{"max_feed_lag", stratumMaxFeedLag}
+			job := jobMgr.CurrentJob()
+			if job != nil && !job.CreatedAt.IsZero() {
+				fields = append(fields, "job_age", time.Since(job.CreatedAt))
+			} else {
+				fields = append(fields, "job_age", "(none)")
+			}
+			if !fs.LastSuccess.IsZero() {
+				fields = append(fields, "last_success", fs.LastSuccess, "last_success_age", time.Since(fs.LastSuccess))
+			}
+			if fs.LastError != nil {
+				fields = append(fields, "last_error", fs.LastError.Error())
+			}
+			logger.Warn("stratum gated: waiting for initial job", fields...)
+			lastLog = time.Now()
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry) {
+	if ctx == nil || jobMgr == nil || registry == nil {
+		return
+	}
+
+	wasHealthy := true
+	unhealthySince := time.Time{}
+	lastLog := time.Time{}
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		now := time.Now()
+		h := stratumHealthStatus(jobMgr, now)
+		if !h.Healthy {
+			if unhealthySince.IsZero() {
+				unhealthySince = now
+			}
+			// Avoid flapping: only disconnect after a brief continuous unhealthy window.
+			if wasHealthy && now.Sub(unhealthySince) >= stratumDegradedGrace {
+				miners := registry.Snapshot()
+				for _, mc := range miners {
+					mc.sendClientShowMessage("Pool paused: node updates degraded. Reconnecting when ready.")
+					mc.Close("node updates degraded")
+				}
+				if time.Since(lastLog) > 2*time.Second {
+					fs := jobMgr.FeedStatus()
+					fields := []any{"disconnected", len(miners), "reason", h.Reason, "max_feed_lag", stratumMaxFeedLag}
+					if strings.TrimSpace(h.Detail) != "" {
+						fields = append(fields, "detail", h.Detail)
+					}
+					job := jobMgr.CurrentJob()
+					if job != nil && !job.CreatedAt.IsZero() {
+						fields = append(fields, "job_age", now.Sub(job.CreatedAt))
+					} else {
+						fields = append(fields, "job_age", "(none)")
+					}
+					if !fs.LastSuccess.IsZero() {
+						fields = append(fields, "last_success", fs.LastSuccess, "last_success_age", now.Sub(fs.LastSuccess))
+					}
+					if fs.LastError != nil {
+						fields = append(fields, "last_error", fs.LastError.Error())
+					}
+					logger.Warn("stratum gated: node updates degraded; disconnected miners", fields...)
+					lastLog = now
+				}
+				wasHealthy = false
+			}
+		} else {
+			unhealthySince = time.Time{}
+			if !wasHealthy {
+				logger.Info("stratum ungated: node updates healthy again")
+				wasHealthy = true
+			}
+		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

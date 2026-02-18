@@ -1384,6 +1384,11 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 		)
 	}
 
+	// Don't send pool->miner notifications until the miner has subscribed.
+	if !mc.subscribed {
+		return
+	}
+
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_difficulty",
@@ -1423,6 +1428,9 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 }
 
 func (mc *MinerConn) sendVersionMask() {
+	if !mc.subscribed {
+		return
+	}
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_version_mask",
@@ -1490,6 +1498,9 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 }
 
 func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
+	if !mc.subscribed {
+		return
+	}
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_extranonce",

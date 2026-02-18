@@ -169,6 +169,7 @@ func TestHandleConfigureSubscribeExtranonceSendsSetExtranonce(t *testing.T) {
 		id:             "configure-extranonce",
 		conn:           conn,
 		extranonce1Hex: "abcdef01",
+		subscribed:     true,
 		cfg:            Config{Extranonce2Size: 4},
 	}
 

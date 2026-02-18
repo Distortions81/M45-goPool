@@ -240,6 +240,7 @@ func (mc *MinerConn) handle() {
 			logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
 			return
 		}
+		mc.maybeSendInitialWorkDue(now)
 		deadline := now.Add(mc.currentReadTimeout())
 		if err := mc.conn.SetReadDeadline(deadline); err != nil {
 			if mc.ctx.Err() != nil {
@@ -360,6 +361,9 @@ func (mc *MinerConn) handle() {
 			mc.handleSubscribe(&req)
 		case "mining.authorize":
 			mc.handleAuthorize(&req)
+		case "mining.auth":
+			// CKPool-compatible alias for mining.authorize.
+			mc.handleAuthorize(&req)
 		case "mining.submit":
 			mc.handleSubmit(&req)
 		case "mining.configure":
@@ -403,22 +407,82 @@ func (mc *MinerConn) handle() {
 			// Respond to keepalive ping with pong
 			mc.writePongResponse(req.ID)
 		case "mining.get_transactions":
-			// Client requests transaction hashes for current job. We don't
-			// support this but acknowledge to avoid breaking miners that send it.
-			mc.writeEmptySliceResponse(req.ID)
+			mc.handleGetTransactions(&req)
 		case "mining.capabilities":
 			// Draft extension where client advertises its capabilities.
 			// Acknowledge receipt but we don't need to act on it.
 			mc.writeTrueResponse(req.ID)
 		default:
-			// Silently ignore unknown methods to avoid confusing miners that
-			// send non-standard extensions. Log at debug level for diagnostics.
+			// If the request has an ID, respond with a JSON-RPC error so strict
+			// proxies/miners don't hang waiting for a response.
+			//
+			// If there's no ID (or it's null), treat it as a notification and
+			// ignore to preserve compatibility with non-standard extensions.
+			if req.ID != nil {
+				mc.writeResponse(StratumResponse{
+					ID:     req.ID,
+					Result: nil,
+					Error:  newStratumError(-32601, "method not found"),
+				})
+				if debugLogging {
+					logger.Debug("unknown stratum method (replied method not found)", "remote", mc.id, "method", req.Method)
+				}
+				break
+			}
 			if debugLogging {
 				logger.Debug("ignoring unknown stratum method", "remote", mc.id, "method", req.Method)
 			}
 		}
 
 	}
+}
+
+func (mc *MinerConn) handleGetTransactions(req *StratumRequest) {
+	if req == nil {
+		return
+	}
+	// Stratum v1 extension used by some clients to request tx hashes for a job.
+	// Keep it bandwidth-safe by returning txids only (not raw tx hex).
+	//
+	// Common shapes:
+	// - params: [] (current job)
+	// - params: [job_id]
+	jobID := ""
+	if len(req.Params) > 0 {
+		if s, ok := req.Params[0].(string); ok {
+			jobID = strings.TrimSpace(s)
+		}
+	}
+
+	var job *Job
+	if jobID != "" {
+		j, _, _, _, _, _, ok := mc.jobForIDWithLast(jobID)
+		if ok {
+			job = j
+		}
+	} else {
+		// No job id provided: use the last job notified to this connection when available.
+		_, last, _, _, _, _, _ := mc.jobForIDWithLast("")
+		if last != nil {
+			job = last
+		} else if mc.jobMgr != nil {
+			job = mc.jobMgr.CurrentJob()
+		}
+	}
+
+	if job == nil || len(job.Transactions) == 0 {
+		mc.writeEmptySliceResponse(req.ID)
+		return
+	}
+
+	out := make([]string, 0, len(job.Transactions))
+	for _, tx := range job.Transactions {
+		txid := strings.TrimSpace(tx.Txid)
+		if txid != "" {
+			out = append(out, txid)
+		}
+	}
+	mc.writeResponse(StratumResponse{ID: req.ID, Result: out, Error: nil})
 }
 
 func (mc *MinerConn) workerForRateLimitBan(method stratumMethodTag, line []byte) string {
@@ -445,12 +509,8 @@ func (mc *MinerConn) scheduleInitialWork() {
 		return
 	}
 	mc.initialWorkScheduled = true
+	mc.initialWorkDue = time.Now().Add(defaultInitialDifficultyDelay)
 	mc.initWorkMu.Unlock()
-
-	go func() {
-		time.Sleep(defaultInitialDifficultyDelay)
-		mc.sendInitialWork()
-	}()
 }
 
 func (mc *MinerConn) maybeSendInitialWork() {
@@ -463,7 +523,29 @@ func (mc *MinerConn) maybeSendInitialWork() {
 	mc.sendInitialWork()
 }
 
+func (mc *MinerConn) maybeSendInitialWorkDue(now time.Time) {
+	if mc == nil {
+		return
+	}
+	mc.initWorkMu.Lock()
+	scheduled := mc.initialWorkScheduled
+	sent := mc.initialWorkSent
+	due := mc.initialWorkDue
+	mc.initWorkMu.Unlock()
+	if !scheduled || sent {
+		return
+	}
+	if !due.IsZero() && now.Before(due) {
+		return
+	}
+	mc.sendInitialWork()
+}
+
 func (mc *MinerConn) sendInitialWork() {
+	if !mc.subscribed || !mc.authorized || !mc.listenerOn {
+		return
+	}
+
 	mc.initWorkMu.Lock()
 	if mc.initialWorkSent {
 		mc.initWorkMu.Unlock()
@@ -471,10 +553,6 @@ func (mc *MinerConn) sendInitialWork() {
 	}
 	mc.initialWorkSent = true
 	mc.initWorkMu.Unlock()
-
-	if !mc.authorized || !mc.listenerOn {
-		return
-	}
 
 	// Respect suggested difficulty if already processed. Otherwise, fall back
 	// to a sane default/minimum so miners have a starting target.
