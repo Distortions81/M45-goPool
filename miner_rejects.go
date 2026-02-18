@@ -14,7 +14,7 @@ func (mc *MinerConn) recordActivity(now time.Time) {
 	mc.lastActivity = now
 }
 
-func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time, method string) bool {
+func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time, method stratumMethodTag) bool {
 	limit := mc.cfg.StratumMessagesPerMinute
 	if limit <= 0 {
 		return false
@@ -31,7 +31,7 @@ func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time, method string) b
 	}
 
 	weightUnits := 2 // one full message
-	if method == "mining.submit" && !mc.connectedAt.IsZero() && now.Sub(mc.connectedAt) < earlySubmitHalfWeightWindow {
+	if method == stratumMethodMiningSubmit && !mc.connectedAt.IsZero() && now.Sub(mc.connectedAt) < earlySubmitHalfWeightWindow {
 		weightUnits = 1 // startup submit spam counts half until vardiff stabilizes
 	}
 
