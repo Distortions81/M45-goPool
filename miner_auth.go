@@ -456,24 +456,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		hasSuggestedDiff = true
 	}
 
-	// Restore prior difficulty (in-memory) for this worker/session if it would
-	// start the miner at a higher target.
 	explicitSuggested := hasPasswordDiff || hasUsernameDiff
-	storedDiff := 0.0
-	if h := mc.currentWorkerHash(); h != "" {
-		if d, ok := globalDifficultyCache.getWorker(h, 2*time.Hour); ok && d > storedDiff {
-			storedDiff = d
-		}
-	}
-	if sid := mc.currentSessionID(); sid != "" {
-		if d, ok := globalDifficultyCache.getSession(sid, 2*time.Hour); ok && d > storedDiff {
-			storedDiff = d
-		}
-	}
-	if storedDiff > 0 && storedDiff > suggestedDiff {
-		suggestedDiff = storedDiff
-		hasSuggestedDiff = true
-	}
 
 	if hasSuggestedDiff && explicitSuggested {
 		min := mc.cfg.MinDifficulty
@@ -541,19 +524,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	}
 
 	if hasSuggestedDiff {
-		// If the difficulty came from restore rather than an explicit suggest,
-		// treat it as already restored so later suggests don't fight it.
-		if storedDiff > 0 && suggestedDiff == storedDiff && !hasPasswordDiff && !hasUsernameDiff {
-			mc.restoredRecentDiff = true
-			mc.setDifficulty(suggestedDiff)
-		} else {
-			mc.applySuggestedDifficulty(suggestedDiff)
-		}
-	} else if storedDiff > 0 {
-		// No explicit diff hint, but we have a remembered session/worker diff.
-		// Restore it as the starting point (VarDiff can still move from here).
-		mc.restoredRecentDiff = true
-		mc.setDifficulty(storedDiff)
+		mc.applySuggestedDifficulty(suggestedDiff)
 	}
 
 	// Now that the worker is authorized and its wallet-style ID is known

@@ -218,10 +218,14 @@ func main() {
 	logger.Info("effective config", "config", cfg.Effective())
 	logger.Info("sha256 implementation", "implementation", sha256ImplementationName())
 
-	// Best-effort load of in-memory Stratum difficulty/session resume cache.
-	// Loaded entries get a fresh "age window" at boot (we don't persist timestamps).
-	if err := globalDifficultyCache.loadFromJSON(difficultyCacheJSONPath(cfg.DataDir), time.Now()); err != nil {
-		logger.Warn("load difficulty cache", "error", err)
+	// Best-effort cleanup of legacy difficulty cache file.
+	dataDir := strings.TrimSpace(cfg.DataDir)
+	if dataDir == "" {
+		dataDir = defaultDataDir
+	}
+	difficultyCachePath := filepath.Join(dataDir, "state", "difficulty_cache.json")
+	if err := os.Remove(difficultyCachePath); err != nil && !os.IsNotExist(err) {
+		logger.Warn("delete difficulty cache", "error", err, "path", difficultyCachePath)
 	}
 
 	// Config sanity checks.
@@ -801,11 +805,6 @@ func main() {
 		if err := accounting.Flush(); err != nil {
 			logger.Error("flush accounting", "error", err)
 		}
-	}
-
-	// Best-effort save of in-memory Stratum difficulty/session resume cache.
-	if err := globalDifficultyCache.saveToJSON(difficultyCacheJSONPath(cfg.DataDir)); err != nil {
-		logger.Warn("save difficulty cache", "error", err)
 	}
 
 	// Best-effort checkpoint to flush WAL into the main DB on shutdown.

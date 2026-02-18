@@ -1372,7 +1372,6 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 	atomicStoreFloat64(&mc.difficulty, diff)
 	mc.shareTarget.Store(targetFromDifficulty(diff))
 	mc.lastDiffChange.Store(now.UnixNano())
-	mc.rememberDifficulty(diff, now)
 
 	target := mc.shareTarget.Load()
 	if logger.Enabled(logLevelInfo) {
