@@ -71,6 +71,8 @@ func defaultConfig() Config {
 		DifficultyStepGranularity:           defaultDifficultyStepGranularity,
 		EnforceSuggestedDifficultyLimits:    false,
 		HashrateEMATauSeconds:               defaultHashrateEMATauSeconds,
+		HashrateCumulativeEnabled:           false,
+		HashrateRecentCumulativeEnabled:     false,
 		ShareNTimeMaxForwardSeconds:         defaultShareNTimeMaxForwardSeconds,
 		CleanExpiredBansOnStartup:           true,
 		LogLevel:                            "warn",

@@ -141,19 +141,21 @@ type StatusData struct {
 	SystemLoad5         float64 `json:"system_load5"`
 	SystemLoad15        float64 `json:"system_load15"`
 	// Safe-to-share pool config summary.
-	MaxConns                    int      `json:"max_conns"`
-	MaxAcceptsPerSecond         int      `json:"max_accepts_per_second"`
-	MaxAcceptBurst              int      `json:"max_accept_burst"`
-	MinDifficulty               float64  `json:"min_difficulty"`
-	MaxDifficulty               float64  `json:"max_difficulty"`
-	LockSuggestedDifficulty     bool     `json:"lock_suggested_difficulty"`
-	BannedMinerTypes            []string `json:"banned_miner_types,omitempty"`
-	TargetSharesPerMin          float64  `json:"target_shares_per_min,omitempty"`
-	MinHashrateForTarget        float64  `json:"min_hashrate_for_target,omitempty"`
-	MaxHashrateForTarget        float64  `json:"max_hashrate_for_target,omitempty"`
-	HashrateEMATauSeconds       float64  `json:"hashrate_ema_tau_seconds"`
-	ShareNTimeMaxForwardSeconds int      `json:"share_ntime_max_forward_seconds"`
-	Warnings                    []string `json:"warnings,omitempty"`
+	MaxConns                        int      `json:"max_conns"`
+	MaxAcceptsPerSecond             int      `json:"max_accepts_per_second"`
+	MaxAcceptBurst                  int      `json:"max_accept_burst"`
+	MinDifficulty                   float64  `json:"min_difficulty"`
+	MaxDifficulty                   float64  `json:"max_difficulty"`
+	LockSuggestedDifficulty         bool     `json:"lock_suggested_difficulty"`
+	BannedMinerTypes                []string `json:"banned_miner_types,omitempty"`
+	TargetSharesPerMin              float64  `json:"target_shares_per_min,omitempty"`
+	MinHashrateForTarget            float64  `json:"min_hashrate_for_target,omitempty"`
+	MaxHashrateForTarget            float64  `json:"max_hashrate_for_target,omitempty"`
+	HashrateEMATauSeconds           float64  `json:"hashrate_ema_tau_seconds"`
+	HashrateCumulativeEnabled       bool     `json:"hashrate_cumulative_enabled"`
+	HashrateRecentCumulativeEnabled bool     `json:"hashrate_recent_cumulative_enabled"`
+	ShareNTimeMaxForwardSeconds     int      `json:"share_ntime_max_forward_seconds"`
+	Warnings                        []string `json:"warnings,omitempty"`
 }
 
 type ServerPageJobFeed struct {

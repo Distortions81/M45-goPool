@@ -313,6 +313,8 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		CoinbaseScriptSigMaxBytes:            cfg.CoinbaseScriptSigMaxBytes,
 		DiscordWorkerNotifyThresholdSeconds:  cfg.DiscordWorkerNotifyThresholdSeconds,
 		HashrateEMATauSeconds:                cfg.HashrateEMATauSeconds,
+		HashrateCumulativeEnabled:            cfg.HashrateCumulativeEnabled,
+		HashrateRecentCumulativeEnabled:      cfg.HashrateRecentCumulativeEnabled,
 		ShareNTimeMaxForwardSeconds:          cfg.ShareNTimeMaxForwardSeconds,
 		MinVersionBits:                       cfg.MinVersionBits,
 		ShareAllowDegradedVersionBits:        cfg.ShareAllowDegradedVersionBits,
@@ -852,6 +854,8 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0")
 	}
+	next.HashrateCumulativeEnabled = getBool("hashrate_cumulative_enabled")
+	next.HashrateRecentCumulativeEnabled = getBool("hashrate_recent_cumulative_enabled")
 	if next.ShareNTimeMaxForwardSeconds, err = parseInt("share_ntime_max_forward_seconds", next.ShareNTimeMaxForwardSeconds); err != nil {
 		return err
 	}

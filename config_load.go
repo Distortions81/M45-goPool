@@ -512,6 +512,12 @@ func applyFileOverrides(cfg *Config, fc fileOverrideConfig) {
 	if fc.Hashrate.HashrateEMATauSeconds != nil && *fc.Hashrate.HashrateEMATauSeconds > 0 {
 		cfg.HashrateEMATauSeconds = *fc.Hashrate.HashrateEMATauSeconds
 	}
+	if fc.Hashrate.HashrateCumulativeEnabled != nil {
+		cfg.HashrateCumulativeEnabled = *fc.Hashrate.HashrateCumulativeEnabled
+	}
+	if fc.Hashrate.HashrateRecentCumulativeEnabled != nil {
+		cfg.HashrateRecentCumulativeEnabled = *fc.Hashrate.HashrateRecentCumulativeEnabled
+	}
 	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
 		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
 	}
@@ -605,7 +611,9 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		Mining:       fc.Mining,
 		PeerCleaning: fc.PeerCleaning,
 		Hashrate: hashrateTuning{
-			HashrateEMATauSeconds: fc.Hashrate.HashrateEMATauSeconds,
+			HashrateEMATauSeconds:           fc.Hashrate.HashrateEMATauSeconds,
+			HashrateCumulativeEnabled:       fc.Hashrate.HashrateCumulativeEnabled,
+			HashrateRecentCumulativeEnabled: fc.Hashrate.HashrateRecentCumulativeEnabled,
 		},
 	}
 	applyFileOverrides(cfg, t)

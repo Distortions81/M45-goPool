@@ -145,6 +145,11 @@ func tuningConfigDocComments() []byte {
 # - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (requires restart).
 # - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
 #
+# Hashrate ([hashrate])
+# - hashrate_ema_tau_seconds: EMA time constant for per-connection hashrate smoothing (seconds; requires restart).
+# - hashrate_cumulative_enabled: Blend per-connection EMA with cumulative hashrate for per-worker display (requires restart).
+# - hashrate_recent_cumulative_enabled: Allow short-window cumulative (vardiff window) to influence per-worker display (requires restart).
+#
 # Peer cleaning ([peer_cleaning])
 # - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.
 #

@@ -23,7 +23,7 @@ func TestBlendDisplayHashrateMovesTowardCumulativeWithEvidence(t *testing.T) {
 	stats := MinerStats{Accepted: 96}
 	ema := 1.0e12
 	cumulative := 1.2e12
-	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0)
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0, true, true)
 	if got < 1.15e12 || got > 1.2e12 {
 		t.Fatalf("got %.6g want closer to cumulative %.6g than ema %.6g", got, cumulative, ema)
 	}
