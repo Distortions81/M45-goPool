@@ -322,10 +322,9 @@ func hashrateAccuracySymbol(level int) string {
 		return "~"
 	case 1:
 		return "≈"
-	case 2:
-		return "≈+"
 	default:
-		return "✓"
+		// Stable hashrate estimates intentionally display no marker.
+		return ""
 	}
 }
 
