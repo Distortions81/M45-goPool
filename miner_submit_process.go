@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 )
@@ -73,7 +74,23 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	if !ctx.isBlock && mc.cfg.ShareCheckDuplicate && mc.isDuplicateShare(jobID, (&task).extranonce2Decoded(), task.ntimeVal, task.nonceVal, task.useVersion) {
-		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", extranonce2, "ntime", ntime, "nonce", nonce, "version", versionHex)
+		ex2Log := extranonce2
+		if ex2Log == "" {
+			ex2Log = hex.EncodeToString((&task).extranonce2Decoded())
+		}
+		ntimeLog := ntime
+		if ntimeLog == "" {
+			ntimeLog = fmt.Sprintf("%08x", task.ntimeVal)
+		}
+		nonceLog := nonce
+		if nonceLog == "" {
+			nonceLog = fmt.Sprintf("%08x", task.nonceVal)
+		}
+		verLog := versionHex
+		if verLog == "" {
+			verLog = fmt.Sprintf("%08x", task.useVersion)
+		}
+		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", ex2Log, "ntime", ntimeLog, "nonce", nonceLog, "version", verLog)
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
 		return
 	}
@@ -133,7 +150,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), fmt.Sprintf("%08x", task.ntimeVal), fmt.Sprintf("%08x", task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
@@ -189,7 +206,7 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), task.ntime, task.nonce, task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), fmt.Sprintf("%08x", task.ntimeVal), fmt.Sprintf("%08x", task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return

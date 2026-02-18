@@ -132,6 +132,65 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 	return nil, false
 }
 
+func sniffStratumSubmitParamsBytes(data []byte) (worker, jobID, extranonce2, ntime, nonce, version []byte, haveVersion bool, ok bool) {
+	// mining.submit params are typically 5 or 6 JSON strings:
+	// [worker_name, job_id, extranonce2, ntime, nonce, (optional) version]
+	idx := bytes.Index(data, []byte(`"params"`))
+	if idx < 0 {
+		return nil, nil, nil, nil, nil, nil, false, false
+	}
+	start, ok := findValueStart(data, idx+len(`"params"`))
+	if !ok || start >= len(data) || data[start] != '[' {
+		return nil, nil, nil, nil, nil, nil, false, false
+	}
+
+	i := start + 1
+	var fields [6][]byte
+	n := 0
+	for i < len(data) && n < len(fields) {
+		i = skipSpaces(data, i)
+		if i >= len(data) {
+			return nil, nil, nil, nil, nil, nil, false, false
+		}
+		switch data[i] {
+		case ']':
+			if n == 5 {
+				return fields[0], fields[1], fields[2], fields[3], fields[4], nil, false, true
+			}
+			if n == 6 {
+				return fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], true, true
+			}
+			return nil, nil, nil, nil, nil, nil, false, false
+		case ',':
+			i++
+			continue
+		case '"':
+			j := i + 1
+			for j < len(data) {
+				if data[j] == '\\' {
+					// Escapes require unquoting; fall back to the full decoder path.
+					return nil, nil, nil, nil, nil, nil, false, false
+				}
+				if data[j] == '"' {
+					break
+				}
+				j++
+			}
+			if j >= len(data) {
+				return nil, nil, nil, nil, nil, nil, false, false
+			}
+			fields[n] = data[i+1 : j]
+			n++
+			i = j + 1
+		default:
+			return nil, nil, nil, nil, nil, nil, false, false
+		}
+	}
+
+	// Parse didn't terminate cleanly.
+	return nil, nil, nil, nil, nil, nil, false, false
+}
+
 func skipSpaces(data []byte, idx int) int {
 	for idx < len(data) {
 		switch data[idx] {

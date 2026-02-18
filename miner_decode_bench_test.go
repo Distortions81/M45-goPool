@@ -47,9 +47,23 @@ func BenchmarkStratumDecodeManual_MiningSubmit(b *testing.B) {
 		if !ok || method != "mining.submit" {
 			b.Fatalf("manual decode method failed")
 		}
-		params, ok := sniffStratumStringParams(sampleSubmitRequest, 6)
-		if !ok || len(params) != 5 {
+		worker, jobID, en2, ntime, nonce, ver, haveVer, ok := sniffStratumSubmitParamsBytes(sampleSubmitRequest)
+		if !ok || haveVer || len(worker) == 0 || len(jobID) == 0 {
 			b.Fatalf("manual decode params failed")
+		}
+		if _, err := parseUint32BEHexBytes(ntime); err != nil {
+			b.Fatalf("parse ntime: %v", err)
+		}
+		if _, err := parseUint32BEHexBytes(nonce); err != nil {
+			b.Fatalf("parse nonce: %v", err)
+		}
+		if haveVer {
+			if _, err := parseUint32BEHexBytes(ver); err != nil {
+				b.Fatalf("parse version: %v", err)
+			}
+		}
+		if _, _, _, err := decodeExtranonce2HexBytes(en2, true, 4); err != nil {
+			b.Fatalf("decode extranonce2: %v", err)
 		}
 	}
 }

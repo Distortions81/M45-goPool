@@ -325,8 +325,9 @@ func (mc *MinerConn) handle() {
 				// Fast-path: most mining.submit payloads are small and string-only.
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
 				// allocations and tail latency under load.
-				if params, ok := sniffStratumStringParams(line, 6); ok && (len(params) == 5 || len(params) == 6) {
-					mc.handleSubmitStringParams(sniffedID, params)
+				worker, jobID, en2, ntime, nonce, version, haveVersion, ok := sniffStratumSubmitParamsBytes(line)
+				if ok {
+					mc.handleSubmitFastBytes(sniffedID, worker, jobID, en2, ntime, nonce, version, haveVersion)
 					continue
 				}
 			}

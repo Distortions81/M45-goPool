@@ -33,6 +33,20 @@ func (mc *MinerConn) handleSubmitStringParams(id any, params []string) {
 	submissionWorkers.submit(task)
 }
 
+func (mc *MinerConn) handleSubmitFastBytes(id any, worker, jobID, extranonce2, ntime, nonce, version []byte, haveVersion bool) {
+	now := time.Now()
+	task, ok := mc.prepareSubmissionTaskFastBytes(id, worker, jobID, extranonce2, ntime, nonce, version, haveVersion, now)
+	if !ok {
+		return
+	}
+	if mc.cfg.SubmitProcessInline {
+		mc.processSubmissionTask(task)
+		return
+	}
+	ensureSubmissionWorkerPool()
+	submissionWorkers.submit(task)
+}
+
 func (mc *MinerConn) prepareSubmissionTaskStringParams(id any, params []string, now time.Time) (submissionTask, bool) {
 	parsed, ok := mc.parseSubmitParamsStrings(id, params, now)
 	if !ok {
