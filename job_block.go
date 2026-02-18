@@ -37,25 +37,59 @@ func buildMerkleBranches(txids [][]byte) []string {
 	return steps
 }
 
+func decodeMerkleBranchesBytes(branches []string) ([][32]byte, error) {
+	if len(branches) == 0 {
+		return nil, nil
+	}
+	out := make([][32]byte, len(branches))
+	for i, b := range branches {
+		if err := decodeHexToFixedBytes(out[i][:], b); err != nil {
+			return nil, fmt.Errorf("decode merkle branch: %w", err)
+		}
+	}
+	return out, nil
+}
+
 // computeMerkleRootFromBranches computes the merkle root by starting with the
 // coinbase txid (BE) and applying each branch (LE) in order, returning a BE root.
 func computeMerkleRootFromBranches(coinbaseHash []byte, branches []string) []byte {
-	root := coinbaseHash
-	var hashBuf [32]byte
+	root, ok := computeMerkleRootFromBranches32(coinbaseHash, branches)
+	if !ok {
+		return nil
+	}
+	return root[:]
+}
+
+func computeMerkleRootFromBranches32(coinbaseHash []byte, branches []string) (root [32]byte, ok bool) {
+	if len(coinbaseHash) != 32 {
+		return root, false
+	}
+	copy(root[:], coinbaseHash)
+	var branch [32]byte
 	var concatBuf [64]byte
 	for _, b := range branches {
-		if len(b) != 64 {
-			return nil
+		if err := decodeHexToFixedBytes(branch[:], b); err != nil {
+			return root, false
 		}
-		n, err := hex.Decode(hashBuf[:], []byte(b))
-		if err != nil || n != 32 {
-			return nil
-		}
-		copy(concatBuf[:32], root)
-		copy(concatBuf[32:], hashBuf[:])
-		root = doubleSHA256(concatBuf[:])
+		copy(concatBuf[:32], root[:])
+		copy(concatBuf[32:], branch[:])
+		root = doubleSHA256Array(concatBuf[:])
 	}
-	return root
+	return root, true
+}
+
+func computeMerkleRootFromBranchesBytes32(coinbaseHash []byte, branches [][32]byte) (root [32]byte, ok bool) {
+	if len(coinbaseHash) != 32 {
+		return root, false
+	}
+	copy(root[:], coinbaseHash)
+	var concatBuf [64]byte
+	for i := range branches {
+		copy(concatBuf[:32], root[:])
+		copy(concatBuf[32:], branches[i][:])
+		root = doubleSHA256Array(concatBuf[:])
+	}
+	return root, true
 }
 
 // buildBlockHeaderFromHex constructs the block header bytes for SHA256d jobs.

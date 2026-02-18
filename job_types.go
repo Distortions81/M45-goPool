@@ -51,6 +51,7 @@ type Job struct {
 	WitnessCommitment       string
 	CoinbaseMsg             string
 	MerkleBranches          []string
+	merkleBranchesBytes     [][32]byte
 	Transactions            []GBTTransaction
 	TransactionIDs          [][]byte
 	PayoutScript            []byte
