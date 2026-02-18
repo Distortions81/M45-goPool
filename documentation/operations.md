@@ -2,7 +2,7 @@
 
 > **Quick start reminder:** the [main README](../README.md) gives a concise walk-through; this document expands each section into the operational context needed to run goPool day-to-day.
 
-goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production, from building binaries to tuning performance; refer to sibling documents (`documentation/performance.md`, `documentation/RELEASES.md`, `documentation/TESTING.md`) for capacity planning, release bundles, and testing recipes.
+goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production; refer to sibling documents (especially `documentation/TESTING.md`) for testing recipes.
 
 Operational Stratum notes:
 
@@ -320,8 +320,6 @@ Each override value logs when set, so goPool operators can audit what changed vi
 
 ## Related guides
 
-- **`documentation/performance.md`** – Capacity planning, CPU/latency breakdowns, and network bandwidth ballparks.
-- **`documentation/RELEASES.md`** – Packaging, verifying release checksums, upgrade steps, and release workflow details.
 - **`documentation/TESTING.md`** – How to run and extend the test suite, including fuzz targets and benchmarks.
 
 Refer back to the concise [main README](../README.md) for quick start instructions, and keep this document nearby while you tune your deployment.
