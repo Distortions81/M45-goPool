@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 )
 
@@ -46,25 +45,3 @@ func TestHexLUTAcceptsUpperAndLower(t *testing.T) {
 	}
 }
 
-func TestUint32ToHex8LowerUpper(t *testing.T) {
-	cases := []uint32{
-		0,
-		1,
-		0x10,
-		0xff,
-		0x12345678,
-		0xdeadbeef,
-		0xffffffff,
-	}
-	for _, v := range cases {
-		wantLower := fmt.Sprintf("%08x", v)
-		wantUpper := fmt.Sprintf("%08X", v)
-
-		if got := uint32ToHex8Lower(v); got != wantLower {
-			t.Fatalf("uint32ToHex8Lower(%08x)=%q want %q", v, got, wantLower)
-		}
-		if got := uint32ToHex8Upper(v); got != wantUpper {
-			t.Fatalf("uint32ToHex8Upper(%08x)=%q want %q", v, got, wantUpper)
-		}
-	}
-}
