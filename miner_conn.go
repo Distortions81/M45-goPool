@@ -277,7 +277,7 @@ func (mc *MinerConn) handle() {
 			continue
 		}
 		mc.recordActivity(now)
-		sniffedMethod, sniffedID, sniffedOK := sniffStratumMethodID(line)
+		sniffedMethod, sniffedID, sniffedOK := sniffStratumMethodIDTag(line)
 		if mc.stratumMsgRateLimitExceeded(now, sniffedMethod) {
 			banWorker := mc.workerForRateLimitBan(sniffedMethod, line)
 			logger.Warn("closing miner for stratum message rate limit",
@@ -292,10 +292,10 @@ func (mc *MinerConn) handle() {
 
 		if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
 			switch sniffedMethod {
-			case "mining.ping":
+			case stratumMethodMiningPing:
 				mc.writePongResponse(sniffedID)
 				continue
-			case "mining.authorize":
+			case stratumMethodMiningAuthorize:
 				// Fast-path: mining.authorize typically uses string params.
 				// Avoid full JSON unmarshal on the connection goroutine.
 				if params, ok := sniffStratumStringParams(line, 2); ok && len(params) > 0 {
@@ -307,7 +307,7 @@ func (mc *MinerConn) handle() {
 					mc.handleAuthorizeID(sniffedID, worker, pass)
 					continue
 				}
-			case "mining.subscribe":
+			case stratumMethodMiningSubscribe:
 				// Fast-path: mining.subscribe only needs the request ID and (optionally)
 				// a string client identifier in params[0].
 				params, ok := sniffStratumStringParams(line, 1)
@@ -321,7 +321,7 @@ func (mc *MinerConn) handle() {
 					mc.handleSubscribeID(sniffedID, clientID, haveClientID)
 					continue
 				}
-			case "mining.submit":
+			case stratumMethodMiningSubmit:
 				// Fast-path: most mining.submit payloads are small and string-only.
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
 				// allocations and tail latency under load.
@@ -378,14 +378,14 @@ func (mc *MinerConn) handle() {
 	}
 }
 
-func (mc *MinerConn) workerForRateLimitBan(method string, line []byte) string {
+func (mc *MinerConn) workerForRateLimitBan(method stratumMethodTag, line []byte) string {
 	if mc == nil {
 		return ""
 	}
 	if worker := strings.TrimSpace(mc.currentWorker()); worker != "" {
 		return worker
 	}
-	if method != "mining.authorize" {
+	if method != stratumMethodMiningAuthorize {
 		return ""
 	}
 	params, ok := sniffStratumStringParams(line, 1)

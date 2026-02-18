@@ -1056,10 +1056,10 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		)
 	}
 
-	if err := mc.writeJSON(map[string]any{
-		"id":     nil,
-		"method": "mining.notify",
-		"params": params,
+	if err := mc.writeJSON(StratumMessage{
+		ID:     nil,
+		Method: "mining.notify",
+		Params: params,
 	}); err != nil {
 		logger.Error("notify write error", "remote", mc.id, "error", err)
 		return

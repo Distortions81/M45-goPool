@@ -21,7 +21,7 @@ func BenchmarkStratumDecodeFastJSON(b *testing.B) {
 func BenchmarkStratumDecodeManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if method, id, ok := sniffStratumMethodID(sampleStratumRequest); !ok || method == "" {
+		if method, id, ok := sniffStratumMethodIDTag(sampleStratumRequest); !ok || method == stratumMethodUnknown {
 			b.Fatalf("manual decode failed")
 		} else {
 			_ = id
@@ -43,8 +43,8 @@ func BenchmarkStratumDecodeFastJSON_MiningSubmit(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningSubmit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodID(sampleSubmitRequest)
-		if !ok || method != "mining.submit" {
+		method, _, ok := sniffStratumMethodIDTag(sampleSubmitRequest)
+		if !ok || method != stratumMethodMiningSubmit {
 			b.Fatalf("manual decode method failed")
 		}
 		worker, jobID, en2, ntime, nonce, ver, haveVer, ok := sniffStratumSubmitParamsBytes(sampleSubmitRequest)
@@ -82,8 +82,8 @@ func BenchmarkStratumDecodeFastJSON_MiningSubscribe(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningSubscribe(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodID(sampleSubscribeRequest)
-		if !ok || method != "mining.subscribe" {
+		method, _, ok := sniffStratumMethodIDTag(sampleSubscribeRequest)
+		if !ok || method != stratumMethodMiningSubscribe {
 			b.Fatalf("manual decode method failed")
 		}
 		params, ok := sniffStratumStringParams(sampleSubscribeRequest, 1)
@@ -107,8 +107,8 @@ func BenchmarkStratumDecodeFastJSON_MiningAuthorize(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningAuthorize(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodID(sampleAuthorizeRequest)
-		if !ok || method != "mining.authorize" {
+		method, _, ok := sniffStratumMethodIDTag(sampleAuthorizeRequest)
+		if !ok || method != stratumMethodMiningAuthorize {
 			b.Fatalf("manual decode method failed")
 		}
 		params, ok := sniffStratumStringParams(sampleAuthorizeRequest, 2)

@@ -22,6 +22,12 @@ type StratumResponse struct {
 	Error  any `json:"error"`
 }
 
+type StratumMessage struct {
+	ID     any    `json:"id"`
+	Method string `json:"method"`
+	Params []any  `json:"params"`
+}
+
 func newStratumError(code int, msg string) []any {
 	return []any{code, msg, nil}
 }
