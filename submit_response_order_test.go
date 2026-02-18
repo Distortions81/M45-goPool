@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"net"
 	"strings"
@@ -64,7 +63,6 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 		id:          "submit-order-miner",
 		cfg:         Config{PoolFeePercent: 0},
 		conn:        conn,
-		writer:      bufio.NewWriterSize(conn, 4096),
 		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 		vardiff:     defaultVarDiff,
 		authorized:  true,
@@ -96,18 +94,18 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 	mc.statsMu.Unlock()
 	mc.rollingHashrateValue = 1e10 // enough to trigger an upward move (and power-of-two quantization)
 
-	task := submissionTask{
-		mc:               mc,
-		reqID:            1,
-		job:              job,
-		jobID:            job.JobID,
-		workerName:       workerName,
-		extranonce2:      "00000000",
-		extranonce2Bytes: []byte{0, 0, 0, 0},
-		ntime:            "6553f100",
-		ntimeVal:         0x6553f100,
-		nonce:            "00000001",
-		nonceVal:         0x00000001,
+		task := submissionTask{
+			mc:               mc,
+			reqID:            1,
+			job:              job,
+			jobID:            job.JobID,
+			workerName:       workerName,
+			extranonce2:      "00000000",
+			extranonce2Large: []byte{0, 0, 0, 0},
+			ntime:            "6553f100",
+			ntimeVal:         0x6553f100,
+			nonce:            "00000001",
+			nonceVal:         0x00000001,
 		useVersion:       1,
 		scriptTime:       job.Template.CurTime,
 		receivedAt:       time.Now(),

@@ -1,10 +1,5 @@
 package main
 
-import (
-	"bytes"
-	"encoding/hex"
-)
-
 func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext, bool) {
 	// Solo mode keeps this hot path minimal: build header, compute hash/diff, and
 	// detect block candidates. We intentionally skip strict verification and
@@ -16,9 +11,15 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	nonceVal := task.nonceVal
 	useVersion := task.useVersion
 	scriptTime := task.scriptTime
-	en2 := task.extranonce2Bytes
+	en2 := (&task).extranonce2Decoded()
 	reqID := task.reqID
 	now := task.receivedAt
+	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
+		logger.Warn("submit bad extranonce2", "remote", mc.id)
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		return shareContext{}, false
+	}
 
 	if scriptTime == 0 {
 		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)
@@ -33,7 +34,8 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	// Rebuild coinbase+header. Dual/Triple payout paths are kept because they
 	// affect the coinbase txid (and thus merkle root and header hash).
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		var merkleRoot []byte
+		var merkleRoot [32]byte
+		var merkleOK bool
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			_, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
@@ -68,8 +70,14 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 			)
 		}
 		if err == nil && len(cbTxid) == 32 {
-			merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-			header, err = job.buildBlockHeaderU32(merkleRoot, ntimeVal, nonceVal, int32(useVersion))
+			if job.merkleBranchesBytes != nil {
+				merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+			} else {
+				merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+			}
+			if merkleOK {
+				header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
+			}
 		}
 	}
 
@@ -96,12 +104,25 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 			})
 			return shareContext{}, false
 		}
-		merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-		header, err = job.buildBlockHeaderU32(merkleRoot, ntimeVal, nonceVal, int32(useVersion))
+		var merkleRoot [32]byte
+		var merkleOK bool
+		if job.merkleBranchesBytes != nil {
+			merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+		} else {
+			merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+		}
+		if !merkleOK {
+			logger.Warn("submit merkle build failed", "remote", mc.id)
+			mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", nil, now)
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
+			return shareContext{}, false
+		}
+		header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
 		if err != nil {
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 			} else {
@@ -125,7 +146,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	}
 	isBlock := uint256BELessOrEqual(headerHashLE, targetBE)
 
-	hashHex := hex.EncodeToString(headerHashLE[:])
+	hashHex := hexEncode32LowerString(&headerHashLE)
 
 	return shareContext{
 		hashHex:   hashHex,
@@ -142,9 +163,15 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 	nonceVal := task.nonceVal
 	useVersion := task.useVersion
 	scriptTime := task.scriptTime
-	en2 := task.extranonce2Bytes
+	en2 := (&task).extranonce2Decoded()
 	reqID := task.reqID
 	now := task.receivedAt
+	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
+		logger.Warn("submit bad extranonce2", "remote", mc.id)
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		return shareContext{}, false
+	}
 
 	if scriptTime == 0 {
 		scriptTime = mc.scriptTimeForJob(jobID, job.ScriptTime)
@@ -152,7 +179,8 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 
 	var (
 		header           []byte
-		merkleRoot       []byte
+		merkleRoot       [32]byte
+		merkleOK         bool
 		cbTx             []byte
 		cbTxid           []byte
 		usedDualCoinbase bool
@@ -194,15 +222,21 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			)
 		}
 		if err == nil && len(cbTxid) == 32 {
-			merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-			header, err = job.buildBlockHeaderU32(merkleRoot, ntimeVal, nonceVal, int32(useVersion))
+			if job.merkleBranchesBytes != nil {
+				merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+			} else {
+				merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+			}
+			if merkleOK {
+				header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
+			}
 			if err == nil {
 				usedDualCoinbase = true
 			}
 		}
 	}
 
-	if header == nil || merkleRoot == nil || err != nil || len(cbTxid) != 32 {
+	if header == nil || !merkleOK || err != nil || len(cbTxid) != 32 {
 		if err != nil && usedDualCoinbase {
 			logger.Warn("dual-payout header build failed, falling back to single-output header",
 				"error", err,
@@ -231,12 +265,23 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			})
 			return shareContext{}, false
 		}
-		merkleRoot = computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-		header, err = job.buildBlockHeaderU32(merkleRoot, ntimeVal, nonceVal, int32(useVersion))
+		if job.merkleBranchesBytes != nil {
+			merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+		} else {
+			merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+		}
+		if !merkleOK {
+			logger.Warn("submit merkle build failed", "remote", mc.id)
+			mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", nil, now)
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
+			return shareContext{}, false
+		}
+		header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
 		if err != nil {
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 			} else {
@@ -244,23 +289,6 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			}
 			return shareContext{}, false
 		}
-	}
-
-	expectedMerkle := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-	if merkleRoot == nil || expectedMerkle == nil || !bytes.Equal(merkleRoot, expectedMerkle) {
-		logger.Warn("submit merkle mismatch", "remote", mc.id, "worker", workerName, "job", jobID)
-		var detail *ShareDetail
-		if debugLogging || verboseLogging {
-			detail = mc.buildShareDetailFromCoinbase(job, cbTx)
-		}
-		mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", detail, now)
-		if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidMerkle); banned {
-			mc.logBan(rejectInvalidMerkle.String(), workerName, invalids)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
-		} else {
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
-		}
-		return shareContext{}, false
 	}
 
 	headerHashArray := doubleSHA256Array(header)
@@ -275,7 +303,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 	}
 	isBlock := uint256BELessOrEqual(headerHashLE, targetBE)
 
-	hashHex := hex.EncodeToString(headerHashLE[:])
+	hashHex := hexEncode32LowerString(&headerHashLE)
 
 	ctx := shareContext{
 		hashHex:   hashHex,
@@ -288,7 +316,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 		copy(hashLE, headerHashLE[:])
 		ctx.header = header
 		ctx.cbTx = cbTx
-		ctx.merkleRoot = append([]byte(nil), merkleRoot...)
+		ctx.merkleRoot = append([]byte(nil), merkleRoot[:]...)
 		ctx.hashLE = hashLE
 	}
 	return ctx, true

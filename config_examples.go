@@ -94,6 +94,9 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
+# - [stratum].fast_decode_enabled: Enable fast-path decoding (sniffing) for common Stratum methods (requires restart).
+# - [stratum].fast_encode_enabled: Enable fast-path response encoding (canned/manual JSON) for common Stratum responses (requires restart).
+# - [stratum].tcp_read_buffer_bytes / tcp_write_buffer_bytes: Set TCP socket buffer sizes in bytes (0 = OS default; requires restart).
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
@@ -141,6 +144,11 @@ func tuningConfigDocComments() []byte {
 # - job_entropy: Entropy bytes added to per-job coinbase tags (requires restart).
 # - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (requires restart).
 # - difficulty_step_granularity: Quantize difficulty to 2^(k/N) steps (N=1 power-of-two, N=2 half, N=3 third, N=4 quarter). Higher values are finer; requires restart.
+#
+# Hashrate ([hashrate])
+# - hashrate_ema_tau_seconds: EMA time constant for per-connection hashrate smoothing (seconds; requires restart).
+# - hashrate_cumulative_enabled: Blend per-connection EMA with cumulative hashrate for per-worker display (requires restart).
+# - hashrate_recent_cumulative_enabled: Allow short-window cumulative (vardiff window) to influence per-worker display (requires restart).
 #
 # Peer cleaning ([peer_cleaning])
 # - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.

@@ -95,7 +95,7 @@ func normalizeShareJobFreshnessMode(mode int) int {
 }
 
 func shareJobFreshnessChecksJobID(mode int) bool {
-	switch normalizeShareJobFreshnessMode(mode) {
+	switch mode {
 	case shareJobFreshnessJobID, shareJobFreshnessJobIDPrev:
 		return true
 	default:
@@ -104,5 +104,5 @@ func shareJobFreshnessChecksJobID(mode int) bool {
 }
 
 func shareJobFreshnessChecksPrevhash(mode int) bool {
-	return normalizeShareJobFreshnessMode(mode) == shareJobFreshnessJobIDPrev
+	return mode == shareJobFreshnessJobIDPrev
 }

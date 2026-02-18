@@ -70,7 +70,7 @@ go test -race ./...
 
 ### Performance / Timing
 - **`submit_timing_test.go`** - Measures latency from `handleBlockShare` entry to `submitblock` invocation
-- See [performance.md](performance.md) for detailed benchmark notes and capacity planning
+- Benchmark suites live alongside the code as `*_bench_test.go` files; run them with `go test -run '^$' -bench . -benchmem ./...`.
 
 ## CPU Profiling with Simulated Miners
 

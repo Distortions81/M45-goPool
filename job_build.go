@@ -32,6 +32,10 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	}
 
 	merkleBranches := buildMerkleBranches(txids)
+	merkleBranchesBytes, err := decodeMerkleBranchesBytes(merkleBranches)
+	if err != nil {
+		return nil, err
+	}
 
 	scriptTime := time.Now().Unix()
 	coinbaseMsg := jm.cfg.CoinbaseMsg
@@ -57,15 +61,12 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	if len(tpl.Previous) != 64 {
 		return nil, fmt.Errorf("previousblockhash hex must be 64 chars")
 	}
-	if n, err := hex.Decode(prevBytes[:], []byte(tpl.Previous)); err != nil || n != 32 {
+	if err := decodeHexToFixedBytes(prevBytes[:], tpl.Previous); err != nil {
 		return nil, fmt.Errorf("decode previousblockhash: %w", err)
 	}
 
 	var bitsBytes [4]byte
-	if len(tpl.Bits) != 8 {
-		return nil, fmt.Errorf("bits hex must be 8 chars")
-	}
-	if n, err := hex.Decode(bitsBytes[:], []byte(tpl.Bits)); err != nil || n != 4 {
+	if err := decodeHex8To4(&bitsBytes, tpl.Bits); err != nil {
 		return nil, fmt.Errorf("decode bits: %w", err)
 	}
 
@@ -99,6 +100,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		WitnessCommitment:       tpl.DefaultWitnessCommitment,
 		CoinbaseMsg:             coinbaseMsg,
 		MerkleBranches:          merkleBranches,
+		merkleBranchesBytes:     merkleBranchesBytes,
 		Transactions:            tpl.Transactions,
 		TransactionIDs:          txids,
 		PayoutScript:            jm.payoutScript,

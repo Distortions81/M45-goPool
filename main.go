@@ -218,6 +218,16 @@ func main() {
 	logger.Info("effective config", "config", cfg.Effective())
 	logger.Info("sha256 implementation", "implementation", sha256ImplementationName())
 
+	// Best-effort cleanup of legacy difficulty cache file.
+	dataDir := strings.TrimSpace(cfg.DataDir)
+	if dataDir == "" {
+		dataDir = defaultDataDir
+	}
+	difficultyCachePath := filepath.Join(dataDir, "state", "difficulty_cache.json")
+	if err := os.Remove(difficultyCachePath); err != nil && !os.IsNotExist(err) {
+		logger.Warn("delete difficulty cache", "error", err, "path", difficultyCachePath)
+	}
+
 	// Config sanity checks.
 	if cfg.PoolFeePercent <= 0 {
 		logger.Warn("pool_fee_percent is 0; operator will not receive a fee")
@@ -448,7 +458,7 @@ func main() {
 	// Static legal pages
 	mux.HandleFunc("/privacy", statusServer.handleStaticFile("privacy.html"))
 	mux.HandleFunc("/terms", statusServer.handleStaticFile("terms.html"))
-	// Alternative worker lookup URLs (SHA256-based)
+	// Alternative worker lookup URLs (plaintext worker name)
 	mux.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/user")
 	})
@@ -618,6 +628,11 @@ func main() {
 	}
 	jobMgr.Start(ctx)
 
+		// Once Stratum is live, enforce the same freshness rule at runtime:
+		// - refuse new miner connections while the job feed is stale
+		// - disconnect existing miners so they stop hashing stale work
+		go enforceStratumFreshness(ctx, jobMgr, registry, startTime)
+
 	ln, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
 		fatal("listen error", err, "addr", cfg.ListenAddr)
@@ -693,25 +708,42 @@ func main() {
 		}
 	}()
 
-	serveStratum := func(label string, l net.Listener) {
-		for {
-			if !acceptLimiter.wait(ctx) {
-				break
-			}
-			conn, err := l.Accept()
+		serveStratum := func(label string, l net.Listener) {
+			lastRefuseLog := time.Time{}
+			for {
+				if !acceptLimiter.wait(ctx) {
+					break
+				}
+				conn, err := l.Accept()
 			if err != nil {
 				if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 					break
 				}
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
-			}
-			disableTCPNagle(conn)
-			remote := conn.RemoteAddr().String()
-			if reconnectLimiter != nil {
-				host, _, errSplit := net.SplitHostPort(remote)
-				if errSplit != nil {
-					host = remote
+				}
+				disableTCPNagle(conn)
+				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+				now := time.Now()
+				if now.Sub(startTime) >= stratumStartupGrace {
+					if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
+						if time.Since(lastRefuseLog) > 5*time.Second {
+							fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason}
+							if strings.TrimSpace(h.Detail) != "" {
+								fields = append(fields, "detail", h.Detail)
+							}
+							logger.Warn("refusing miner connection: node updates degraded", fields...)
+							lastRefuseLog = time.Now()
+						}
+						_ = conn.Close()
+						continue
+					}
+				}
+				remote := conn.RemoteAddr().String()
+				if reconnectLimiter != nil {
+					host, _, errSplit := net.SplitHostPort(remote)
+					if errSplit != nil {
+						host = remote
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {
 					logger.Warn("rejecting miner for reconnect churn",
@@ -753,6 +785,7 @@ func main() {
 	logger.Info("shutdown requested; draining active miners")
 	shutdownStart := time.Now()
 	for _, mc := range registry.Snapshot() {
+		mc.sendClientShowMessage("Pool restarting; please reconnect.")
 		mc.Close("shutdown")
 	}
 
@@ -773,6 +806,7 @@ func main() {
 			logger.Error("flush accounting", "error", err)
 		}
 	}
+
 	// Best-effort checkpoint to flush WAL into the main DB on shutdown.
 	checkpointSharedStateDB()
 	// Best-effort sync of log files on shutdown so buffered OS writes are
@@ -802,9 +836,95 @@ func main() {
 	}
 }
 
+func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry, start time.Time) {
+	if ctx == nil || jobMgr == nil || registry == nil {
+		return
+	}
+
+	wasHealthy := true
+	unhealthySince := time.Time{}
+	lastLog := time.Time{}
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		now := time.Now()
+		if !start.IsZero() && now.Sub(start) < stratumStartupGrace {
+			// During boot grace window, do not treat missing/degraded node state as actionable.
+			unhealthySince = time.Time{}
+			wasHealthy = true
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		h := stratumHealthStatus(jobMgr, now)
+		if !h.Healthy {
+			if unhealthySince.IsZero() {
+				unhealthySince = now
+			}
+			// Avoid flapping: only disconnect after a brief continuous unhealthy window.
+			if wasHealthy && now.Sub(unhealthySince) >= stratumDegradedGrace {
+				miners := registry.Snapshot()
+				for _, mc := range miners {
+					mc.sendClientShowMessage("Pool paused: node updates degraded. Reconnecting when ready.")
+					mc.Close("node updates degraded")
+				}
+				if time.Since(lastLog) > 2*time.Second {
+					fs := jobMgr.FeedStatus()
+					fields := []any{"disconnected", len(miners), "reason", h.Reason, "heartbeat_interval", stratumHeartbeatInterval}
+					if strings.TrimSpace(h.Detail) != "" {
+						fields = append(fields, "detail", h.Detail)
+					}
+					job := jobMgr.CurrentJob()
+					if job != nil && !job.CreatedAt.IsZero() {
+						fields = append(fields, "job_age", now.Sub(job.CreatedAt))
+					} else {
+						fields = append(fields, "job_age", "(none)")
+					}
+					if !fs.LastSuccess.IsZero() {
+						fields = append(fields, "last_success", fs.LastSuccess, "last_success_age", now.Sub(fs.LastSuccess))
+					}
+					if fs.LastError != nil {
+						fields = append(fields, "last_error", fs.LastError.Error())
+					}
+					logger.Warn("stratum gated: node updates degraded; disconnected miners", fields...)
+					lastLog = now
+				}
+				wasHealthy = false
+			}
+		} else {
+			unhealthySince = time.Time{}
+			if !wasHealthy {
+				logger.Info("stratum ungated: node updates healthy again")
+				wasHealthy = true
+			}
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 func disableTCPNagle(conn net.Conn) {
 	if tcp := findTCPConn(conn); tcp != nil {
 		_ = tcp.SetNoDelay(true)
+	}
+}
+
+func setTCPBuffers(conn net.Conn, readBytes, writeBytes int) {
+	if readBytes <= 0 && writeBytes <= 0 {
+		return
+	}
+	if tcp := findTCPConn(conn); tcp != nil {
+		if readBytes > 0 {
+			if err := tcp.SetReadBuffer(readBytes); err != nil && debugLogging {
+				logger.Debug("set tcp read buffer failed", "error", err, "bytes", readBytes)
+			}
+		}
+		if writeBytes > 0 {
+			if err := tcp.SetWriteBuffer(writeBytes); err != nil && debugLogging {
+				logger.Debug("set tcp write buffer failed", "error", err, "bytes", writeBytes)
+			}
+		}
 	}
 }
 

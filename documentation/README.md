@@ -2,9 +2,6 @@
 
 - `operations.md` - Configuration, CLI flags, logging, backup, and runtime procedures.
 - `json-apis.md` - JSON API reference for `/api/*`.
-- `performance.md` - Capacity planning and performance expectations.
+- `stratum-v1.md` - Stratum v1 method compatibility notes.
 - `TESTING.md` - Test suite usage and contribution testing guidance.
-- `RELEASES.md` - Release packaging, verification, and upgrade guidance.
 - `systemd.service` - Example systemd unit file.
-
-Related:

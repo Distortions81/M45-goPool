@@ -135,7 +135,7 @@ func parseRawBlockTip(payload []byte) (ZMQBlockTip, error) {
 		Hash:       hash,
 		Height:     height,
 		Time:       time.Unix(int64(tipTime), 0).UTC(),
-		Bits:       fmt.Sprintf("%08x", bits),
+		Bits:       uint32ToHex8Lower(bits),
 		Difficulty: difficultyFromBits(bits),
 	}, nil
 }
@@ -242,7 +242,7 @@ func blockHashFromHeader(header []byte) string {
 }
 
 func difficultyFromBits(bits uint32) float64 {
-	bitsStr := fmt.Sprintf("%08x", bits)
+	bitsStr := uint32ToHex8Lower(bits)
 	target, err := targetFromBits(bitsStr)
 	if err != nil || target.Sign() == 0 {
 		return 0

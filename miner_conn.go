@@ -167,19 +167,20 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	var evictedShareCache map[string]*evictedCacheEntry
 	if cfg.ShareCheckDuplicate {
 		shareCache = make(map[string]*duplicateShareSet, maxRecentJobs)
-		evictedShareCache = make(map[string]*evictedCacheEntry)
+		evictedShareCache = make(map[string]*evictedCacheEntry, maxRecentJobs)
 	}
 
 	mc := &MinerConn{
 		ctx:               ctx,
 		id:                c.RemoteAddr().String(),
 		conn:              c,
-		writer:            bufio.NewWriter(c),
 		reader:            bufio.NewReaderSize(c, maxStratumMessageSize),
+		writeScratch:      make([]byte, 0, 256),
 		jobMgr:            jobMgr,
 		rpc:               rpc,
 		cfg:               cfg,
 		extranonce1:       en1,
+		extranonce1Hex:    hex.EncodeToString(en1),
 		jobCh:             jobCh,
 		vardiff:           vdiff,
 		metrics:           metrics,
@@ -188,9 +189,13 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		savedWorkerStore:  workerLists,
 		discordNotifier:   notifier,
 		activeJobs:        make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
+		jobOrder:          make([]string, 0, maxRecentJobs),
 		connectedAt:       now,
 		lastActivity:      now,
 		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
+		jobScriptTime:     make(map[string]int64, maxRecentJobs),
+		jobNotifyCoinbase: make(map[string]notifiedCoinbaseParts, maxRecentJobs),
+		jobNTimeBounds:    nil,
 		shareCache:        shareCache,
 		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,
@@ -203,6 +208,10 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		bootstrapDone:     false,
 		isTLSConnection:   isTLS,
 		statsUpdates:      make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
+		workerWallets:     make(map[string]workerWalletState, 4),
+	}
+	if cfg.ShareCheckNTimeWindow {
+		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, maxRecentJobs)
 	}
 
 	// Initialize atomic fields
@@ -219,7 +228,7 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 func (mc *MinerConn) handle() {
 	defer mc.cleanup()
 	if debugLogging || verboseLogging {
-		logger.Info("miner connected", "remote", mc.id, "extranonce1", hex.EncodeToString(mc.extranonce1))
+		logger.Info("miner connected", "remote", mc.id, "extranonce1", mc.extranonce1Hex)
 	}
 
 	for {
@@ -231,6 +240,7 @@ func (mc *MinerConn) handle() {
 			logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
 			return
 		}
+		mc.maybeSendInitialWorkDue(now)
 		deadline := now.Add(mc.currentReadTimeout())
 		if err := mc.conn.SetReadDeadline(deadline); err != nil {
 			if mc.ctx.Err() != nil {
@@ -240,12 +250,13 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-		line, err := mc.reader.ReadBytes('\n')
+		line, err := mc.reader.ReadSlice('\n')
 		now = time.Now()
 		if err != nil {
 			if errors.Is(err, bufio.ErrBufferFull) {
 				logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
 				if banned, count := mc.noteProtocolViolation(now); banned {
+					mc.sendClientShowMessage("Banned: " + mc.banReason)
 					mc.logBan("oversized stratum message", mc.currentWorker(), count)
 				}
 				return
@@ -262,21 +273,13 @@ func (mc *MinerConn) handle() {
 			}
 			return
 		}
-		if len(line) > maxStratumMessageSize {
-			logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
-			if banned, count := mc.noteProtocolViolation(now); banned {
-				mc.logBan("oversized stratum message", mc.currentWorker(), count)
-			}
-			return
-		}
-
 		logNetMessage("recv", line)
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
 		mc.recordActivity(now)
-		sniffedMethod, sniffedID, sniffedOK := sniffStratumMethodID(line)
+		sniffedMethod, sniffedIDRaw, sniffedOK := sniffStratumMethodIDTagRawID(line)
 		if mc.stratumMsgRateLimitExceeded(now, sniffedMethod) {
 			banWorker := mc.workerForRateLimitBan(sniffedMethod, line)
 			logger.Warn("closing miner for stratum message rate limit",
@@ -289,17 +292,56 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-		if sniffedOK {
+		if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
 			switch sniffedMethod {
-			case "mining.ping":
-				mc.writePongResponse(sniffedID)
+			case stratumMethodMiningPing:
+				mc.writePongResponseRawID(sniffedIDRaw)
 				continue
-			case "mining.submit":
+			case stratumMethodMiningAuthorize:
+				// Fast-path: mining.authorize typically uses string params.
+				// Avoid full JSON unmarshal on the connection goroutine.
+				if params, ok := sniffStratumStringParams(line, 2); ok && len(params) > 0 {
+					worker := params[0]
+					pass := ""
+					if len(params) > 1 {
+						pass = params[1]
+					}
+					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
+					if ok {
+						mc.handleAuthorizeID(idVal, worker, pass)
+					}
+					continue
+				}
+			case stratumMethodMiningSubscribe:
+				// Fast-path: mining.subscribe only needs the request ID and (optionally)
+				// a string client identifier in params[0] and optional session in params[1].
+				params, ok := sniffStratumStringParams(line, 2)
+				if ok {
+					clientID := ""
+					haveClientID := false
+					sessionID := ""
+					haveSessionID := false
+					if len(params) > 0 {
+						clientID = params[0]
+						haveClientID = true
+					}
+					if len(params) > 1 {
+						sessionID = strings.TrimSpace(params[1])
+						haveSessionID = sessionID != ""
+					}
+					mc.handleSubscribeRawID(sniffedIDRaw, clientID, haveClientID, sessionID, haveSessionID)
+					continue
+				}
+			case stratumMethodMiningSubmit:
 				// Fast-path: most mining.submit payloads are small and string-only.
 				// Avoid full JSON unmarshal on the connection goroutine to reduce
 				// allocations and tail latency under load.
-				if params, ok := sniffStratumStringParams(line, 6); ok && (len(params) == 5 || len(params) == 6) {
-					mc.handleSubmitStringParams(sniffedID, params)
+				worker, jobID, en2, ntime, nonce, version, haveVersion, ok := sniffStratumSubmitParamsBytes(line)
+				if ok {
+					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
+					if ok {
+						mc.handleSubmitFastBytes(idVal, worker, jobID, en2, ntime, nonce, version, haveVersion)
+					}
 					continue
 				}
 			}
@@ -308,6 +350,7 @@ func (mc *MinerConn) handle() {
 		if err := fastJSONUnmarshal(line, &req); err != nil {
 			logger.Warn("json error from miner", "remote", mc.id, "error", err)
 			if banned, count := mc.noteProtocolViolation(now); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan("invalid stratum json", mc.currentWorker(), count)
 			}
 			return
@@ -317,6 +360,9 @@ func (mc *MinerConn) handle() {
 		case "mining.subscribe":
 			mc.handleSubscribe(&req)
 		case "mining.authorize":
+			mc.handleAuthorize(&req)
+		case "mining.auth":
+			// CKPool-compatible alias for mining.authorize.
 			mc.handleAuthorize(&req)
 		case "mining.submit":
 			mc.handleSubmit(&req)
@@ -328,20 +374,61 @@ func (mc *MinerConn) handle() {
 			mc.suggestDifficulty(&req)
 		case "mining.suggest_target":
 			mc.suggestTarget(&req)
+		case "mining.set_difficulty":
+			// Non-standard (pool->miner) message that some proxies/miners may
+			// accidentally send to the pool. Treat it like a difficulty hint.
+			mc.suggestDifficulty(&req)
+		case "mining.set_target":
+			// Non-standard (pool->miner) message that some proxies/miners may
+			// accidentally send to the pool. Treat it like a target hint.
+			mc.suggestTarget(&req)
+		case "client.get_version":
+			v := strings.TrimSpace(buildVersion)
+			if v == "" || v == "(dev)" {
+				v = "dev"
+			}
+			mc.writeResponse(StratumResponse{
+				ID:     req.ID,
+				Result: "goPool/" + v,
+				Error:  nil,
+			})
+		case "client.ping":
+			// Some software uses client.ping instead of mining.ping.
+			mc.writePongResponse(req.ID)
+		case "client.show_message":
+			// Some software stacks send this method even though it's typically
+			// a pool->miner notification. Acknowledge to avoid breaking proxies.
+			mc.writeTrueResponse(req.ID)
+		case "client.reconnect":
+			// Some stacks treat this as a request rather than a notification.
+			// Acknowledge and let the miner decide what to do.
+			mc.writeTrueResponse(req.ID)
 		case "mining.ping":
 			// Respond to keepalive ping with pong
 			mc.writePongResponse(req.ID)
 		case "mining.get_transactions":
-			// Client requests transaction hashes for current job. We don't
-			// support this but acknowledge to avoid breaking miners that send it.
-			mc.writeEmptySliceResponse(req.ID)
+			mc.handleGetTransactions(&req)
 		case "mining.capabilities":
 			// Draft extension where client advertises its capabilities.
 			// Acknowledge receipt but we don't need to act on it.
 			mc.writeTrueResponse(req.ID)
 		default:
-			// Silently ignore unknown methods to avoid confusing miners that
-			// send non-standard extensions. Log at debug level for diagnostics.
+			// If the request has an ID, respond with a JSON-RPC error so strict
+			// proxies/miners don't hang waiting for a response.
+			//
+			// If there's no ID (or it's null), treat it as a notification and
+			// ignore to preserve compatibility with non-standard extensions.
+			if req.ID != nil {
+				mc.writeResponse(StratumResponse{
+					ID:     req.ID,
+					Result: nil,
+					Error:  newStratumError(-32601, "method not found"),
+				})
+				if debugLogging {
+					logger.Debug("unknown stratum method (replied method not found)", "remote", mc.id, "method", req.Method)
+				}
+				break
+			}
 			if debugLogging {
 				logger.Debug("ignoring unknown stratum method", "remote", mc.id, "method", req.Method)
 			}
@@ -350,14 +437,62 @@ func (mc *MinerConn) handle() {
 	}
 }
 
-func (mc *MinerConn) workerForRateLimitBan(method string, line []byte) string {
+func (mc *MinerConn) handleGetTransactions(req *StratumRequest) {
+	if req == nil {
+		return
+	}
+	// Stratum v1 extension used by some clients to request tx hashes for a job.
+	// Keep it bandwidth-safe by returning txids only (not raw tx hex).
+	//
+	// Common shapes:
+	// - params: [] (current job)
+	// - params: [job_id]
+	jobID := ""
+	if len(req.Params) > 0 {
+		if s, ok := req.Params[0].(string); ok {
+			jobID = strings.TrimSpace(s)
+		}
+	}
+
+	var job *Job
+	if jobID != "" {
+		j, _, _, _, _, _, ok := mc.jobForIDWithLast(jobID)
+		if ok {
+			job = j
+		}
+	} else {
+		// No job id provided: use the last job notified to this connection when available.
+		_, last, _, _, _, _, _ := mc.jobForIDWithLast("")
+		if last != nil {
+			job = last
+		} else if mc.jobMgr != nil {
+			job = mc.jobMgr.CurrentJob()
+		}
+	}
+
+	if job == nil || len(job.Transactions) == 0 {
+		mc.writeEmptySliceResponse(req.ID)
+		return
+	}
+
+	out := make([]string, 0, len(job.Transactions))
+	for _, tx := range job.Transactions {
+		txid := strings.TrimSpace(tx.Txid)
+		if txid != "" {
+			out = append(out, txid)
+		}
+	}
+	mc.writeResponse(StratumResponse{ID: req.ID, Result: out, Error: nil})
+}
+
+func (mc *MinerConn) workerForRateLimitBan(method stratumMethodTag, line []byte) string {
 	if mc == nil {
 		return ""
 	}
 	if worker := strings.TrimSpace(mc.currentWorker()); worker != "" {
 		return worker
 	}
-	if method != "mining.authorize" {
+	if method != stratumMethodMiningAuthorize {
 		return ""
 	}
 	params, ok := sniffStratumStringParams(line, 1)
@@ -374,12 +509,8 @@ func (mc *MinerConn) scheduleInitialWork() {
 		return
 	}
 	mc.initialWorkScheduled = true
+	mc.initialWorkDue = time.Now().Add(defaultInitialDifficultyDelay)
 	mc.initWorkMu.Unlock()
-
-	go func() {
-		time.Sleep(defaultInitialDifficultyDelay)
-		mc.sendInitialWork()
-	}()
 }
 
 func (mc *MinerConn) maybeSendInitialWork() {
@@ -392,7 +523,29 @@ func (mc *MinerConn) maybeSendInitialWork() {
 	mc.sendInitialWork()
 }
 
+func (mc *MinerConn) maybeSendInitialWorkDue(now time.Time) {
+	if mc == nil {
+		return
+	}
+	mc.initWorkMu.Lock()
+	scheduled := mc.initialWorkScheduled
+	sent := mc.initialWorkSent
+	due := mc.initialWorkDue
+	mc.initWorkMu.Unlock()
+	if !scheduled || sent {
+		return
+	}
+	if !due.IsZero() && now.Before(due) {
+		return
+	}
+	mc.sendInitialWork()
+}
+
 func (mc *MinerConn) sendInitialWork() {
+	if !mc.subscribed || !mc.authorized || !mc.listenerOn {
+		return
+	}
+
 	mc.initWorkMu.Lock()
 	if mc.initialWorkSent {
 		mc.initWorkMu.Unlock()
@@ -400,10 +553,6 @@ func (mc *MinerConn) sendInitialWork() {
 	}
 	mc.initialWorkSent = true
 	mc.initWorkMu.Unlock()
-
-	if !mc.authorized || !mc.listenerOn {
-		return
-	}
 
 	// Respect suggested difficulty if already processed. Otherwise, fall back
 	// to a sane default/minimum so miners have a starting target.

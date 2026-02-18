@@ -7,7 +7,12 @@
 
 goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and ships with a status UI + JSON APIs for monitoring.
 
-> **Downloads:** Pre-built binaries are available on GitHub Releases (see [documentation/RELEASES.md](documentation/RELEASES.md)).
+> **Downloads:** Pre-built binaries are available on GitHub Releases.
+
+Stratum notes:
+
+- goPool accepts both `mining.authorize` and CKPool-style `mining.auth`, and tolerates authorize-before-subscribe (work starts after subscribe completes).
+- On startup and during runtime, Stratum is gated only when the node/job feed reports errors or the node is in a non-usable syncing/indexing state: new connections are refused and existing miners are disconnected to avoid wasted hashing.
 
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
@@ -58,16 +63,14 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
   ```bash
   go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=v0.0.0-dev" -o goPool
   ```
-- Downloaded releases bundle everything under `data/` plus `documentation/` docs—see [documentation/RELEASES.md](documentation/RELEASES.md) for upgrade guidance, checksums, and release mechanics.
+- Downloaded releases bundle everything under `data/` plus `documentation/` docs.
 
 ## Documentation & resources
 
 - **`documentation/README.md`** - Documentation index.
 - **`documentation/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
 - **`documentation/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
-- **`documentation/performance.md`** – Capacity planning, benchmark data, and CPU/network ballparks.
 - **`documentation/TESTING.md`** – Test suite instructions and how to add or run existing tests.
-- **`documentation/RELEASES.md`** – Release package contents, verification, and upgrade steps.
 - **`LICENSE`** – Legal terms for using goPool.
 
 Need help? Open an issue on GitHub or refer to the documentation in `documentation/` before asking for assistance.

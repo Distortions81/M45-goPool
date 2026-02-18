@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // duplicateShareKey is a compact, comparable representation of a share
 // submission used for duplicate detection. It stores a bounded prefix of
@@ -13,6 +16,7 @@ type duplicateShareKey struct {
 // duplicateShareSet is a hash-based duplicate detection cache with bounded size.
 // Uses LRU eviction to remove oldest entries when at capacity.
 type duplicateShareSet struct {
+	mu    sync.Mutex
 	m     map[duplicateShareKey]struct{}
 	order []duplicateShareKey // Track insertion order for LRU eviction
 }
@@ -64,9 +68,55 @@ func makeDuplicateShareKey(dst *duplicateShareKey, extranonce2, ntime, nonce str
 	}
 }
 
+func makeDuplicateShareKeyDecoded(dst *duplicateShareKey, extranonce2 []byte, ntime, nonce uint32, version uint32) {
+	*dst = duplicateShareKey{}
+
+	writeBytes := func(b []byte) {
+		if int(dst.n) >= maxDuplicateShareKeyBytes {
+			return
+		}
+		remain := maxDuplicateShareKeyBytes - int(dst.n)
+		if len(b) > remain {
+			b = b[:remain]
+		}
+		n := copy(dst.buf[dst.n:], b)
+		dst.n += uint8(n)
+	}
+	writeU32 := func(v uint32) {
+		remain := maxDuplicateShareKeyBytes - int(dst.n)
+		if remain <= 0 {
+			return
+		}
+		if remain >= 4 {
+			i := dst.n
+			dst.buf[i+0] = byte(v >> 24)
+			dst.buf[i+1] = byte(v >> 16)
+			dst.buf[i+2] = byte(v >> 8)
+			dst.buf[i+3] = byte(v)
+			dst.n += 4
+			return
+		}
+		shift := uint(24)
+		for remain > 0 {
+			dst.buf[dst.n] = byte(v >> shift)
+			dst.n++
+			remain--
+			shift -= 8
+		}
+	}
+
+	writeBytes(extranonce2)
+	writeU32(ntime)
+	writeU32(nonce)
+	writeU32(version)
+}
+
 // seenOrAdd reports whether key has already been seen, and records it if not.
 // O(1) lookup via hash map. Uses LRU eviction when reaching capacity.
 func (s *duplicateShareSet) seenOrAdd(key duplicateShareKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.m == nil {
 		s.m = make(map[duplicateShareKey]struct{}, duplicateShareHistory)
 		s.order = make([]duplicateShareKey, 0, duplicateShareHistory)

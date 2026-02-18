@@ -393,6 +393,20 @@
 						<input name="hashrate_ema_tau_seconds" type="number" min="1" step="1" class="textfield" value="{{printf "%.0f" .Settings.HashrateEMATauSeconds}}">
 					</div>
 					<div>
+						<div class="label">hashrate_cumulative_enabled {{template "restart-required" .}}<div class="label-note">Blend EMA with cumulative hashrate (long-horizon) for per-worker display.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="hashrate_cumulative_enabled" value="1" {{if .Settings.HashrateCumulativeEnabled}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
+						<div class="label">hashrate_recent_cumulative_enabled {{template "restart-required" .}}<div class="label-note">Allow short-window cumulative (vardiff window) to influence per-worker display.</div></div>
+						<label class="label" style="font-weight:500;margin-top:10px;">
+							<input type="checkbox" name="hashrate_recent_cumulative_enabled" value="1" {{if .Settings.HashrateRecentCumulativeEnabled}}checked{{end}}>
+							<span style="margin-left:8px;">Enabled</span>
+						</label>
+					</div>
+					<div>
 						<div class="label">share_ntime_max_forward_seconds {{template "restart-required" .}}<div class="label-note">Maximum seconds a miner can roll nTime forward.</div></div>
 						<input name="share_ntime_max_forward_seconds" type="number" min="1" class="textfield" value="{{.Settings.ShareNTimeMaxForwardSeconds}}">
 					</div>

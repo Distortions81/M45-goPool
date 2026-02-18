@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -29,6 +28,10 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumPasswordEnabled: cfg.StratumPasswordEnabled,
 			StratumPassword:        cfg.StratumPassword,
 			StratumPasswordPublic:  cfg.StratumPasswordPublic,
+			FastDecodeEnabled:      new(cfg.StratumFastDecodeEnabled),
+			FastEncodeEnabled:      new(cfg.StratumFastEncodeEnabled),
+			TCPReadBufferBytes:     new(cfg.StratumTCPReadBufferBytes),
+			TCPWriteBufferBytes:    new(cfg.StratumTCPWriteBufferBytes),
 		},
 		Node: nodeConfig{
 			RPCURL:           cfg.RPCURL,
@@ -154,9 +157,11 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			DisablePoolJobEntropy:     new(false),
 			DifficultyStepGranularity: new(cfg.DifficultyStepGranularity),
 		},
-	Hashrate: tuningHashrateConfig{
-		HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
-	},
+		Hashrate: tuningHashrateConfig{
+			HashrateEMATauSeconds:           new(cfg.HashrateEMATauSeconds),
+			HashrateCumulativeEnabled:       new(cfg.HashrateCumulativeEnabled),
+			HashrateRecentCumulativeEnabled: new(cfg.HashrateRecentCumulativeEnabled),
+		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   new(cfg.PeerCleanupEnabled),
 			MaxPingMs: new(cfg.PeerCleanupMaxPingMs),
@@ -185,6 +190,10 @@ func (cfg Config) Effective() EffectiveConfig {
 		GitHubURL:                         cfg.GitHubURL,
 		ServerLocation:                    cfg.ServerLocation,
 		StratumTLSListen:                  cfg.StratumTLSListen,
+		StratumFastDecodeEnabled:          cfg.StratumFastDecodeEnabled,
+		StratumFastEncodeEnabled:          cfg.StratumFastEncodeEnabled,
+		StratumTCPReadBufferBytes:         cfg.StratumTCPReadBufferBytes,
+		StratumTCPWriteBufferBytes:        cfg.StratumTCPWriteBufferBytes,
 		ClerkIssuerURL:                    cfg.ClerkIssuerURL,
 		ClerkJWKSURL:                      cfg.ClerkJWKSURL,
 		ClerkSignInURL:                    cfg.ClerkSignInURL,
@@ -228,7 +237,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		StratumMessagesPerMinute:          cfg.StratumMessagesPerMinute,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
 		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
-		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
+		VersionMask:                       uint32ToHex8Lower(cfg.VersionMask),
 		MinVersionBits:                    cfg.MinVersionBits,
 		ShareAllowDegradedVersionBits:     cfg.ShareAllowDegradedVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,
