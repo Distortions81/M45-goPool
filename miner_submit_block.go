@@ -60,24 +60,32 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 			)
 		}
 		if err == nil && len(cbTxid) == 32 {
-			merkleRoot := computeMerkleRootFromBranches(cbTxid, job.MerkleBranches)
-			header, err := job.buildBlockHeader(merkleRoot, ntime, nonce, int32(useVersion))
-			if err == nil {
-				var buf bytes.Buffer
-
-				buf.Write(header)
-				writeVarInt(&buf, uint64(1+len(job.Transactions)))
-				buf.Write(cbTx)
-				for _, tx := range job.Transactions {
-					raw, derr := hex.DecodeString(tx.Data)
-					if derr != nil {
-						err = fmt.Errorf("decode tx data: %w", derr)
-						break
-					}
-					buf.Write(raw)
-				}
+			var merkleRoot [32]byte
+			var merkleOK bool
+			if job.merkleBranchesBytes != nil {
+				merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+			} else {
+				merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+			}
+			if merkleOK {
+				header, err := job.buildBlockHeader(merkleRoot[:], ntime, nonce, int32(useVersion))
 				if err == nil {
-					blockHex = hex.EncodeToString(buf.Bytes())
+					var buf bytes.Buffer
+
+					buf.Write(header)
+					writeVarInt(&buf, uint64(1+len(job.Transactions)))
+					buf.Write(cbTx)
+					for _, tx := range job.Transactions {
+						raw, derr := hex.DecodeString(tx.Data)
+						if derr != nil {
+							err = fmt.Errorf("decode tx data: %w", derr)
+							break
+						}
+						buf.Write(raw)
+					}
+					if err == nil {
+						blockHex = hex.EncodeToString(buf.Bytes())
+					}
 				}
 			}
 		}

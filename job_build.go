@@ -32,6 +32,10 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	}
 
 	merkleBranches := buildMerkleBranches(txids)
+	merkleBranchesBytes, err := decodeMerkleBranchesBytes(merkleBranches)
+	if err != nil {
+		return nil, err
+	}
 
 	scriptTime := time.Now().Unix()
 	coinbaseMsg := jm.cfg.CoinbaseMsg
@@ -99,6 +103,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		WitnessCommitment:       tpl.DefaultWitnessCommitment,
 		CoinbaseMsg:             coinbaseMsg,
 		MerkleBranches:          merkleBranches,
+		merkleBranchesBytes:     merkleBranchesBytes,
 		Transactions:            tpl.Transactions,
 		TransactionIDs:          txids,
 		PayoutScript:            jm.payoutScript,
