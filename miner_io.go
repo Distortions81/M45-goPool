@@ -69,6 +69,18 @@ func (mc *MinerConn) writePongResponse(id any) {
 	})
 }
 
+func (mc *MinerConn) writePongResponseRawID(idRaw []byte) {
+	if mc.cfg.StratumFastEncodeEnabled {
+		mc.sendCannedResponseRawID("pong", idRaw, cannedPongSuffix)
+		return
+	}
+	idVal, _, ok := parseJSONValue(idRaw, 0)
+	if !ok {
+		return
+	}
+	mc.writePongResponse(idVal)
+}
+
 func (mc *MinerConn) writeEmptySliceResponse(id any) {
 	if mc.cfg.StratumFastEncodeEnabled {
 		mc.sendCannedResponse("empty slice", id, cannedEmptySliceSuffix)
@@ -81,6 +93,18 @@ func (mc *MinerConn) writeEmptySliceResponse(id any) {
 	})
 }
 
+func (mc *MinerConn) writeEmptySliceResponseRawID(idRaw []byte) {
+	if mc.cfg.StratumFastEncodeEnabled {
+		mc.sendCannedResponseRawID("empty slice", idRaw, cannedEmptySliceSuffix)
+		return
+	}
+	idVal, _, ok := parseJSONValue(idRaw, 0)
+	if !ok {
+		return
+	}
+	mc.writeEmptySliceResponse(idVal)
+}
+
 func (mc *MinerConn) writeTrueResponse(id any) {
 	if mc.cfg.StratumFastEncodeEnabled {
 		mc.sendCannedResponse("true", id, cannedTrueSuffix)
@@ -91,6 +115,18 @@ func (mc *MinerConn) writeTrueResponse(id any) {
 		Result: true,
 		Error:  nil,
 	})
+}
+
+func (mc *MinerConn) writeTrueResponseRawID(idRaw []byte) {
+	if mc.cfg.StratumFastEncodeEnabled {
+		mc.sendCannedResponseRawID("true", idRaw, cannedTrueSuffix)
+		return
+	}
+	idVal, _, ok := parseJSONValue(idRaw, 0)
+	if !ok {
+		return
+	}
+	mc.writeTrueResponse(idVal)
 }
 
 func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int) {
@@ -115,8 +151,28 @@ func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extra
 	})
 }
 
+func (mc *MinerConn) writeSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int) {
+	if mc.cfg.StratumFastEncodeEnabled {
+		if err := mc.writeCannedSubscribeResponseRawID(idRaw, extranonce1Hex, extranonce2Size); err != nil {
+			logger.Error("write canned response", "remote", mc.id, "label", "subscribe", "error", err)
+		}
+		return
+	}
+	idVal, _, ok := parseJSONValue(idRaw, 0)
+	if !ok {
+		return
+	}
+	mc.writeSubscribeResponse(idVal, extranonce1Hex, extranonce2Size)
+}
+
 func (mc *MinerConn) sendCannedResponse(label string, id any, suffix []byte) {
 	if err := mc.writeCannedResponse(id, suffix); err != nil {
+		logger.Error("write canned response", "remote", mc.id, "label", label, "error", err)
+	}
+}
+
+func (mc *MinerConn) sendCannedResponseRawID(label string, idRaw []byte, suffix []byte) {
+	if err := mc.writeCannedResponseRawID(idRaw, suffix); err != nil {
 		logger.Error("write canned response", "remote", mc.id, "label", label, "error", err)
 	}
 }
@@ -140,6 +196,20 @@ func (mc *MinerConn) writeCannedResponse(id any, suffix []byte) error {
 	return mc.writeBytesLocked(buf)
 }
 
+func (mc *MinerConn) writeCannedResponseRawID(idRaw []byte, suffix []byte) error {
+	mc.writeMu.Lock()
+	defer mc.writeMu.Unlock()
+
+	buf := mc.writeScratch[:0]
+	buf = append(buf, `{"id":`...)
+	buf = append(buf, idRaw...)
+	buf = append(buf, suffix...)
+	buf = append(buf, '\n')
+
+	mc.writeScratch = buf[:0]
+	return mc.writeBytesLocked(buf)
+}
+
 func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int) error {
 	mc.writeMu.Lock()
 	defer mc.writeMu.Unlock()
@@ -149,6 +219,24 @@ func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string,
 	if err != nil {
 		return err
 	}
+	buf = append(buf, '\n')
+
+	mc.writeScratch = buf[:0]
+	return mc.writeBytesLocked(buf)
+}
+
+func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int) error {
+	mc.writeMu.Lock()
+	defer mc.writeMu.Unlock()
+
+	buf := mc.writeScratch[:0]
+	buf = append(buf, `{"id":`...)
+	buf = append(buf, idRaw...)
+	buf = append(buf, cannedSubscribePrefix...)
+	buf = strconv.AppendQuote(buf, extranonce1Hex)
+	buf = append(buf, ',')
+	buf = strconv.AppendInt(buf, int64(extranonce2Size), 10)
+	buf = append(buf, cannedSubscribeSuffix...)
 	buf = append(buf, '\n')
 
 	mc.writeScratch = buf[:0]
