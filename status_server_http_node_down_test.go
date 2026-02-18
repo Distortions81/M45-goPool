@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,8 +17,9 @@ func TestStatusServerOverview_RendersNodeDownWhenStale(t *testing.T) {
 
 	jm := &JobManager{}
 	jm.mu.Lock()
-	jm.curJob = &Job{CreatedAt: time.Now().Add(-stratumMaxFeedLag * 2)}
+	jm.curJob = &Job{CreatedAt: time.Now()}
 	jm.mu.Unlock()
+	jm.recordJobError(fmt.Errorf("node indexing"))
 
 	s := &StatusServer{tmpl: tmpl, jobMgr: jm}
 	s.UpdateConfig(Config{ListenAddr: ":3333"})
@@ -30,7 +32,7 @@ func TestStatusServerOverview_RendersNodeDownWhenStale(t *testing.T) {
 		t.Fatalf("status=%d body=%q", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "Node work unavailable") && !strings.Contains(body, "Node connection unavailable") && !strings.Contains(body, "Node updates degraded") {
+	if !strings.Contains(body, "Node work unavailable") && !strings.Contains(body, "Node connection unavailable") && !strings.Contains(body, "Node indexing/syncing") {
 		t.Fatalf("expected node-down page, got body=%q", body[:min(len(body), 300)])
 	}
 	if !strings.Contains(body, "/logo.png") {

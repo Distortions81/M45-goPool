@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"time"
+	"strconv"
 )
 
 type stratumHealth struct {
@@ -33,13 +34,10 @@ func stratumHealthStatus(jobMgr *JobManager, now time.Time) stratumHealth {
 		return stratumHealth{Healthy: false, Reason: "node/job feed error", Detail: strings.TrimSpace(fs.LastError.Error())}
 	}
 
-	if fs.LastSuccess.IsZero() {
-		return stratumHealth{Healthy: false, Reason: "no successful job refresh yet"}
-	}
-
-	successAge := now.Sub(fs.LastSuccess)
-	if successAge > stratumMaxFeedLag {
-		return stratumHealth{Healthy: false, Reason: "node/job updates stalled", Detail: "last success " + humanShortDuration(successAge) + " ago"}
+	ibd, blocks, headers, fetchedAt := jobMgr.nodeSyncSnapshot()
+	if !fetchedAt.IsZero() && (ibd || (headers > 0 && blocks >= 0 && blocks < headers)) {
+		detail := "node syncing: ibd=" + strconv.FormatBool(ibd) + " blocks=" + strconv.FormatInt(blocks, 10) + " headers=" + strconv.FormatInt(headers, 10)
+		return stratumHealth{Healthy: false, Reason: "node syncing/indexing", Detail: detail}
 	}
 
 	return stratumHealth{Healthy: true}

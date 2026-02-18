@@ -6,9 +6,9 @@ goPool ships as a self-contained pool daemon that connects directly to Bitcoin C
 
 Operational Stratum notes:
 
-- Stratum is gated (at startup and during runtime) until the job feed is healthy (a job exists, no feed error, and updates are arriving within `stratumMaxFeedLag`). While gated, new miner connections are refused and existing miners are disconnected to avoid idling on stale/no work during node/bootstrap issues.
+- Stratum is gated (at startup and during runtime) only when the job feed reports errors or the node is in a non-usable syncing/indexing state. While gated, new miner connections are refused and existing miners are disconnected to avoid idling on stale/no work during node/bootstrap issues.
 - When the node/job feed is stale, the main status page (`/`) displays a dedicated "node unavailable" page instead of the normal overview.
-- Node update health is based on update cadence (`stratumMaxFeedLag`) plus feed error state. If updates stall or the feed reports errors, the pool is treated as degraded.
+- A background heartbeat (`stratumHeartbeatInterval`) performs periodic non-longpoll template refreshes so "quiet mempool / no template churn" does not look like a dead node.
 - When updates are degraded but basic node RPC calls still work, the node-unavailable page will also show common sync/indexing indicators (IBD flag and blocks/headers) to help diagnose "node indexing" situations.
 
 ## Building

@@ -864,7 +864,7 @@ func waitForStratumJobReady(ctx context.Context, jobMgr *JobManager) {
 		}
 		if time.Since(lastLog) > 5*time.Second {
 			fs := jobMgr.FeedStatus()
-			fields := []any{"max_feed_lag", stratumMaxFeedLag}
+			fields := []any{"heartbeat_interval", stratumHeartbeatInterval}
 			job := jobMgr.CurrentJob()
 			if job != nil && !job.CreatedAt.IsZero() {
 				fields = append(fields, "job_age", time.Since(job.CreatedAt))
@@ -912,7 +912,7 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 				}
 				if time.Since(lastLog) > 2*time.Second {
 					fs := jobMgr.FeedStatus()
-					fields := []any{"disconnected", len(miners), "reason", h.Reason, "max_feed_lag", stratumMaxFeedLag}
+					fields := []any{"disconnected", len(miners), "reason", h.Reason, "heartbeat_interval", stratumHeartbeatInterval}
 					if strings.TrimSpace(h.Detail) != "" {
 						fields = append(fields, "detail", h.Detail)
 					}

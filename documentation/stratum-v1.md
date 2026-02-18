@@ -70,4 +70,4 @@ Code pointers:
 
 - Pool→miner notifications (`mining.notify`, `mining.set_difficulty`, `mining.set_extranonce`, `mining.set_version_mask`) are only sent after `mining.subscribe` has completed.
 - Initial work is normally sent shortly after authorize to allow miners a brief negotiation window; if the miner sends `mining.configure`, goPool will send the initial work immediately after configure is handled.
-- When the job feed is degraded (no template, errors, or updates stalled beyond `stratumMaxFeedLag`), goPool refuses new connections and disconnects existing miners until updates recover.
+- When the job feed is degraded (no template, RPC errors, or node syncing/indexing state), goPool refuses new connections and disconnects existing miners until updates recover.

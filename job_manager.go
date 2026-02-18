@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"strconv"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/remeh/sizedwaitgroup"
 )
+
+const jobMgrNodeSyncTimeout = 3 * time.Second
 
 func (jm *JobManager) recordJobError(err error) {
 	if err == nil {
@@ -80,6 +83,57 @@ func (jm *JobManager) recordJobSuccess(job *Job) {
 	}
 	jm.lastErrMu.Unlock()
 	jm.resetRetryDelay()
+}
+
+func (jm *JobManager) nodeSyncSnapshot() (ibd bool, blocks int64, headers int64, fetchedAt time.Time) {
+	if jm == nil {
+		return false, 0, 0, time.Time{}
+	}
+	jm.nodeSyncMu.RLock()
+	ibd = jm.nodeIBD
+	blocks = jm.nodeBlocks
+	headers = jm.nodeHeaders
+	fetchedAt = jm.nodeSyncFetched
+	jm.nodeSyncMu.RUnlock()
+	return
+}
+
+// refreshNodeSyncInfo updates the node sync/indexing state via getblockchaininfo.
+// This is best-effort; failures are recorded as job-feed errors only if we have
+// no other way to determine node usability.
+func (jm *JobManager) refreshNodeSyncInfo(ctx context.Context) {
+	if jm == nil || jm.rpc == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	type bcInfo struct {
+		Blocks               int64 `json:"blocks"`
+		Headers              int64 `json:"headers"`
+		InitialBlockDownload bool  `json:"initialblockdownload"`
+	}
+	var bc bcInfo
+
+	callCtx, cancel := context.WithTimeout(ctx, jobMgrNodeSyncTimeout)
+	defer cancel()
+	err := jm.rpc.callCtx(callCtx, "getblockchaininfo", nil, &bc)
+	if err != nil {
+		// Some bitcoind warmup/indexing states can still serve sockets but are not usable.
+		// Treat these as degraded signals.
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			jm.recordJobError(err)
+		}
+		return
+	}
+
+	jm.nodeSyncMu.Lock()
+	jm.nodeIBD = bc.InitialBlockDownload
+	jm.nodeBlocks = bc.Blocks
+	jm.nodeHeaders = bc.Headers
+	jm.nodeSyncFetched = time.Now()
+	jm.nodeSyncMu.Unlock()
 }
 
 func (jm *JobManager) FeedStatus() JobFeedStatus {
@@ -334,7 +388,26 @@ func (jm *JobManager) Start(ctx context.Context) {
 	if err := jm.refreshJobCtx(ctx); err != nil {
 		logger.Error("initial job refresh error", "error", err)
 	}
+	// Best-effort initial sync snapshot so the pool can gate mining while the node
+	// is indexing/syncing (IBD).
+	jm.refreshNodeSyncInfo(ctx)
 
 	go jm.longpollLoop(ctx)
+	go jm.heartbeatLoop(ctx)
 	jm.startZMQLoops(ctx)
+}
+
+func (jm *JobManager) heartbeatLoop(ctx context.Context) {
+	ticker := time.NewTicker(stratumHeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Prove the node is responsive even without template churn.
+			_ = jm.refreshJobCtxMinInterval(ctx, 0)
+			jm.refreshNodeSyncInfo(ctx)
+		}
+	}
 }
