@@ -10,6 +10,12 @@ import (
 var (
 	hexNibbleLUT   [256]byte
 	hexPairByteLUT [65536]uint16
+
+	hexByteLowerPairLUT [256]uint16
+	hexByteUpperPairLUT [256]uint16
+
+	hexUint16LowerQuadLUT [65536]uint32
+	hexUint16UpperQuadLUT [65536]uint32
 )
 
 func init() {
@@ -42,6 +48,18 @@ func init() {
 			}
 			hexPairByteLUT[(hi<<8)|lo] = uint16((h << 4) | l)
 		}
+	}
+
+	for i := 0; i < 256; i++ {
+		b := byte(i)
+		hexByteLowerPairLUT[i] = uint16(hexLowerDigits[b>>4])<<8 | uint16(hexLowerDigits[b&0x0f])
+		hexByteUpperPairLUT[i] = uint16(hexUpperDigits[b>>4])<<8 | uint16(hexUpperDigits[b&0x0f])
+	}
+	for i := 0; i < 65536; i++ {
+		hi := byte(i >> 8)
+		lo := byte(i)
+		hexUint16LowerQuadLUT[i] = uint32(hexByteLowerPairLUT[hi])<<16 | uint32(hexByteLowerPairLUT[lo])
+		hexUint16UpperQuadLUT[i] = uint32(hexByteUpperPairLUT[hi])<<16 | uint32(hexByteUpperPairLUT[lo])
 	}
 }
 
@@ -136,14 +154,38 @@ func parseUint32BEHexBytes(hexBytes []byte) (uint32, error) {
 	return uint32(byte(v0))<<24 | uint32(byte(v1))<<16 | uint32(byte(v2))<<8 | uint32(byte(v3)), nil
 }
 
-const hexLowerDigits = "0123456789abcdef"
+const (
+	hexLowerDigits = "0123456789abcdef"
+	hexUpperDigits = "0123456789ABCDEF"
+)
 
 func uint32ToHex8Lower(v uint32) string {
 	var buf [8]byte
-	for i := 7; i >= 0; i-- {
-		buf[i] = hexLowerDigits[v&0x0f]
-		v >>= 4
-	}
+	w0 := hexUint16LowerQuadLUT[uint16(v>>16)]
+	w1 := hexUint16LowerQuadLUT[uint16(v)]
+	buf[0] = byte(w0 >> 24)
+	buf[1] = byte(w0 >> 16)
+	buf[2] = byte(w0 >> 8)
+	buf[3] = byte(w0)
+	buf[4] = byte(w1 >> 24)
+	buf[5] = byte(w1 >> 16)
+	buf[6] = byte(w1 >> 8)
+	buf[7] = byte(w1)
+	return string(buf[:])
+}
+
+func uint32ToHex8Upper(v uint32) string {
+	var buf [8]byte
+	w0 := hexUint16UpperQuadLUT[uint16(v>>16)]
+	w1 := hexUint16UpperQuadLUT[uint16(v)]
+	buf[0] = byte(w0 >> 24)
+	buf[1] = byte(w0 >> 16)
+	buf[2] = byte(w0 >> 8)
+	buf[3] = byte(w0)
+	buf[4] = byte(w1 >> 24)
+	buf[5] = byte(w1 >> 16)
+	buf[6] = byte(w1 >> 8)
+	buf[7] = byte(w1)
 	return string(buf[:])
 }
 
