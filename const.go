@@ -77,10 +77,9 @@ const (
 	defaultZMQRecreateBackoffMin  = 500 * time.Millisecond
 	defaultZMQRecreateBackoffMax  = 10 * time.Second
 	defaultInitialDifficultyDelay = 250 * time.Millisecond
-	// stratumMaxFeedLag is the maximum allowed time since the last successful job refresh.
-	// If updates stall beyond this, consider the node/job feed degraded even if the last
-	// template is still "fresh enough" by age.
-	stratumMaxFeedLag             = 2 * time.Minute
+	// stratumHeartbeatInterval is how often we do a non-longpoll template refresh
+	// to prove the node is responsive even when the template doesn't change.
+	stratumHeartbeatInterval      = 30 * time.Second
 	// stratumDegradedGrace avoids flapping during brief hiccups by requiring the job feed
 	// to be continuously unhealthy for a short window before we disconnect miners.
 	stratumDegradedGrace          = 15 * time.Second

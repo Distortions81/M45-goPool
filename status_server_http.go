@@ -61,9 +61,9 @@ func (s *StatusServer) serveOverviewOrNodeDown(w http.ResponseWriter) error {
 		title := "Node connection unavailable"
 		message := "This pool does not currently have a connection to a node."
 		switch h.Reason {
-		case "node/job updates stalled":
-			title = "Node updates degraded"
-			message = "The pool is temporarily paused because node updates are degraded."
+		case "node syncing/indexing":
+			title = "Node indexing/syncing"
+			message = "The pool is temporarily paused because the node is syncing/indexing."
 		case "node/job feed error":
 			title = "Node connection unavailable"
 			message = "This pool does not currently have a connection to a node."
