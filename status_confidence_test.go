@@ -140,10 +140,10 @@ func TestHashrateAccuracySymbol_MultiLevel(t *testing.T) {
 	if got := hashrateAccuracySymbol(1); got != "≈" {
 		t.Fatalf("symbol=%q want %q for level 1", got, "≈")
 	}
-	if got := hashrateAccuracySymbol(2); got != "≈+" {
-		t.Fatalf("symbol=%q want %q for level 2", got, "≈+")
+	if got := hashrateAccuracySymbol(2); got != "" {
+		t.Fatalf("symbol=%q want empty string for level 2", got)
 	}
-	if got := hashrateAccuracySymbol(3); got != "✓" {
-		t.Fatalf("symbol=%q want %q for level 3", got, "✓")
+	if got := hashrateAccuracySymbol(3); got != "" {
+		t.Fatalf("symbol=%q want empty string for level 3", got)
 	}
 }

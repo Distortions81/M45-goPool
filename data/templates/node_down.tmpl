@@ -1,0 +1,41 @@
+{{/* Dedicated node-unavailable page for the main overview */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — {{.Title}}</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<main class="page" id="content">
+		<h1>{{.Title}}</h1>
+		<div class="card" style="display:flex;gap:16px;align-items:center;">
+			<img src="/logo.png" alt="{{.BrandName}} logo" style="width:64px;height:64px;flex:0 0 auto;">
+			<div>
+				<p class="text-sm" style="margin:0;">
+					{{.Message}}
+				</p>
+				{{if .Detail}}
+				<p class="text-sm" style="margin-top:6px;color:#b3bbd4;">
+					{{.Detail}}
+				</p>
+				{{end}}
+				<p class="text-sm" style="margin-top:8px;color:#b3bbd4;">
+					This page auto-refreshes as the node reconnects and a fresh template becomes available.
+				</p>
+			</div>
+		</div>
+		<div class="card">
+			<div class="label">What you can do</div>
+			<p class="text-sm" style="margin-top:8px;">
+				Miners should pause or reconnect later. Operators should check the node RPC/ZMQ connectivity and ensure Bitcoin Core is fully synced.
+			</p>
+		</div>
+		{{template "footer" .}}
+	</main>
+</body>
+</html>
+

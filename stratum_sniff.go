@@ -5,46 +5,104 @@ import (
 	"strconv"
 )
 
-func sniffStratumMethodID(data []byte) (string, any, bool) {
-	idIdx := bytes.Index(data, []byte(`"id"`))
+type stratumMethodTag uint8
+
+const (
+	stratumMethodUnknown stratumMethodTag = iota
+	stratumMethodMiningPing
+	stratumMethodMiningAuthorize
+	stratumMethodMiningSubscribe
+	stratumMethodMiningSubmit
+)
+
+func (t stratumMethodTag) String() string {
+	switch t {
+	case stratumMethodMiningPing:
+		return "mining.ping"
+	case stratumMethodMiningAuthorize:
+		return "mining.authorize"
+	case stratumMethodMiningSubscribe:
+		return "mining.subscribe"
+	case stratumMethodMiningSubmit:
+		return "mining.submit"
+	default:
+		return ""
+	}
+}
+
+var (
+	stratumKeyIDBytes     = []byte(`"id"`)
+	stratumKeyMethodBytes = []byte(`"method"`)
+	stratumKeyParamsBytes = []byte(`"params"`)
+
+	stratumMethodMiningPingBytes      = []byte("mining.ping")
+	stratumMethodMiningAuthorizeBytes = []byte("mining.authorize")
+	stratumMethodMiningAuthBytes      = []byte("mining.auth")
+	stratumMethodMiningSubscribeBytes = []byte("mining.subscribe")
+	stratumMethodMiningSubmitBytes    = []byte("mining.submit")
+)
+
+func sniffStratumMethodIDTagRawID(data []byte) (stratumMethodTag, []byte, bool) {
+	idIdx := bytes.Index(data, stratumKeyIDBytes)
 	if idIdx < 0 {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
-	idStart, ok := findValueStart(data, idIdx+len(`"id"`))
+	idStart, ok := findValueStart(data, idIdx+len(stratumKeyIDBytes))
 	if !ok {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
-	idVal, _, ok := parseJSONValue(data, idStart)
+	idRaw, _, ok := parseJSONValueRaw(data, idStart)
 	if !ok {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
 
-	methodIdx := bytes.Index(data, []byte(`"method"`))
+	methodIdx := bytes.Index(data, stratumKeyMethodBytes)
 	if methodIdx < 0 {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
-	methodStart, ok := findValueStart(data, methodIdx+len(`"method"`))
+	methodStart, ok := findValueStart(data, methodIdx+len(stratumKeyMethodBytes))
 	if !ok {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
 	if methodStart >= len(data) || data[methodStart] != '"' {
-		return "", nil, false
+		return stratumMethodUnknown, nil, false
 	}
 	methodStart++
 	methodEnd := methodStart
 	for methodEnd < len(data) {
 		switch data[methodEnd] {
 		case '\\':
-			methodEnd += 2
-			continue
+			// Escapes are non-standard for method names; fall back to full decode.
+			return stratumMethodUnknown, nil, false
 		case '"':
-			method := string(data[methodStart:methodEnd])
-			return method, idVal, true
+			method := data[methodStart:methodEnd]
+			switch len(method) {
+			case len("mining.ping"):
+				if bytes.Equal(method, stratumMethodMiningPingBytes) {
+					return stratumMethodMiningPing, idRaw, true
+				}
+				if bytes.Equal(method, stratumMethodMiningAuthBytes) {
+					return stratumMethodMiningAuthorize, idRaw, true
+				}
+			case len("mining.authorize"):
+				if bytes.Equal(method, stratumMethodMiningAuthorizeBytes) {
+					return stratumMethodMiningAuthorize, idRaw, true
+				}
+				if bytes.Equal(method, stratumMethodMiningSubscribeBytes) {
+					return stratumMethodMiningSubscribe, idRaw, true
+				}
+			case len("mining.submit"):
+				if bytes.Equal(method, stratumMethodMiningSubmitBytes) {
+					return stratumMethodMiningSubmit, idRaw, true
+				}
+			}
+			// Unknown method; return ok with unknown tag so callers can still use the ID.
+			return stratumMethodUnknown, idRaw, true
 		default:
 			methodEnd++
 		}
 	}
-	return "", nil, false
+	return stratumMethodUnknown, nil, false
 }
 
 func findValueStart(data []byte, idx int) (int, bool) {
@@ -71,11 +129,11 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 	if limit <= 0 {
 		return nil, false
 	}
-	idx := bytes.Index(data, []byte(`"params"`))
+	idx := bytes.Index(data, stratumKeyParamsBytes)
 	if idx < 0 {
 		return nil, false
 	}
-	start, ok := findValueStart(data, idx+len(`"params"`))
+	start, ok := findValueStart(data, idx+len(stratumKeyParamsBytes))
 	if !ok || start >= len(data) || data[start] != '[' {
 		return nil, false
 	}
@@ -132,6 +190,65 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 	return nil, false
 }
 
+func sniffStratumSubmitParamsBytes(data []byte) (worker, jobID, extranonce2, ntime, nonce, version []byte, haveVersion bool, ok bool) {
+	// mining.submit params are typically 5 or 6 JSON strings:
+	// [worker_name, job_id, extranonce2, ntime, nonce, (optional) version]
+	idx := bytes.Index(data, stratumKeyParamsBytes)
+	if idx < 0 {
+		return nil, nil, nil, nil, nil, nil, false, false
+	}
+	start, ok := findValueStart(data, idx+len(stratumKeyParamsBytes))
+	if !ok || start >= len(data) || data[start] != '[' {
+		return nil, nil, nil, nil, nil, nil, false, false
+	}
+
+	i := start + 1
+	var fields [6][]byte
+	n := 0
+	for i < len(data) && n < len(fields) {
+		i = skipSpaces(data, i)
+		if i >= len(data) {
+			return nil, nil, nil, nil, nil, nil, false, false
+		}
+		switch data[i] {
+		case ']':
+			if n == 5 {
+				return fields[0], fields[1], fields[2], fields[3], fields[4], nil, false, true
+			}
+			if n == 6 {
+				return fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], true, true
+			}
+			return nil, nil, nil, nil, nil, nil, false, false
+		case ',':
+			i++
+			continue
+		case '"':
+			j := i + 1
+			for j < len(data) {
+				if data[j] == '\\' {
+					// Escapes require unquoting; fall back to the full decoder path.
+					return nil, nil, nil, nil, nil, nil, false, false
+				}
+				if data[j] == '"' {
+					break
+				}
+				j++
+			}
+			if j >= len(data) {
+				return nil, nil, nil, nil, nil, nil, false, false
+			}
+			fields[n] = data[i+1 : j]
+			n++
+			i = j + 1
+		default:
+			return nil, nil, nil, nil, nil, nil, false, false
+		}
+	}
+
+	// Parse didn't terminate cleanly.
+	return nil, nil, nil, nil, nil, nil, false, false
+}
+
 func skipSpaces(data []byte, idx int) int {
 	for idx < len(data) {
 		switch data[idx] {
@@ -169,15 +286,15 @@ func parseJSONValue(data []byte, idx int) (any, int, bool) {
 		}
 		return nil, idx, false
 	case 'n':
-		if len(data) >= idx+4 && string(data[idx:idx+4]) == "null" {
+		if len(data) >= idx+4 && data[idx+1] == 'u' && data[idx+2] == 'l' && data[idx+3] == 'l' {
 			return nil, idx + 4, true
 		}
 	case 't':
-		if len(data) >= idx+4 && string(data[idx:idx+4]) == "true" {
+		if len(data) >= idx+4 && data[idx+1] == 'r' && data[idx+2] == 'u' && data[idx+3] == 'e' {
 			return true, idx + 4, true
 		}
 	case 'f':
-		if len(data) >= idx+5 && string(data[idx:idx+5]) == "false" {
+		if len(data) >= idx+5 && data[idx+1] == 'a' && data[idx+2] == 'l' && data[idx+3] == 's' && data[idx+4] == 'e' {
 			return false, idx + 5, true
 		}
 	default:
@@ -187,6 +304,48 @@ func parseJSONValue(data []byte, idx int) (any, int, bool) {
 				return nil, idx, false
 			}
 			return val, next, true
+		}
+	}
+	return nil, idx, false
+}
+
+func parseJSONValueRaw(data []byte, idx int) ([]byte, int, bool) {
+	if idx >= len(data) {
+		return nil, idx, false
+	}
+	switch data[idx] {
+	case '"':
+		i := idx + 1
+		for i < len(data) {
+			if data[i] == '\\' {
+				i += 2
+				continue
+			}
+			if data[i] == '"' {
+				return data[idx : i+1], i + 1, true
+			}
+			i++
+		}
+		return nil, idx, false
+	case 'n':
+		if len(data) >= idx+4 && data[idx+1] == 'u' && data[idx+2] == 'l' && data[idx+3] == 'l' {
+			return data[idx : idx+4], idx + 4, true
+		}
+	case 't':
+		if len(data) >= idx+4 && data[idx+1] == 'r' && data[idx+2] == 'u' && data[idx+3] == 'e' {
+			return data[idx : idx+4], idx + 4, true
+		}
+	case 'f':
+		if len(data) >= idx+5 && data[idx+1] == 'a' && data[idx+2] == 'l' && data[idx+3] == 's' && data[idx+4] == 'e' {
+			return data[idx : idx+5], idx + 5, true
+		}
+	default:
+		if data[idx] == '-' || (data[idx] >= '0' && data[idx] <= '9') {
+			_, next, ok := parseInt64(data, idx)
+			if !ok {
+				return nil, idx, false
+			}
+			return data[idx:next], next, true
 		}
 	}
 	return nil, idx, false

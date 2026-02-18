@@ -22,6 +22,12 @@ type StratumResponse struct {
 	Error  any `json:"error"`
 }
 
+type StratumMessage struct {
+	ID     any    `json:"id"`
+	Method string `json:"method"`
+	Params []any  `json:"params"`
+}
+
 func newStratumError(code int, msg string) []any {
 	return []any{code, msg, nil}
 }
@@ -91,16 +97,18 @@ type MinerConn struct {
 	id                   string
 	ctx                  context.Context
 	conn                 net.Conn
-	writer               *bufio.Writer
 	writeMu              sync.Mutex
+	writeScratch         []byte
 	reader               *bufio.Reader
 	jobMgr               *JobManager
 	rpc                  rpcCaller
 	cfg                  Config
 	extranonce1          []byte
+	extranonce1Hex       string
 	jobCh                chan *Job
 	difficulty           atomic.Uint64 // float64 stored as bits
 	previousDifficulty   atomic.Uint64 // float64 stored as bits
+	hintMinDifficulty    atomic.Uint64 // float64 stored as bits; 0 means unset
 	shareTarget          atomic.Pointer[big.Int]
 	lastDiffChange       atomic.Int64 // Unix nanos
 	stateMu              sync.Mutex
@@ -127,10 +135,13 @@ type MinerConn struct {
 	shareCache           map[string]*duplicateShareSet
 	evictedShareCache    map[string]*evictedCacheEntry
 	lastJob              *Job
+	lastJobPrevHash      string
+	lastJobHeight        int64
 	lastClean            bool
 	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
 	jobScriptTime        map[string]int64
 	jobNotifyCoinbase    map[string]notifiedCoinbaseParts
+	jobNTimeBounds       map[string]jobNTimeBounds
 	banUntil             time.Time
 	banReason            string
 	lastPenalty          time.Time
@@ -190,6 +201,14 @@ type MinerConn struct {
 	// stratumMsgCount stores weighted half-message units (2 = full message).
 	stratumMsgWindowStart time.Time
 	stratumMsgCount       int
+	// invalidWarnedAt/invalidWarnedCount rate-limit client.show_message warnings
+	// when the miner is approaching an invalid-submission ban threshold.
+	invalidWarnedAt    time.Time
+	invalidWarnedCount int
+	// dupWarn* rate-limit client.show_message warnings for repeated duplicate shares.
+	dupWarnWindowStart time.Time
+	dupWarnCount       int
+	dupWarnedAt        time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
@@ -245,14 +264,23 @@ type MinerConn struct {
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64
+	// sessionID is an optional client-provided token sometimes sent in
+	// mining.subscribe to allow miners/proxies to resume sessions.
+	sessionID string
 	// suggestDiffProcessed tracks whether we've already processed mining.suggest_difficulty
 	// during the initialization phase. Subsequent suggests will be ignored to prevent
 	// repeated keepalive messages from disrupting vardiff adjustments.
 	suggestDiffProcessed bool
 	initialWorkScheduled bool
+	initialWorkDue       time.Time
 	initialWorkSent      bool
 }
 
 type rpcCaller interface {
 	callCtx(ctx context.Context, method string, params any, out any) error
+}
+
+type jobNTimeBounds struct {
+	min int64
+	max int64
 }

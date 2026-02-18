@@ -44,11 +44,13 @@ func (mc *MinerConn) adminBan(reason string, duration time.Duration) {
 	if reason == "" {
 		reason = "admin ban"
 	}
+	now := time.Now()
 	mc.stateMu.Lock()
-	mc.banUntil = time.Now().Add(duration)
+	mc.banUntil = now.Add(duration)
 	mc.banReason = reason
 	mc.stateMu.Unlock()
 	mc.logBan(reason, mc.currentWorker(), 0)
+	mc.sendClientShowMessage("Banned: " + reason)
 }
 
 func (mc *MinerConn) banFor(reason string, duration time.Duration, worker string) {
@@ -61,11 +63,13 @@ func (mc *MinerConn) banFor(reason string, duration time.Duration, worker string
 	if reason == "" {
 		reason = "ban"
 	}
+	now := time.Now()
 	mc.stateMu.Lock()
-	mc.banUntil = time.Now().Add(duration)
+	mc.banUntil = now.Add(duration)
 	mc.banReason = reason
 	mc.stateMu.Unlock()
 	mc.logBan(reason, worker, 0)
+	mc.sendClientShowMessage("Banned: " + reason)
 }
 
 func (mc *MinerConn) lookupPersistedBan(worker string) (WorkerView, bool) {

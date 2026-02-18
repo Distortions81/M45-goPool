@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -64,7 +63,7 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 		jobID:            jobID,
 		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
-		extranonce2Bytes: []byte{0, 0, 0, 0},
+		extranonce2Large: []byte{0, 0, 0, 0},
 		ntime:            ntimeHex,
 		ntimeVal:         0x6553f100,
 		nonce:            "00000000",
@@ -77,12 +76,11 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 
 	// Seed the duplicate cache with the exact share key. If duplicate detection
 	// were applied to winning blocks, this would cause an incorrect rejection.
-	if dup := mc.isDuplicateShare(jobID, task.extranonce2, task.ntime, task.nonce, task.useVersion); dup {
+	if dup := mc.isDuplicateShare(jobID, (&task).extranonce2Decoded(), task.ntimeVal, task.nonceVal, task.useVersion); dup {
 		t.Fatalf("unexpected duplicate when seeding cache")
 	}
 
 	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
 	mc.processSubmissionTask(task)
 	flushFoundBlockLog(t)
 
@@ -204,7 +202,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		jobID:            jobID,
 		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
-		extranonce2Bytes: ex2,
+		extranonce2Large: ex2,
 		ntime:            ntimeHex,
 		ntimeVal:         0x6553f100,
 		nonce:            chosenNonce,
@@ -213,12 +211,11 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		receivedAt:       time.Unix(1700000000, 0),
-	}
+		}
 
-	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
-	mc.processSubmissionTask(task)
-	flushFoundBlockLog(t)
+		mc.conn = nopConn{}
+		mc.processSubmissionTask(task)
+		flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {
@@ -247,7 +244,7 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		jobID:            jobID,
 		workerName:       mc.currentWorker(),
 		extranonce2:      "00000000",
-		extranonce2Bytes: []byte{0, 0, 0, 0},
+		extranonce2Large: []byte{0, 0, 0, 0},
 		ntime:            "6553f100",
 		ntimeVal:         0x6553f100,
 		nonce:            "00000000",
@@ -259,12 +256,11 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		// should not prevent submitting a real block.
 		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"},
 		receivedAt:   time.Unix(1700000000, 0),
-	}
+		}
 
-	mc.conn = nopConn{}
-	mc.writer = bufio.NewWriterSize(mc.conn, 256)
-	mc.processSubmissionTask(task)
-	flushFoundBlockLog(t)
+		mc.conn = nopConn{}
+		mc.processSubmissionTask(task)
+		flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {

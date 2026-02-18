@@ -53,6 +53,8 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
 	// This avoids unnecessary job churn and duplicate JobIDs for the same work.
 	if !needsNewJob {
+		// Heartbeat: the node responded successfully, even if the template was unchanged.
+		jm.recordJobSuccess(nil)
 		jm.updateBlockTipFromTemplate(tpl)
 		return nil
 	}

@@ -39,6 +39,10 @@ type stratumConfig struct {
 	StratumPasswordEnabled bool   `toml:"stratum_password_enabled"`
 	StratumPassword        string `toml:"stratum_password"`
 	StratumPasswordPublic  bool   `toml:"stratum_password_public"`
+	FastDecodeEnabled      *bool  `toml:"fast_decode_enabled"`
+	FastEncodeEnabled      *bool  `toml:"fast_encode_enabled"`
+	TCPReadBufferBytes     *int   `toml:"tcp_read_buffer_bytes"`
+	TCPWriteBufferBytes    *int   `toml:"tcp_write_buffer_bytes"`
 }
 
 type authConfig struct {
@@ -170,8 +174,10 @@ type miningTuning struct {
 }
 
 type hashrateTuning struct {
-	HashrateEMATauSeconds       *float64 `toml:"hashrate_ema_tau_seconds"`
-	ShareNTimeMaxForwardSeconds *int     `toml:"share_ntime_max_forward_seconds"`
+	HashrateEMATauSeconds           *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateCumulativeEnabled       *bool    `toml:"hashrate_cumulative_enabled"`
+	HashrateRecentCumulativeEnabled *bool    `toml:"hashrate_recent_cumulative_enabled"`
+	ShareNTimeMaxForwardSeconds     *int     `toml:"share_ntime_max_forward_seconds"`
 }
 
 type peerCleaningTuning struct {
@@ -234,15 +240,17 @@ type policyFileConfig struct {
 }
 
 type tuningHashrateConfig struct {
-	HashrateEMATauSeconds *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateEMATauSeconds           *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateCumulativeEnabled       *bool    `toml:"hashrate_cumulative_enabled"`
+	HashrateRecentCumulativeEnabled *bool    `toml:"hashrate_recent_cumulative_enabled"`
 }
 
 type tuningFileConfig struct {
-	RateLimits   rateLimitTuning           `toml:"rate_limits"`
-	Difficulty   difficultyTuning          `toml:"difficulty"`
-	Mining       miningTuning              `toml:"mining"`
-	Hashrate     tuningHashrateConfig      `toml:"hashrate"`
-	PeerCleaning peerCleaningTuning        `toml:"peer_cleaning"`
+	RateLimits   rateLimitTuning      `toml:"rate_limits"`
+	Difficulty   difficultyTuning     `toml:"difficulty"`
+	Mining       miningTuning         `toml:"mining"`
+	Hashrate     tuningHashrateConfig `toml:"hashrate"`
+	PeerCleaning peerCleaningTuning   `toml:"peer_cleaning"`
 }
 
 // secretsConfig holds values from secrets.toml: Clerk secrets and (when enabled)

@@ -12,7 +12,7 @@ func testSubmitTask(job *Job, worker string) submissionTask {
 		jobID:            job.JobID,
 		workerName:       worker,
 		extranonce2:      "00000000",
-		extranonce2Bytes: []byte{0x00, 0x00, 0x00, 0x00},
+		extranonce2Large: []byte{0x00, 0x00, 0x00, 0x00},
 		ntime:            "6553f100",
 		ntimeVal:         uint32(job.Template.CurTime),
 		nonce:            "00000001",

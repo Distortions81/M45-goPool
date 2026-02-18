@@ -2,7 +2,14 @@
 
 > **Quick start reminder:** the [main README](../README.md) gives a concise walk-through; this document expands each section into the operational context needed to run goPool day-to-day.
 
-goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production, from building binaries to tuning performance; refer to sibling documents (`documentation/performance.md`, `documentation/RELEASES.md`, `documentation/TESTING.md`) for capacity planning, release bundles, and testing recipes.
+goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production; refer to sibling documents (especially `documentation/TESTING.md`) for testing recipes.
+
+Operational Stratum notes:
+
+- Stratum is gated (at startup and during runtime) only when the job feed reports errors or the node is in a non-usable syncing/indexing state. While gated, new miner connections are refused and existing miners are disconnected to avoid idling on stale/no work during node/bootstrap issues.
+- When the node/job feed is stale, the main status page (`/`) displays a dedicated "node unavailable" page instead of the normal overview.
+- A background heartbeat (`stratumHeartbeatInterval`) performs periodic non-longpoll template refreshes so "quiet mempool / no template churn" does not look like a dead node.
+- When updates are degraded but basic node RPC calls still work, the node-unavailable page will also show common sync/indexing indicators (IBD flag and blocks/headers) to help diagnose "node indexing" situations.
 
 ## Building
 
@@ -101,7 +108,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 
 - `[server]`: `pool_listen`, `status_listen`, `status_tls_listen`, and `status_public_url`. Set `status_tls_listen = ""` to disable HTTPS and rely on `status_listen` only. Leaving `status_listen` empty disables HTTP entirely (e.g., TLS-only deployments). `status_public_url` feeds redirects and Clerk cookie domains. When both HTTP and HTTPS are enabled, the HTTP listener now issues a temporary (307) redirect to the HTTPS endpoint so the public UI and JSON APIs stay behind TLS.
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, location string).
-- `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel.
+- `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel. Performance/tuning: `fast_decode_enabled` (fast-path decoding), `fast_encode_enabled` (fast-path response encoding), and `tcp_read_buffer_bytes`/`tcp_write_buffer_bytes` (socket buffer sizes; 0 = OS default).
 - `[node]`: `rpc_url`, `rpc_cookie_path`, and ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`).
 - `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
 - `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.
@@ -313,8 +320,6 @@ Each override value logs when set, so goPool operators can audit what changed vi
 
 ## Related guides
 
-- **`documentation/performance.md`** – Capacity planning, CPU/latency breakdowns, and network bandwidth ballparks.
-- **`documentation/RELEASES.md`** – Packaging, verifying release checksums, upgrade steps, and release workflow details.
 - **`documentation/TESTING.md`** – How to run and extend the test suite, including fuzz targets and benchmarks.
 
 Refer back to the concise [main README](../README.md) for quick start instructions, and keep this document nearby while you tune your deployment.

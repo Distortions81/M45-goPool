@@ -55,6 +55,15 @@ type Config struct {
 	StratumPasswordEnabled bool
 	StratumPassword        string
 	StratumPasswordPublic  bool // show password in public connect panel when enabled
+	// Stratum fast decode: enables lightweight request sniffing for common methods
+	// (e.g. mining.submit/mining.subscribe/mining.ping) to reduce allocations.
+	StratumFastDecodeEnabled bool
+	// Stratum fast encode: enables canned/manual JSON encoding for common Stratum
+	// responses to reduce allocations (encode path only).
+	StratumFastEncodeEnabled bool
+	// Stratum TCP socket buffer tuning (0 = leave OS defaults).
+	StratumTCPReadBufferBytes  int
+	StratumTCPWriteBufferBytes int
 
 	// Clerk authentication.
 	ClerkIssuerURL         string
@@ -139,6 +148,8 @@ type Config struct {
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
 	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
+	HashrateCumulativeEnabled        bool    // blend per-connection EMA with cumulative hashrate (display)
+	HashrateRecentCumulativeEnabled  bool    // allow short-horizon cumulative (vardiff window) to influence display
 	ShareNTimeMaxForwardSeconds      int     // max seconds ntime can roll forward
 	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
 	ShareRequireJobID                bool    // reject empty job_id in mining.submit (default false)
@@ -188,6 +199,10 @@ type EffectiveConfig struct {
 	GitHubURL                         string   `json:"github_url,omitempty"`
 	ServerLocation                    string   `json:"server_location,omitempty"`
 	StratumTLSListen                  string   `json:"stratum_tls_listen,omitempty"`
+	StratumFastDecodeEnabled          bool     `json:"stratum_fast_decode_enabled"`
+	StratumFastEncodeEnabled          bool     `json:"stratum_fast_encode_enabled"`
+	StratumTCPReadBufferBytes         int      `json:"stratum_tcp_read_buffer_bytes,omitempty"`
+	StratumTCPWriteBufferBytes        int      `json:"stratum_tcp_write_buffer_bytes,omitempty"`
 	ClerkIssuerURL                    string   `json:"clerk_issuer_url,omitempty"`
 	ClerkJWKSURL                      string   `json:"clerk_jwks_url,omitempty"`
 	ClerkSignInURL                    string   `json:"clerk_signin_url,omitempty"`
