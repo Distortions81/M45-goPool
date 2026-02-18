@@ -21,7 +21,7 @@ func BenchmarkStratumDecodeFastJSON(b *testing.B) {
 func BenchmarkStratumDecodeManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if method, id, ok := sniffStratumMethodIDTag(sampleStratumRequest); !ok || method == stratumMethodUnknown {
+		if method, id, ok := sniffStratumMethodIDTagRawID(sampleStratumRequest); !ok || method == stratumMethodUnknown {
 			b.Fatalf("manual decode failed")
 		} else {
 			_ = id
@@ -43,7 +43,7 @@ func BenchmarkStratumDecodeFastJSON_MiningSubmit(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningSubmit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodIDTag(sampleSubmitRequest)
+		method, _, ok := sniffStratumMethodIDTagRawID(sampleSubmitRequest)
 		if !ok || method != stratumMethodMiningSubmit {
 			b.Fatalf("manual decode method failed")
 		}
@@ -82,7 +82,7 @@ func BenchmarkStratumDecodeFastJSON_MiningSubscribe(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningSubscribe(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodIDTag(sampleSubscribeRequest)
+		method, _, ok := sniffStratumMethodIDTagRawID(sampleSubscribeRequest)
 		if !ok || method != stratumMethodMiningSubscribe {
 			b.Fatalf("manual decode method failed")
 		}
@@ -107,7 +107,7 @@ func BenchmarkStratumDecodeFastJSON_MiningAuthorize(b *testing.B) {
 func BenchmarkStratumDecodeManual_MiningAuthorize(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		method, _, ok := sniffStratumMethodIDTag(sampleAuthorizeRequest)
+		method, _, ok := sniffStratumMethodIDTagRawID(sampleAuthorizeRequest)
 		if !ok || method != stratumMethodMiningAuthorize {
 			b.Fatalf("manual decode method failed")
 		}

@@ -53,6 +53,94 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	mc.handleSubscribeID(req.ID, clientID, haveClientID)
 }
 
+func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveClientID bool) {
+	idVal, _, ok := parseJSONValue(idRaw, 0)
+	if !ok {
+		return
+	}
+
+	// Ignore duplicate subscribe requests - should only subscribe once
+	if mc.subscribed {
+		logger.Warn("subscribe rejected: already subscribed", "remote", mc.id)
+		mc.writeResponse(StratumResponse{
+			ID:     idVal,
+			Result: nil,
+			Error:  newStratumError(20, "already subscribed"),
+		})
+		return
+	}
+
+	if haveClientID {
+		// Validate client ID length to prevent abuse
+		if len(clientID) > maxMinerClientIDLen {
+			logger.Warn("subscribe rejected: client identifier too long", "remote", mc.id, "len", len(clientID))
+			mc.writeResponse(StratumResponse{
+				ID:     idVal,
+				Result: nil,
+				Error:  newStratumError(20, "client identifier too long"),
+			})
+			mc.Close("client identifier too long")
+			return
+		}
+		if clientID != "" {
+			// Best-effort split into name/version for nicer aggregation.
+			name, ver := parseMinerID(clientID)
+			mc.stateMu.Lock()
+			mc.minerType = clientID
+			if name != "" {
+				mc.minerClientName = name
+			}
+			if ver != "" {
+				mc.minerClientVersion = ver
+			}
+			mc.stateMu.Unlock()
+			if mc.minerTypeBanned(clientID, name) {
+				logger.Warn("subscribe rejected: banned miner type",
+					"remote", mc.id,
+					"miner_type", clientID,
+					"miner_name", name,
+				)
+				mc.writeResponse(StratumResponse{
+					ID:     idVal,
+					Result: nil,
+					Error:  newStratumError(20, "banned miner type"),
+				})
+				mc.Close("banned miner type")
+				return
+			}
+		}
+	}
+
+	mc.subscribed = true
+
+	ex1 := mc.extranonce1Hex
+	en2Size := mc.cfg.Extranonce2Size
+	if en2Size <= 0 {
+		en2Size = 4
+	}
+
+	mc.writeSubscribeResponseRawID(idRaw, ex1, en2Size)
+
+	initialJob := mc.jobMgr.CurrentJob()
+	if initialJob != nil {
+		mc.updateVersionMask(initialJob.VersionMask)
+	}
+	if mc.extranonceSubscribed {
+		mc.sendSetExtranonce(ex1, en2Size)
+	}
+	if initialJob == nil {
+		status := mc.jobMgr.FeedStatus()
+		fields := []any{"remote", mc.id, "reason", "no job available"}
+		if status.LastError != nil {
+			fields = append(fields, "job_error", status.LastError.Error())
+		}
+		if !status.LastSuccess.IsZero() {
+			fields = append(fields, "last_job_at", status.LastSuccess)
+		}
+		logger.Warn("miner subscribed but no job ready", fields...)
+	}
+}
+
 func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool) {
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {

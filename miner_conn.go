@@ -277,7 +277,7 @@ func (mc *MinerConn) handle() {
 			continue
 		}
 		mc.recordActivity(now)
-		sniffedMethod, sniffedID, sniffedOK := sniffStratumMethodIDTag(line)
+		sniffedMethod, sniffedIDRaw, sniffedOK := sniffStratumMethodIDTagRawID(line)
 		if mc.stratumMsgRateLimitExceeded(now, sniffedMethod) {
 			banWorker := mc.workerForRateLimitBan(sniffedMethod, line)
 			logger.Warn("closing miner for stratum message rate limit",
@@ -293,7 +293,7 @@ func (mc *MinerConn) handle() {
 		if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
 			switch sniffedMethod {
 			case stratumMethodMiningPing:
-				mc.writePongResponse(sniffedID)
+				mc.writePongResponseRawID(sniffedIDRaw)
 				continue
 			case stratumMethodMiningAuthorize:
 				// Fast-path: mining.authorize typically uses string params.
@@ -304,7 +304,10 @@ func (mc *MinerConn) handle() {
 					if len(params) > 1 {
 						pass = params[1]
 					}
-					mc.handleAuthorizeID(sniffedID, worker, pass)
+					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
+					if ok {
+						mc.handleAuthorizeID(idVal, worker, pass)
+					}
 					continue
 				}
 			case stratumMethodMiningSubscribe:
@@ -318,7 +321,7 @@ func (mc *MinerConn) handle() {
 						clientID = params[0]
 						haveClientID = true
 					}
-					mc.handleSubscribeID(sniffedID, clientID, haveClientID)
+					mc.handleSubscribeRawID(sniffedIDRaw, clientID, haveClientID)
 					continue
 				}
 			case stratumMethodMiningSubmit:
@@ -327,7 +330,10 @@ func (mc *MinerConn) handle() {
 				// allocations and tail latency under load.
 				worker, jobID, en2, ntime, nonce, version, haveVersion, ok := sniffStratumSubmitParamsBytes(line)
 				if ok {
-					mc.handleSubmitFastBytes(sniffedID, worker, jobID, en2, ntime, nonce, version, haveVersion)
+					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
+					if ok {
+						mc.handleSubmitFastBytes(idVal, worker, jobID, en2, ntime, nonce, version, haveVersion)
+					}
 					continue
 				}
 			}

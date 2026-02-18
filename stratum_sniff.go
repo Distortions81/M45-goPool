@@ -41,7 +41,7 @@ var (
 	stratumMethodMiningSubmitBytes    = []byte("mining.submit")
 )
 
-func sniffStratumMethodIDTag(data []byte) (stratumMethodTag, any, bool) {
+func sniffStratumMethodIDTagRawID(data []byte) (stratumMethodTag, []byte, bool) {
 	idIdx := bytes.Index(data, stratumKeyIDBytes)
 	if idIdx < 0 {
 		return stratumMethodUnknown, nil, false
@@ -50,7 +50,7 @@ func sniffStratumMethodIDTag(data []byte) (stratumMethodTag, any, bool) {
 	if !ok {
 		return stratumMethodUnknown, nil, false
 	}
-	idVal, _, ok := parseJSONValue(data, idStart)
+	idRaw, _, ok := parseJSONValueRaw(data, idStart)
 	if !ok {
 		return stratumMethodUnknown, nil, false
 	}
@@ -78,22 +78,22 @@ func sniffStratumMethodIDTag(data []byte) (stratumMethodTag, any, bool) {
 			switch len(method) {
 			case len("mining.ping"):
 				if bytes.Equal(method, stratumMethodMiningPingBytes) {
-					return stratumMethodMiningPing, idVal, true
+					return stratumMethodMiningPing, idRaw, true
 				}
 			case len("mining.authorize"):
 				if bytes.Equal(method, stratumMethodMiningAuthorizeBytes) {
-					return stratumMethodMiningAuthorize, idVal, true
+					return stratumMethodMiningAuthorize, idRaw, true
 				}
 				if bytes.Equal(method, stratumMethodMiningSubscribeBytes) {
-					return stratumMethodMiningSubscribe, idVal, true
+					return stratumMethodMiningSubscribe, idRaw, true
 				}
 			case len("mining.submit"):
 				if bytes.Equal(method, stratumMethodMiningSubmitBytes) {
-					return stratumMethodMiningSubmit, idVal, true
+					return stratumMethodMiningSubmit, idRaw, true
 				}
 			}
 			// Unknown method; return ok with unknown tag so callers can still use the ID.
-			return stratumMethodUnknown, idVal, true
+			return stratumMethodUnknown, idRaw, true
 		default:
 			methodEnd++
 		}
@@ -282,15 +282,15 @@ func parseJSONValue(data []byte, idx int) (any, int, bool) {
 		}
 		return nil, idx, false
 	case 'n':
-		if len(data) >= idx+4 && string(data[idx:idx+4]) == "null" {
+		if len(data) >= idx+4 && data[idx+1] == 'u' && data[idx+2] == 'l' && data[idx+3] == 'l' {
 			return nil, idx + 4, true
 		}
 	case 't':
-		if len(data) >= idx+4 && string(data[idx:idx+4]) == "true" {
+		if len(data) >= idx+4 && data[idx+1] == 'r' && data[idx+2] == 'u' && data[idx+3] == 'e' {
 			return true, idx + 4, true
 		}
 	case 'f':
-		if len(data) >= idx+5 && string(data[idx:idx+5]) == "false" {
+		if len(data) >= idx+5 && data[idx+1] == 'a' && data[idx+2] == 'l' && data[idx+3] == 's' && data[idx+4] == 'e' {
 			return false, idx + 5, true
 		}
 	default:
@@ -300,6 +300,48 @@ func parseJSONValue(data []byte, idx int) (any, int, bool) {
 				return nil, idx, false
 			}
 			return val, next, true
+		}
+	}
+	return nil, idx, false
+}
+
+func parseJSONValueRaw(data []byte, idx int) ([]byte, int, bool) {
+	if idx >= len(data) {
+		return nil, idx, false
+	}
+	switch data[idx] {
+	case '"':
+		i := idx + 1
+		for i < len(data) {
+			if data[i] == '\\' {
+				i += 2
+				continue
+			}
+			if data[i] == '"' {
+				return data[idx : i+1], i + 1, true
+			}
+			i++
+		}
+		return nil, idx, false
+	case 'n':
+		if len(data) >= idx+4 && data[idx+1] == 'u' && data[idx+2] == 'l' && data[idx+3] == 'l' {
+			return data[idx : idx+4], idx + 4, true
+		}
+	case 't':
+		if len(data) >= idx+4 && data[idx+1] == 'r' && data[idx+2] == 'u' && data[idx+3] == 'e' {
+			return data[idx : idx+4], idx + 4, true
+		}
+	case 'f':
+		if len(data) >= idx+5 && data[idx+1] == 'a' && data[idx+2] == 'l' && data[idx+3] == 's' && data[idx+4] == 'e' {
+			return data[idx : idx+5], idx + 5, true
+		}
+	default:
+		if data[idx] == '-' || (data[idx] >= '0' && data[idx] <= '9') {
+			_, next, ok := parseInt64(data, idx)
+			if !ok {
+				return nil, idx, false
+			}
+			return data[idx:next], next, true
 		}
 	}
 	return nil, idx, false
