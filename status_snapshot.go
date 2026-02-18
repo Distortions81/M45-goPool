@@ -49,16 +49,39 @@ func cumulativeHashrateEstimate(stats MinerStats, connectedAt, now time.Time) fl
 	return (stats.TotalDifficulty * hashPerShare) / elapsed
 }
 
-func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulative float64) float64 {
-	if ema <= 0 {
-		return cumulative
+func cumulativeHashrateEstimateFromDifficultySum(sumDifficulty float64, startAt, now time.Time) float64 {
+	if sumDifficulty <= 0 || startAt.IsZero() || !now.After(startAt) {
+		return 0
 	}
-	if cumulative <= 0 {
+	elapsed := now.Sub(startAt).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	return (sumDifficulty * hashPerShare) / elapsed
+}
+
+func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulativeLifetime, cumulativeRecent float64) float64 {
+	if ema <= 0 {
+		if cumulativeRecent > 0 {
+			return cumulativeRecent
+		}
+		return cumulativeLifetime
+	}
+	if cumulativeLifetime <= 0 && cumulativeRecent <= 0 {
 		return ema
 	}
+
+	cumulative := cumulativeLifetime
+	// Prefer a recent cumulative estimate (VarDiff retarget window) when it
+	// indicates a materially higher hashrate than the lifetime cumulative.
+	// This avoids slow upward convergence after early low-difficulty epochs.
+	if cumulativeRecent > 0 && (cumulative <= 0 || cumulativeRecent > cumulative*1.05) {
+		cumulative = cumulativeRecent
+	}
+
 	// Favor cumulative estimator as samples grow: it is more accurate over
 	// longer horizons and less sensitive to vardiff/window resets.
-	w := float64(stats.Accepted) / 16.0
+	w := float64(stats.Accepted) / 64.0
 	if w < 0 {
 		w = 0
 	}
@@ -373,7 +396,14 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 		ShareRate:        rawRate,
 		Difficulty:       diff,
 	}, now)
-	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, cumulativeHashrateEstimate(stats, mc.connectedAt, now))
+	lifetimeCumulative := cumulativeHashrateEstimate(stats, mc.connectedAt, now)
+	recentCumulative := 0.0
+	if snap.RetargetWindowAccepted >= 8 && !snap.RetargetWindowStart.IsZero() && now.After(snap.RetargetWindowStart) {
+		if window := now.Sub(snap.RetargetWindowStart); window >= initialHashrateEMATau {
+			recentCumulative = cumulativeHashrateEstimateFromDifficultySum(snap.RetargetWindowDifficulty, snap.RetargetWindowStart, now)
+		}
+	}
+	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, lifetimeCumulative, recentCumulative)
 	modeledRate := modeledShareRatePerMinute(hashRate, diff)
 	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
 	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)
