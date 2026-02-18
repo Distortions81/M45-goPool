@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math/bits"
 	"strings"
 	"time"
@@ -121,7 +120,7 @@ func autoConfigureVersionMaskFromNode(ctx context.Context, rpc versionMaskRPC, c
 
 	logger.Info("configured version_mask from bitcoin node",
 		"chain", info.Chain,
-		"version_mask", fmt.Sprintf("%08x", cfg.VersionMask))
+		"version_mask", uint32ToHex8Lower(cfg.VersionMask))
 }
 
 // autoConfigureAcceptRateLimits sets sensible defaults for max_accepts_per_second

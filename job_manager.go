@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
@@ -142,7 +141,7 @@ func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
 	if bits := strings.TrimSpace(tpl.Bits); bits != "" {
 		tip.Bits = bits
 		if parsed, err := strconv.ParseUint(bits, 16, 32); err == nil {
-			tip.Bits = fmt.Sprintf("%08x", uint32(parsed))
+			tip.Bits = uint32ToHex8Lower(uint32(parsed))
 			tip.Difficulty = difficultyFromBits(uint32(parsed))
 		}
 	}
