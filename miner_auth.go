@@ -1050,7 +1050,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 			"bits", bitsBE,
 			"ntime", ntimeBE,
 			"clean", cleanJobs,
-			"share_target", fmt.Sprintf("%064x", shareTarget),
+			"share_target", formatBigIntHex64(shareTarget),
 			"merkle_root_be", hex.EncodeToString(merkleRoot),
 			"header_hash_le", hex.EncodeToString(headerHashLE),
 		)

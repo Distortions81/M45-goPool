@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -213,5 +212,5 @@ func generateAdminPassword() (string, error) {
 
 func adminPasswordHash(password string) string {
 	sum := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(sum[:])
+	return hexEncode32LowerString(&sum)
 }

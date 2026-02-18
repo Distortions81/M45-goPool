@@ -1,8 +1,6 @@
 package main
 
-import (
-	"encoding/hex"
-)
+
 
 func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext, bool) {
 	// Solo mode keeps this hot path minimal: build header, compute hash/diff, and
@@ -149,7 +147,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	}
 	isBlock := uint256BELessOrEqual(headerHashLE, targetBE)
 
-	hashHex := hex.EncodeToString(headerHashLE[:])
+	hashHex := hexEncode32LowerString(&headerHashLE)
 
 	return shareContext{
 		hashHex:   hashHex,
@@ -305,7 +303,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 	}
 	isBlock := uint256BELessOrEqual(headerHashLE, targetBE)
 
-	hashHex := hex.EncodeToString(headerHashLE[:])
+	hashHex := hexEncode32LowerString(&headerHashLE)
 
 	ctx := shareContext{
 		hashHex:   hashHex,

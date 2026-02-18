@@ -1282,7 +1282,7 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 			"miner", mc.minerName(""),
 			"requested_diff", requested,
 			"clamped_diff", diff,
-			"share_target", fmt.Sprintf("%064x", target),
+			"share_target", formatBigIntHex64(target),
 		)
 	}
 

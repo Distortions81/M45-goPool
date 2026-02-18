@@ -1,16 +1,13 @@
 package main
 
-import (
-	"encoding/hex"
-	"strings"
-)
+import "strings"
 
 func workerNameHashTrimmed(name string) string {
 	if name == "" {
 		return ""
 	}
 	sum := sha256Sum([]byte(name))
-	return hex.EncodeToString(sum[:])
+	return hexEncode32LowerString(&sum)
 }
 
 func workerNameHash(name string) string {

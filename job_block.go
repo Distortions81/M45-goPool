@@ -124,35 +124,22 @@ func buildBlockHeaderFromHex(version int32, prevhash string, merkleRootBE []byte
 	if len(prevhash) != 64 {
 		return nil, fmt.Errorf("prevhash hex must be 64 chars")
 	}
-	n, err := hex.Decode(prev[:], []byte(prevhash))
-	if err != nil || n != 32 {
+	if err := decodeHexToFixedBytes(prev[:], prevhash); err != nil {
 		return nil, fmt.Errorf("decode prevhash: %w", err)
 	}
 
 	// Decode ntime
-	if len(ntimeHex) != 8 {
-		return nil, fmt.Errorf("ntime hex must be 8 chars")
-	}
-	n, err = hex.Decode(ntimeBytes[:], []byte(ntimeHex))
-	if err != nil || n != 4 {
+	if err := decodeHex8To4(&ntimeBytes, ntimeHex); err != nil {
 		return nil, fmt.Errorf("decode ntime: %w", err)
 	}
 
 	// Decode bits
-	if len(bitsHex) != 8 {
-		return nil, fmt.Errorf("bits hex must be 8 chars")
-	}
-	n, err = hex.Decode(bitsBytes[:], []byte(bitsHex))
-	if err != nil || n != 4 {
+	if err := decodeHex8To4(&bitsBytes, bitsHex); err != nil {
 		return nil, fmt.Errorf("decode bits: %w", err)
 	}
 
 	// Decode nonce
-	if len(nonceHex) != 8 {
-		return nil, fmt.Errorf("nonce hex must be 8 chars")
-	}
-	n, err = hex.Decode(nonceBytes[:], []byte(nonceHex))
-	if err != nil || n != 4 {
+	if err := decodeHex8To4(&nonceBytes, nonceHex); err != nil {
 		return nil, fmt.Errorf("decode nonce: %w", err)
 	}
 
@@ -197,20 +184,12 @@ func (job *Job) buildBlockHeader(merkleRootBE []byte, ntimeHex string, nonceHex 
 	var merkleReversed [32]byte
 
 	// Decode ntime
-	if len(ntimeHex) != 8 {
-		return nil, fmt.Errorf("ntime hex must be 8 chars")
-	}
-	n, err := hex.Decode(ntimeBytes[:], []byte(ntimeHex))
-	if err != nil || n != 4 {
+	if err := decodeHex8To4(&ntimeBytes, ntimeHex); err != nil {
 		return nil, fmt.Errorf("decode ntime: %w", err)
 	}
 
 	// Decode nonce
-	if len(nonceHex) != 8 {
-		return nil, fmt.Errorf("nonce hex must be 8 chars")
-	}
-	n, err = hex.Decode(nonceBytes[:], []byte(nonceHex))
-	if err != nil || n != 4 {
+	if err := decodeHex8To4(&nonceBytes, nonceHex); err != nil {
 		return nil, fmt.Errorf("decode nonce: %w", err)
 	}
 
