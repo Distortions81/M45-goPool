@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -449,7 +448,7 @@ func main() {
 	// Static legal pages
 	mux.HandleFunc("/privacy", statusServer.handleStaticFile("privacy.html"))
 	mux.HandleFunc("/terms", statusServer.handleStaticFile("terms.html"))
-	// Alternative worker lookup URLs (SHA256-based)
+	// Alternative worker lookup URLs (plaintext worker name)
 	mux.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/user")
 	})
@@ -461,39 +460,6 @@ func main() {
 	})
 	mux.HandleFunc("/app/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookup(w, r, "/app")
-	})
-		// Some clients incorrectly encode hash-routes into the URL path (e.g. "/%23/app/{worker}").
-		// net/http decodes %23 to '#', so we register the decoded form and redirect to the
-		// canonical SHA256 worker lookup endpoint.
-		mux.HandleFunc("/#/app/", func(w http.ResponseWriter, r *http.Request) {
-			// Be tolerant of both "/#/app/<worker>" and "/%23/app/<worker>" forms by
-			// extracting the suffix after the "/app/" marker.
-			idx := strings.Index(r.URL.Path, "/app/")
-			if idx < 0 {
-				http.Redirect(w, r, "/worker", http.StatusSeeOther)
-				return
-			}
-			workerPart := strings.TrimPrefix(r.URL.Path[idx+len("/app/"):], "/")
-			worker, err := url.PathUnescape(workerPart)
-			if err != nil {
-				worker = workerPart
-			}
-			worker = strings.TrimSpace(worker)
-			if len(worker) > workerLookupMaxBytes {
-				http.Redirect(w, r, "/worker", http.StatusSeeOther)
-				return
-			}
-			if worker == "" {
-				http.Redirect(w, r, "/worker", http.StatusSeeOther)
-				return
-			}
-		workerHash := workerNameHashTrimmed(worker)
-		if workerHash == "" {
-			http.Redirect(w, r, "/worker", http.StatusSeeOther)
-			return
-		}
-		target := "/worker/sha256?hash=" + workerHash + "&worker=" + url.QueryEscape(worker)
-		http.Redirect(w, r, target, http.StatusSeeOther)
 	})
 	// Catch-all: try static files first, fall back to status server
 	// Use os.OpenRoot for secure, chroot-like file serving that prevents path traversal.
