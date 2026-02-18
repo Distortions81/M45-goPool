@@ -80,15 +80,15 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 		}
 		ntimeLog := ntime
 		if ntimeLog == "" {
-			ntimeLog = fmt.Sprintf("%08x", task.ntimeVal)
+			ntimeLog = uint32ToHex8Lower(task.ntimeVal)
 		}
 		nonceLog := nonce
 		if nonceLog == "" {
-			nonceLog = fmt.Sprintf("%08x", task.nonceVal)
+			nonceLog = uint32ToHex8Lower(task.nonceVal)
 		}
 		verLog := versionHex
 		if verLog == "" {
-			verLog = fmt.Sprintf("%08x", task.useVersion)
+			verLog = uint32ToHex8Lower(task.useVersion)
 		}
 		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", ex2Log, "ntime", ntimeLog, "nonce", nonceLog, "version", verLog)
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
@@ -150,7 +150,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), fmt.Sprintf("%08x", task.ntimeVal), fmt.Sprintf("%08x", task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
@@ -206,7 +206,7 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), fmt.Sprintf("%08x", task.ntimeVal), fmt.Sprintf("%08x", task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -158,9 +157,9 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			DisablePoolJobEntropy:     new(false),
 			DifficultyStepGranularity: new(cfg.DifficultyStepGranularity),
 		},
-	Hashrate: tuningHashrateConfig{
-		HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
-	},
+		Hashrate: tuningHashrateConfig{
+			HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
+		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   new(cfg.PeerCleanupEnabled),
 			MaxPingMs: new(cfg.PeerCleanupMaxPingMs),
@@ -236,7 +235,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		StratumMessagesPerMinute:          cfg.StratumMessagesPerMinute,
 		MaxRecentJobs:                     cfg.MaxRecentJobs,
 		ConnectionTimeout:                 cfg.ConnectionTimeout.String(),
-		VersionMask:                       fmt.Sprintf("%08x", cfg.VersionMask),
+		VersionMask:                       uint32ToHex8Lower(cfg.VersionMask),
 		MinVersionBits:                    cfg.MinVersionBits,
 		ShareAllowDegradedVersionBits:     cfg.ShareAllowDegradedVersionBits,
 		MaxDifficulty:                     cfg.MaxDifficulty,

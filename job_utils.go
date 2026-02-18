@@ -136,6 +136,17 @@ func parseUint32BEHexBytes(hexBytes []byte) (uint32, error) {
 	return uint32(byte(v0))<<24 | uint32(byte(v1))<<16 | uint32(byte(v2))<<8 | uint32(byte(v3)), nil
 }
 
+const hexLowerDigits = "0123456789abcdef"
+
+func uint32ToHex8Lower(v uint32) string {
+	var buf [8]byte
+	for i := 7; i >= 0; i-- {
+		buf[i] = hexLowerDigits[v&0x0f]
+		v >>= 4
+	}
+	return string(buf[:])
+}
+
 func uint32ToBEHex(v uint32) string {
 	var buf [4]byte
 	binary.BigEndian.PutUint32(buf[:], v)

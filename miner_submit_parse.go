@@ -464,7 +464,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
-		versionHex = fmt.Sprintf("%08x", useVersion)
+		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
 	task := submissionTask{
@@ -595,7 +595,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 
 	versionHex := ""
 	if debugLogging || verboseLogging {
-		versionHex = fmt.Sprintf("%08x", useVersion)
+		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
 	task := submissionTask{
@@ -755,21 +755,21 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
-		versionHex = fmt.Sprintf("%08x", useVersion)
+		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
 		maskedDiff := versionDiff & mc.versionMask
 
 		if !mc.versionRoll {
-			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
+			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
 				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
-			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
+			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
 				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
 			}
@@ -779,13 +779,13 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 			usedBits := bits.OnesCount32(maskedDiff)
 			if usedBits < mc.minVerBits {
 				if !mc.cfg.ShareAllowDegradedVersionBits {
-					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
+					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
 						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
 					}
 				} else {
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
-						"remote", mc.id, "version", fmt.Sprintf("%08x", useVersion),
+						"remote", mc.id, "version", uint32ToHex8Lower(useVersion),
 						"used_bits", usedBits,
 						"negotiated_minimum", mc.minVerBits)
 				}
@@ -953,20 +953,20 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 
 	versionHex := ""
 	if debugLogging || verboseLogging {
-		versionHex = fmt.Sprintf("%08x", useVersion)
+		versionHex = uint32ToHex8Lower(useVersion)
 	}
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
 		maskedDiff := versionDiff & mc.versionMask
 
 		if !mc.versionRoll {
-			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", fmt.Sprintf("%08x", versionDiff))
+			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
 				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
-			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "mask", fmt.Sprintf("%08x", mc.versionMask))
+			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
 				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
 			}
@@ -976,14 +976,14 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 			usedBits := bits.OnesCount32(maskedDiff)
 			if usedBits < mc.minVerBits {
 				if !mc.cfg.ShareAllowDegradedVersionBits {
-					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", fmt.Sprintf("%08x", useVersion), "required_bits", mc.minVerBits)
+					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
 						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
 					}
 				} else {
 					// Log but don't reject (BIP310 permissive approach: allow degraded mode)
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
-						"remote", mc.id, "version", fmt.Sprintf("%08x", useVersion),
+						"remote", mc.id, "version", uint32ToHex8Lower(useVersion),
 						"used_bits", usedBits,
 						"negotiated_minimum", mc.minVerBits)
 				}

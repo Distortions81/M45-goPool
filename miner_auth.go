@@ -875,7 +875,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			mc.versionRoll = true
 			mc.versionMask = mask
 			result["version-rolling"] = true
-			result["version-rolling.mask"] = fmt.Sprintf("%08x", mask)
+			result["version-rolling.mask"] = uint32ToHex8Lower(mask)
 			result["version-rolling.min-bit-count"] = mc.minVerBits
 			// Important: some miners (including some cgminer-based firmwares)
 			// expect the immediate next line after mining.configure to be its

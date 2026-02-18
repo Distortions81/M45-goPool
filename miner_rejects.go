@@ -1328,7 +1328,7 @@ func (mc *MinerConn) sendVersionMask() {
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_version_mask",
-		"params": []any{fmt.Sprintf("%08x", mc.versionMask)},
+		"params": []any{uint32ToHex8Lower(mc.versionMask)},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("version mask write error", "remote", mc.id, "error", err)
