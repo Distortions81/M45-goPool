@@ -177,6 +177,8 @@ type AdminSettingsData struct {
 	CoinbaseScriptSigMaxBytes           int
 	DiscordWorkerNotifyThresholdSeconds int
 	HashrateEMATauSeconds               float64
+	HashrateCumulativeEnabled           bool
+	HashrateRecentCumulativeEnabled     bool
 	ShareNTimeMaxForwardSeconds         int
 	MinVersionBits                      int
 	ShareAllowDegradedVersionBits       bool

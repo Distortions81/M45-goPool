@@ -46,7 +46,7 @@ func TestBlendDisplayHashrate_LongLivedConnectionFavorsCumulative(t *testing.T) 
 	}
 	ema := 100.0
 	cumulative := 200.0
-	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0)
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0, true, true)
 	if got < 190.0 || got > 200.0 {
 		t.Fatalf("got %.4f want close to cumulative for long-lived connection", got)
 	}
@@ -60,7 +60,7 @@ func TestBlendDisplayHashrate_YoungConnectionStaysNearEMA(t *testing.T) {
 	}
 	ema := 100.0
 	cumulative := 200.0
-	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0)
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulative, 0, true, true)
 	if got <= 100.0 || got >= 120.0 {
 		t.Fatalf("got %.4f want near EMA for newly connected worker", got)
 	}
@@ -75,7 +75,7 @@ func TestBlendDisplayHashrate_PrefersRecentCumulativeAfterDifficultyRamp(t *test
 	ema := 1.0e12
 	cumulativeLifetime := 2.0e11
 	cumulativeRecent := 1.02e12
-	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulativeLifetime, cumulativeRecent)
+	got := blendDisplayHashrate(stats, connectedAt, now, ema, cumulativeLifetime, cumulativeRecent, true, true)
 	if got < 9.5e11 || got > 1.02e12 {
 		t.Fatalf("got %.6g want close to recent cumulative %.6g (not lifetime %.6g)", got, cumulativeRecent, cumulativeLifetime)
 	}

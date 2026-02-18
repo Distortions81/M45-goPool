@@ -148,6 +148,8 @@ type Config struct {
 	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
 	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
 	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
+	HashrateCumulativeEnabled        bool    // blend per-connection EMA with cumulative hashrate (display)
+	HashrateRecentCumulativeEnabled  bool    // allow short-horizon cumulative (vardiff window) to influence display
 	ShareNTimeMaxForwardSeconds      int     // max seconds ntime can roll forward
 	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
 	ShareRequireJobID                bool    // reject empty job_id in mining.submit (default false)

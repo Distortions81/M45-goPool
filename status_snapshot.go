@@ -60,7 +60,10 @@ func cumulativeHashrateEstimateFromDifficultySum(sumDifficulty float64, startAt,
 	return (sumDifficulty * hashPerShare) / elapsed
 }
 
-func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulativeLifetime, cumulativeRecent float64) float64 {
+func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cumulativeLifetime, cumulativeRecent float64, useCumulative, useRecentCumulative bool) float64 {
+	if !useCumulative {
+		return ema
+	}
 	if ema <= 0 {
 		if cumulativeRecent > 0 {
 			return cumulativeRecent
@@ -75,7 +78,7 @@ func blendDisplayHashrate(stats MinerStats, connectedAt, now time.Time, ema, cum
 	// Prefer a recent cumulative estimate (VarDiff retarget window) when it
 	// indicates a materially higher hashrate than the lifetime cumulative.
 	// This avoids slow upward convergence after early low-difficulty epochs.
-	if cumulativeRecent > 0 && (cumulative <= 0 || cumulativeRecent > cumulative*1.05) {
+	if useRecentCumulative && cumulativeRecent > 0 && (cumulative <= 0 || cumulativeRecent > cumulative*1.05) {
 		cumulative = cumulativeRecent
 	}
 
@@ -403,7 +406,7 @@ func workerViewFromConn(mc *MinerConn, now time.Time) WorkerView {
 			recentCumulative = cumulativeHashrateEstimateFromDifficultySum(snap.RetargetWindowDifficulty, snap.RetargetWindowStart, now)
 		}
 	}
-	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, lifetimeCumulative, recentCumulative)
+	hashRate = blendDisplayHashrate(stats, mc.connectedAt, now, hashRate, lifetimeCumulative, recentCumulative, mc.cfg.HashrateCumulativeEnabled, mc.cfg.HashrateRecentCumulativeEnabled)
 	modeledRate := modeledShareRatePerMinute(hashRate, diff)
 	accRate := blendedShareRatePerMinute(stats, now, rawRate, modeledRate)
 	conf := hashrateConfidenceLevel(stats, now, modeledRate, hashRate, mc.connectedAt)

@@ -158,7 +158,9 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			DifficultyStepGranularity: new(cfg.DifficultyStepGranularity),
 		},
 		Hashrate: tuningHashrateConfig{
-			HashrateEMATauSeconds: new(cfg.HashrateEMATauSeconds),
+			HashrateEMATauSeconds:           new(cfg.HashrateEMATauSeconds),
+			HashrateCumulativeEnabled:       new(cfg.HashrateCumulativeEnabled),
+			HashrateRecentCumulativeEnabled: new(cfg.HashrateRecentCumulativeEnabled),
 		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   new(cfg.PeerCleanupEnabled),
