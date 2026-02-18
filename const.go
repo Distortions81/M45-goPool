@@ -80,6 +80,11 @@ const (
 	// stratumHeartbeatInterval is how often we do a non-longpoll template refresh
 	// to prove the node is responsive even when the template doesn't change.
 	stratumHeartbeatInterval      = 30 * time.Second
+	// stratumStartupGrace is a boot grace window during which we do not treat
+	// "no job yet" / "node degraded" as actionable for disconnecting/refusing
+	// miners or showing node-down UI. This avoids noisy false alarms while the
+	// pool and node are still starting up.
+	stratumStartupGrace           = 60 * time.Second
 	// stratumDegradedGrace avoids flapping during brief hiccups by requiring the job feed
 	// to be continuously unhealthy for a short window before we disconnect miners.
 	stratumDegradedGrace          = 15 * time.Second

@@ -624,25 +624,10 @@ func main() {
 	}
 	jobMgr.Start(ctx)
 
-	// Gate Stratum startup until a job is available and reasonably fresh.
-	//
-	// Rationale:
-	// - If the node/job feed is still bootstrapping, letting miners connect
-	//   immediately causes "connected but no work" idle time (wasted power,
-	//   noisy reconnect loops, confusing UX).
-		// - If we already have a recent-enough template, don't delay Stratum even
-		//   if the feed is temporarily degraded. A large freshness window avoids
-		//   needless gating during transient node hiccups while still preventing
-		//   miners from burning electricity on very stale work.
-	//
-	// Note: this gate only delays listener startup; once Stratum is running,
-	// normal notify/stale-job handling still applies.
-		waitForStratumJobReady(ctx, jobMgr)
-
 		// Once Stratum is live, enforce the same freshness rule at runtime:
 		// - refuse new miner connections while the job feed is stale
 		// - disconnect existing miners so they stop hashing stale work
-		go enforceStratumFreshness(ctx, jobMgr, registry)
+		go enforceStratumFreshness(ctx, jobMgr, registry, startTime)
 
 	ln, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
@@ -735,17 +720,20 @@ func main() {
 				}
 				disableTCPNagle(conn)
 				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
-				if h := stratumHealthStatus(jobMgr, time.Now()); !h.Healthy {
-					if time.Since(lastRefuseLog) > 5*time.Second {
-						fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason}
-						if strings.TrimSpace(h.Detail) != "" {
-							fields = append(fields, "detail", h.Detail)
+				now := time.Now()
+				if now.Sub(startTime) >= stratumStartupGrace {
+					if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
+						if time.Since(lastRefuseLog) > 5*time.Second {
+							fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason}
+							if strings.TrimSpace(h.Detail) != "" {
+								fields = append(fields, "detail", h.Detail)
+							}
+							logger.Warn("refusing miner connection: node updates degraded", fields...)
+							lastRefuseLog = time.Now()
 						}
-						logger.Warn("refusing miner connection: node updates degraded", fields...)
-						lastRefuseLog = time.Now()
+						_ = conn.Close()
+						continue
 					}
-					_ = conn.Close()
-					continue
 				}
 				remote := conn.RemoteAddr().String()
 				if reconnectLimiter != nil {
@@ -849,42 +837,7 @@ func main() {
 	}
 }
 
-func waitForStratumJobReady(ctx context.Context, jobMgr *JobManager) {
-	if ctx == nil || jobMgr == nil {
-		return
-	}
-
-	lastLog := time.Time{}
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		if h := stratumHealthStatus(jobMgr, time.Now()); h.Healthy {
-			return
-		}
-		if time.Since(lastLog) > 5*time.Second {
-			fs := jobMgr.FeedStatus()
-			fields := []any{"heartbeat_interval", stratumHeartbeatInterval}
-			job := jobMgr.CurrentJob()
-			if job != nil && !job.CreatedAt.IsZero() {
-				fields = append(fields, "job_age", time.Since(job.CreatedAt))
-			} else {
-				fields = append(fields, "job_age", "(none)")
-			}
-			if !fs.LastSuccess.IsZero() {
-				fields = append(fields, "last_success", fs.LastSuccess, "last_success_age", time.Since(fs.LastSuccess))
-			}
-			if fs.LastError != nil {
-				fields = append(fields, "last_error", fs.LastError.Error())
-			}
-			logger.Warn("stratum gated: waiting for initial job", fields...)
-			lastLog = time.Now()
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry) {
+func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry, start time.Time) {
 	if ctx == nil || jobMgr == nil || registry == nil {
 		return
 	}
@@ -898,6 +851,13 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 		}
 
 		now := time.Now()
+		if !start.IsZero() && now.Sub(start) < stratumStartupGrace {
+			// During boot grace window, do not treat missing/degraded node state as actionable.
+			unhealthySince = time.Time{}
+			wasHealthy = true
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
 		h := stratumHealthStatus(jobMgr, now)
 		if !h.Healthy {
 			if unhealthySince.IsZero() {

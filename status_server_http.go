@@ -57,6 +57,10 @@ func (s *StatusServer) serveOverviewOrNodeDown(w http.ResponseWriter) error {
 		fs = s.jobMgr.FeedStatus()
 	}
 
+	if !s.start.IsZero() && time.Since(s.start) < stratumStartupGrace {
+		h = stratumHealth{Healthy: true}
+	}
+
 	if !h.Healthy {
 		title := "Node connection unavailable"
 		message := "This pool does not currently have a connection to a node."

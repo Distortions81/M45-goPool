@@ -23,6 +23,7 @@ func TestStatusServerOverview_RendersNodeDownWhenStale(t *testing.T) {
 
 	s := &StatusServer{tmpl: tmpl, jobMgr: jm}
 	s.UpdateConfig(Config{ListenAddr: ":3333"})
+	s.start = time.Now().Add(-2 * stratumStartupGrace)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

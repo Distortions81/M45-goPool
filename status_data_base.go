@@ -51,12 +51,14 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	if !s.Config().DisableConnectRateLimits && s.Config().MaxAcceptsPerSecond == 0 && s.Config().MaxConns == 0 {
 		warnings = append(warnings, "No connection rate limit and no max connection cap are configured. This can make the pool vulnerable to connection floods or accidental overload.")
 	}
-	if h := stratumHealthStatus(s.jobMgr, time.Now()); !h.Healthy {
-		msg := "Node updates degraded: " + h.Reason
-		if strings.TrimSpace(h.Detail) != "" {
-			msg += " (" + strings.TrimSpace(h.Detail) + ")"
+	if s != nil && !s.start.IsZero() && time.Since(s.start) >= stratumStartupGrace {
+		if h := stratumHealthStatus(s.jobMgr, time.Now()); !h.Healthy {
+			msg := "Node updates degraded: " + h.Reason
+			if strings.TrimSpace(h.Detail) != "" {
+				msg += " (" + strings.TrimSpace(h.Detail) + ")"
+			}
+			warnings = append(warnings, msg)
 		}
-		warnings = append(warnings, msg)
 	}
 
 	bannedMinerTypes := make([]string, 0, len(s.Config().BannedMinerTypes))
