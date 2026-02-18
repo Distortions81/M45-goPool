@@ -37,7 +37,7 @@ This file is intentionally written in Discord-friendly Markdown blocks so pool o
 **Hex / encoding micro-opts**
 - Added LUT-based fixed-width hex helpers for common 2/4/32-byte cases; avoid `fmt.Sprintf` for fixed-width hex formatting.
 
-**Performance notes (microbench, `fd1cf98` → `3330e26`, Ryzen 9 7950X, `-count=7 -benchtime=200ms`)**
+**Performance notes (microbench, before → after, Ryzen 9 7950X, `-count=7 -benchtime=200ms`)**
 - Stratum manual decode: `-49.9%` time (`45.81ns → 22.95ns`) and `-100%` allocs (`2 → 0 allocs/op`).
 - Stratum manual `mining.submit` decode: `-42.5%` time (`179.7ns → 103.4ns`) and `-100%` allocs (`7 → 0 allocs/op`).
 - Share-prep task: `-2.3% to -2.7%` time and `-10%` allocs (`10 → 9 allocs/op`).
