@@ -42,8 +42,5 @@ This file is intentionally written in Discord-friendly Markdown blocks so pool o
 - Stratum manual `mining.submit` decode: `-42.5%` time (`179.7ns → 103.4ns`) and `-100%` allocs (`7 → 0 allocs/op`).
 - Share-prep task: `-2.3% to -2.7%` time and `-10%` allocs (`10 → 9 allocs/op`).
 - Merkle branch compute (1000 tx): `-20.5%` time (`204.9µs → 162.9µs`).
-- Notable regressions to be aware of:
-  - `StratumDecodeFastJSON_MiningSubscribe`: `+17.7%` time (`172.2ns → 202.7ns`).
-  - `ManualAppendSubscribe`: `+110.8%` time (`72.35ns → 152.50ns`) and `+200%` allocs (`1 → 3 allocs/op`).
-  - `ProcessSubmissionTaskAcceptedShare`: `+8.9%` time (`850.8ns → 926.3ns`).
+- Follow-up: subscribe response builder was optimized again (prealloc + no-escape quoting for numeric/hex fields) to bring `BenchmarkManualAppendSubscribe` back to ~`70–80ns/op` with `1 allocs/op` (and avoid the earlier regression).
 ```
