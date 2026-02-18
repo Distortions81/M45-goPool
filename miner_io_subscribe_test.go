@@ -30,6 +30,33 @@ func TestBuildSubscribeResponseBytes(t *testing.T) {
 	if !ok || len(result) != 3 {
 		t.Fatalf("unexpected result shape: %#v", resp.Result)
 	}
+
+	// Verify we advertise expected notifications in subscriptions list.
+	subs, ok := result[0].([]any)
+	if !ok || len(subs) == 0 {
+		t.Fatalf("unexpected subscriptions shape: %#v", result[0])
+	}
+	methods := make(map[string]bool, len(subs))
+	for _, item := range subs {
+		pair, ok := item.([]any)
+		if !ok || len(pair) < 1 {
+			continue
+		}
+		method, ok := pair[0].(string)
+		if !ok || method == "" {
+			continue
+		}
+		methods[method] = true
+	}
+	if !methods["mining.set_difficulty"] || !methods["mining.notify"] {
+		t.Fatalf("expected set_difficulty and notify in subscriptions list: %#v", subs)
+	}
+	if !methods["mining.set_extranonce"] {
+		t.Fatalf("expected set_extranonce in subscriptions list: %#v", subs)
+	}
+	if !methods["mining.set_version_mask"] {
+		t.Fatalf("expected set_version_mask in subscriptions list: %#v", subs)
+	}
 	if got, ok := result[1].(string); !ok || got != "0011aabb" {
 		t.Fatalf("unexpected extranonce1: %#v", result[1])
 	}
@@ -37,4 +64,3 @@ func TestBuildSubscribeResponseBytes(t *testing.T) {
 		t.Fatalf("unexpected extranonce2_size: %#v", result[2])
 	}
 }
-

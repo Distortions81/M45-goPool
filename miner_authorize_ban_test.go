@@ -53,4 +53,7 @@ func TestHandleAuthorizeRejectsPersistedWorkerBan(t *testing.T) {
 	if !strings.Contains(out, "\"banned\"") {
 		t.Fatalf("expected banned authorize response, got: %q", out)
 	}
+	if !strings.Contains(out, "\"method\":\"client.show_message\"") {
+		t.Fatalf("expected client.show_message before disconnect, got: %q", out)
+	}
 }

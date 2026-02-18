@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,11 +50,31 @@ func (mc *MinerConn) writeResponse(resp StratumResponse) {
 	}
 }
 
+func (mc *MinerConn) sendClientShowMessage(message string) {
+	if mc == nil || mc.conn == nil {
+		return
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	if len(message) > 512 {
+		message = message[:512]
+	}
+	msg := StratumMessage{
+		ID:     nil,
+		Method: "client.show_message",
+		Params: []any{message},
+	}
+	if err := mc.writeJSON(msg); err != nil && debugLogging {
+		logger.Debug("client.show_message write error", "remote", mc.id, "error", err)
+	}
+}
+
 var (
 	cannedPongSuffix       = []byte(`,"result":"pong","error":null}`)
 	cannedEmptySliceSuffix = []byte(`,"result":[],"error":null}`)
 	cannedTrueSuffix       = []byte(`,"result":true,"error":null}`)
-	cannedSubscribePrefix  = []byte(`,"result":[[["mining.set_difficulty","1"],["mining.notify","1"]],`)
 	cannedSubscribeSuffix  = []byte(`],"error":null}`)
 )
 
@@ -129,20 +150,25 @@ func (mc *MinerConn) writeTrueResponseRawID(idRaw []byte) {
 	mc.writeTrueResponse(idVal)
 }
 
-func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int) {
+func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int, subID string) {
 	if mc.cfg.StratumFastEncodeEnabled {
-		if err := mc.writeCannedSubscribeResponse(id, extranonce1Hex, extranonce2Size); err != nil {
+		if err := mc.writeCannedSubscribeResponse(id, extranonce1Hex, extranonce2Size, subID); err != nil {
 			logger.Error("write canned response", "remote", mc.id, "label", "subscribe", "error", err)
 		}
 		return
 	}
 
+	if strings.TrimSpace(subID) == "" {
+		subID = "1"
+	}
 	mc.writeResponse(StratumResponse{
 		ID: id,
 		Result: []any{
 			[][]any{
-				{"mining.set_difficulty", "1"},
-				{"mining.notify", "1"},
+				{"mining.set_difficulty", subID},
+				{"mining.notify", subID},
+				{"mining.set_extranonce", subID},
+				{"mining.set_version_mask", subID},
 			},
 			extranonce1Hex,
 			extranonce2Size,
@@ -151,9 +177,9 @@ func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extra
 	})
 }
 
-func (mc *MinerConn) writeSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int) {
+func (mc *MinerConn) writeSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int, subID string) {
 	if mc.cfg.StratumFastEncodeEnabled {
-		if err := mc.writeCannedSubscribeResponseRawID(idRaw, extranonce1Hex, extranonce2Size); err != nil {
+		if err := mc.writeCannedSubscribeResponseRawID(idRaw, extranonce1Hex, extranonce2Size, subID); err != nil {
 			logger.Error("write canned response", "remote", mc.id, "label", "subscribe", "error", err)
 		}
 		return
@@ -162,7 +188,7 @@ func (mc *MinerConn) writeSubscribeResponseRawID(idRaw []byte, extranonce1Hex st
 	if !ok {
 		return
 	}
-	mc.writeSubscribeResponse(idVal, extranonce1Hex, extranonce2Size)
+	mc.writeSubscribeResponse(idVal, extranonce1Hex, extranonce2Size, subID)
 }
 
 func (mc *MinerConn) sendCannedResponse(label string, id any, suffix []byte) {
@@ -210,12 +236,12 @@ func (mc *MinerConn) writeCannedResponseRawID(idRaw []byte, suffix []byte) error
 	return mc.writeBytesLocked(buf)
 }
 
-func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int) error {
+func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int, subID string) error {
 	mc.writeMu.Lock()
 	defer mc.writeMu.Unlock()
 
 	buf := mc.writeScratch[:0]
-	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size)
+	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, subID)
 	if err != nil {
 		return err
 	}
@@ -225,14 +251,26 @@ func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string,
 	return mc.writeBytesLocked(buf)
 }
 
-func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int) error {
+func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1Hex string, extranonce2Size int, subID string) error {
 	mc.writeMu.Lock()
 	defer mc.writeMu.Unlock()
 
+	if strings.TrimSpace(subID) == "" {
+		subID = "1"
+	}
 	buf := mc.writeScratch[:0]
 	buf = append(buf, `{"id":`...)
 	buf = append(buf, idRaw...)
-	buf = append(buf, cannedSubscribePrefix...)
+	buf = append(buf, `,"result":[[[`...)
+	buf = append(buf, `"mining.set_difficulty",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.notify",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.set_extranonce",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.set_version_mask",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `]],`...)
 	buf = strconv.AppendQuote(buf, extranonce1Hex)
 	buf = append(buf, ',')
 	buf = strconv.AppendInt(buf, int64(extranonce2Size), 10)
@@ -245,7 +283,7 @@ func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1
 
 func buildSubscribeResponseBytes(id any, extranonce1Hex string, extranonce2Size int) ([]byte, error) {
 	buf := make([]byte, 0, 128+len(extranonce1Hex))
-	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size)
+	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, "1")
 	if err != nil {
 		return nil, err
 	}
@@ -253,15 +291,27 @@ func buildSubscribeResponseBytes(id any, extranonce1Hex string, extranonce2Size 
 	return buf, nil
 }
 
-func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, extranonce2Size int) ([]byte, error) {
-	// {"id":<id>,"result":[[["mining.set_difficulty","1"],["mining.notify","1"]],"<ex1>",<en2Size>],"error":null}
+func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, extranonce2Size int, subID string) ([]byte, error) {
+	// {"id":<id>,"result":[[["mining.set_difficulty","<subid>"],["mining.notify","<subid>"],["mining.set_extranonce","<subid>"],["mining.set_version_mask","<subid>"]],"<ex1>",<en2Size>],"error":null}
+	if strings.TrimSpace(subID) == "" {
+		subID = "1"
+	}
 	buf = append(buf, `{"id":`...)
 	var err error
 	buf, err = appendJSONValue(buf, id)
 	if err != nil {
 		return nil, err
 	}
-	buf = append(buf, cannedSubscribePrefix...)
+	buf = append(buf, `,"result":[[[`...)
+	buf = append(buf, `"mining.set_difficulty",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.notify",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.set_extranonce",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `],["mining.set_version_mask",`...)
+	buf = strconv.AppendQuote(buf, subID)
+	buf = append(buf, `]],`...)
 	buf = strconv.AppendQuote(buf, extranonce1Hex)
 	buf = append(buf, ',')
 	buf = strconv.AppendInt(buf, int64(extranonce2Size), 10)

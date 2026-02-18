@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -100,6 +101,85 @@ func (r submitRejectReason) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+func isBanEligibleInvalidReason(reason submitRejectReason) bool {
+	switch reason {
+	case rejectInvalidExtranonce2,
+		rejectInvalidNTime,
+		rejectInvalidNonce,
+		rejectInvalidCoinbase,
+		rejectInvalidMerkle,
+		rejectInvalidVersion,
+		rejectInvalidVersionMask,
+		rejectInsufficientVersionBits:
+		return true
+	default:
+		return false
+	}
+}
+
+func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason submitRejectReason, effectiveInvalid int) {
+	if mc == nil || !mc.authorized {
+		return
+	}
+	if !isBanEligibleInvalidReason(reason) {
+		return
+	}
+	threshold := mc.cfg.BanInvalidSubmissionsAfter
+	if threshold <= 0 {
+		threshold = defaultBanInvalidSubmissionsAfter
+	}
+	if threshold <= 1 {
+		return
+	}
+	if effectiveInvalid < threshold-1 {
+		return
+	}
+
+	window := mc.banInvalidWindow()
+
+	shouldWarn := false
+	mc.stateMu.Lock()
+	if effectiveInvalid > mc.invalidWarnedCount && (mc.invalidWarnedAt.IsZero() || now.Sub(mc.invalidWarnedAt) >= 30*time.Second) {
+		mc.invalidWarnedAt = now
+		mc.invalidWarnedCount = effectiveInvalid
+		shouldWarn = true
+	}
+	mc.stateMu.Unlock()
+	if !shouldWarn {
+		return
+	}
+
+	msg := fmt.Sprintf("Warning: %s (%d/%d invalid submissions in %s). Next invalid submission may result in a temporary ban.", reason.String(), effectiveInvalid, threshold, window)
+	mc.sendClientShowMessage(msg)
+}
+
+func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
+	if mc == nil || !mc.authorized {
+		return
+	}
+	const (
+		dupWindow    = 2 * time.Minute
+		dupThreshold = 3
+	)
+	shouldWarn := false
+	mc.stateMu.Lock()
+	if mc.dupWarnWindowStart.IsZero() || now.Sub(mc.dupWarnWindowStart) > dupWindow {
+		mc.dupWarnWindowStart = now
+		mc.dupWarnCount = 0
+	}
+	mc.dupWarnCount++
+	if mc.dupWarnCount == dupThreshold && (mc.dupWarnedAt.IsZero() || now.Sub(mc.dupWarnedAt) > dupWindow) {
+		mc.dupWarnedAt = now
+		shouldWarn = true
+	}
+	mc.stateMu.Unlock()
+	if !shouldWarn {
+		return
+	}
+
+	mc.sendClientShowMessage("Warning: repeated duplicate shares detected. This often indicates a miner/proxy bug or reconnect replay; consider restarting the miner/proxy.")
 }
 
 func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason) (bool, int) {
@@ -245,7 +325,13 @@ func (mc *MinerConn) noteProtocolViolation(now time.Time) (bool, int) {
 func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, reason submitRejectReason, errCode int, errMsg string, now time.Time) {
 	reasonText := reason.String()
 	mc.recordShare(workerName, false, 0, 0, reasonText, "", nil, now)
-	if banned, invalids := mc.noteInvalidSubmit(now, reason); banned {
+	banned, invalids := mc.noteInvalidSubmit(now, reason)
+	if banned {
+		until, banReason, _ := mc.banDetails()
+		if strings.TrimSpace(banReason) == "" {
+			banReason = reasonText
+		}
+		mc.sendClientShowMessage(fmt.Sprintf("Banned until %s: %s", until.UTC().Format(time.RFC3339), banReason))
 		mc.logBan(reasonText, workerName, invalids)
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
@@ -253,6 +339,11 @@ func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, 
 			Error:  newStratumError(24, "banned"),
 		})
 		return
+	}
+	if reason == rejectDuplicateShare {
+		mc.maybeWarnDuplicateShares(now)
+	} else {
+		mc.maybeWarnApproachingInvalidBan(now, reason, invalids)
 	}
 	mc.writeResponse(StratumResponse{
 		ID:     req.ID,
@@ -1238,6 +1329,12 @@ func (mc *MinerConn) clampDifficulty(diff float64) float64 {
 		min = mc.vardiff.MinDiff
 	}
 
+	// Apply per-connection minimum difficulty hints (e.g. from miner username
+	// or mining.configure minimum-difficulty).
+	if hintMin := atomicLoadFloat64(&mc.hintMinDifficulty); hintMin > 0 && hintMin > min {
+		min = hintMin
+	}
+
 	max := mc.cfg.MaxDifficulty
 	if max < 0 {
 		max = 0
@@ -1275,6 +1372,7 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 	atomicStoreFloat64(&mc.difficulty, diff)
 	mc.shareTarget.Store(targetFromDifficulty(diff))
 	mc.lastDiffChange.Store(now.UnixNano())
+	mc.rememberDifficulty(diff, now)
 
 	target := mc.shareTarget.Load()
 	if logger.Enabled(logLevelInfo) {

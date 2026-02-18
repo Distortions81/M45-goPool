@@ -108,6 +108,7 @@ type MinerConn struct {
 	jobCh                chan *Job
 	difficulty           atomic.Uint64 // float64 stored as bits
 	previousDifficulty   atomic.Uint64 // float64 stored as bits
+	hintMinDifficulty    atomic.Uint64 // float64 stored as bits; 0 means unset
 	shareTarget          atomic.Pointer[big.Int]
 	lastDiffChange       atomic.Int64 // Unix nanos
 	stateMu              sync.Mutex
@@ -200,6 +201,14 @@ type MinerConn struct {
 	// stratumMsgCount stores weighted half-message units (2 = full message).
 	stratumMsgWindowStart time.Time
 	stratumMsgCount       int
+	// invalidWarnedAt/invalidWarnedCount rate-limit client.show_message warnings
+	// when the miner is approaching an invalid-submission ban threshold.
+	invalidWarnedAt    time.Time
+	invalidWarnedCount int
+	// dupWarn* rate-limit client.show_message warnings for repeated duplicate shares.
+	dupWarnWindowStart time.Time
+	dupWarnCount       int
+	dupWarnedAt        time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
 	lastHashrateUpdate time.Time
@@ -255,6 +264,9 @@ type MinerConn struct {
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64
+	// sessionID is an optional client-provided token sometimes sent in
+	// mining.subscribe to allow miners/proxies to resume sessions.
+	sessionID string
 	// suggestDiffProcessed tracks whether we've already processed mining.suggest_difficulty
 	// during the initialization phase. Subsequent suggests will be ignored to prevent
 	// repeated keepalive messages from disrupting vardiff adjustments.

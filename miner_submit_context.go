@@ -1,7 +1,5 @@
 package main
 
-
-
 func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext, bool) {
 	// Solo mode keeps this hot path minimal: build header, compute hash/diff, and
 	// detect block candidates. We intentionally skip strict verification and
@@ -124,6 +122,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 			} else {
@@ -282,6 +281,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
 			} else {

@@ -42,6 +42,8 @@ func (mc *MinerConn) minerTypeBanned(minerType, minerName string) bool {
 func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 	clientID := ""
 	haveClientID := false
+	sessionID := ""
+	haveSessionID := false
 	// Many miners send a client identifier as the first subscribe parameter.
 	// Capture it so we can summarize miner types on the status page.
 	if len(req.Params) > 0 {
@@ -50,10 +52,17 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 			haveClientID = true
 		}
 	}
-	mc.handleSubscribeID(req.ID, clientID, haveClientID)
+	// Some miners send a resume/session token as the second subscribe param.
+	if len(req.Params) > 1 {
+		if s, ok := req.Params[1].(string); ok {
+			sessionID = strings.TrimSpace(s)
+			haveSessionID = sessionID != ""
+		}
+	}
+	mc.handleSubscribeID(req.ID, clientID, haveClientID, sessionID, haveSessionID)
 }
 
-func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveClientID bool) {
+func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveClientID bool, sessionID string, haveSessionID bool) {
 	idVal, _, ok := parseJSONValue(idRaw, 0)
 	if !ok {
 		return
@@ -111,6 +120,31 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 		}
 	}
 
+	if haveSessionID {
+		mc.stateMu.Lock()
+		if mc.sessionID == "" {
+			mc.sessionID = strings.TrimSpace(sessionID)
+		}
+		mc.stateMu.Unlock()
+	}
+
+	// Ensure a stable per-connection session ID is available for the subscribe
+	// response. Some miners send it back as params[1] on reconnect.
+	mc.assignConnectionSeq()
+	if haveSessionID {
+		mc.stateMu.Lock()
+		if mc.sessionID == "" {
+			mc.sessionID = strings.TrimSpace(sessionID)
+		}
+		mc.stateMu.Unlock()
+	} else {
+		mc.stateMu.Lock()
+		if mc.sessionID == "" {
+			mc.sessionID = mc.connectionIDString()
+		}
+		mc.stateMu.Unlock()
+	}
+
 	mc.subscribed = true
 
 	ex1 := mc.extranonce1Hex
@@ -119,7 +153,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 		en2Size = 4
 	}
 
-	mc.writeSubscribeResponseRawID(idRaw, ex1, en2Size)
+	mc.writeSubscribeResponseRawID(idRaw, ex1, en2Size, mc.currentSessionID())
 
 	initialJob := mc.jobMgr.CurrentJob()
 	if initialJob != nil {
@@ -141,7 +175,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 	}
 }
 
-func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool) {
+func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool, sessionID string, haveSessionID bool) {
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {
 		logger.Warn("subscribe rejected: already subscribed", "remote", mc.id)
@@ -194,6 +228,23 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		}
 	}
 
+	// Ensure a stable per-connection session ID is available for the subscribe
+	// response. Some miners send it back as params[1] on reconnect.
+	mc.assignConnectionSeq()
+	if haveSessionID {
+		mc.stateMu.Lock()
+		if mc.sessionID == "" {
+			mc.sessionID = strings.TrimSpace(sessionID)
+		}
+		mc.stateMu.Unlock()
+	} else {
+		mc.stateMu.Lock()
+		if mc.sessionID == "" {
+			mc.sessionID = mc.connectionIDString()
+		}
+		mc.stateMu.Unlock()
+	}
+
 	mc.subscribed = true
 
 	// Result spec (simplified):
@@ -208,7 +259,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		en2Size = 4
 	}
 
-	mc.writeSubscribeResponse(id, ex1, en2Size)
+	mc.writeSubscribeResponse(id, ex1, en2Size, mc.currentSessionID())
 
 	initialJob := mc.jobMgr.CurrentJob()
 	if initialJob != nil {
@@ -263,7 +314,8 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		return
 	}
 
-	worker := strings.TrimSpace(workerParam)
+	workerClean, usernameDiff, hasUsernameDiff := parseWorkerDifficultyHint(workerParam)
+	worker := strings.TrimSpace(workerClean)
 
 	// Validate worker name length to prevent abuse
 	if len(worker) == 0 {
@@ -305,6 +357,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		if reason == "" {
 			reason = "banned"
 		}
+		mc.sendClientShowMessage("Banned: " + reason)
 		mc.stateMu.Lock()
 		mc.banUntil = bannedView.BannedUntil
 		mc.banReason = reason
@@ -355,18 +408,47 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	}
 
 	passwordDiff, hasPasswordDiff := parsePasswordDifficultyHint(pass)
+	suggestedDiff := 0.0
+	hasSuggestedDiff := false
 	if hasPasswordDiff {
+		suggestedDiff = passwordDiff
+		hasSuggestedDiff = true
+	} else if hasUsernameDiff {
+		suggestedDiff = usernameDiff
+		hasSuggestedDiff = true
+	}
+
+	// Restore prior difficulty (in-memory) for this worker/session if it would
+	// start the miner at a higher target.
+	explicitSuggested := hasPasswordDiff || hasUsernameDiff
+	storedDiff := 0.0
+	if h := mc.currentWorkerHash(); h != "" {
+		if d, ok := globalDifficultyCache.getWorker(h, 2*time.Hour); ok && d > storedDiff {
+			storedDiff = d
+		}
+	}
+	if sid := mc.currentSessionID(); sid != "" {
+		if d, ok := globalDifficultyCache.getSession(sid, 2*time.Hour); ok && d > storedDiff {
+			storedDiff = d
+		}
+	}
+	if storedDiff > 0 && storedDiff > suggestedDiff {
+		suggestedDiff = storedDiff
+		hasSuggestedDiff = true
+	}
+
+	if hasSuggestedDiff && explicitSuggested {
 		min := mc.cfg.MinDifficulty
 		max := mc.cfg.MaxDifficulty
 		if min > 0 && max > 0 && max < min {
 			max = min
 		}
-		outOfRange := (min > 0 && passwordDiff < min) || (max > 0 && passwordDiff > max)
+		outOfRange := (min > 0 && suggestedDiff < min) || (max > 0 && suggestedDiff > max)
 		if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
-			reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", passwordDiff)
-			if min > 0 && passwordDiff < min {
+			reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", suggestedDiff)
+			if min > 0 && suggestedDiff < min {
 				reason = "Miner too slow"
-			} else if max > 0 && passwordDiff > max {
+			} else if max > 0 && suggestedDiff > max {
 				reason = "Miner too fast"
 			}
 			mc.banFor(reason, time.Hour, workerName)
@@ -377,6 +459,14 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 			})
 			mc.Close(reason)
 			return
+		}
+
+		// Treat username/password difficulty hints as "minimum-difficulty" hints
+		// for the connection so VarDiff doesn't drop below the requested floor.
+		// This keeps behavior compatible with miners that use username suffixes
+		// like "+1024" intending a minimum share target.
+		if atomicLoadFloat64(&mc.hintMinDifficulty) <= 0 {
+			atomicStoreFloat64(&mc.hintMinDifficulty, suggestedDiff)
 		}
 	}
 
@@ -405,8 +495,20 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		go mc.listenJobs()
 	}
 
-	if hasPasswordDiff {
-		mc.applySuggestedDifficulty(passwordDiff)
+	if hasSuggestedDiff {
+		// If the difficulty came from restore rather than an explicit suggest,
+		// treat it as already restored so later suggests don't fight it.
+		if storedDiff > 0 && suggestedDiff == storedDiff && !hasPasswordDiff && !hasUsernameDiff {
+			mc.restoredRecentDiff = true
+			mc.setDifficulty(suggestedDiff)
+		} else {
+			mc.applySuggestedDifficulty(suggestedDiff)
+		}
+	} else if storedDiff > 0 {
+		// No explicit diff hint, but we have a remembered session/worker diff.
+		// Restore it as the starting point (VarDiff can still move from here).
+		mc.restoredRecentDiff = true
+		mc.setDifficulty(storedDiff)
 	}
 
 	// Now that the worker is authorized and its wallet-style ID is known
@@ -582,6 +684,17 @@ func splitPasswordTokens(pass string) []string {
 	})
 }
 
+func splitWorkerHintTokens(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		switch r {
+		case '+', '#', ',', ';', '|', '&', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
 func authorizePasswordMatches(pass, expected string) bool {
 	expected = strings.TrimSpace(expected)
 	pass = strings.TrimSpace(pass)
@@ -622,6 +735,55 @@ func parsePasswordDifficultyHint(pass string) (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+func parseWorkerDifficultyHint(worker string) (cleanWorker string, diff float64, ok bool) {
+	raw := strings.TrimSpace(worker)
+	if raw == "" {
+		return worker, 0, false
+	}
+
+	// Some miners encode a diff hint inside the worker string (username), e.g.:
+	// - wallet.worker+1024
+	// - wallet.worker+d=1024
+	// - wallet.worker#diff=64
+	// Only strip a suffix when we detect an actual diff hint.
+	idx := strings.IndexAny(raw, "+#,:;|& \t\r\n")
+	if idx < 0 {
+		return worker, 0, false
+	}
+	prefix := strings.TrimSpace(raw[:idx])
+	if prefix == "" {
+		return worker, 0, false
+	}
+	suffix := raw[idx+1:]
+	if strings.TrimSpace(suffix) == "" {
+		return worker, 0, false
+	}
+
+	for _, token := range splitWorkerHintTokens(suffix) {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if key, val, okSplit := splitOptionToken(token); okSplit {
+			switch normalizeOptionKey(key) {
+			case "d", "diff", "difficulty", "sd", "suggestdiff", "suggestdifficulty":
+				d, okParse := parseSuggestedDifficultyString(val)
+				if okParse && d > 0 {
+					return prefix, d, true
+				}
+			}
+			continue
+		}
+		// Common shorthand: "+1024" (no key).
+		d, okParse := parseSuggestedDifficultyString(token)
+		if okParse && d > 0 {
+			return prefix, d, true
+		}
+	}
+
+	return worker, 0, false
 }
 
 func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
@@ -912,7 +1074,12 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 
 	result := make(map[string]any)
 	shouldSendVersionMask := false
+	shouldSendExtranonce := false
+	banReason := ""
 	for _, ext := range rawExts {
+		if banReason != "" {
+			break
+		}
 		name := strings.TrimSpace(ext)
 		switch normalizeOptionKey(name) {
 		case "versionrolling":
@@ -974,15 +1141,77 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			// Non-standard extension some miners use to confirm support for
 			// mining.suggest_difficulty before sending it.
 			result[name] = true
+		case "minimumdifficulty":
+			// Non-standard extension some miners use to request a minimum share
+			// difficulty floor (often paired with mining.configure options like
+			// minimum-difficulty.value).
+			result[name] = true
+			if opts != nil && atomicLoadFloat64(&mc.hintMinDifficulty) <= 0 {
+				if rawMinDiff, found := optionValueByAliases(opts,
+					"minimum-difficulty.value",
+					"minimum_difficulty.value",
+					"minimum-difficulty-value",
+					"minimum_difficulty_value",
+				); found {
+					if minDiff, ok := parseSuggestedDifficulty(rawMinDiff); ok && minDiff > 0 {
+						min := mc.cfg.MinDifficulty
+						max := mc.cfg.MaxDifficulty
+						if min > 0 && max > 0 && max < min {
+							max = min
+						}
+						outOfRange := (min > 0 && minDiff < min) || (max > 0 && minDiff > max)
+						if outOfRange && mc.cfg.EnforceSuggestedDifficultyLimits {
+							worker := mc.currentWorker()
+							reason := fmt.Sprintf("suggested difficulty %.8g outside pool limits", minDiff)
+							if min > 0 && minDiff < min {
+								reason = "Miner too slow"
+							} else if max > 0 && minDiff > max {
+								reason = "Miner too fast"
+							}
+							mc.banFor(reason, time.Hour, worker)
+							banReason = reason
+							break
+						}
+						atomicStoreFloat64(&mc.hintMinDifficulty, minDiff)
+					}
+				}
+			}
+		case "subscribeextranonce":
+			// Some miners expect "subscribe-extranonce" negotiation via
+			// mining.configure rather than calling mining.extranonce.subscribe.
+			// Treat it as an opt-in for mining.set_extranonce notifications.
+			result[name] = true
+			if !mc.extranonceSubscribed {
+				mc.extranonceSubscribed = true
+				shouldSendExtranonce = true
+			}
 		default:
 			// Unknown extension; explicitly deny so miners don't retry forever.
 			result[name] = false
 		}
 	}
 
+	if banReason != "" {
+		mc.writeResponse(StratumResponse{
+			ID:     req.ID,
+			Result: false,
+			Error:  newStratumError(24, "banned"),
+		})
+		mc.Close(banReason)
+		return
+	}
+
 	mc.writeResponse(StratumResponse{ID: req.ID, Result: result, Error: nil})
 	if shouldSendVersionMask {
 		mc.sendVersionMask()
+	}
+	if shouldSendExtranonce {
+		ex1 := mc.extranonce1Hex
+		en2Size := mc.cfg.Extranonce2Size
+		if en2Size <= 0 {
+			en2Size = 4
+		}
+		mc.sendSetExtranonce(ex1, en2Size)
 	}
 }
 

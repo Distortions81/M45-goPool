@@ -87,6 +87,46 @@ func TestParseSuggestedDifficultyVariants(t *testing.T) {
 	}
 }
 
+func TestParseWorkerDifficultyHintVariants(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		worker        string
+		clean         string
+		diff          float64
+		ok            bool
+		wantUnchanged bool
+	}{
+		{name: "plus_number", worker: "wallet.worker+1024", clean: "wallet.worker", diff: 1024, ok: true},
+		{name: "plus_keyed_hex", worker: "wallet.worker+d=0x400", clean: "wallet.worker", diff: 1024, ok: true},
+		{name: "hash_keyed_float", worker: "wallet.worker#difficulty=2.5", clean: "wallet.worker", diff: 2.5, ok: true},
+		{name: "comma_keyed", worker: "wallet.worker,diff:64", clean: "wallet.worker", diff: 64, ok: true},
+		{name: "space_separated", worker: "wallet.worker + 128", clean: "wallet.worker", diff: 128, ok: true},
+		{name: "non_diff_suffix", worker: "wallet.worker+garage", clean: "wallet.worker+garage", diff: 0, ok: false, wantUnchanged: true},
+		{name: "zero_ignored", worker: "wallet.worker+0", clean: "wallet.worker+0", diff: 0, ok: false, wantUnchanged: true},
+		{name: "no_delim", worker: "wallet.worker", clean: "wallet.worker", diff: 0, ok: false, wantUnchanged: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clean, diff, ok := parseWorkerDifficultyHint(tc.worker)
+			if ok != tc.ok {
+				t.Fatalf("parseWorkerDifficultyHint(%q) ok=%v, want %v", tc.worker, ok, tc.ok)
+			}
+			if ok && diff != tc.diff {
+				t.Fatalf("parseWorkerDifficultyHint(%q) diff=%v, want %v", tc.worker, diff, tc.diff)
+			}
+			if ok && clean != tc.clean {
+				t.Fatalf("parseWorkerDifficultyHint(%q) clean=%q, want %q", tc.worker, clean, tc.clean)
+			}
+			if !ok && tc.wantUnchanged && clean != tc.worker {
+				t.Fatalf("parseWorkerDifficultyHint(%q) clean=%q, want unchanged", tc.worker, clean)
+			}
+		})
+	}
+}
+
 func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
@@ -120,5 +160,49 @@ func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	}
 	if !strings.Contains(out, "\"suggest_difficulty\":true") {
 		t.Fatalf("expected configure response to acknowledge suggest_difficulty, got: %q", out)
+	}
+}
+
+func TestHandleConfigureSubscribeExtranonceSendsSetExtranonce(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:             "configure-extranonce",
+		conn:           conn,
+		extranonce1Hex: "abcdef01",
+		cfg:            Config{Extranonce2Size: 4},
+	}
+
+	req := &StratumRequest{
+		ID:     1,
+		Method: "mining.configure",
+		Params: []any{"subscribe-extranonce"},
+	}
+	mc.handleConfigure(req)
+
+	if !mc.extranonceSubscribed {
+		t.Fatalf("expected extranonceSubscribed to be enabled")
+	}
+	out := conn.String()
+	if !strings.Contains(out, "\"subscribe-extranonce\":true") {
+		t.Fatalf("expected configure response to acknowledge subscribe-extranonce, got: %q", out)
+	}
+	if !strings.Contains(out, "\"method\":\"mining.set_extranonce\"") {
+		t.Fatalf("expected set_extranonce to be sent after configure, got: %q", out)
+	}
+}
+
+func TestSubscribeResponseAdvertisesSetExtranonce(t *testing.T) {
+	conn := &writeRecorderConn{}
+	mc := &MinerConn{
+		id:   "subscribe-advertise-extranonce",
+		conn: conn,
+		cfg:  Config{StratumFastEncodeEnabled: false},
+	}
+
+	mc.writeSubscribeResponse(1, "00", 4, "sid")
+
+	out := conn.String()
+	if !strings.Contains(out, "\"mining.set_extranonce\"") {
+		t.Fatalf("expected subscribe response to advertise set_extranonce, got: %q", out)
 	}
 }

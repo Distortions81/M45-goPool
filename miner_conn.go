@@ -255,6 +255,7 @@ func (mc *MinerConn) handle() {
 			if errors.Is(err, bufio.ErrBufferFull) {
 				logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
 				if banned, count := mc.noteProtocolViolation(now); banned {
+					mc.sendClientShowMessage("Banned: " + mc.banReason)
 					mc.logBan("oversized stratum message", mc.currentWorker(), count)
 				}
 				return
@@ -312,16 +313,22 @@ func (mc *MinerConn) handle() {
 				}
 			case stratumMethodMiningSubscribe:
 				// Fast-path: mining.subscribe only needs the request ID and (optionally)
-				// a string client identifier in params[0].
-				params, ok := sniffStratumStringParams(line, 1)
+				// a string client identifier in params[0] and optional session in params[1].
+				params, ok := sniffStratumStringParams(line, 2)
 				if ok {
 					clientID := ""
 					haveClientID := false
+					sessionID := ""
+					haveSessionID := false
 					if len(params) > 0 {
 						clientID = params[0]
 						haveClientID = true
 					}
-					mc.handleSubscribeRawID(sniffedIDRaw, clientID, haveClientID)
+					if len(params) > 1 {
+						sessionID = strings.TrimSpace(params[1])
+						haveSessionID = sessionID != ""
+					}
+					mc.handleSubscribeRawID(sniffedIDRaw, clientID, haveClientID, sessionID, haveSessionID)
 					continue
 				}
 			case stratumMethodMiningSubmit:
@@ -342,6 +349,7 @@ func (mc *MinerConn) handle() {
 		if err := fastJSONUnmarshal(line, &req); err != nil {
 			logger.Warn("json error from miner", "remote", mc.id, "error", err)
 			if banned, count := mc.noteProtocolViolation(now); banned {
+				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan("invalid stratum json", mc.currentWorker(), count)
 			}
 			return
@@ -362,6 +370,35 @@ func (mc *MinerConn) handle() {
 			mc.suggestDifficulty(&req)
 		case "mining.suggest_target":
 			mc.suggestTarget(&req)
+		case "mining.set_difficulty":
+			// Non-standard (pool->miner) message that some proxies/miners may
+			// accidentally send to the pool. Treat it like a difficulty hint.
+			mc.suggestDifficulty(&req)
+		case "mining.set_target":
+			// Non-standard (pool->miner) message that some proxies/miners may
+			// accidentally send to the pool. Treat it like a target hint.
+			mc.suggestTarget(&req)
+		case "client.get_version":
+			v := strings.TrimSpace(buildVersion)
+			if v == "" || v == "(dev)" {
+				v = "dev"
+			}
+			mc.writeResponse(StratumResponse{
+				ID:     req.ID,
+				Result: "goPool/" + v,
+				Error:  nil,
+			})
+		case "client.ping":
+			// Some software uses client.ping instead of mining.ping.
+			mc.writePongResponse(req.ID)
+		case "client.show_message":
+			// Some software stacks send this method even though it's typically
+			// a pool->miner notification. Acknowledge to avoid breaking proxies.
+			mc.writeTrueResponse(req.ID)
+		case "client.reconnect":
+			// Some stacks treat this as a request rather than a notification.
+			// Acknowledge and let the miner decide what to do.
+			mc.writeTrueResponse(req.ID)
 		case "mining.ping":
 			// Respond to keepalive ping with pong
 			mc.writePongResponse(req.ID)

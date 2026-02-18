@@ -84,6 +84,18 @@ func (mc *MinerConn) currentWorker() string {
 	return mc.stats.Worker
 }
 
+func (mc *MinerConn) currentWorkerHash() string {
+	mc.statsMu.Lock()
+	defer mc.statsMu.Unlock()
+	return strings.TrimSpace(mc.stats.WorkerSHA256)
+}
+
+func (mc *MinerConn) currentSessionID() string {
+	mc.stateMu.Lock()
+	defer mc.stateMu.Unlock()
+	return strings.TrimSpace(mc.sessionID)
+}
+
 func (mc *MinerConn) updateWorker(worker string) string {
 	if worker == "" {
 		return mc.minerName("")

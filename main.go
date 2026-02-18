@@ -218,6 +218,12 @@ func main() {
 	logger.Info("effective config", "config", cfg.Effective())
 	logger.Info("sha256 implementation", "implementation", sha256ImplementationName())
 
+	// Best-effort load of in-memory Stratum difficulty/session resume cache.
+	// Loaded entries get a fresh "age window" at boot (we don't persist timestamps).
+	if err := globalDifficultyCache.loadFromJSON(difficultyCacheJSONPath(cfg.DataDir), time.Now()); err != nil {
+		logger.Warn("load difficulty cache", "error", err)
+	}
+
 	// Config sanity checks.
 	if cfg.PoolFeePercent <= 0 {
 		logger.Warn("pool_fee_percent is 0; operator will not receive a fee")
@@ -754,6 +760,7 @@ func main() {
 	logger.Info("shutdown requested; draining active miners")
 	shutdownStart := time.Now()
 	for _, mc := range registry.Snapshot() {
+		mc.sendClientShowMessage("Pool restarting; please reconnect.")
 		mc.Close("shutdown")
 	}
 
@@ -774,6 +781,12 @@ func main() {
 			logger.Error("flush accounting", "error", err)
 		}
 	}
+
+	// Best-effort save of in-memory Stratum difficulty/session resume cache.
+	if err := globalDifficultyCache.saveToJSON(difficultyCacheJSONPath(cfg.DataDir)); err != nil {
+		logger.Warn("save difficulty cache", "error", err)
+	}
+
 	// Best-effort checkpoint to flush WAL into the main DB on shutdown.
 	checkpointSharedStateDB()
 	// Best-effort sync of log files on shutdown so buffered OS writes are
