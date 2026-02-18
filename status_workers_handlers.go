@@ -405,10 +405,6 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 
 // handleWorkerLookup is a generic handler that extracts a worker identifier from the URL path
 // and performs a direct worker lookup. It supports multiple URL patterns for miner software:
-// - /user/{worker}
-// - /users/{worker}
-// - /stats/{worker}
-// - /app/{worker}
 // The worker identifier is used directly for lookup (plaintext worker name).
 func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request, prefix string) {
 	host := remoteHostFromRequest(r)
