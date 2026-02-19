@@ -106,6 +106,7 @@ type JobManager struct {
 	payoutScript        []byte
 	donationScript      []byte
 	extraID             uint32
+	jobIDCounter        uint64
 	subs                map[chan *Job]struct{}
 	subsMu              sync.Mutex
 	zmqHashblockHealthy atomic.Bool
@@ -127,11 +128,11 @@ type JobManager struct {
 	// nodeSync* tracks whether the node is in a usable state for mining.
 	// When the node reports IBD/syncing, we treat Stratum as degraded to avoid
 	// miners wasting power on stale work.
-	nodeSyncMu       sync.RWMutex
-	nodeIBD          bool
-	nodeBlocks       int64
-	nodeHeaders      int64
-	nodeSyncFetched  time.Time
+	nodeSyncMu      sync.RWMutex
+	nodeIBD         bool
+	nodeBlocks      int64
+	nodeHeaders     int64
+	nodeSyncFetched time.Time
 	// Async notification queue
 	notifyQueue chan *Job
 	notifyWg    sizedwaitgroup.SizedWaitGroup
