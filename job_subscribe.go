@@ -25,6 +25,11 @@ func (jm *JobManager) NextExtranonce1() []byte {
 	return buf[:]
 }
 
+func (jm *JobManager) nextJobID() string {
+	id := atomic.AddUint64(&jm.jobIDCounter, 1) - 1
+	return encodeBase58Uint64(id)
+}
+
 func (jm *JobManager) Subscribe() chan *Job {
 	ch := make(chan *Job, jobSubscriberBuffer)
 	jm.subsMu.Lock()

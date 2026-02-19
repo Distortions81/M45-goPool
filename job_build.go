@@ -89,7 +89,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	}
 
 	job := &Job{
-		JobID:                   fmt.Sprintf("%d", time.Now().UnixNano()),
+		JobID:                   jm.nextJobID(),
 		Template:                tpl,
 		Target:                  target,
 		targetBE:                uint256BEFromBigInt(target),
