@@ -403,104 +403,80 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 	_, _ = w.Write(buf.Bytes())
 }
 
-// handleWorkerLookup is a generic handler that extracts a worker identifier from the URL path
-// and performs a direct worker lookup. It supports multiple URL patterns for miner software:
-// The worker identifier is used directly for lookup (plaintext worker name).
-func (s *StatusServer) handleWorkerLookup(w http.ResponseWriter, r *http.Request, prefix string) {
+func (s *StatusServer) lookupPathIdentifier(w http.ResponseWriter, r *http.Request, prefix, label string) (string, bool) {
 	host := remoteHostFromRequest(r)
 	if !s.workerLookupLimiter.allow(host) {
 		http.Error(w, "Worker lookup rate limit exceeded; try again later.", http.StatusTooManyRequests)
-		return
+		return "", false
 	}
 
-	start := time.Now()
-	base := s.statusDataView()
-
-	// Best-effort derivation of the pool payout script so the UI can
-	// label coinbase outputs by destination. Errors are treated as
-	// "unknown" and do not affect normal worker stats rendering.
-	var poolScriptHex string
-	addr := strings.TrimSpace(s.Config().PayoutAddress)
-	if addr != "" {
-		if script, err := scriptForAddress(addr, ChainParams()); err == nil && len(script) > 0 {
-			poolScriptHex = strings.ToLower(hex.EncodeToString(script))
-		}
-	}
-
-	// Best-effort derivation of the donation script for 3-way payout display.
-	var donationScriptHex string
-	donationAddr := strings.TrimSpace(s.Config().OperatorDonationAddress)
-	if donationAddr != "" && s.Config().OperatorDonationPercent > 0 {
-		if script, err := scriptForAddress(donationAddr, ChainParams()); err == nil && len(script) > 0 {
-			donationScriptHex = strings.ToLower(hex.EncodeToString(script))
-		}
-	}
-
-	privacyMode := workerPrivacyModeFromRequest(r)
-	data := WorkerStatusData{
-		StatusData:        base,
-		PoolScriptHex:     poolScriptHex,
-		DonationScriptHex: donationScriptHex,
-		PrivacyMode:       privacyMode,
-	}
-	data.RenderDuration = time.Since(start)
-
-	// Extract worker ID from path after the prefix
 	path := strings.TrimPrefix(r.URL.Path, prefix)
 	path = strings.TrimPrefix(path, "/")
-	workerID := strings.TrimSpace(path)
+	value := strings.TrimSpace(path)
 
-	if len(workerID) > workerLookupMaxBytes {
+	if len(value) > workerLookupMaxBytes {
 		s.renderErrorPage(w, r, http.StatusBadRequest,
-			"Worker ID too long",
-			fmt.Sprintf("Worker identifiers are limited to %d bytes.", workerLookupMaxBytes),
-			"Please shorten the worker name and try again.")
+			label+" too long",
+			fmt.Sprintf("%ss are limited to %d bytes.", label, workerLookupMaxBytes),
+			"Please shorten the value and try again.")
+		return "", false
+	}
+
+	if value == "" {
+		s.renderErrorPage(w, r, http.StatusBadRequest,
+			"Missing "+label,
+			"Please provide a "+strings.ToLower(label)+" in the URL.",
+			"Example: "+prefix+"/bc1...")
+		return "", false
+	}
+	return value, true
+}
+
+// handleWorkerLookupByWallet handles standard wallet path lookups and
+// redirects to the wallet-search page.
+func (s *StatusServer) handleWorkerLookupByWallet(w http.ResponseWriter, r *http.Request, prefix string) {
+	walletID, ok := s.lookupPathIdentifier(w, r, prefix, "Wallet ID")
+	if !ok {
+		return
+	}
+	baseWallet := workerBaseAddress(walletID)
+	if baseWallet == "" {
+		s.renderErrorPage(w, r, http.StatusBadRequest,
+			"Invalid wallet ID",
+			"Please provide a valid wallet identifier.",
+			"Example: "+prefix+"/bc1...")
+		return
+	}
+	walletHash := workerNameHash(baseWallet)
+	if walletHash == "" {
+		s.renderErrorPage(w, r, http.StatusBadRequest,
+			"Invalid wallet hash",
+			"Could not derive a wallet hash from the provided identifier.",
+			"Try a valid wallet address.")
 		return
 	}
 
-	if workerID == "" {
-		s.renderErrorPage(w, r, http.StatusBadRequest,
-			"Missing worker ID",
-			"Please provide a worker identifier in the URL.",
-			"Example: "+prefix+"/worker_name")
+	http.Redirect(w, r, "/worker/search?hash="+url.QueryEscape(walletHash), http.StatusSeeOther)
+}
+
+// handleWorkerLookupByWalletHash handles privacy-oriented wallet links by
+// validating a pre-computed wallet SHA256 in the path, then redirecting to
+// the wallet-search page.
+func (s *StatusServer) handleWorkerLookupByWalletHash(w http.ResponseWriter, r *http.Request, prefix string) {
+	hashValue, ok := s.lookupPathIdentifier(w, r, prefix, "Wallet hash")
+	if !ok {
 		return
 	}
-
-	data.QueriedWorkerHash = workerNameHashTrimmed(workerID)
-
-	data.QueriedWorker = workerID
-	found := false
-	if wv, ok := s.findWorkerViewByHash(data.QueriedWorkerHash); ok {
-		setWorkerStatusView(&data, wv)
-		found = true
-	} else if s.accounting != nil {
-		if wv, ok := s.accounting.WorkerViewBySHA256(data.QueriedWorkerHash); ok {
-			setWorkerStatusView(&data, wv)
-			found = true
+	walletHash, errMsg := parseSHA256HexStrict(hashValue)
+	if errMsg != "" || walletHash == "" {
+		if errMsg == "" {
+			errMsg = "Invalid hash format; expected 64 hex characters."
 		}
+		s.renderErrorPage(w, r, http.StatusBadRequest,
+			"Invalid wallet hash",
+			errMsg,
+			"Use a 64-character SHA256 hash.")
+		return
 	}
-	if found {
-		if data.BTCPriceFiat > 0 {
-			cur := strings.ToUpper(strings.TrimSpace(data.FiatCurrency))
-			if cur == "" {
-				cur = "USD"
-			}
-			base := fmt.Sprintf("Approximate fiat values (%s) use 1 BTC ≈ %.2f", cur, data.BTCPriceFiat)
-			if data.BTCPriceUpdatedAt != "" {
-				base += " (price updated " + data.BTCPriceUpdatedAt + ")"
-			}
-			data.FiatNote = base + "; payouts are always made in BTC."
-		}
-	} else {
-		data.Error = "worker not found"
-	}
-
-	setShortHTMLCacheHeaders(w, true)
-	if err := s.executeTemplate(w, "worker_status", data); err != nil {
-		logger.Error("worker status template error", "error", err)
-		s.renderErrorPage(w, r, http.StatusInternalServerError,
-			"Worker page error",
-			"We couldn't render the worker info page.",
-			"Template error while rendering worker details.")
-	}
+	http.Redirect(w, r, "/worker/search?hash="+url.QueryEscape(walletHash), http.StatusSeeOther)
 }

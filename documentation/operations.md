@@ -202,7 +202,7 @@ The status UI uses two listeners:
 
 Set `status_tls_listen = ""` to disable HTTPS and keep only the HTTP listener. Set `status_listen = ""` to disable HTTP entirely and rely solely on TLS. The CLI no longer provides an `-http-only` toggle.
 
-goPool also auto-creates `/app/`, `/stats/`, and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails) and `SIGUSR2` to reload the configuration files without stopping the daemon.
+goPool also auto-creates `/stats/` and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails) and `SIGUSR2` to reload the configuration files without stopping the daemon.
 
 ## Admin Control Panel
 
@@ -309,7 +309,9 @@ Each override value logs when set, so goPool operators can audit what changed vi
 ## Monitoring APIs
 
 - `/api/overview`, `/api/pool-page`, `/api/server`, etc., provide JSON snapshots consumed by the UI. Disable them with `-no-json`.
-- `/stats/` and `/app/` serve the saved-worker dashboards, including per-worker graphing data.
+- `/user/<wallet>` and `/stats/<wallet>` are standard wallet lookup routes.
+- `/users/<wallet_sha256>` is the privacy variant of wallet lookup (keeps raw wallet values out of links/bookmarks).
+- `/stats/` serves the saved-worker dashboards, including per-worker graphing data.
 - The status UI exposes worker-level metrics (hashrate, bans, accepted shares) and automatically lists Discord/Clerk states if configured.
 
 ## Profiling and debugging
