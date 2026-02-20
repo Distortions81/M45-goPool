@@ -233,6 +233,9 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (configChanged bool, mi
 		cfg.StratumPassword = ""
 	}
 	cfg.StratumPasswordPublic = fc.Stratum.StratumPasswordPublic
+	if fc.Stratum.CKPoolEmulate != nil {
+		cfg.CKPoolEmulate = *fc.Stratum.CKPoolEmulate
+	}
 	if fc.Stratum.FastDecodeEnabled != nil {
 		cfg.StratumFastDecodeEnabled = *fc.Stratum.FastDecodeEnabled
 	}

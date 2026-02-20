@@ -16,6 +16,9 @@ Code pointers:
 - `mining.subscribe`
   - Accepts a best-effort **client identifier** in `params[0]` (used for UI aggregation).
   - Accepts a best-effort **session/resume token** in `params[1]` and uses it as the per-connection session ID (also returned in the subscribe response).
+  - Subscribe response shape is controlled by `[stratum].ckpool_emulate`:
+    - `true` (default): CKPool-style tuple list with `mining.notify` only.
+    - `false`: extended tuple list includes `mining.set_difficulty`, `mining.notify`, `mining.set_extranonce`, and `mining.set_version_mask`.
 - `mining.authorize`
   - Usually follows `mining.subscribe`, but goPool also accepts authorize-before-subscribe and will begin sending work only after subscribe completes.
   - Optional shared password enforcement via config.

@@ -197,7 +197,7 @@ func TestSubscribeResponseAdvertisesSetExtranonce(t *testing.T) {
 	mc := &MinerConn{
 		id:   "subscribe-advertise-extranonce",
 		conn: conn,
-		cfg:  Config{StratumFastEncodeEnabled: false},
+		cfg:  Config{StratumFastEncodeEnabled: false, CKPoolEmulate: false},
 	}
 
 	mc.writeSubscribeResponse(1, "00", 4, "sid")

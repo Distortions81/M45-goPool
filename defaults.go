@@ -18,6 +18,7 @@ func defaultConfig() Config {
 		StratumPasswordEnabled:              false,
 		StratumPassword:                     "",
 		StratumPasswordPublic:               false,
+		CKPoolEmulate:                       true,
 		StratumFastDecodeEnabled:            true,
 		StratumFastEncodeEnabled:            true,
 		StratumTCPReadBufferBytes:           0,

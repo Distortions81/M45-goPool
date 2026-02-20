@@ -48,6 +48,47 @@ func TestBuildSubscribeResponseBytes(t *testing.T) {
 		}
 		methods[method] = true
 	}
+	if len(methods) != 1 || !methods["mining.notify"] {
+		t.Fatalf("expected CKPool-style subscribe tuple list with notify only: %#v", subs)
+	}
+	if got, ok := result[1].(string); !ok || got != "0011aabb" {
+		t.Fatalf("unexpected extranonce1: %#v", result[1])
+	}
+	if got, ok := result[2].(float64); !ok || got != 4 {
+		t.Fatalf("unexpected extranonce2_size: %#v", result[2])
+	}
+}
+
+func TestBuildSubscribeResponseBytes_ExpandedWhenCKPoolEmulateDisabled(t *testing.T) {
+	b, err := buildSubscribeResponseBytesWithMode(int64(7), "0011aabb", 4, false)
+	if err != nil {
+		t.Fatalf("buildSubscribeResponseBytesWithMode: %v", err)
+	}
+
+	var resp StratumResponse
+	if err := json.Unmarshal(bytes.TrimSpace(b), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	result, ok := resp.Result.([]any)
+	if !ok || len(result) != 3 {
+		t.Fatalf("unexpected result shape: %#v", resp.Result)
+	}
+	subs, ok := result[0].([]any)
+	if !ok || len(subs) == 0 {
+		t.Fatalf("unexpected subscriptions shape: %#v", result[0])
+	}
+	methods := make(map[string]bool, len(subs))
+	for _, item := range subs {
+		pair, ok := item.([]any)
+		if !ok || len(pair) < 1 {
+			continue
+		}
+		method, ok := pair[0].(string)
+		if !ok || method == "" {
+			continue
+		}
+		methods[method] = true
+	}
 	if !methods["mining.set_difficulty"] || !methods["mining.notify"] {
 		t.Fatalf("expected set_difficulty and notify in subscriptions list: %#v", subs)
 	}
@@ -56,11 +97,5 @@ func TestBuildSubscribeResponseBytes(t *testing.T) {
 	}
 	if !methods["mining.set_version_mask"] {
 		t.Fatalf("expected set_version_mask in subscriptions list: %#v", subs)
-	}
-	if got, ok := result[1].(string); !ok || got != "0011aabb" {
-		t.Fatalf("unexpected extranonce1: %#v", result[1])
-	}
-	if got, ok := result[2].(float64); !ok || got != 4 {
-		t.Fatalf("unexpected extranonce2_size: %#v", result[2])
 	}
 }
