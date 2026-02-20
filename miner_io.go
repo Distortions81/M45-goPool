@@ -161,15 +161,11 @@ func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extra
 	if strings.TrimSpace(subID) == "" {
 		subID = "1"
 	}
+	subs := subscribeMethodTuples(subID, mc.cfg.CKPoolEmulate)
 	mc.writeResponse(StratumResponse{
 		ID: id,
 		Result: []any{
-			[][]any{
-				{"mining.set_difficulty", subID},
-				{"mining.notify", subID},
-				{"mining.set_extranonce", subID},
-				{"mining.set_version_mask", subID},
-			},
+			subs,
 			extranonce1Hex,
 			extranonce2Size,
 		},
@@ -241,7 +237,7 @@ func (mc *MinerConn) writeCannedSubscribeResponse(id any, extranonce1Hex string,
 	defer mc.writeMu.Unlock()
 
 	buf := mc.writeScratch[:0]
-	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, subID)
+	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, subID, mc.cfg.CKPoolEmulate)
 	if err != nil {
 		return err
 	}
@@ -262,42 +258,54 @@ func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1
 	}
 	subIDDigits := isASCIIAll(subID, isASCIIDigit)
 	ex1Hex := isASCIIAll(extranonce1Hex, isASCIIHexDigit)
+	ckpoolEmulate := mc.cfg.CKPoolEmulate
 
 	buf := mc.writeScratch[:0]
 	buf = append(buf, `{"id":`...)
 	buf = append(buf, idRaw...)
 	buf = append(buf, `,"result":[[[`...)
-	buf = append(buf, `"mining.set_difficulty",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
+	if ckpoolEmulate {
+		buf = append(buf, `"mining.notify",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
 	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.notify",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.set_extranonce",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.set_version_mask",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
+		buf = append(buf, `"mining.set_difficulty",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.notify",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.set_extranonce",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.set_version_mask",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
 	}
 	buf = append(buf, `]],`...)
 	if ex1Hex {
@@ -317,10 +325,14 @@ func (mc *MinerConn) writeCannedSubscribeResponseRawID(idRaw []byte, extranonce1
 }
 
 func buildSubscribeResponseBytes(id any, extranonce1Hex string, extranonce2Size int) ([]byte, error) {
+	return buildSubscribeResponseBytesWithMode(id, extranonce1Hex, extranonce2Size, true)
+}
+
+func buildSubscribeResponseBytesWithMode(id any, extranonce1Hex string, extranonce2Size int, ckpoolEmulate bool) ([]byte, error) {
 	// The subscribe response JSON is fairly large (multiple method strings).
 	// Use a capacity that avoids buffer growth in typical cases.
 	buf := make([]byte, 0, 256+len(extranonce1Hex))
-	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, "1")
+	buf, err := appendSubscribeResponseBytes(buf, id, extranonce1Hex, extranonce2Size, "1", ckpoolEmulate)
 	if err != nil {
 		return nil, err
 	}
@@ -328,8 +340,10 @@ func buildSubscribeResponseBytes(id any, extranonce1Hex string, extranonce2Size 
 	return buf, nil
 }
 
-func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, extranonce2Size int, subID string) ([]byte, error) {
-	// {"id":<id>,"result":[[["mining.set_difficulty","<subid>"],["mining.notify","<subid>"],["mining.set_extranonce","<subid>"],["mining.set_version_mask","<subid>"]],"<ex1>",<en2Size>],"error":null}
+func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, extranonce2Size int, subID string, ckpoolEmulate bool) ([]byte, error) {
+	// subscribe result is configurable:
+	// - CKPool emulate: [[["mining.notify","<subid>"]],"<ex1>",<en2Size>]
+	// - Extended:       [[["mining.set_difficulty","<subid>"],["mining.notify","<subid>"],["mining.set_extranonce","<subid>"],["mining.set_version_mask","<subid>"]],"<ex1>",<en2Size>]
 	// Avoid TrimSpace: subID is generated by us, and if it ever arrives blank we
 	// just use the canonical "1".
 	if subID == "" {
@@ -345,37 +359,48 @@ func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, ext
 		return nil, err
 	}
 	buf = append(buf, `,"result":[[[`...)
-	buf = append(buf, `"mining.set_difficulty",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
+	if ckpoolEmulate {
+		buf = append(buf, `"mining.notify",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
 	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.notify",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.set_extranonce",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
-	}
-	buf = append(buf, `],["mining.set_version_mask",`...)
-	if subIDDigits {
-		buf = append(buf, '"')
-		buf = append(buf, subID...)
-		buf = append(buf, '"')
-	} else {
-		buf = strconv.AppendQuote(buf, subID)
+		buf = append(buf, `"mining.set_difficulty",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.notify",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.set_extranonce",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
+		buf = append(buf, `],["mining.set_version_mask",`...)
+		if subIDDigits {
+			buf = append(buf, '"')
+			buf = append(buf, subID...)
+			buf = append(buf, '"')
+		} else {
+			buf = strconv.AppendQuote(buf, subID)
+		}
 	}
 	buf = append(buf, `]],`...)
 	if ex1Hex {
@@ -389,6 +414,20 @@ func appendSubscribeResponseBytes(buf []byte, id any, extranonce1Hex string, ext
 	buf = strconv.AppendInt(buf, int64(extranonce2Size), 10)
 	buf = append(buf, cannedSubscribeSuffix...)
 	return buf, nil
+}
+
+func subscribeMethodTuples(subID string, ckpoolEmulate bool) [][]any {
+	if ckpoolEmulate {
+		return [][]any{
+			{"mining.notify", subID},
+		}
+	}
+	return [][]any{
+		{"mining.set_difficulty", subID},
+		{"mining.notify", subID},
+		{"mining.set_extranonce", subID},
+		{"mining.set_version_mask", subID},
+	}
 }
 
 func isASCIIAll(s string, fn func(byte) bool) bool {
