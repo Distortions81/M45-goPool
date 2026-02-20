@@ -459,12 +459,11 @@ func main() {
 	mux.HandleFunc("/privacy", statusServer.handleStaticFile("privacy.html"))
 	mux.HandleFunc("/terms", statusServer.handleStaticFile("terms.html"))
 	// Standard wallet lookup URLs used by miner tooling.
-	// /users accepts a pre-hashed wallet SHA256 to keep raw wallet values out of links.
 	mux.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookupByWallet(w, r, "/user")
 	})
 	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
-		statusServer.handleWorkerLookupByWalletHash(w, r, "/users")
+		statusServer.handleWorkerLookupByWallet(w, r, "/users")
 	})
 	mux.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookupByWallet(w, r, "/stats")
