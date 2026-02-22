@@ -15,15 +15,16 @@ func TestStatusServerOverview_RendersNodeDownWhenStale(t *testing.T) {
 		t.Fatalf("loadTemplates: %v", err)
 	}
 
+	now := time.Now()
 	jm := &JobManager{}
 	jm.mu.Lock()
-	jm.curJob = &Job{CreatedAt: time.Now()}
+	jm.curJob = &Job{CreatedAt: now.Add(-(stratumStaleJobGrace + time.Minute))}
 	jm.mu.Unlock()
 	jm.recordJobError(fmt.Errorf("node indexing"))
 
 	s := &StatusServer{tmpl: tmpl, jobMgr: jm}
 	s.UpdateConfig(Config{ListenAddr: ":3333"})
-	s.start = time.Now().Add(-2 * stratumStartupGrace)
+	s.start = now.Add(-2 * stratumStartupGrace)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
