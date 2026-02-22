@@ -12,6 +12,23 @@ type stratumHealth struct {
 	Detail  string
 }
 
+func stratumNodeSyncSnapshotFresh(now, fetchedAt time.Time) bool {
+	if fetchedAt.IsZero() {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if fetchedAt.After(now) {
+		return true
+	}
+	// Treat getblockchaininfo snapshot as best-effort and require it to be recent
+	// before using it to gate Stratum. Otherwise a stale "IBD/indexing" snapshot
+	// can poison one pool process even while another process remains healthy.
+	const maxNodeSyncSnapshotAge = (2 * stratumHeartbeatInterval) + (5 * time.Second)
+	return now.Sub(fetchedAt) <= maxNodeSyncSnapshotAge
+}
+
 func stratumHealthStatus(jobMgr *JobManager, now time.Time) stratumHealth {
 	if now.IsZero() {
 		now = time.Now()
@@ -38,7 +55,7 @@ func stratumHealthStatus(jobMgr *JobManager, now time.Time) stratumHealth {
 	}
 
 	ibd, blocks, headers, fetchedAt := jobMgr.nodeSyncSnapshot()
-	if !fetchedAt.IsZero() && (ibd || (headers > 0 && blocks >= 0 && blocks < headers)) {
+	if stratumNodeSyncSnapshotFresh(now, fetchedAt) && (ibd || (headers > 0 && blocks >= 0 && blocks < headers)) {
 		detail := "node syncing: ibd=" + strconv.FormatBool(ibd) + " blocks=" + strconv.FormatInt(blocks, 10) + " headers=" + strconv.FormatInt(headers, 10)
 		return stratumHealth{Healthy: false, Reason: "node syncing/indexing", Detail: detail}
 	}

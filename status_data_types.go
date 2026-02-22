@@ -198,23 +198,32 @@ type PoolErrorEvent struct {
 	Message string `json:"message"`
 }
 
+type PoolDisconnectEvent struct {
+	At           string `json:"at,omitempty"`
+	Disconnected int    `json:"disconnected"`
+	Reason       string `json:"reason,omitempty"`
+	Detail       string `json:"detail,omitempty"`
+}
+
 // PoolPageData contains data for the pool info page
 type PoolPageData struct {
-	APIVersion       string           `json:"api_version"`
-	BlocksAccepted   uint64           `json:"blocks_accepted"`
-	BlocksErrored    uint64           `json:"blocks_errored"`
-	RPCGBTLastSec    float64          `json:"rpc_gbt_last_sec"`
-	RPCGBTMaxSec     float64          `json:"rpc_gbt_max_sec"`
-	RPCGBTCount      uint64           `json:"rpc_gbt_count"`
-	RPCSubmitLastSec float64          `json:"rpc_submit_last_sec"`
-	RPCSubmitMaxSec  float64          `json:"rpc_submit_max_sec"`
-	RPCSubmitCount   uint64           `json:"rpc_submit_count"`
-	RPCErrors        uint64           `json:"rpc_errors"`
-	ShareErrors      uint64           `json:"share_errors"`
-	RPCGBTMin1hSec   float64          `json:"rpc_gbt_min_1h_sec"`
-	RPCGBTAvg1hSec   float64          `json:"rpc_gbt_avg_1h_sec"`
-	RPCGBTMax1hSec   float64          `json:"rpc_gbt_max_1h_sec"`
-	ErrorHistory     []PoolErrorEvent `json:"error_history,omitempty"`
+	APIVersion                      string                `json:"api_version"`
+	BlocksAccepted                  uint64                `json:"blocks_accepted"`
+	BlocksErrored                   uint64                `json:"blocks_errored"`
+	RPCGBTLastSec                   float64               `json:"rpc_gbt_last_sec"`
+	RPCGBTMaxSec                    float64               `json:"rpc_gbt_max_sec"`
+	RPCGBTCount                     uint64                `json:"rpc_gbt_count"`
+	RPCSubmitLastSec                float64               `json:"rpc_submit_last_sec"`
+	RPCSubmitMaxSec                 float64               `json:"rpc_submit_max_sec"`
+	RPCSubmitCount                  uint64                `json:"rpc_submit_count"`
+	RPCErrors                       uint64                `json:"rpc_errors"`
+	ShareErrors                     uint64                `json:"share_errors"`
+	RPCGBTMin1hSec                  float64               `json:"rpc_gbt_min_1h_sec"`
+	RPCGBTAvg1hSec                  float64               `json:"rpc_gbt_avg_1h_sec"`
+	RPCGBTMax1hSec                  float64               `json:"rpc_gbt_max_1h_sec"`
+	StratumSafeguardDisconnectCount uint64                `json:"stratum_safeguard_disconnect_count,omitempty"`
+	StratumSafeguardDisconnects     []PoolDisconnectEvent `json:"stratum_safeguard_disconnects,omitempty"`
+	ErrorHistory                    []PoolErrorEvent      `json:"error_history,omitempty"`
 }
 
 // ServerPageData contains data for the server diagnostics page
