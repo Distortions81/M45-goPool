@@ -1,9 +1,9 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 )
 
 type stratumHealth struct {
@@ -31,6 +31,9 @@ func stratumHealthStatus(jobMgr *JobManager, now time.Time) stratumHealth {
 	}
 
 	if fs.LastError != nil {
+		if now.Sub(job.CreatedAt) < stratumStaleJobGrace {
+			return stratumHealth{Healthy: true}
+		}
 		return stratumHealth{Healthy: false, Reason: "node/job feed error", Detail: strings.TrimSpace(fs.LastError.Error())}
 	}
 
