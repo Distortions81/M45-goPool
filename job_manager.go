@@ -99,8 +99,10 @@ func (jm *JobManager) nodeSyncSnapshot() (ibd bool, blocks int64, headers int64,
 }
 
 // refreshNodeSyncInfo updates the node sync/indexing state via getblockchaininfo.
-// This is best-effort; failures are recorded as job-feed errors only if we have
-// no other way to determine node usability.
+// This is best-effort; failures should not poison job-feed health while we
+// already have a usable current job template, otherwise transient
+// getblockchaininfo hiccups can flap Stratum gating and disconnect miners.
+// We only record the error when no job template exists yet.
 func (jm *JobManager) refreshNodeSyncInfo(ctx context.Context) {
 	if jm == nil || jm.rpc == nil {
 		return
@@ -123,7 +125,10 @@ func (jm *JobManager) refreshNodeSyncInfo(ctx context.Context) {
 		// Some bitcoind warmup/indexing states can still serve sockets but are not usable.
 		// Treat these as degraded signals.
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			jm.recordJobError(err)
+			job := jm.CurrentJob()
+			if job == nil || job.CreatedAt.IsZero() {
+				jm.recordJobError(err)
+			}
 		}
 		return
 	}

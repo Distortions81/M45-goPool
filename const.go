@@ -79,17 +79,21 @@ const (
 	defaultInitialDifficultyDelay = 250 * time.Millisecond
 	// stratumHeartbeatInterval is how often we do a non-longpoll template refresh
 	// to prove the node is responsive even when the template doesn't change.
-	stratumHeartbeatInterval      = 30 * time.Second
+	stratumHeartbeatInterval = 30 * time.Second
 	// stratumStartupGrace is a boot grace window during which we do not treat
 	// "no job yet" / "node degraded" as actionable for disconnecting/refusing
 	// miners or showing node-down UI. This avoids noisy false alarms while the
 	// pool and node are still starting up.
-	stratumStartupGrace           = 60 * time.Second
+	stratumStartupGrace = 60 * time.Second
 	// stratumDegradedGrace avoids flapping during brief hiccups by requiring the job feed
 	// to be continuously unhealthy for a short window before we disconnect miners.
-	stratumDegradedGrace          = 15 * time.Second
-	defaultZMQHashBlockAddr       = "tcp://127.0.0.1:28334"
-	defaultZMQRawBlockAddr        = "tcp://127.0.0.1:28332"
+	stratumDegradedGrace = 15 * time.Second
+	// stratumStaleJobGrace allows miners to continue hashing on the last known
+	// job for a few minutes before the pool decides node updates are dead.
+	// This avoids mass disconnects on transient RPC/ZMQ outages.
+	stratumStaleJobGrace    = 5 * time.Minute
+	defaultZMQHashBlockAddr = "tcp://127.0.0.1:28334"
+	defaultZMQRawBlockAddr  = "tcp://127.0.0.1:28332"
 
 	defaultAutoAcceptRateLimits    = true
 	defaultOperatorDonationPercent = 0.0
