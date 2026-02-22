@@ -154,7 +154,7 @@ func (s *workerListStore) flushBestDiffPending() {
 	stmt, err := tx.Prepare(`
 		UPDATE saved_workers
 		SET best_difficulty = ?
-		WHERE worker_hash = ? AND best_difficulty < ?
+		WHERE worker_hash = ? AND COALESCE(best_difficulty, 0) < ?
 	`)
 	if err != nil {
 		logger.Warn("saved worker best diff flush prepare failed", "error", err)

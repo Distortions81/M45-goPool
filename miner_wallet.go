@@ -171,14 +171,29 @@ func (mc *MinerConn) syncSavedWorkerState(hash string) {
 }
 
 func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
-	if mc == nil || !mc.savedWorkerTracked || mc.savedWorkerStore == nil {
-		return
-	}
-	if diff <= mc.savedWorkerBestDiff {
+	if mc == nil || mc.savedWorkerStore == nil {
 		return
 	}
 	hash := mc.registeredWorkerHash
 	if hash == "" {
+		return
+	}
+	// Workers can be saved while a connection is already online. Lazily
+	// re-check tracking here so best-share updates start flowing without forcing
+	// a reconnect.
+	if !mc.savedWorkerTracked {
+		best, ok, err := mc.savedWorkerStore.BestDifficultyForHash(hash)
+		if err != nil {
+			logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
+			return
+		}
+		if !ok {
+			return
+		}
+		mc.savedWorkerTracked = true
+		mc.savedWorkerBestDiff = best
+	}
+	if diff <= mc.savedWorkerBestDiff {
 		return
 	}
 	if _, err := mc.savedWorkerStore.UpdateSavedWorkerBestDifficulty(hash, diff); err != nil {
