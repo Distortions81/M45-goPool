@@ -268,9 +268,19 @@ func (mc *MinerConn) handle() {
 				}
 				continue
 			}
-			if err != io.EOF && !errors.Is(err, net.ErrClosed) {
-				logger.Error("read error", "remote", mc.id, "error", err)
+			if err == io.EOF || errors.Is(err, net.ErrClosed) {
+				worker := mc.currentWorker()
+				fields := []any{"remote", mc.id, "reason", "client disconnected"}
+				if worker != "" {
+					fields = append(fields, "worker", worker)
+				}
+				if !mc.connectedAt.IsZero() {
+					fields = append(fields, "session", now.Sub(mc.connectedAt).Round(time.Second))
+				}
+				logger.Info("miner disconnected", fields...)
+				return
 			}
+			logger.Error("read error", "remote", mc.id, "error", err)
 			return
 		}
 		logNetMessage("recv", line)
