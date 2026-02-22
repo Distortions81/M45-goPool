@@ -134,6 +134,11 @@
 			<div class="mono" id="pool-error-history">--</div>
 		</div>
 
+		<div class="card">
+			<div class="label">Stratum safeguard disconnects (node health)</div>
+			<div class="mono" id="pool-safeguard-disconnect-events">--</div>
+		</div>
+
 		<div style="margin-top:16px;padding:8px;text-align:center;font-size:0.85em;color:#888;">
 			<div class="mono" id="pool-data-refreshed">Data loading...</div>
 		</div>
@@ -148,6 +153,7 @@
 		const rpcSubmitEl = document.getElementById('pool-rpc-submit');
 		const errorCountersEl = document.getElementById('pool-error-counters');
 		const errorHistoryEl = document.getElementById('pool-error-history');
+		const safeguardDisconnectsEl = document.getElementById('pool-safeguard-disconnect-events');
 		const dataRefreshedEl = document.getElementById('pool-data-refreshed');
 
 		function formatMilliseconds(value) {
@@ -206,6 +212,30 @@
 			});
 		}
 
+		function renderSafeguardDisconnects(count, events) {
+			if (!safeguardDisconnectsEl) return;
+			safeguardDisconnectsEl.replaceChildren();
+			const total = Number.isFinite(Number(count)) ? Number(count) : 0;
+			const header = document.createElement('div');
+			header.textContent = `count: ${total}`;
+			safeguardDisconnectsEl.appendChild(header);
+			if (!events || events.length === 0) {
+				const line = document.createElement('div');
+				line.textContent = 'No recorded events';
+				safeguardDisconnectsEl.appendChild(line);
+				return;
+			}
+			const ordered = events.slice().reverse();
+			ordered.forEach((entry) => {
+				const line = document.createElement('div');
+				const when = formatTimeAgo(entry.at);
+				const disconnected = Number(entry.disconnected || 0);
+				const reason = entry.reason || 'node updates degraded';
+				line.textContent = `${when}  disconnected=${disconnected}  ${reason}`;
+				safeguardDisconnectsEl.appendChild(line);
+			});
+		}
+
 		function updatePoolMetrics(data, updatedAt) {
 			if (!data) return;
 			if (blockSubEl) {
@@ -218,9 +248,10 @@
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;
 			}
 			if (errorCountersEl) {
-				errorCountersEl.innerHTML = `RPC errors: ${data.rpc_errors || 0}<br>Share errors: ${data.share_errors || 0}`;
+				errorCountersEl.innerHTML = `RPC errors: ${data.rpc_errors || 0}<br>Share errors: ${data.share_errors || 0}<br>Node safeguard disconnects: ${data.stratum_safeguard_disconnect_count || 0}`;
 			}
 			renderErrorHistory(data.error_history);
+			renderSafeguardDisconnects(data.stratum_safeguard_disconnect_count, data.stratum_safeguard_disconnects);
 			if (dataRefreshedEl && updatedAt) {
 				dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
 			}

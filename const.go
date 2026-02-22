@@ -85,12 +85,9 @@ const (
 	// miners or showing node-down UI. This avoids noisy false alarms while the
 	// pool and node are still starting up.
 	stratumStartupGrace = 60 * time.Second
-	// stratumDegradedGrace avoids flapping during brief hiccups by requiring the job feed
-	// to be continuously unhealthy for a short window before we disconnect miners.
-	stratumDegradedGrace = 15 * time.Second
-	// stratumStaleJobGrace allows miners to continue hashing on the last known
-	// job for a few minutes before the pool decides node updates are dead.
-	// This avoids mass disconnects on transient RPC/ZMQ outages.
+	// stratumStaleJobGrace is the single runtime grace window before Stratum
+	// starts refusing new miners or disconnecting existing miners due to node/job
+	// feed health issues. This keeps transient hiccups from kicking users.
 	stratumStaleJobGrace    = 5 * time.Minute
 	defaultZMQHashBlockAddr = "tcp://127.0.0.1:28334"
 	defaultZMQRawBlockAddr  = "tcp://127.0.0.1:28332"

@@ -150,22 +150,25 @@ func (s *StatusServer) handlePoolPageJSON(w http.ResponseWriter, r *http.Request
 	key := "pool_page"
 	s.serveCachedJSON(w, key, overviewRefreshInterval, func() ([]byte, error) {
 		view := s.statusDataView()
+		safeguardDisconnectCount, safeguardDisconnects := s.stratumSafeguardDisconnectSnapshot()
 		data := PoolPageData{
-			APIVersion:       apiVersion,
-			BlocksAccepted:   view.BlocksAccepted,
-			BlocksErrored:    view.BlocksErrored,
-			RPCGBTLastSec:    view.RPCGBTLastSec,
-			RPCGBTMaxSec:     view.RPCGBTMaxSec,
-			RPCGBTCount:      view.RPCGBTCount,
-			RPCSubmitLastSec: view.RPCSubmitLastSec,
-			RPCSubmitMaxSec:  view.RPCSubmitMaxSec,
-			RPCSubmitCount:   view.RPCSubmitCount,
-			RPCErrors:        view.RPCErrors,
-			ShareErrors:      view.ShareErrors,
-			RPCGBTMin1hSec:   view.RPCGBTMin1hSec,
-			RPCGBTAvg1hSec:   view.RPCGBTAvg1hSec,
-			RPCGBTMax1hSec:   view.RPCGBTMax1hSec,
-			ErrorHistory:     view.ErrorHistory,
+			APIVersion:                      apiVersion,
+			BlocksAccepted:                  view.BlocksAccepted,
+			BlocksErrored:                   view.BlocksErrored,
+			RPCGBTLastSec:                   view.RPCGBTLastSec,
+			RPCGBTMaxSec:                    view.RPCGBTMaxSec,
+			RPCGBTCount:                     view.RPCGBTCount,
+			RPCSubmitLastSec:                view.RPCSubmitLastSec,
+			RPCSubmitMaxSec:                 view.RPCSubmitMaxSec,
+			RPCSubmitCount:                  view.RPCSubmitCount,
+			RPCErrors:                       view.RPCErrors,
+			ShareErrors:                     view.ShareErrors,
+			RPCGBTMin1hSec:                  view.RPCGBTMin1hSec,
+			RPCGBTAvg1hSec:                  view.RPCGBTAvg1hSec,
+			RPCGBTMax1hSec:                  view.RPCGBTMax1hSec,
+			StratumSafeguardDisconnectCount: safeguardDisconnectCount,
+			StratumSafeguardDisconnects:     safeguardDisconnects,
+			ErrorHistory:                    view.ErrorHistory,
 		}
 		return sonic.Marshal(data)
 	})

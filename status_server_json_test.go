@@ -146,3 +146,39 @@ func TestHandlePoolHashrateJSON_IncludeHistoryToggle(t *testing.T) {
 		t.Fatalf("expected non-empty pool_hashrate_history with include_history=1")
 	}
 }
+
+func TestHandlePoolPageJSON_IncludesSafeguardDisconnectEvents(t *testing.T) {
+	s := newStatusServerForJSONTests()
+	at := time.Date(2026, 2, 22, 12, 34, 56, 0, time.UTC)
+	total := s.recordStratumSafeguardDisconnectEvent(at, 17, "node/job feed error", "rpc timeout")
+	if total != 1 {
+		t.Fatalf("record total got %d want 1", total)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pool-page", nil)
+	rr := httptest.NewRecorder()
+	s.handlePoolPageJSON(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var payload struct {
+		StratumSafeguardDisconnectCount uint64                `json:"stratum_safeguard_disconnect_count"`
+		StratumSafeguardDisconnects     []PoolDisconnectEvent `json:"stratum_safeguard_disconnects"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode pool-page response: %v", err)
+	}
+	if payload.StratumSafeguardDisconnectCount != 1 {
+		t.Fatalf("disconnect count got %d want 1", payload.StratumSafeguardDisconnectCount)
+	}
+	if len(payload.StratumSafeguardDisconnects) != 1 {
+		t.Fatalf("disconnect events len got %d want 1", len(payload.StratumSafeguardDisconnects))
+	}
+	if payload.StratumSafeguardDisconnects[0].Disconnected != 17 {
+		t.Fatalf("disconnect event size got %d want 17", payload.StratumSafeguardDisconnects[0].Disconnected)
+	}
+	if payload.StratumSafeguardDisconnects[0].At != at.Format(time.RFC3339) {
+		t.Fatalf("disconnect event time got %q want %q", payload.StratumSafeguardDisconnects[0].At, at.Format(time.RFC3339))
+	}
+}

@@ -625,10 +625,10 @@ func main() {
 	}
 	jobMgr.Start(ctx)
 
-		// Once Stratum is live, enforce the same freshness rule at runtime:
-		// - refuse new miner connections while the job feed is stale
-		// - disconnect existing miners so they stop hashing stale work
-		go enforceStratumFreshness(ctx, jobMgr, registry, startTime)
+	// Once Stratum is live, enforce the same freshness rule at runtime:
+	// - refuse new miner connections while the job feed is stale
+	// - disconnect existing miners so they stop hashing stale work
+	go enforceStratumFreshness(ctx, jobMgr, registry, statusServer, startTime)
 
 	ln, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
@@ -705,27 +705,32 @@ func main() {
 		}
 	}()
 
-		serveStratum := func(label string, l net.Listener) {
-			lastRefuseLog := time.Time{}
-			for {
-				if !acceptLimiter.wait(ctx) {
-					break
-				}
-				conn, err := l.Accept()
+	serveStratum := func(label string, l net.Listener) {
+		lastRefuseLog := time.Time{}
+		unhealthySince := time.Time{}
+		for {
+			if !acceptLimiter.wait(ctx) {
+				break
+			}
+			conn, err := l.Accept()
 			if err != nil {
 				if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 					break
 				}
 				logger.Error("accept error", "listener", label, "error", err)
 				continue
-				}
-				disableTCPNagle(conn)
-				setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
-				now := time.Now()
-				if now.Sub(startTime) >= stratumStartupGrace {
-					if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
+			}
+			disableTCPNagle(conn)
+			setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+			now := time.Now()
+			if now.Sub(startTime) >= stratumStartupGrace {
+				if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
+					if unhealthySince.IsZero() {
+						unhealthySince = now
+					}
+					if now.Sub(unhealthySince) >= stratumStaleJobGrace {
 						if time.Since(lastRefuseLog) > 5*time.Second {
-							fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason}
+							fields := []any{"listener", label, "remote", conn.RemoteAddr().String(), "reason", h.Reason, "grace", stratumStaleJobGrace}
 							if strings.TrimSpace(h.Detail) != "" {
 								fields = append(fields, "detail", h.Detail)
 							}
@@ -735,12 +740,15 @@ func main() {
 						_ = conn.Close()
 						continue
 					}
+				} else {
+					unhealthySince = time.Time{}
 				}
-				remote := conn.RemoteAddr().String()
-				if reconnectLimiter != nil {
-					host, _, errSplit := net.SplitHostPort(remote)
-					if errSplit != nil {
-						host = remote
+			}
+			remote := conn.RemoteAddr().String()
+			if reconnectLimiter != nil {
+				host, _, errSplit := net.SplitHostPort(remote)
+				if errSplit != nil {
+					host = remote
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {
 					logger.Warn("rejecting miner for reconnect churn",
@@ -833,7 +841,7 @@ func main() {
 	}
 }
 
-func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry, start time.Time) {
+func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry, statusServer *StatusServer, start time.Time) {
 	if ctx == nil || jobMgr == nil || registry == nil {
 		return
 	}
@@ -859,16 +867,23 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 			if unhealthySince.IsZero() {
 				unhealthySince = now
 			}
-			// Avoid flapping: only disconnect after a brief continuous unhealthy window.
-			if wasHealthy && now.Sub(unhealthySince) >= stratumDegradedGrace {
+			// Require a long continuous unhealthy window before disconnecting miners.
+			if wasHealthy && now.Sub(unhealthySince) >= stratumStaleJobGrace {
 				miners := registry.Snapshot()
 				for _, mc := range miners {
 					mc.sendClientShowMessage("Pool paused: node updates degraded. Reconnecting when ready.")
 					mc.Close("node updates degraded")
 				}
+				eventCountTotal := uint64(0)
+				if statusServer != nil && len(miners) > 0 {
+					eventCountTotal = statusServer.recordStratumSafeguardDisconnectEvent(now, len(miners), h.Reason, h.Detail)
+				}
 				if time.Since(lastLog) > 2*time.Second {
 					fs := jobMgr.FeedStatus()
-					fields := []any{"disconnected", len(miners), "reason", h.Reason, "heartbeat_interval", stratumHeartbeatInterval}
+					fields := []any{"disconnected", len(miners), "reason", h.Reason, "heartbeat_interval", stratumHeartbeatInterval, "grace", stratumStaleJobGrace}
+					if eventCountTotal > 0 {
+						fields = append(fields, "safeguard_disconnect_events_total", eventCountTotal)
+					}
 					if strings.TrimSpace(h.Detail) != "" {
 						fields = append(fields, "detail", h.Detail)
 					}
