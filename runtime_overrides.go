@@ -188,5 +188,9 @@ func applySafeModeProfile(cfg *Config) {
 	cfg.ShareCheckVersionRolling = false
 	cfg.ShareRequireWorkerMatch = false
 
+	// Disable automatic temporary bans in safe mode to avoid false positives while troubleshooting.
+	cfg.BanInvalidSubmissionsAfter = 0
+	cfg.ReconnectBanThreshold = 0
+
 	cfg.DisableConnectRateLimits = true
 }
