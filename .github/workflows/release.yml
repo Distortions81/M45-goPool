@@ -65,11 +65,14 @@ jobs:
 
           # Copy documentation
           cp README.md "$PACKAGE_NAME/"
-          cp guide/RELEASES.md "$PACKAGE_NAME/RELEASES.md"
-          cp guide/operations.md "$PACKAGE_NAME/operations.md"
-          cp guide/performance.md "$PACKAGE_NAME/performance.md"
-          cp guide/TESTING.md "$PACKAGE_NAME/TESTING.md"
           cp LICENSE "$PACKAGE_NAME/"
+          if [ -d documentation ]; then
+            mkdir -p "$PACKAGE_NAME/documentation"
+            cp -a documentation/. "$PACKAGE_NAME/documentation/"
+          elif [ -d guide ]; then
+            mkdir -p "$PACKAGE_NAME/guide"
+            cp -a guide/. "$PACKAGE_NAME/guide/"
+          fi
 
           # Copy data directory structure
           mkdir -p "$PACKAGE_NAME/data/templates"
@@ -216,10 +219,13 @@ jobs:
           mkdir -p "$PACKAGE_NAME"
           cp goPool "$PACKAGE_NAME/"
           cp README.md LICENSE "$PACKAGE_NAME/"
-          cp guide/RELEASES.md "$PACKAGE_NAME/RELEASES.md"
-          cp guide/operations.md "$PACKAGE_NAME/operations.md"
-          cp guide/performance.md "$PACKAGE_NAME/performance.md"
-          cp guide/TESTING.md "$PACKAGE_NAME/TESTING.md"
+          if [ -d documentation ]; then
+            mkdir -p "$PACKAGE_NAME/documentation"
+            cp -a documentation/. "$PACKAGE_NAME/documentation/"
+          elif [ -d guide ]; then
+            mkdir -p "$PACKAGE_NAME/guide"
+            cp -a guide/. "$PACKAGE_NAME/guide/"
+          fi
 
           mkdir -p "$PACKAGE_NAME/data/templates"
           mkdir -p "$PACKAGE_NAME/data/www"
