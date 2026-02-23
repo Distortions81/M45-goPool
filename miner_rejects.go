@@ -137,8 +137,6 @@ func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason submit
 		return
 	}
 
-	window := mc.banInvalidWindow()
-
 	shouldWarn := false
 	mc.stateMu.Lock()
 	if effectiveInvalid > mc.invalidWarnedCount && (mc.invalidWarnedAt.IsZero() || now.Sub(mc.invalidWarnedAt) >= 30*time.Second) {
@@ -151,8 +149,8 @@ func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason submit
 		return
 	}
 
-	msg := fmt.Sprintf("Warning: %s (%d/%d invalid submissions in %s). Next invalid submission may result in a temporary ban.", reason.String(), effectiveInvalid, threshold, window)
-	mc.sendClientShowMessage(msg)
+	// Non-fatal warning only; keep counters/state but avoid sending
+	// client.show_message unless we are disconnecting/banning the miner.
 }
 
 func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
@@ -179,7 +177,7 @@ func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
 		return
 	}
 
-	mc.sendClientShowMessage("Warning: repeated duplicate shares detected. This often indicates a miner/proxy bug or reconnect replay; consider restarting the miner/proxy.")
+	// Non-fatal warning only; avoid client.show_message unless disconnecting.
 }
 
 func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason) (bool, int) {
@@ -318,6 +316,22 @@ func (mc *MinerConn) noteProtocolViolation(now time.Time) (bool, int) {
 	return false, mc.protoViolations
 }
 
+func (mc *MinerConn) bannedStratumError() []any {
+	until, reason, _ := mc.banDetails()
+	msg := "banned"
+	if strings.TrimSpace(reason) != "" {
+		msg = "banned: " + reason
+	}
+	if !until.IsZero() {
+		if strings.TrimSpace(reason) != "" {
+			msg = fmt.Sprintf("banned until %s: %s", until.UTC().Format(time.RFC3339), reason)
+		} else {
+			msg = fmt.Sprintf("banned until %s", until.UTC().Format(time.RFC3339))
+		}
+	}
+	return newStratumError(stratumErrCodeUnauthorized, msg)
+}
+
 // rejectShareWithBan records a rejected share, updates invalid-submission
 // counters, and either bans the worker or returns a typed Stratum error
 // depending on recent behavior. It centralizes the common pattern used for
@@ -336,7 +350,7 @@ func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, 
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
 			Result: false,
-			Error:  newStratumError(24, "banned"),
+			Error:  mc.bannedStratumError(),
 		})
 		return
 	}

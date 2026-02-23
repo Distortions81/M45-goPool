@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 
@@ -284,8 +285,12 @@ func (s *StatusServer) loadOneTimeCodesFromDB(dataDir string) {
 		}
 		persisted = append(persisted, entry)
 	}
-	_ = rows.Close()
-	_, _ = db.Exec("DELETE FROM one_time_codes")
+	if err := rows.Close(); err != nil {
+		logger.Warn("one-time code rows close failed", "error", err)
+	}
+	if _, err := db.Exec("DELETE FROM one_time_codes"); err != nil {
+		logger.Warn("one-time code sqlite clear before load failed", "error", err)
+	}
 
 	now := time.Now()
 	s.oneTimeCodeMu.Lock()
@@ -331,7 +336,9 @@ func (s *StatusServer) persistOneTimeCodesToDB(dataDir string) {
 	}
 
 	now := time.Now()
-	_, _ = db.Exec("DELETE FROM one_time_codes")
+	if _, err := db.Exec("DELETE FROM one_time_codes"); err != nil {
+		logger.Warn("one-time code sqlite clear failed", "error", err)
+	}
 
 	s.oneTimeCodeMu.Lock()
 	s.initOneTimeCodesLocked()
@@ -362,7 +369,11 @@ func (s *StatusServer) persistOneTimeCodesToDB(dataDir string) {
 		logger.Warn("one-time code sqlite begin failed", "error", err)
 		return
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logger.Debug("one-time code sqlite rollback failed", "error", err)
+		}
+	}()
 	stmt, err := tx.Prepare("INSERT OR REPLACE INTO one_time_codes (user_id, code, created_at_unix, expires_at_unix) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		logger.Warn("one-time code sqlite prepare failed", "error", err)
@@ -370,12 +381,16 @@ func (s *StatusServer) persistOneTimeCodesToDB(dataDir string) {
 	}
 	for _, e := range codes {
 		if _, err := stmt.Exec(strings.TrimSpace(e.UserID), strings.TrimSpace(e.Code), unixOrZero(e.CreatedAt), unixOrZero(e.ExpiresAt)); err != nil {
-			_ = stmt.Close()
+			if closeErr := stmt.Close(); closeErr != nil {
+				logger.Debug("one-time code sqlite stmt close failed", "error", closeErr)
+			}
 			logger.Warn("one-time code sqlite insert failed", "error", err)
 			return
 		}
 	}
-	_ = stmt.Close()
+	if err := stmt.Close(); err != nil {
+		logger.Debug("one-time code sqlite stmt close failed", "error", err)
+	}
 	if err := tx.Commit(); err != nil {
 		logger.Warn("one-time code sqlite commit failed", "error", err)
 	}

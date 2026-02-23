@@ -29,6 +29,9 @@ type AdminPageData struct {
 	AdminPerPageOptions  []int
 	AdminLogSources      []string
 	AdminLogSource       string
+	AdminDebugEnabled    bool
+	AdminNetDebugEnabled bool
+	AdminNetDebugSupport bool
 	OperatorStats        AdminOperatorStatsData
 }
 
@@ -166,7 +169,8 @@ type AdminSettingsData struct {
 	ReconnectBanDurationSeconds          int
 
 	// Logging
-	LogLevel string
+	LogDebug    bool
+	LogNetDebug bool
 
 	// Runtime / misc
 	StratumMessagesPerMinute            int

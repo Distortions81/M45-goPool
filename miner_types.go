@@ -28,6 +28,20 @@ type StratumMessage struct {
 	Params []any  `json:"params"`
 }
 
+const (
+	// JSON-RPC standard parse error code.
+	stratumErrCodeParseError = -32700
+	// JSON-RPC standard method-not-found code.
+	stratumErrCodeMethodNotFound = -32601
+
+	// Stratum/pool-specific request/share/auth error codes used by this pool.
+	stratumErrCodeInvalidRequest = 20
+	stratumErrCodeJobNotFound    = 21
+	stratumErrCodeDuplicateShare = 22
+	stratumErrCodeLowDiffShare   = 23
+	stratumErrCodeUnauthorized   = 24
+)
+
 func newStratumError(code int, msg string) []any {
 	return []any{code, msg, nil}
 }

@@ -53,13 +53,13 @@ func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) 
 		mc.cfg.ShareRequireAuthorizedConnection = true
 		mc.cfg.ShareRequireWorkerMatch = true
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			req := testSubmitRequestForJob(job, "other.worker")
-			if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
-				t.Fatalf("expected submit to reject mismatched worker")
-			}
+		req := testSubmitRequestForJob(job, "other.worker")
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected submit to reject mismatched worker")
+		}
 		if out := conn.String(); out == "" {
 			t.Fatalf("expected strict rejection response to be written")
 		}
@@ -126,12 +126,12 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.SubmitProcessInline = true
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			req := testSubmitRequestForJob(job, mc.currentWorker())
-			mc.handleSubmit(req)
-			if out := conn.String(); out == "" {
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		mc.handleSubmit(req)
+		if out := conn.String(); out == "" {
 			t.Fatalf("expected inline submit processing to emit a response")
 		}
 
@@ -148,13 +148,13 @@ func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.ShareCheckDuplicate = true
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			task := submissionTask{
-				mc:          mc,
-				reqID:       1,
-				job:         job,
+		task := submissionTask{
+			mc:          mc,
+			reqID:       1,
+			job:         job,
 			jobID:       job.JobID,
 			workerName:  mc.currentWorker(),
 			extranonce2: "00000000",
@@ -185,12 +185,12 @@ func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.ShareCheckDuplicate = false
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			task := submissionTask{
-				mc:          mc,
-				reqID:       1,
+		task := submissionTask{
+			mc:          mc,
+			reqID:       1,
 			job:         job,
 			jobID:       job.JobID,
 			workerName:  mc.currentWorker(),
@@ -224,12 +224,12 @@ func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.ShareRequireJobID = false
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			req := testSubmitRequestForJob(job, mc.currentWorker())
-			req.Params[1] = ""
-			if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[1] = ""
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
 			t.Fatalf("expected empty job id submit to be rejected")
 		}
 		if out := conn.String(); !strings.Contains(out, "job not found") {
@@ -241,12 +241,12 @@ func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.ShareRequireJobID = true
 
-			conn := &recordConn{}
-			mc.conn = conn
+		conn := &recordConn{}
+		mc.conn = conn
 
-			req := testSubmitRequestForJob(job, mc.currentWorker())
-			req.Params[1] = ""
-			if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[1] = ""
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
 			t.Fatalf("expected empty job id submit to be rejected")
 		}
 		if out := conn.String(); !strings.Contains(out, "job id required") {

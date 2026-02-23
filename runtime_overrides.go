@@ -8,8 +8,14 @@ import (
 
 type runtimeOverrides struct {
 	bind                string
+	listenAddr          string
+	statusAddr          string
+	statusTLSAddr       string
+	stratumTLSListen    string
 	rpcURL              string
 	rpcCookiePath       string
+	dataDir             string
+	maxConns            int
 	allowPublicRPC      bool
 	allowRPCCredentials bool
 	flood               bool
@@ -58,6 +64,12 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if overrides.rpcCookiePath != "" {
 		cfg.RPCCookiePath = overrides.rpcCookiePath
 	}
+	if strings.TrimSpace(overrides.dataDir) != "" {
+		cfg.DataDir = strings.TrimSpace(overrides.dataDir)
+	}
+	if overrides.maxConns >= 0 {
+		cfg.MaxConns = overrides.maxConns
+	}
 	if overrides.allowPublicRPC {
 		cfg.AllowPublicRPC = true
 	}
@@ -96,6 +108,20 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 				cfg.StratumTLSListen = net.JoinHostPort(overrides.bind, port)
 			}
 		}
+	}
+
+	// Explicit listener overrides win over global bind rewrites.
+	if strings.TrimSpace(overrides.listenAddr) != "" {
+		cfg.ListenAddr = strings.TrimSpace(overrides.listenAddr)
+	}
+	if strings.TrimSpace(overrides.statusAddr) != "" {
+		cfg.StatusAddr = strings.TrimSpace(overrides.statusAddr)
+	}
+	if strings.TrimSpace(overrides.statusTLSAddr) != "" {
+		cfg.StatusTLSAddr = strings.TrimSpace(overrides.statusTLSAddr)
+	}
+	if strings.TrimSpace(overrides.stratumTLSListen) != "" {
+		cfg.StratumTLSListen = strings.TrimSpace(overrides.stratumTLSListen)
 	}
 
 	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {

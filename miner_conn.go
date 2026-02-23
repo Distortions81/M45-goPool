@@ -59,7 +59,7 @@ func (mc *MinerConn) Close(reason string) {
 	if reason == "" {
 		reason = "shutdown"
 	}
-	logger.Info("closing miner", "remote", mc.id, "reason", reason)
+	logger.Info("closing miner", "component", "miner", "kind", "lifecycle", "remote", mc.id, "reason", reason)
 	mc.cleanup()
 }
 
@@ -227,8 +227,8 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 
 func (mc *MinerConn) handle() {
 	defer mc.cleanup()
-	if debugLogging || verboseLogging {
-		logger.Info("miner connected", "remote", mc.id, "extranonce1", mc.extranonce1Hex)
+	if debugLogging || verboseRuntimeLogging {
+		logger.Info("miner connected", "component", "miner", "kind", "lifecycle", "remote", mc.id, "extranonce1", mc.extranonce1Hex)
 	}
 
 	for {
@@ -237,7 +237,7 @@ func (mc *MinerConn) handle() {
 			return
 		}
 		if expired, reason := mc.idleExpired(now); expired {
-			logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
+			logger.Warn("closing miner for idle timeout", "component", "miner", "kind", "timeout", "remote", mc.id, "reason", reason)
 			return
 		}
 		mc.maybeSendInitialWorkDue(now)
@@ -246,7 +246,7 @@ func (mc *MinerConn) handle() {
 			if mc.ctx.Err() != nil {
 				return
 			}
-			logger.Error("set read deadline failed", "remote", mc.id, "error", err)
+			logger.Error("set read deadline failed", "component", "miner", "kind", "io", "remote", mc.id, "error", err)
 			return
 		}
 
@@ -254,7 +254,7 @@ func (mc *MinerConn) handle() {
 		now = time.Now()
 		if err != nil {
 			if errors.Is(err, bufio.ErrBufferFull) {
-				logger.Warn("closing miner for oversized message", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
+				logger.Warn("closing miner for oversized message", "component", "miner", "kind", "protocol", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
 				if banned, count := mc.noteProtocolViolation(now); banned {
 					mc.sendClientShowMessage("Banned: " + mc.banReason)
 					mc.logBan("oversized stratum message", mc.currentWorker(), count)
@@ -263,7 +263,7 @@ func (mc *MinerConn) handle() {
 			}
 			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
 				if expired, reason := mc.idleExpired(now); expired {
-					logger.Warn("closing miner for idle timeout", "remote", mc.id, "reason", reason)
+					logger.Warn("closing miner for idle timeout", "component", "miner", "kind", "timeout", "remote", mc.id, "reason", reason)
 					return
 				}
 				continue
@@ -277,10 +277,11 @@ func (mc *MinerConn) handle() {
 				if !mc.connectedAt.IsZero() {
 					fields = append(fields, "session", now.Sub(mc.connectedAt).Round(time.Second))
 				}
+				fields = append([]any{"component", "miner", "kind", "lifecycle"}, fields...)
 				logger.Info("miner disconnected", fields...)
 				return
 			}
-			logger.Error("read error", "remote", mc.id, "error", err)
+			logger.Error("read error", "component", "miner", "kind", "io", "remote", mc.id, "error", err)
 			return
 		}
 		logNetMessage("recv", line)
@@ -293,6 +294,7 @@ func (mc *MinerConn) handle() {
 		if mc.stratumMsgRateLimitExceeded(now, sniffedMethod) {
 			banWorker := mc.workerForRateLimitBan(sniffedMethod, line)
 			logger.Warn("closing miner for stratum message rate limit",
+				"component", "miner", "kind", "rate_limit",
 				"remote", mc.id,
 				"worker", banWorker,
 				"configured_limit_per_min", mc.cfg.StratumMessagesPerMinute,
@@ -358,7 +360,16 @@ func (mc *MinerConn) handle() {
 		}
 		var req StratumRequest
 		if err := fastJSONUnmarshal(line, &req); err != nil {
-			logger.Warn("json error from miner", "remote", mc.id, "error", err)
+			if sniffedOK && len(sniffedIDRaw) > 0 {
+				if idVal, _, ok := parseJSONValue(sniffedIDRaw, 0); ok && idVal != nil {
+					mc.writeResponse(StratumResponse{
+						ID:     idVal,
+						Result: nil,
+						Error:  newStratumError(stratumErrCodeParseError, "parse error"),
+					})
+				}
+			}
+			logger.Warn("json error from miner", "component", "miner", "kind", "protocol", "remote", mc.id, "error", err)
 			if banned, count := mc.noteProtocolViolation(now); banned {
 				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan("invalid stratum json", mc.currentWorker(), count)
@@ -432,7 +443,7 @@ func (mc *MinerConn) handle() {
 				mc.writeResponse(StratumResponse{
 					ID:     req.ID,
 					Result: nil,
-					Error:  newStratumError(-32601, "method not found"),
+					Error:  newStratumError(stratumErrCodeMethodNotFound, "method not found"),
 				})
 				if debugLogging {
 					logger.Debug("unknown stratum method (replied method not found)", "remote", mc.id, "method", req.Method)

@@ -66,8 +66,23 @@ func (mc *MinerConn) sendClientShowMessage(message string) {
 		Method: "client.show_message",
 		Params: []any{message},
 	}
-	if err := mc.writeJSON(msg); err != nil && debugLogging {
-		logger.Debug("client.show_message write error", "remote", mc.id, "error", err)
+	worker := mc.currentWorker()
+	fields := []any{"remote", mc.id, "message", message}
+	if worker != "" {
+		fields = append(fields, "worker", worker)
+	}
+	switch {
+	case strings.HasPrefix(message, "Banned:"):
+		logger.Warn("sending client.show_message", fields...)
+	case strings.HasPrefix(message, "Warning:"):
+		logger.Warn("sending client.show_message", fields...)
+	default:
+		logger.Info("sending client.show_message", fields...)
+	}
+	if err := mc.writeJSON(msg); err != nil {
+		errFields := append([]any{}, fields...)
+		errFields = append(errFields, "error", err)
+		logger.Warn("client.show_message write error", errFields...)
 	}
 }
 

@@ -211,11 +211,11 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		receivedAt:       time.Unix(1700000000, 0),
-		}
+	}
 
-		mc.conn = nopConn{}
-		mc.processSubmissionTask(task)
-		flushFoundBlockLog(t)
+	mc.conn = nopConn{}
+	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {
@@ -254,13 +254,13 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		scriptTime:       job.ScriptTime + 1,
 		// Simulate a policy rejection (e.g. strict ntime/version rules) that
 		// should not prevent submitting a real block.
-		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"},
+		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"},
 		receivedAt:   time.Unix(1700000000, 0),
-		}
+	}
 
-		mc.conn = nopConn{}
-		mc.processSubmissionTask(task)
-		flushFoundBlockLog(t)
+	mc.conn = nopConn{}
+	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
 
 	rpc := mc.rpc.(*countingSubmitRPC)
 	if got := rpc.submitCalls.Load(); got != 1 {

@@ -29,6 +29,14 @@ func setShortHTMLCacheHeaders(w http.ResponseWriter, private bool) {
 	w.Header().Set("Cache-Control", cacheControlShortTTL(private))
 }
 
+func logResponseWriteDebug(msg string, err error, attrs ...any) {
+	if err == nil {
+		return
+	}
+	args := append(attrs, "error", err)
+	logger.Debug(msg, args...)
+}
+
 func (s *StatusServer) cachedJSONResponse(key string, ttl time.Duration, build func() ([]byte, error)) ([]byte, time.Time, time.Time, error) {
 	now := time.Now()
 	s.jsonCacheMu.RLock()
@@ -67,7 +75,7 @@ func (s *StatusServer) serveCachedJSON(w http.ResponseWriter, key string, ttl ti
 	w.Header().Set("X-JSON-Updated-At", updatedAt.UTC().Format(time.RFC3339))
 	w.Header().Set("X-JSON-Next-Update-At", expiresAt.UTC().Format(time.RFC3339))
 	if _, err := w.Write(payload); err != nil {
-		logger.Error("write cached json response", "key", key, "error", err)
+		logResponseWriteDebug("write cached json response", err, "key", key)
 	}
 }
 
@@ -81,7 +89,11 @@ func (s *StatusServer) serveCachedHTML(w http.ResponseWriter, key string, build 
 		setShortHTMLCacheHeaders(w, false)
 		w.Header().Set("X-HTML-Updated-At", entry.updatedAt.UTC().Format(time.RFC3339))
 		_, err := w.Write(payload)
-		return err
+		if err != nil {
+			logResponseWriteDebug("write cached html response", err, "key", key, "cache", "hit")
+			return nil
+		}
+		return nil
 	}
 	s.pageCacheMu.RUnlock()
 
@@ -104,7 +116,11 @@ func (s *StatusServer) serveCachedHTML(w http.ResponseWriter, key string, build 
 	setShortHTMLCacheHeaders(w, false)
 	w.Header().Set("X-HTML-Updated-At", updatedAt.UTC().Format(time.RFC3339))
 	_, err = w.Write(payload)
-	return err
+	if err != nil {
+		logResponseWriteDebug("write cached html response", err, "key", key, "cache", "miss")
+		return nil
+	}
+	return nil
 }
 
 func (s *StatusServer) clearPageCache() {

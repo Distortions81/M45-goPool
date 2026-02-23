@@ -22,8 +22,10 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 	nonce := task.nonce
 	versionHex := task.versionHex
 
-	if debugLogging || verboseLogging {
-		logger.Info("submit received",
+	if debugLogging || verboseRuntimeLogging {
+		logger.Debug("submit received",
+			"component", "miner",
+			"kind", "submit",
 			"remote", mc.id,
 			"worker", workerName,
 			"job", jobID,
@@ -90,8 +92,17 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 		if verLog == "" {
 			verLog = uint32ToHex8Lower(task.useVersion)
 		}
-		logger.Warn("duplicate share", "remote", mc.id, "job", jobID, "extranonce2", ex2Log, "ntime", ntimeLog, "nonce", nonceLog, "version", verLog)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, 22, "duplicate share", now)
+		logger.Info("duplicate share",
+			"component", "miner",
+			"kind", "reject",
+			"remote", mc.id,
+			"job", jobID,
+			"extranonce2", ex2Log,
+			"ntime", ntimeLog,
+			"nonce", nonceLog,
+			"version", verLog,
+		)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, stratumErrCodeDuplicateShare, "duplicate share", now)
 		return
 	}
 
@@ -110,20 +121,24 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	if lowDiff {
-		if debugLogging || verboseLogging {
+		if debugLogging || verboseRuntimeLogging {
 			logger.Info("share rejected",
+				"component", "miner",
+				"kind", "reject",
 				"share_diff", ctx.shareDiff,
 				"required_diff", thresholdDiff,
 				"assigned_diff", assignedDiff,
 				"current_diff", currentDiff,
 			)
-			logger.Warn("submit rejected: lowDiff",
+			logger.Info("submit rejected: lowDiff",
+				"component", "miner",
+				"kind", "reject",
 				"miner", mc.minerName(workerName),
 				"hash", ctx.hashHex,
 			)
 		}
 		var detail *ShareDetail
-		if debugLogging || verboseLogging {
+		if debugLogging || verboseRuntimeLogging {
 			detail = mc.buildShareDetailFromCoinbase(job, ctx.cbTx)
 		}
 		acceptedForStats := false
@@ -131,12 +146,12 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
 			mc.logBan(rejectLowDiff.String(), workerName, invalids)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 		} else {
 			mc.writeResponse(StratumResponse{
 				ID:     reqID,
 				Result: false,
-				Error:  []any{23, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", ctx.shareDiff, assignedDiff), nil},
+				Error:  []any{stratumErrCodeLowDiffShare, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", ctx.shareDiff, assignedDiff), nil},
 			})
 		}
 		return
@@ -144,7 +159,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	shareHash := ctx.hashHex
 	var detail *ShareDetail
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		detail = mc.buildShareDetailFromCoinbase(job, ctx.cbTx)
 	}
 
@@ -179,6 +194,8 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 			}
 		}
 		logger.Info("share accepted",
+			"component", "miner",
+			"kind", "share",
 			"miner", miner,
 			"difficulty", ctx.shareDiff,
 			"hash", ctx.hashHex,
@@ -235,6 +252,8 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 			}
 		}
 		logger.Info("share accepted",
+			"component", "miner",
+			"kind", "share",
 			"miner", miner,
 			"difficulty", ctx.shareDiff,
 			"hash", ctx.hashHex,

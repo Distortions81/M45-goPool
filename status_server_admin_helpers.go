@@ -112,6 +112,9 @@ func (s *StatusServer) buildAdminPageData(r *http.Request, noticeKey string) (Ad
 	if data.AdminLogSource == "" {
 		data.AdminLogSource = defaultAdminLogSource
 	}
+	data.AdminDebugEnabled = debugLogging
+	data.AdminNetDebugSupport = netLogRuntimeSupported()
+	data.AdminNetDebugEnabled = netLogRuntimeEnabled()
 	return data, cfg, nil
 }
 
@@ -304,7 +307,8 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ReconnectBanThreshold:                cfg.ReconnectBanThreshold,
 		ReconnectBanWindowSeconds:            cfg.ReconnectBanWindowSeconds,
 		ReconnectBanDurationSeconds:          cfg.ReconnectBanDurationSeconds,
-		LogLevel:                             cfg.LogLevel,
+		LogDebug:                             cfg.LogDebug,
+		LogNetDebug:                          cfg.LogNetDebug,
 		StratumMessagesPerMinute:             cfg.StratumMessagesPerMinute,
 		MaxRecentJobs:                        cfg.MaxRecentJobs,
 		Extranonce2Size:                      cfg.Extranonce2Size,
@@ -832,13 +836,6 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 		return err
 	}
 	if next.MinVersionBits, err = parseInt("min_version_bits", next.MinVersionBits); err != nil {
-		return err
-	}
-
-	if lvl := strings.ToLower(getTrim("log_level")); lvl != "" {
-		next.LogLevel = lvl
-	}
-	if _, err := parseLogLevel(next.LogLevel); err != nil {
 		return err
 	}
 

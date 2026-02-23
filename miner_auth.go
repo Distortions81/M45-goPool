@@ -70,11 +70,11 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {
-		logger.Warn("subscribe rejected: already subscribed", "remote", mc.id)
+		logger.Debug("subscribe rejected: already subscribed", "component", "miner", "kind", "protocol", "remote", mc.id)
 		mc.writeResponse(StratumResponse{
 			ID:     idVal,
 			Result: nil,
-			Error:  newStratumError(20, "already subscribed"),
+			Error:  newStratumError(stratumErrCodeInvalidRequest, "already subscribed"),
 		})
 		return
 	}
@@ -82,11 +82,11 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 	if haveClientID {
 		// Validate client ID length to prevent abuse
 		if len(clientID) > maxMinerClientIDLen {
-			logger.Warn("subscribe rejected: client identifier too long", "remote", mc.id, "len", len(clientID))
+			logger.Warn("subscribe rejected: client identifier too long", "component", "miner", "kind", "protocol", "remote", mc.id, "len", len(clientID))
 			mc.writeResponse(StratumResponse{
 				ID:     idVal,
 				Result: nil,
-				Error:  newStratumError(20, "client identifier too long"),
+				Error:  newStratumError(stratumErrCodeInvalidRequest, "client identifier too long"),
 			})
 			mc.Close("client identifier too long")
 			return
@@ -105,6 +105,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 			mc.stateMu.Unlock()
 			if mc.minerTypeBanned(clientID, name) {
 				logger.Warn("subscribe rejected: banned miner type",
+					"component", "miner", "kind", "ban",
 					"remote", mc.id,
 					"miner_type", clientID,
 					"miner_name", name,
@@ -112,7 +113,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 				mc.writeResponse(StratumResponse{
 					ID:     idVal,
 					Result: nil,
-					Error:  newStratumError(20, "banned miner type"),
+					Error:  newStratumError(stratumErrCodeInvalidRequest, "banned miner type"),
 				})
 				mc.Close("banned miner type")
 				return
@@ -195,18 +196,19 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 		if !status.LastSuccess.IsZero() {
 			fields = append(fields, "last_job_at", status.LastSuccess)
 		}
-		logger.Warn("miner subscribed but no job ready", fields...)
+		fields = append([]any{"component", "miner", "kind", "job_state"}, fields...)
+		logger.Info("miner subscribed but no job ready", fields...)
 	}
 }
 
 func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool, sessionID string, haveSessionID bool) {
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {
-		logger.Warn("subscribe rejected: already subscribed", "remote", mc.id)
+		logger.Debug("subscribe rejected: already subscribed", "component", "miner", "kind", "protocol", "remote", mc.id)
 		mc.writeResponse(StratumResponse{
 			ID:     id,
 			Result: nil,
-			Error:  newStratumError(20, "already subscribed"),
+			Error:  newStratumError(stratumErrCodeInvalidRequest, "already subscribed"),
 		})
 		return
 	}
@@ -214,11 +216,11 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	if haveClientID {
 		// Validate client ID length to prevent abuse
 		if len(clientID) > maxMinerClientIDLen {
-			logger.Warn("subscribe rejected: client identifier too long", "remote", mc.id, "len", len(clientID))
+			logger.Warn("subscribe rejected: client identifier too long", "component", "miner", "kind", "protocol", "remote", mc.id, "len", len(clientID))
 			mc.writeResponse(StratumResponse{
 				ID:     id,
 				Result: nil,
-				Error:  newStratumError(20, "client identifier too long"),
+				Error:  newStratumError(stratumErrCodeInvalidRequest, "client identifier too long"),
 			})
 			mc.Close("client identifier too long")
 			return
@@ -237,6 +239,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 			mc.stateMu.Unlock()
 			if mc.minerTypeBanned(clientID, name) {
 				logger.Warn("subscribe rejected: banned miner type",
+					"component", "miner", "kind", "ban",
 					"remote", mc.id,
 					"miner_type", clientID,
 					"miner_name", name,
@@ -244,7 +247,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 				mc.writeResponse(StratumResponse{
 					ID:     id,
 					Result: nil,
-					Error:  newStratumError(20, "banned miner type"),
+					Error:  newStratumError(stratumErrCodeInvalidRequest, "banned miner type"),
 				})
 				mc.Close("banned miner type")
 				return
@@ -330,7 +333,8 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		if !status.LastSuccess.IsZero() {
 			fields = append(fields, "last_job_at", status.LastSuccess)
 		}
-		logger.Warn("miner subscribed but no job ready", fields...)
+		fields = append([]any{"component", "miner", "kind", "job_state"}, fields...)
+		logger.Info("miner subscribed but no job ready", fields...)
 	}
 }
 
@@ -357,21 +361,21 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 
 	// Validate worker name length to prevent abuse
 	if len(worker) == 0 {
-		logger.Warn("authorize rejected: empty worker name", "remote", mc.id)
+		logger.Warn("authorize rejected: empty worker name", "component", "miner", "kind", "auth", "remote", mc.id)
 		mc.writeResponse(StratumResponse{
 			ID:     id,
 			Result: false,
-			Error:  newStratumError(20, "worker name required"),
+			Error:  newStratumError(stratumErrCodeInvalidRequest, "worker name required"),
 		})
 		mc.Close("empty worker name")
 		return
 	}
 	if len(worker) > maxWorkerNameLen {
-		logger.Warn("authorize rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		logger.Warn("authorize rejected: worker name too long", "component", "miner", "kind", "auth", "remote", mc.id, "len", len(worker))
 		mc.writeResponse(StratumResponse{
 			ID:     id,
 			Result: false,
-			Error:  newStratumError(20, "worker name too long"),
+			Error:  newStratumError(stratumErrCodeInvalidRequest, "worker name too long"),
 		})
 		mc.Close("worker name too long")
 		return
@@ -379,11 +383,11 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 
 	if mc.cfg.StratumPasswordEnabled {
 		if !authorizePasswordMatches(pass, mc.cfg.StratumPassword) {
-			logger.Warn("authorize rejected: invalid stratum password", "remote", mc.id)
+			logger.Warn("authorize rejected: invalid stratum password", "component", "miner", "kind", "auth", "remote", mc.id)
 			mc.writeResponse(StratumResponse{
 				ID:     id,
 				Result: false,
-				Error:  newStratumError(24, "invalid password"),
+				Error:  newStratumError(stratumErrCodeUnauthorized, "invalid password"),
 			})
 			mc.Close("invalid stratum password")
 			return
@@ -401,6 +405,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		mc.banReason = reason
 		mc.stateMu.Unlock()
 		logger.Warn("authorize rejected: worker banned",
+			"component", "miner", "kind", "ban",
 			"remote", mc.id,
 			"worker", worker,
 			"reason", reason,
@@ -409,7 +414,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		mc.writeResponse(StratumResponse{
 			ID:     id,
 			Result: false,
-			Error:  newStratumError(24, "banned"),
+			Error:  mc.bannedStratumError(),
 		})
 		mc.Close("banned worker")
 		return
@@ -427,13 +432,14 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 				addr = "(invalid)"
 			}
 			logger.Warn("worker has invalid wallet-style name",
+				"component", "miner", "kind", "auth",
 				"worker", workerName,
 				"addr", addr,
 			)
 			resp := StratumResponse{
 				ID:     id,
 				Result: false,
-				Error:  newStratumError(20, "wallet worker validation failed"),
+				Error:  newStratumError(stratumErrCodeInvalidRequest, "worker name has no valid bitcoin wallet"),
 			}
 			mc.writeResponse(resp)
 			mc.Close("wallet validation failed")
@@ -476,7 +482,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 			mc.writeResponse(StratumResponse{
 				ID:     id,
 				Result: false,
-				Error:  newStratumError(24, "banned"),
+				Error:  mc.bannedStratumError(),
 			})
 			mc.Close(reason)
 			return
@@ -548,7 +554,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 
 	diff, ok := parseSuggestedDifficulty(req.Params[0])
 	if !ok || diff < 0 {
-		resp.Error = newStratumError(20, "invalid params")
+		resp.Error = newStratumError(stratumErrCodeInvalidRequest, "invalid params")
 		mc.writeResponse(resp)
 		return
 	}
@@ -577,7 +583,7 @@ func (mc *MinerConn) suggestDifficulty(req *StratumRequest) {
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
 			Result: false,
-			Error:  newStratumError(24, "banned"),
+			Error:  mc.bannedStratumError(),
 		})
 		mc.Close(reason)
 		return
@@ -988,7 +994,7 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 
 	diff, ok := difficultyFromTargetHex(targetHex)
 	if !ok || diff < 0 {
-		resp.Error = newStratumError(20, "invalid target")
+		resp.Error = newStratumError(stratumErrCodeInvalidRequest, "invalid target")
 		mc.writeResponse(resp)
 		return
 	}
@@ -1017,7 +1023,7 @@ func (mc *MinerConn) suggestTarget(req *StratumRequest) {
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
 			Result: false,
-			Error:  newStratumError(24, "banned"),
+			Error:  mc.bannedStratumError(),
 		})
 		mc.Close(reason)
 		return
@@ -1074,13 +1080,13 @@ func difficultyFromTargetHex(targetHex string) (float64, bool) {
 
 func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	if len(req.Params) == 0 {
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(20, "invalid params")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid params")})
 		return
 	}
 
 	rawExts, ok := parseConfigureExtensions(req.Params[0])
 	if !ok {
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(20, "invalid params")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: nil, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid params")})
 		return
 	}
 	var opts map[string]any
@@ -1211,7 +1217,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		mc.writeResponse(StratumResponse{
 			ID:     req.ID,
 			Result: false,
-			Error:  newStratumError(24, "banned"),
+			Error:  mc.bannedStratumError(),
 		})
 		mc.Close(banReason)
 		return
@@ -1267,12 +1273,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 
 	worker := mc.currentWorker()
 	if worker == "" {
-		logger.Warn("notify aborted: missing authorized worker", "remote", mc.id)
+		logger.Debug("notify aborted: missing authorized worker", "component", "miner", "kind", "notify", "remote", mc.id)
 		mc.Close("missing authorized worker")
 		return
 	}
 	if _, _, ok := mc.ensureWorkerWallet(worker); !ok {
-		logger.Warn("notify aborted: unable to resolve worker wallet", "remote", mc.id, "worker", worker)
+		logger.Warn("notify aborted: unable to resolve worker wallet", "component", "miner", "kind", "notify", "remote", mc.id, "worker", worker)
 		mc.Close("wallet resolution failed")
 		return
 	}
@@ -1284,7 +1290,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
 		logger.Debug("payout check", "donation_percent", job.OperatorDonationPercent, "donation_script_len", len(job.DonationScript))
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
-			logger.Info("using triple payout", "worker", worker, "donation_percent", job.OperatorDonationPercent)
+			logger.Debug("using triple payout", "worker", worker, "donation_percent", job.OperatorDonationPercent)
 			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
 				job.Template.Height,
 				mc.extranonce1,
@@ -1322,6 +1328,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	if coinb1 == "" || coinb2 == "" || err != nil {
 		if err != nil {
 			logger.Warn("dual-payout coinbase build failed, falling back to single-output coinbase",
+				"component", "miner", "kind", "coinbase",
 				"error", err,
 				"worker", worker,
 			)
@@ -1340,7 +1347,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		)
 	}
 	if err != nil {
-		logger.Error("notify coinbase parts", "error", err)
+		logger.Error("notify coinbase parts", "component", "miner", "kind", "coinbase", "error", err)
 		return
 	}
 	mc.jobMu.Lock()
@@ -1379,10 +1386,10 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		cleanJobs,
 	}
 
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		merkleRoot := computeMerkleRootBE(coinb1, coinb2, job.MerkleBranches)
 		headerHashLE := headerHashFromNotify(prevhashLE, merkleRoot, uint32(job.Template.Version), job.Template.Bits, job.Template.CurTime)
-		logger.Info("notify payload",
+		logger.Debug("notify payload",
 			"job", job.JobID,
 			"prevhash", prevhashLE,
 			"coinb1", coinb1,
@@ -1403,7 +1410,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		Method: "mining.notify",
 		Params: params,
 	}); err != nil {
-		logger.Error("notify write error", "remote", mc.id, "error", err)
+		logger.Error("notify write error", "component", "miner", "kind", "notify", "remote", mc.id, "error", err)
 		return
 	}
 	mc.recordNotifySent(time.Now())

@@ -16,8 +16,8 @@ func TestHandleGetTransactions_ReturnsTxidsForJobID(t *testing.T) {
 	}
 
 	mc := &MinerConn{
-		id:        "get-txs",
-		conn:      conn,
+		id:         "get-txs",
+		conn:       conn,
 		activeJobs: map[string]*Job{"job1": job},
 		lastJob:    job,
 	}
@@ -41,8 +41,8 @@ func TestHandleGetTransactions_EmptyParamsUsesLastJob(t *testing.T) {
 	}
 
 	mc := &MinerConn{
-		id:        "get-txs-last",
-		conn:      conn,
+		id:         "get-txs-last",
+		conn:       conn,
 		activeJobs: map[string]*Job{"jobLast": job},
 		lastJob:    job,
 	}
@@ -55,4 +55,3 @@ func TestHandleGetTransactions_EmptyParamsUsesLastJob(t *testing.T) {
 		t.Fatalf("expected txids from last job, got: %q", out)
 	}
 }
-

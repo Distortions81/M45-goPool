@@ -11,6 +11,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func setBackblazeTestClock(svc *backblazeBackupService, start time.Time) func(time.Duration) {
+	now := start
+	svc.now = func() time.Time { return now }
+	return func(d time.Duration) { now = now.Add(d) }
+}
+
 func createTestWorkerDB(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -184,6 +190,7 @@ func TestBackups_RunOnInterval_EvenWhenDBUnchanged(t *testing.T) {
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
+	advance := setBackblazeTestClock(svc, time.Unix(1_700_000_000, 0))
 
 	// First backup.
 	svc.RunOnce(context.Background(), "test", true)
@@ -197,7 +204,7 @@ func TestBackups_RunOnInterval_EvenWhenDBUnchanged(t *testing.T) {
 
 	// Second backup with no DB writes. Ensure the stamp advances even if the DB
 	// is unchanged (interval-driven backups).
-	time.Sleep(1100 * time.Millisecond)
+	advance(1100 * time.Millisecond)
 	svc.RunOnce(context.Background(), "test", true)
 	ts2, _, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
 	if err != nil {
@@ -236,6 +243,7 @@ func TestBackups_DefaultSkipsWhenDBUnchanged(t *testing.T) {
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
+	advance := setBackblazeTestClock(svc, time.Unix(1_700_000_100, 0))
 
 	// First backup.
 	svc.RunOnce(context.Background(), "test", true)
@@ -248,7 +256,7 @@ func TestBackups_DefaultSkipsWhenDBUnchanged(t *testing.T) {
 	}
 
 	// Second run after interval with no DB writes should be skipped.
-	time.Sleep(1100 * time.Millisecond)
+	advance(1100 * time.Millisecond)
 	svc.RunOnce(context.Background(), "test", false)
 	ts2, dv2, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
 	if err != nil {
@@ -290,6 +298,7 @@ func TestBackups_DefaultRunsWhenDBChanged(t *testing.T) {
 	if svc == nil {
 		t.Fatalf("expected service")
 	}
+	advance := setBackblazeTestClock(svc, time.Unix(1_700_000_200, 0))
 
 	// First backup.
 	svc.RunOnce(context.Background(), "test", true)
@@ -307,7 +316,7 @@ func TestBackups_DefaultRunsWhenDBChanged(t *testing.T) {
 		t.Fatalf("insert ban row: %v", err)
 	}
 
-	time.Sleep(1100 * time.Millisecond)
+	advance(1100 * time.Millisecond)
 	svc.RunOnce(context.Background(), "test", false)
 	ts2, dv2, err := readLastBackupStampFromDB(db, backupStateKeyWorkerDBSnapshot)
 	if err != nil {

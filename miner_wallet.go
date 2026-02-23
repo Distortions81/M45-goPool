@@ -96,6 +96,12 @@ func (mc *MinerConn) ensureWorkerWallet(worker string) (string, []byte, bool) {
 	}
 	script, err := scriptForAddress(base, ChainParams())
 	if err != nil {
+		logger.Warn("derive worker payout script failed",
+			"remote", mc.id,
+			"worker", worker,
+			"address", base,
+			"error", err,
+		)
 		return "", nil, false
 	}
 	mc.setWorkerWallet(worker, base, script)

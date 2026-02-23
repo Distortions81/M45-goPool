@@ -51,7 +51,8 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			PoolTagPrefix:           cfg.PoolTagPrefix,
 		},
 		Logging: loggingConfig{
-			Level: cfg.LogLevel,
+			Debug:    boolPtr(cfg.LogDebug),
+			NetDebug: boolPtr(cfg.LogNetDebug),
 		},
 	}
 }
@@ -260,7 +261,8 @@ func (cfg Config) Effective() EffectiveConfig {
 		ShareNTimeMaxForwardSeconds:      cfg.ShareNTimeMaxForwardSeconds,
 		ShareCheckDuplicate:              cfg.ShareCheckDuplicate,
 		ShareRequireJobID:                cfg.ShareRequireJobID,
-		LogLevel:                         cfg.LogLevel,
+		LogDebug:                         cfg.LogDebug,
+		LogNetDebug:                      cfg.LogNetDebug,
 		CleanExpiredBansOnStartup:        cfg.CleanExpiredBansOnStartup,
 		BanInvalidSubmissionsAfter:       cfg.BanInvalidSubmissionsAfter,
 		BanInvalidSubmissionsWindow:      cfg.BanInvalidSubmissionsWindow.String(),

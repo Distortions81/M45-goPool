@@ -64,9 +64,13 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 	}
 	var parsed req
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		_ = json.NewDecoder(r.Body).Decode(&parsed)
+		if err := json.NewDecoder(r.Body).Decode(&parsed); err != nil {
+			logger.Warn("clerk refresh decode failed", "error", err)
+		}
 	} else {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			logger.Warn("clerk refresh parse form failed", "error", err)
+		}
 		parsed.Token = r.FormValue("token")
 	}
 	token := strings.TrimSpace(parsed.Token)
@@ -97,7 +101,9 @@ func (s *StatusServer) handleClerkSessionRefresh(w http.ResponseWriter, r *http.
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else {
-		_, _ = w.Write(out)
+		if _, err := w.Write(out); err != nil {
+			logger.Debug("clerk refresh json write failed", "error", err)
+		}
 	}
 }
 

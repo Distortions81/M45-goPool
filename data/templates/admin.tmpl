@@ -279,26 +279,17 @@
 					</div>
 				</div>
 
-				<h3 style="margin:18px 0 8px 0;">Main config runtime</h3>
-				<p class="text-sm" style="margin:0 0 8px 0;">
-					Miscellaneous runtime behavior: connection timeout, logging verbosity, and submit-validation policy toggles.
-				</p>
-				<div class="grid admin-grid">
+					<h3 style="margin:18px 0 8px 0;">Main config runtime</h3>
+					<p class="text-sm" style="margin:0 0 8px 0;">
+						Miscellaneous runtime behavior: connection timeout and submit-validation policy toggles. Logging flags are managed on the Admin Logs page.
+					</p>
+					<div class="grid admin-grid">
 					<div>
 						<div class="label">connection_timeout_seconds {{template "restart-required" .}}<div class="label-note">Miner connection idle timeout (seconds).</div></div>
 						<input name="connection_timeout_seconds" type="number" min="30" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
-					<div>
-						<div class="label">log_level<div class="label-note">Logging verbosity for goPool (applies live immediately and is persisted on save-to-disk).</div></div>
-						<select name="log_level" class="textfield">
-							<option value="debug" {{if eq .Settings.LogLevel "debug"}}selected{{end}}>debug</option>
-							<option value="info" {{if eq .Settings.LogLevel "info"}}selected{{end}}>info</option>
-							<option value="warn" {{if or (eq .Settings.LogLevel "warn") (eq .Settings.LogLevel "")}}selected{{end}}>warn</option>
-							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
-						</select>
-					</div>
-					<div>
-						<div class="label">share_job_freshness_mode {{template "restart-required" .}}<div class="label-note">Job freshness policy for submit validation.</div></div>
+						<div>
+							<div class="label">share_job_freshness_mode {{template "restart-required" .}}<div class="label-note">Job freshness policy for submit validation.</div></div>
 						<select name="share_job_freshness_mode" class="textfield">
 							<option value="0" {{if eq .Settings.ShareJobFreshnessMode 0}}selected{{end}}>0 (off)</option>
 							<option value="1" {{if eq .Settings.ShareJobFreshnessMode 1}}selected{{end}}>1 (job_id)</option>

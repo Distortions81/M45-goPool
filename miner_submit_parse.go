@@ -81,16 +81,16 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if len(req.Params) < 5 || len(req.Params) > 6 {
-		logger.Warn("submit invalid params", "remote", mc.id, "params", req.Params)
+		logger.Debug("submit invalid params", "remote", mc.id, "params", req.Params)
 		mc.recordShare("", false, 0, 0, "invalid params", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid params")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid params")})
 		return out, false
 	}
 
 	worker, ok := req.Params[0].(string)
 	if !ok {
 		mc.recordShare("", false, 0, 0, "invalid worker", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid worker")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid worker")})
 		return out, false
 	}
 	if validateFields {
@@ -98,20 +98,20 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "worker name required")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name required")})
 		return out, false
 	}
 	if validateFields && len(worker) > maxWorkerNameLen {
-		logger.Warn("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		logger.Debug("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
 		mc.recordShare("", false, 0, 0, "worker name too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "worker name too long")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name too long")})
 		return out, false
 	}
 
 	jobID, ok := req.Params[1].(string)
 	if !ok {
 		mc.recordShare(worker, false, 0, 0, "invalid job id", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid job id")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid job id")})
 		return out, false
 	}
 	if validateFields {
@@ -119,31 +119,31 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id required")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return out, false
 	}
 	if validateFields && len(jobID) > maxJobIDLen {
-		logger.Warn("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
+		logger.Debug("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
 		mc.recordShare(worker, false, 0, 0, "job id too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "job id too long")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id too long")})
 		return out, false
 	}
 	extranonce2, ok := req.Params[2].(string)
 	if !ok {
 		mc.recordShare(worker, false, 0, 0, "invalid extranonce2", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid extranonce2")})
 		return out, false
 	}
 	ntime, ok := req.Params[3].(string)
 	if !ok {
 		mc.recordShare(worker, false, 0, 0, "invalid ntime", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid ntime")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid ntime")})
 		return out, false
 	}
 	nonce, ok := req.Params[4].(string)
 	if !ok {
 		mc.recordShare(worker, false, 0, 0, "invalid nonce", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid nonce")})
+		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid nonce")})
 		return out, false
 	}
 
@@ -152,25 +152,25 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 		verStr, ok := req.Params[5].(string)
 		if !ok {
 			mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid version")})
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid version")})
 			return out, false
 		}
 		if validateFields && len(verStr) == 0 {
 			mc.recordShare(worker, false, 0, 0, "empty version", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "version required")})
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version required")})
 			return out, false
 		}
 		if validateFields && len(verStr) > maxVersionHexLen {
-			logger.Warn("submit rejected: version too long", "remote", mc.id, "len", len(verStr))
+			logger.Debug("submit rejected: version too long", "remote", mc.id, "len", len(verStr))
 			mc.recordShare(worker, false, 0, 0, "version too long", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "version too long")})
+			mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version too long")})
 			return out, false
 		}
 		verVal, err := parseUint32BEHex(verStr)
 		if err != nil {
 			if validateFields {
 				mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
-				mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(20, "invalid version")})
+				mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid version")})
 				return out, false
 			}
 			verVal = 0
@@ -192,9 +192,9 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if len(params) < 5 || len(params) > 6 {
-		logger.Warn("submit invalid params", "remote", mc.id, "params", params)
+		logger.Debug("submit invalid params", "remote", mc.id, "params", params)
 		mc.recordShare("", false, 0, 0, "invalid params", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "invalid params")})
+		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid params")})
 		return out, false
 	}
 
@@ -204,13 +204,13 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "worker name required")})
+		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name required")})
 		return out, false
 	}
 	if validateFields && len(worker) > maxWorkerNameLen {
-		logger.Warn("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		logger.Debug("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
 		mc.recordShare("", false, 0, 0, "worker name too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "worker name too long")})
+		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name too long")})
 		return out, false
 	}
 
@@ -220,13 +220,13 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "job id required")})
+		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return out, false
 	}
 	if validateFields && len(jobID) > maxJobIDLen {
-		logger.Warn("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
+		logger.Debug("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
 		mc.recordShare(worker, false, 0, 0, "job id too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "job id too long")})
+		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id too long")})
 		return out, false
 	}
 
@@ -239,20 +239,20 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 		verStr := params[5]
 		if validateFields && len(verStr) == 0 {
 			mc.recordShare(worker, false, 0, 0, "empty version", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "version required")})
+			mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version required")})
 			return out, false
 		}
 		if validateFields && len(verStr) > maxVersionHexLen {
-			logger.Warn("submit rejected: version too long", "remote", mc.id, "len", len(verStr))
+			logger.Debug("submit rejected: version too long", "remote", mc.id, "len", len(verStr))
 			mc.recordShare(worker, false, 0, 0, "version too long", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "version too long")})
+			mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version too long")})
 			return out, false
 		}
 		verVal, err := parseUint32BEHex(verStr)
 		if err != nil {
 			if validateFields {
 				mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
-				mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(20, "invalid version")})
+				mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid version")})
 				return out, false
 			}
 			verVal = 0
@@ -280,13 +280,13 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 	}
 	if validateFields && len(worker) == 0 {
 		mc.recordShare("", false, 0, 0, "empty worker", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "worker name required")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name required")})
 		return submissionTask{}, false
 	}
 	if validateFields && len(worker) > maxWorkerNameLen {
-		logger.Warn("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
+		logger.Debug("submit rejected: worker name too long", "remote", mc.id, "len", len(worker))
 		mc.recordShare("", false, 0, 0, "worker name too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "worker name too long")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "worker name too long")})
 		return submissionTask{}, false
 	}
 
@@ -296,13 +296,13 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 	}
 	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "job id required")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return submissionTask{}, false
 	}
 	if validateFields && len(jobID) > maxJobIDLen {
-		logger.Warn("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
+		logger.Debug("submit rejected: job id too long", "remote", mc.id, "len", len(jobID))
 		mc.recordShare(worker, false, 0, 0, "job id too long", "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "job id too long")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id too long")})
 		return submissionTask{}, false
 	}
 
@@ -310,20 +310,20 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 	if haveVersion {
 		if validateFields && len(versionB) == 0 {
 			mc.recordShare(worker, false, 0, 0, "empty version", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "version required")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version required")})
 			return submissionTask{}, false
 		}
 		if validateFields && len(versionB) > maxVersionHexLen {
-			logger.Warn("submit rejected: version too long", "remote", mc.id, "len", len(versionB))
+			logger.Debug("submit rejected: version too long", "remote", mc.id, "len", len(versionB))
 			mc.recordShare(worker, false, 0, 0, "version too long", "", nil, now)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "version too long")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "version too long")})
 			return submissionTask{}, false
 		}
 		verVal, err := parseUint32BEHexBytes(versionB)
 		if err != nil {
 			if validateFields {
 				mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
-				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid version")})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid version")})
 				return submissionTask{}, false
 			}
 			verVal = 0
@@ -372,12 +372,12 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("unauthorized")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -391,20 +391,20 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("banned")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 		return submissionTask{}, false
 	}
 
 	job, curLast, _, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		if curLast == nil {
-			logger.Warn("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		job = curLast
@@ -417,32 +417,32 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2HexBytes(extranonce2B, validateFields, job.Extranonce2Size)
 	if err != nil {
-		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
+		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(ntimeB) != 8 {
-		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntimeB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntimeB))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	ntimeVal, err := parseUint32BEHexBytes(ntimeB)
 	if err != nil {
-		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(nonceB) != 8 {
-		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonceB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonceB))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 	nonceVal, err := parseUint32BEHexBytes(nonceB)
 	if err != nil {
-		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 
@@ -460,7 +460,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 	ntime := ""
 	nonce := ""
 	versionHex := ""
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
@@ -500,12 +500,12 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("unauthorized")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -522,21 +522,21 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("banned")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 		return submissionTask{}, false
 	}
 
 	job, curLast, _, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
+			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
 			// Use "job not found" for missing/expired jobs.
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		if curLast == nil {
-			logger.Warn("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		job = curLast
@@ -551,32 +551,32 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
 	if err != nil {
-		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
+		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(ntime) != 8 {
-		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	ntimeVal, err := parseUint32BEHex(ntime)
 	if err != nil {
-		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(nonce) != 8 {
-		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 	nonceVal, err := parseUint32BEHex(nonce)
 	if err != nil {
-		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 
@@ -594,7 +594,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 	}
 
 	versionHex := ""
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
@@ -636,12 +636,12 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("unauthorized")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -653,7 +653,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("worker_mismatch")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -667,20 +667,20 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("banned")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 		return submissionTask{}, false
 	}
 
 	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		if curLast == nil {
-			logger.Warn("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		job = curLast
@@ -692,25 +692,25 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	policyReject := submitPolicyReject{reason: rejectUnknown}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
-		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
 	}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2HexBytes(extranonce2B, validateFields, job.Extranonce2Size)
 	if err != nil {
-		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
+		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(ntimeB) != 8 {
-		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntimeB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntimeB))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	ntimeVal, err := parseUint32BEHexBytes(ntimeB)
 	if err != nil {
-		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	minNTime := ntimeBounds.min
@@ -718,19 +718,19 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	if mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
 		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
 		if policyReject.reason == rejectUnknown {
-			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"}
+			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
 		}
 	}
 
 	if validateFields && len(nonceB) != 8 {
-		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonceB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonceB))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 	nonceVal, err := parseUint32BEHexBytes(nonceB)
 	if err != nil {
-		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 
@@ -751,7 +751,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	ntime := ""
 	nonce := ""
 	versionHex := ""
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
@@ -764,14 +764,14 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		if !mc.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
+				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
 			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
+				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
@@ -781,7 +781,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 				if !mc.cfg.ShareAllowDegradedVersionBits {
 					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
-						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
 				} else {
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
@@ -826,12 +826,12 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Warn("submit rejected: unauthorized", "remote", mc.id)
+		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("unauthorized")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -843,7 +843,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("worker_mismatch")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "unauthorized")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
 		return submissionTask{}, false
 	}
 
@@ -857,21 +857,21 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		if mc.metrics != nil {
 			mc.metrics.RecordSubmitError("banned")
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 		return submissionTask{}, false
 	}
 
 	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Warn("submit rejected: stale job", "remote", mc.id, "job", jobID)
+			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
 			// Use "job not found" for missing/expired jobs.
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		if curLast == nil {
-			logger.Warn("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, 21, "job not found", now)
+			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
+			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
 			return submissionTask{}, false
 		}
 		job = curLast
@@ -885,26 +885,26 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	policyReject := submitPolicyReject{reason: rejectUnknown}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
-		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: 21, errMsg: "job not found"}
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
 	}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
 	if err != nil {
-		logger.Warn("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, 20, "invalid extranonce2", now)
+		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
 		return submissionTask{}, false
 	}
 
 	if validateFields && len(ntime) != 8 {
-		logger.Warn("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	// Stratum pools send ntime as BIG-ENDIAN hex and parse it back with parseInt(hex, 16).
 	ntimeVal, err := parseUint32BEHex(ntime)
 	if err != nil {
-		logger.Warn("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, 20, "invalid ntime", now)
+		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
 		return submissionTask{}, false
 	}
 	// Tight ntime bounds: require ntime to be >= the template's curtime
@@ -917,20 +917,20 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		// a real block, submit it even if ntime violates the pool's tighter window.
 		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
 		if policyReject.reason == rejectUnknown {
-			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: 20, errMsg: "invalid ntime"}
+			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
 		}
 	}
 
 	if validateFields && len(nonce) != 8 {
-		logger.Warn("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 	// Nonce is sent as BIG-ENDIAN hex in mining.notify.
 	nonceVal, err := parseUint32BEHex(nonce)
 	if err != nil {
-		logger.Warn("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, 20, "invalid nonce", now)
+		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
+		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
 		return submissionTask{}, false
 	}
 
@@ -952,7 +952,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	}
 
 	versionHex := ""
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		versionHex = uint32ToHex8Lower(useVersion)
 	}
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
@@ -961,14 +961,14 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		if !mc.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: 20, errMsg: "version rolling not enabled"}
+				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
 			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: 20, errMsg: "invalid version mask"}
+				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
@@ -978,7 +978,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 				if !mc.cfg.ShareAllowDegradedVersionBits {
 					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
-						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: 20, errMsg: "insufficient version bits"}
+						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
 				} else {
 					// Log but don't reject (BIP310 permissive approach: allow degraded mode)

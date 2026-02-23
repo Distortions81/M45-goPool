@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	logger         = newSimpleLogger()
-	debugLogging   bool
-	verboseLogging bool
+	logger                = newSimpleLogger()
+	debugLogging          bool
+	verboseRuntimeLogging bool
 )
 
 var runtimeLogLevel = logLevelWarn
@@ -192,7 +192,6 @@ func (l *simpleLogger) writeEntry(evt logEvent) {
 
 	l.writerMu.RLock()
 	pool := l.poolWriter
-	errWriter := l.errorWriter
 	debugWriter := l.debugWriter
 	stdout := l.stdout
 	l.writerMu.RUnlock()
@@ -205,14 +204,8 @@ func (l *simpleLogger) writeEntry(evt logEvent) {
 		if debugWriter != nil {
 			_, _ = debugWriter.Write([]byte(line))
 		}
-	case logLevelError:
-		if errWriter != nil {
-			_, _ = errWriter.Write([]byte(line))
-		} else if pool != nil {
-			// Fallback to pool writer if error writer is unavailable.
-			_, _ = pool.Write([]byte(line))
-		}
 	default:
+		// pool.log is the primary application timeline: include INFO/WARN/ERROR.
 		if evt.level >= logLevelInfo && pool != nil {
 			_, _ = pool.Write([]byte(line))
 		}
@@ -357,27 +350,12 @@ func setLogLevel(level logLevel) {
 	logger.setLevel(level)
 }
 
-func parseLogLevel(name string) (logLevel, error) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "", "warn":
-		return logLevelWarn, nil
-	case "info":
-		return logLevelInfo, nil
-	case "debug":
-		return logLevelDebug, nil
-	case "error":
-		return logLevelError, nil
-	default:
-		return logLevelWarn, fmt.Errorf("unknown log level %q", name)
-	}
-}
-
 func debugEnabled() bool {
 	return runtimeLogLevel <= logLevelDebug
 }
 
-func verboseEnabled() bool {
-	return runtimeLogLevel <= logLevelInfo
+func verboseRuntimeEnabled() bool {
+	return debugEnabled()
 }
 
 func configureFileLogging(poolPath, errorPath, debugPath string, stdout bool) {

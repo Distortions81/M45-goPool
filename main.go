@@ -39,8 +39,18 @@ func main() {
 
 	networkFlag := flag.String("network", "", "bitcoin network: mainnet, testnet, signet, regtest")
 	bindFlag := flag.String("bind", "", "bind IP for all listeners")
+	listenFlag := flag.String("listen", "", "override stratum TCP listen address (e.g. :3333)")
+	statusAddrFlag := flag.String("status", "", "override status HTTP listen address (e.g. :80)")
+	statusTLSAddrFlag := flag.String("status-tls", "", "override status HTTPS listen address (e.g. :443)")
+	stratumTLSFlag := flag.String("stratum-tls", "", "override stratum TLS listen address (e.g. :24333)")
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL")
 	rpcCookieFlag := flag.String("rpc-cookie", "", "override RPC cookie path")
+	dataDirFlag := flag.String("data-dir", "", "override data directory")
+	maxConnsFlag := flag.Int("max-conns", -1, "override max concurrent miner connections (-1 keeps config)")
+	logDirFlag := flag.String("log-dir", "", "override log directory (pool/debug/net-debug logs only)")
+	poolLogPathFlag := flag.String("pool-log", "", "override pool log file path")
+	debugLogPathFlag := flag.String("debug-log", "", "override debug log file path")
+	netDebugLogPathFlag := flag.String("net-debug-log", "", "override net-debug log file path")
 	secretsFlag := flag.String("secrets", "", "path to secrets.toml")
 	stdoutLogFlag := flag.Bool("stdout", false, "mirror logs to stdout")
 	profileFlag := flag.Bool("profile", false, "60s CPU profile")
@@ -49,7 +59,8 @@ func main() {
 	disableJSONFlag := flag.Bool("no-json", false, "disable JSON API")
 	allowPublicRPCFlag := flag.Bool("allow-public-rpc", false, "allow unauthenticated RPC endpoint (testing only)")
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
-	logLevelFlag := flag.String("log-level", "", "override log level (debug/info/warn/error)")
+	debugFlag := flag.Bool("debug", false, "enable debug logging and detailed runtime traces")
+	netDebugFlag := flag.Bool("net-debug", false, "enable raw network debug logging at startup (when supported)")
 	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
 	minerProfileJSONFlag := flag.String("miner-profile-json", "", "optional path to write aggregated miner profile JSON for offline tuning")
 	flag.Parse()
@@ -58,8 +69,14 @@ func main() {
 
 	overrides := runtimeOverrides{
 		bind:                *bindFlag,
+		listenAddr:          *listenFlag,
+		statusAddr:          *statusAddrFlag,
+		statusTLSAddr:       *statusTLSAddrFlag,
+		stratumTLSListen:    *stratumTLSFlag,
 		rpcURL:              *rpcURLFlag,
 		rpcCookiePath:       *rpcCookieFlag,
+		dataDir:             *dataDirFlag,
+		maxConns:            *maxConnsFlag,
 		allowPublicRPC:      *allowPublicRPCFlag,
 		allowRPCCredentials: *allowRPCCredsFlag,
 		flood:               *floodFlag,
@@ -75,17 +92,17 @@ func main() {
 	if *profileFlag {
 		f, err := os.Create("default.pgo")
 		if err != nil {
-			logger.Warn("profile open failed", "error", err)
+			logger.Warn("profile open failed", "component", "startup", "kind", "profile", "error", err)
 		} else if err := pprof.StartCPUProfile(f); err != nil {
-			logger.Warn("profile start failed", "error", err)
+			logger.Warn("profile start failed", "component", "startup", "kind", "profile", "error", err)
 			_ = f.Close()
 		} else {
-			logger.Info("cpu profiling started", "duration", "60s", "path", "default.pgo")
+			logger.Info("cpu profiling started", "component", "startup", "kind", "profile", "duration", "60s", "path", "default.pgo")
 			go func() {
 				time.Sleep(60 * time.Second)
 				pprof.StopCPUProfile()
 				_ = f.Close()
-				logger.Info("cpu profiling finished", "path", "default.pgo")
+				logger.Info("cpu profiling finished", "component", "startup", "kind", "profile", "path", "default.pgo")
 			}()
 		}
 	}
@@ -106,7 +123,7 @@ func main() {
 		fatal("rpc auth", err)
 	}
 	if overrides.allowRPCCredentials {
-		logger.Warn("rpc credentials forced from secrets.toml instead of node.rpc_cookie_path (deprecated and insecure)", "hint", "configure bitcoind's auth cookie via node.rpc_cookie_path instead")
+		logger.Warn("rpc credentials forced from secrets.toml instead of node.rpc_cookie_path (deprecated and insecure)", "component", "startup", "kind", "config", "hint", "configure bitcoind's auth cookie via node.rpc_cookie_path instead")
 	}
 	if err := validateConfig(cfg); err != nil {
 		fatal("config", err)
@@ -116,19 +133,21 @@ func main() {
 		fatal("admin config", err)
 	}
 
-	logLevelName := cfg.LogLevel
-	if *logLevelFlag != "" {
-		logLevelName = *logLevelFlag
+	if *debugFlag {
+		cfg.LogDebug = true
 	}
-	level, err := parseLogLevel(logLevelName)
-	if err != nil {
-		fatal("log level", err)
+	if *netDebugFlag {
+		cfg.LogNetDebug = true
 	}
-	setLogLevel(level)
+	if cfg.LogDebug {
+		setLogLevel(logLevelDebug)
+	} else {
+		setLogLevel(logLevelInfo)
+	}
 
 	// Mirror current log-level into globals used by hot paths.
 	debugLogging = debugEnabled()
-	verboseLogging = verboseEnabled()
+	verboseRuntimeLogging = verboseRuntimeEnabled()
 
 	cleanBansOnStartup := cfg.CleanExpiredBansOnStartup
 	if !cleanBansOnStartup {
@@ -185,17 +204,17 @@ func main() {
 		}
 	}
 
-	logPath, err := initLogOutput(cfg)
+	logPath, err := initLogOutput(cfg, strings.TrimSpace(*logDirFlag), strings.TrimSpace(*poolLogPathFlag))
 	if err != nil {
 		fatal("log file", err)
 	}
-	errorLogPath, err := initErrorLogOutput(cfg)
-	if err != nil {
-		fatal("error log file", err)
-	}
+	// errors.log routing is intentionally disabled: pool.log is the primary
+	// application timeline (INFO/WARN/ERROR). Keep debug/net-debug as opt-in
+	// detail streams.
+	errorLogPath := ""
 	var debugLogPath string
 	if debugEnabled() {
-		debugLogPath, err = initDebugLogOutput(cfg)
+		debugLogPath, err = initDebugLogOutput(cfg, strings.TrimSpace(*logDirFlag), strings.TrimSpace(*debugLogPathFlag))
 		if err != nil {
 			fatal("debug log file", err)
 		}
@@ -205,18 +224,50 @@ func main() {
 	defer logger.Stop()
 
 	var netLogPath string
-	if debugEnabled() {
+	if cfg.LogNetDebug {
 		var err error
-		netLogPath, err = initNetLogOutput(cfg)
+		netLogPath, err = initNetLogOutput(cfg, strings.TrimSpace(*logDirFlag), strings.TrimSpace(*netDebugLogPathFlag))
 		if err != nil {
 			fatal("net log file", err)
 		}
-		setNetLogWriter(newDailyRollingFileWriter(netLogPath))
+		if err := setNetLogRuntime(true, newDailyRollingFileWriter(netLogPath)); err != nil {
+			logger.Warn("net-debug startup enable failed", "error", err)
+		}
 	}
+	logger.Info("log outputs configured",
+		"component", "startup",
+		"kind", "logging",
+		"pool_log", logPath,
+		"errors_log", "disabled",
+		"debug_log", debugLogPath,
+		"net_debug_log", netLogPath,
+		"log_dir_override", strings.TrimSpace(*logDirFlag),
+		"stdout", *stdoutLogFlag,
+		"log_debug", cfg.LogDebug,
+		"log_net_debug", cfg.LogNetDebug,
+		"debug_enabled", debugLogging,
+		"net_debug_enabled", netLogRuntimeEnabled(),
+	)
 
-	logger.Info("starting pool", "listen_addr", cfg.ListenAddr, "status_addr", cfg.StatusAddr)
-	logger.Info("effective config", "config", cfg.Effective())
-	logger.Info("sha256 implementation", "implementation", sha256ImplementationName())
+	logger.Info("starting pool", "component", "startup", "kind", "lifecycle", "listen_addr", cfg.ListenAddr, "status_addr", cfg.StatusAddr)
+	logger.Info("startup config summary",
+		"component", "startup",
+		"kind", "config",
+		"listen_addr", cfg.ListenAddr,
+		"stratum_tls_listen", cfg.StratumTLSListen,
+		"status_addr", cfg.StatusAddr,
+		"status_tls_addr", cfg.StatusTLSAddr,
+		"stratum_tls_enabled", strings.TrimSpace(cfg.StratumTLSListen) != "",
+		"status_public_url_set", strings.TrimSpace(cfg.StatusPublicURL) != "",
+		"vardiff_enabled", cfg.VarDiffEnabled,
+		"share_checks", cfg.ShareCheckParamFormat,
+		"version_rolling_checks", cfg.ShareCheckVersionRolling,
+		"ntimes_window_check", cfg.ShareCheckNTimeWindow,
+		"share_duplicate_check", cfg.ShareCheckDuplicate,
+		"admin_config_present", strings.TrimSpace(adminConfigPath) != "",
+	)
+	logger.Debug("effective config", "component", "startup", "kind", "config_full", "config", cfg.Effective())
+	logger.Info("sha256 implementation", "component", "startup", "kind", "crypto", "implementation", sha256ImplementationName())
 
 	// Best-effort cleanup of legacy difficulty cache file.
 	dataDir := strings.TrimSpace(cfg.DataDir)
@@ -383,7 +434,26 @@ func main() {
 						continue
 					}
 					statusServer.UpdateConfig(reloadedCfg)
-					logger.Info("config reloaded", "path", cfgPath)
+					if reloadedCfg.LogDebug {
+						setLogLevel(logLevelDebug)
+					} else {
+						setLogLevel(logLevelInfo)
+					}
+					verboseRuntimeLogging = verboseRuntimeEnabled()
+					if reloadedCfg.LogNetDebug {
+						netPath := ""
+						netPath, netPathErr := initNetLogOutput(reloadedCfg, strings.TrimSpace(*logDirFlag), strings.TrimSpace(*netDebugLogPathFlag))
+						if netPathErr != nil {
+							logger.Warn("net-debug reload init failed", "error", netPathErr)
+						} else if err := setNetLogRuntime(true, newDailyRollingFileWriter(netPath)); err != nil {
+							logger.Warn("net-debug reload enable failed", "error", err)
+						}
+					} else {
+						if err := setNetLogRuntime(false, nil); err != nil {
+							logger.Warn("net-debug reload disable failed", "error", err)
+						}
+					}
+					logger.Info("config reloaded", "component", "startup", "kind", "config_reload", "path", cfgPath)
 				}
 			}
 		}
@@ -432,7 +502,7 @@ func main() {
 	mux.HandleFunc("/admin/operator", statusServer.handleAdminOperatorPage)
 	mux.HandleFunc("/admin/logs", statusServer.handleAdminLogsPage)
 	mux.HandleFunc("/admin/logs/tail", statusServer.handleAdminLogsTail)
-	mux.HandleFunc("/admin/logs/log-level", statusServer.handleAdminLogsSetLogLevel)
+	mux.HandleFunc("/admin/logs/flags", statusServer.handleAdminLogsSetFlags)
 	mux.HandleFunc("/admin/login", statusServer.handleAdminLogin)
 	mux.HandleFunc("/admin/logout", statusServer.handleAdminLogout)
 	mux.HandleFunc("/admin/apply", statusServer.handleAdminApplySettings)
@@ -513,7 +583,7 @@ func main() {
 		}
 		// Start watching for certificate changes (checks hourly)
 		go certReloader.watch(ctx)
-		logger.Info("tls certificate auto-reload enabled", "check_interval", "1h")
+		logger.Info("tls certificate auto-reload enabled", "component", "http", "kind", "tls", "check_interval", "1h")
 	}
 
 	var statusHTTPServer *http.Server
@@ -540,6 +610,7 @@ func main() {
 			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
+			httpLogFields = append([]any{"component", "http", "kind", "listen"}, httpLogFields...)
 			logger.Info(httpLogMsg, httpLogFields...)
 			if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				fatal("status server error", err)
@@ -562,7 +633,7 @@ func main() {
 			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
-			logger.Info("status page listening (https)", "addr", httpsAddr, "cert", certPath)
+			logger.Info("status page listening (https)", "component", "http", "kind", "listen", "addr", httpsAddr, "cert", certPath)
 			if err := statusHTTPSServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				fatal("status server error", err)
 			}
@@ -577,12 +648,12 @@ func main() {
 		defer cancel()
 		if statusHTTPServer != nil {
 			if err := statusHTTPServer.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("status http shutdown error", "error", err)
+				logger.Error("status http shutdown error", "component", "http", "kind", "shutdown", "error", err)
 			}
 		}
 		if statusHTTPSServer != nil {
 			if err := statusHTTPSServer.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("status https shutdown error", "error", err)
+				logger.Error("status https shutdown error", "component", "http", "kind", "shutdown", "error", err)
 			}
 		}
 	}()
@@ -602,14 +673,14 @@ func main() {
 	// If donation is configured, derive the donation payout script.
 	var donationScript []byte
 	if cfg.OperatorDonationPercent > 0 && cfg.OperatorDonationAddress != "" {
-		logger.Info("configuring donation payout", "address", cfg.OperatorDonationAddress, "percent", cfg.OperatorDonationPercent)
+		logger.Info("configuring donation payout", "component", "startup", "kind", "payout", "address", cfg.OperatorDonationAddress, "percent", cfg.OperatorDonationPercent)
 		donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
 		if err != nil {
 			fatal("donation payout address", err)
 		}
-		logger.Info("donation script derived", "script_len", len(donationScript), "script_hex", hex.EncodeToString(donationScript))
+		logger.Info("donation script derived", "component", "startup", "kind", "payout", "script_len", len(donationScript), "script_hex", hex.EncodeToString(donationScript))
 	} else {
-		logger.Info("donation not configured", "percent", cfg.OperatorDonationPercent, "address", cfg.OperatorDonationAddress)
+		logger.Info("donation not configured", "component", "startup", "kind", "payout", "percent", cfg.OperatorDonationPercent, "address", cfg.OperatorDonationAddress)
 	}
 
 	// Once the node is reachable, derive a network-appropriate version mask
@@ -619,9 +690,9 @@ func main() {
 	jobMgr := NewJobManager(rpcClient, cfg, metrics, payoutScript, donationScript)
 	statusServer.SetJobManager(jobMgr)
 	if cfg.ZMQHashBlockAddr != "" || cfg.ZMQRawBlockAddr != "" {
-		logger.Info("block updates via zmq + longpoll", "hashblock_addr", cfg.ZMQHashBlockAddr, "rawblock_addr", cfg.ZMQRawBlockAddr)
+		logger.Info("block updates via zmq + longpoll", "component", "startup", "kind", "job_feed", "hashblock_addr", cfg.ZMQHashBlockAddr, "rawblock_addr", cfg.ZMQRawBlockAddr)
 	} else {
-		logger.Info("block updates via longpoll")
+		logger.Info("block updates via longpoll", "component", "startup", "kind", "job_feed")
 	}
 	jobMgr.Start(ctx)
 
@@ -652,7 +723,7 @@ func main() {
 				fatal("stratum tls cert reloader", err)
 			}
 			go certReloader.watch(ctx)
-			logger.Info("tls certificate auto-reload enabled", "check_interval", "1h")
+			logger.Info("tls certificate auto-reload enabled", "component", "stratum", "kind", "tls", "check_interval", "1h")
 		}
 		tlsCfg := &tls.Config{
 			GetCertificate: certReloader.getCertificate,
@@ -661,12 +732,12 @@ func main() {
 		if err != nil {
 			fatal("stratum tls listen error", err, "addr", cfg.StratumTLSListen)
 		}
-		logger.Info("stratum TLS listening", "addr", cfg.StratumTLSListen)
+		logger.Info("stratum TLS listening", "component", "stratum", "kind", "listen", "addr", cfg.StratumTLSListen)
 	}
 
 	var acceptLimiter *acceptRateLimiter
 	if cfg.DisableConnectRateLimits {
-		logger.Warn("connect rate limits disabled by config")
+		logger.Warn("connect rate limits disabled by config", "component", "stratum", "kind", "accept_limit")
 	} else {
 		acceptLimiter = newAcceptRateLimiter(cfg.MaxAcceptsPerSecond, cfg.MaxAcceptBurst)
 	}
@@ -677,6 +748,7 @@ func main() {
 		go func() {
 			steadyStateDelay := time.Duration(cfg.AcceptSteadyStateWindow) * time.Second
 			logger.Info("steady-state throttle will activate after reconnection window",
+				"component", "stratum", "kind", "throttle",
 				"delay", steadyStateDelay,
 				"steady_state_rate", cfg.AcceptSteadyStateRate)
 
@@ -688,6 +760,7 @@ func main() {
 				steadyBurst := max(cfg.AcceptSteadyStateRate*2, 20)
 				acceptLimiter.updateRate(cfg.AcceptSteadyStateRate, steadyBurst)
 				logger.Info("transitioned to steady-state throttle mode",
+					"component", "stratum", "kind", "throttle",
 					"rate", cfg.AcceptSteadyStateRate,
 					"burst", steadyBurst)
 			}
@@ -698,7 +771,7 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		logger.Info("shutdown requested; closing stratum listeners")
+		logger.Info("shutdown requested; closing stratum listeners", "component", "stratum", "kind", "shutdown")
 		ln.Close()
 		if tlsLn != nil {
 			tlsLn.Close()
@@ -717,7 +790,7 @@ func main() {
 				if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 					break
 				}
-				logger.Error("accept error", "listener", label, "error", err)
+				logger.Error("accept error", "component", "stratum", "kind", "accept", "listener", label, "error", err)
 				continue
 			}
 			disableTCPNagle(conn)
@@ -734,6 +807,7 @@ func main() {
 							if strings.TrimSpace(h.Detail) != "" {
 								fields = append(fields, "detail", h.Detail)
 							}
+							fields = append([]any{"component", "stratum", "kind", "gating"}, fields...)
 							logger.Warn("refusing miner connection: node updates degraded", fields...)
 							lastRefuseLog = time.Now()
 						}
@@ -752,6 +826,7 @@ func main() {
 				}
 				if !reconnectLimiter.allow(host, time.Now()) {
 					logger.Warn("rejecting miner for reconnect churn",
+						"component", "stratum", "kind", "reconnect_limit",
 						"listener", label,
 						"remote", remote,
 						"host", host,
@@ -762,7 +837,7 @@ func main() {
 			}
 			atCapacity := cfg.MaxConns > 0 && registry.Count() >= cfg.MaxConns
 			if atCapacity {
-				logger.Warn("rejecting miner: at capacity", "listener", label, "remote", conn.RemoteAddr().String(), "max_conns", cfg.MaxConns)
+				logger.Warn("rejecting miner: at capacity", "component", "stratum", "kind", "capacity", "listener", label, "remote", conn.RemoteAddr().String(), "max_conns", cfg.MaxConns)
 				_ = conn.Close()
 				continue
 			}
@@ -787,7 +862,7 @@ func main() {
 	}
 	serveStratum("tcp", ln)
 
-	logger.Info("shutdown requested; draining active miners")
+	logger.Info("shutdown requested; draining active miners", "component", "stratum", "kind", "shutdown")
 	shutdownStart := time.Now()
 	for _, mc := range registry.Snapshot() {
 		mc.sendClientShowMessage("Pool restarting; please reconnect.")
@@ -803,12 +878,12 @@ func main() {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		logger.Warn("timed out waiting for miners to drain", "waited", time.Since(shutdownStart))
+		logger.Warn("timed out waiting for miners to drain", "component", "stratum", "kind", "shutdown", "waited", time.Since(shutdownStart))
 	}
 
 	if accounting != nil {
 		if err := accounting.Flush(); err != nil {
-			logger.Error("flush accounting", "error", err)
+			logger.Error("flush accounting", "component", "db", "kind", "flush", "error", err)
 		}
 	}
 
@@ -816,27 +891,27 @@ func main() {
 	checkpointSharedStateDB()
 	// Best-effort sync of log files on shutdown so buffered OS writes are
 	// forced to disk.
-	logger.Info("shutdown complete", "uptime", time.Since(startTime))
+	logger.Info("shutdown complete", "component", "startup", "kind", "shutdown", "uptime", time.Since(startTime))
 	logger.Stop()
 
 	// Best-effort sync of log files on shutdown so buffered OS writes are
 	// forced to disk.
 	if err := syncFileIfExists(logPath); err != nil {
-		logger.Error("sync pool log", "error", err)
+		logger.Error("sync pool log", "component", "startup", "kind", "log_sync", "error", err)
 	}
 	if debugLogPath != "" {
 		if err := syncFileIfExists(debugLogPath); err != nil {
-			logger.Error("sync debug log", "error", err)
+			logger.Error("sync debug log", "component", "startup", "kind", "log_sync", "error", err)
 		}
 	}
 	if debugEnabled() && netLogPath != "" {
 		if err := syncFileIfExists(netLogPath); err != nil {
-			logger.Error("sync net log", "error", err)
+			logger.Error("sync net log", "component", "startup", "kind", "log_sync", "error", err)
 		}
 	}
 	if errorLogPath != "" {
 		if err := syncFileIfExists(errorLogPath); err != nil {
-			logger.Error("sync error log", "error", err)
+			logger.Error("sync error log", "component", "startup", "kind", "log_sync", "error", err)
 		}
 	}
 }
@@ -899,6 +974,7 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 					if fs.LastError != nil {
 						fields = append(fields, "last_error", fs.LastError.Error())
 					}
+					fields = append([]any{"component", "stratum", "kind", "gating"}, fields...)
 					logger.Warn("stratum gated: node updates degraded; disconnected miners", fields...)
 					lastLog = now
 				}
@@ -907,7 +983,7 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 		} else {
 			unhealthySince = time.Time{}
 			if !wasHealthy {
-				logger.Info("stratum ungated: node updates healthy again")
+				logger.Info("stratum ungated: node updates healthy again", "component", "stratum", "kind", "gating")
 				wasHealthy = true
 			}
 		}
@@ -918,7 +994,9 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 
 func disableTCPNagle(conn net.Conn) {
 	if tcp := findTCPConn(conn); tcp != nil {
-		_ = tcp.SetNoDelay(true)
+		if err := tcp.SetNoDelay(true); err != nil {
+			logger.Debug("set tcp no-delay failed (ignored)", "error", err)
+		}
 	}
 }
 
@@ -928,12 +1006,12 @@ func setTCPBuffers(conn net.Conn, readBytes, writeBytes int) {
 	}
 	if tcp := findTCPConn(conn); tcp != nil {
 		if readBytes > 0 {
-			if err := tcp.SetReadBuffer(readBytes); err != nil && debugLogging {
+			if err := tcp.SetReadBuffer(readBytes); err != nil {
 				logger.Debug("set tcp read buffer failed", "error", err, "bytes", readBytes)
 			}
 		}
 		if writeBytes > 0 {
-			if err := tcp.SetWriteBuffer(writeBytes); err != nil && debugLogging {
+			if err := tcp.SetWriteBuffer(writeBytes); err != nil {
 				logger.Debug("set tcp write buffer failed", "error", err, "bytes", writeBytes)
 			}
 		}
@@ -1006,46 +1084,33 @@ func reloadStatusConfig(cfgPath, secretsPath string, overrides runtimeOverrides)
 	return cfg, nil
 }
 
-func initLogOutput(cfg Config) (string, error) {
-	dir := cfg.DataDir
-	if dir == "" {
-		dir = defaultDataDir
-	}
-	logDir := filepath.Join(dir, "logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return "", err
-	}
-	path := filepath.Join(logDir, "pool.log")
-	return path, nil
+func initLogOutput(cfg Config, logDirOverride, pathOverride string) (string, error) {
+	return initNamedLogOutput(cfg, logDirOverride, pathOverride, "pool.log")
 }
 
-func initNetLogOutput(cfg Config) (string, error) {
-	dir := cfg.DataDir
-	if dir == "" {
-		dir = defaultDataDir
-	}
-	logDir := filepath.Join(dir, "logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return "", err
-	}
-	path := filepath.Join(logDir, "net-debug.log")
-	return path, nil
+func initNetLogOutput(cfg Config, logDirOverride, pathOverride string) (string, error) {
+	return initNamedLogOutput(cfg, logDirOverride, pathOverride, "net-debug.log")
 }
 
-func initErrorLogOutput(cfg Config) (string, error) {
-	dir := cfg.DataDir
-	if dir == "" {
-		dir = defaultDataDir
-	}
-	logDir := filepath.Join(dir, "logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return "", err
-	}
-	path := filepath.Join(logDir, "errors.log")
-	return path, nil
+func initDebugLogOutput(cfg Config, logDirOverride, pathOverride string) (string, error) {
+	return initNamedLogOutput(cfg, logDirOverride, pathOverride, "debug.log")
 }
 
-func initDebugLogOutput(cfg Config) (string, error) {
+func initNamedLogOutput(cfg Config, logDirOverride, pathOverride, baseName string) (string, error) {
+	if strings.TrimSpace(pathOverride) != "" {
+		path := strings.TrimSpace(pathOverride)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+	if strings.TrimSpace(logDirOverride) != "" {
+		logDir := strings.TrimSpace(logDirOverride)
+		if err := os.MkdirAll(logDir, 0o755); err != nil {
+			return "", err
+		}
+		return filepath.Join(logDir, baseName), nil
+	}
 	dir := cfg.DataDir
 	if dir == "" {
 		dir = defaultDataDir
@@ -1054,8 +1119,7 @@ func initDebugLogOutput(cfg Config) (string, error) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(logDir, "debug.log")
-	return path, nil
+	return filepath.Join(logDir, baseName), nil
 }
 
 // sanityCheckPoolAddressRPC performs a one-shot RPC validation of the pool

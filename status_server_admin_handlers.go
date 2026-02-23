@@ -242,19 +242,15 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	level, err := parseLogLevel(cfg.LogLevel)
-	if err != nil {
-		data.AdminApplyError = fmt.Sprintf("Validation error: %v", err)
-		data.Settings = buildAdminSettingsData(cfg)
-		s.renderAdminPage(w, r, data)
-		return
-	}
-
 	s.UpdateConfig(cfg)
-	setLogLevel(level)
+	if cfg.LogDebug {
+		setLogLevel(logLevelDebug)
+	} else {
+		setLogLevel(logLevelInfo)
+	}
 	debugLogging = debugEnabled()
-	verboseLogging = verboseEnabled()
-	logger.Info("admin applied live settings (in memory)")
+	verboseRuntimeLogging = verboseRuntimeEnabled()
+	logger.Info("admin applied live settings (in memory)", "component", "admin", "kind", "config_apply")
 	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
 }
 
@@ -264,7 +260,7 @@ func (s *StatusServer) handleAdminReloadUI(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		logger.Warn("parse admin reload ui form", "error", err)
+		logger.Warn("parse admin reload ui form", "component", "admin", "kind", "http_parse", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -312,7 +308,7 @@ func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		logger.Warn("parse admin persist form", "error", err)
+		logger.Warn("parse admin persist form", "component", "admin", "kind", "http_parse", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -367,7 +363,7 @@ func (s *StatusServer) handleAdminPersist(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	logger.Warn("admin persisted in-memory config to disk", "config_path", s.configPath, "services_path", servicesPath, "policy_path", policyPath, "tuning_path", tuningPath)
+	logger.Info("admin persisted in-memory config to disk", "component", "admin", "kind", "config_persist", "config_path", s.configPath, "services_path", servicesPath, "policy_path", policyPath, "tuning_path", tuningPath)
 	http.Redirect(w, r, "/admin?notice=saved_to_disk", http.StatusSeeOther)
 }
 
@@ -377,7 +373,7 @@ func (s *StatusServer) handleAdminReboot(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		logger.Warn("parse admin reboot form", "error", err)
+		logger.Warn("parse admin reboot form", "component", "admin", "kind", "http_parse", "error", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -405,7 +401,7 @@ func (s *StatusServer) handleAdminReboot(w http.ResponseWriter, r *http.Request)
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	logger.Warn("admin requested reboot")
+	logger.Info("admin requested reboot", "component", "admin", "kind", "reboot")
 	s.renderAdminPage(w, r, data)
 	if s.requestShutdown != nil {
 		s.requestShutdown()

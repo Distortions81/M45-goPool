@@ -57,7 +57,9 @@ func (w *captureResponseWriter) flushTo(dst http.ResponseWriter, method string) 
 	if method == http.MethodHead {
 		return
 	}
-	_, _ = dst.Write(w.body.Bytes())
+	if _, err := dst.Write(w.body.Bytes()); err != nil {
+		logger.Debug("response cache flush write failed", "error", err)
+	}
 }
 
 func (s *StatusServer) responseCacheKey(r *http.Request) string {
@@ -134,7 +136,9 @@ func (s *StatusServer) serveShortResponseCache(next http.Handler) http.Handler {
 			}
 			w.WriteHeader(entry.status)
 			if r.Method != http.MethodHead {
-				_, _ = w.Write(entry.body)
+				if _, err := w.Write(entry.body); err != nil {
+					logger.Debug("response cache hit write failed", "error", err)
+				}
 			}
 			return
 		}

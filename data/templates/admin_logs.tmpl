@@ -36,15 +36,14 @@
 		{{template "admin-nav" .}}
 			<div class="card">
 				<div style="display:flex;align-items:end;gap:12px;flex-wrap:wrap;">
-					<div>
-						<div class="label">Log source</div>
-					<select id="admin-log-source" class="textfield" style="min-width:220px;">
-						<option value="pool" {{if eq .AdminLogSource "pool"}}selected{{end}}>Pool</option>
-						<option value="errors" {{if eq .AdminLogSource "errors"}}selected{{end}}>Errors</option>
-						<option value="debug" {{if eq .AdminLogSource "debug"}}selected{{end}}>Debug</option>
-						<option value="net" {{if eq .AdminLogSource "net"}}selected{{end}}>Network Debug</option>
-					</select>
-				</div>
+						<div>
+							<div class="label">Log source</div>
+						<select id="admin-log-source" class="textfield" style="min-width:220px;">
+							<option value="pool" {{if eq .AdminLogSource "pool"}}selected{{end}}>Pool</option>
+							<option value="debug" {{if eq .AdminLogSource "debug"}}selected{{end}}>Debug</option>
+							<option value="net" {{if eq .AdminLogSource "net"}}selected{{end}}>Network Debug</option>
+						</select>
+					</div>
 					<div>
 						<div class="label">Refresh interval</div>
 					<select id="admin-log-refresh" class="textfield" style="min-width:140px;">
@@ -54,22 +53,24 @@
 						<option value="10000">10s</option>
 					</select>
 					</div>
-					<div>
-						<div class="label">Log level</div>
-						<select id="admin-log-level" class="textfield" style="min-width:140px;">
-							<option value="debug" {{if eq .Settings.LogLevel "debug"}}selected{{end}}>debug</option>
-							<option value="info" {{if eq .Settings.LogLevel "info"}}selected{{end}}>info</option>
-							<option value="warn" {{if or (eq .Settings.LogLevel "warn") (eq .Settings.LogLevel "")}}selected{{end}}>warn</option>
-							<option value="error" {{if eq .Settings.LogLevel "error"}}selected{{end}}>error</option>
-						</select>
+						<div>
+							<div class="label">Logging flags</div>
+							<label style="display:flex;align-items:center;gap:8px;">
+								<input id="admin-log-flag-debug" type="checkbox" {{if .AdminDebugEnabled}}checked{{end}}>
+								<span class="text-sm">Debug</span>
+							</label>
+							<label style="display:flex;align-items:center;gap:8px;margin-top:6px;{{if not .AdminNetDebugSupport}}opacity:.65;{{end}}">
+								<input id="admin-log-flag-net-debug" type="checkbox" {{if .AdminNetDebugEnabled}}checked{{end}} {{if not .AdminNetDebugSupport}}disabled{{end}}>
+								<span class="text-sm">Net Debug{{if not .AdminNetDebugSupport}} (debug build only){{end}}</span>
+							</label>
+						</div>
+						<div>
+							<div class="label">Admin password</div>
+							<input id="admin-log-flags-password" type="password" class="textfield" placeholder="Admin password" style="min-width:220px;">
+						</div>
+						<button id="admin-log-flags-apply" class="btn btn-secondary" type="button">Apply logging flags</button>
+						<button id="admin-log-refresh-now" class="btn btn-secondary" type="button">Refresh now</button>
 					</div>
-					<div>
-						<div class="label">Admin password</div>
-						<input id="admin-log-level-password" type="password" class="textfield" placeholder="Admin password" style="min-width:220px;">
-					</div>
-					<button id="admin-log-level-apply" class="btn btn-secondary" type="button">Apply log level</button>
-					<button id="admin-log-refresh-now" class="btn btn-secondary" type="button">Refresh now</button>
-				</div>
 				<p class="text-sm" id="admin-log-meta" style="margin:10px 0 0 0;color:var(--text-muted);"></p>
 			<pre id="admin-log-output" class="mono" style="margin-top:12px;max-height:65vh;overflow:auto;background:#0b0d12;border:1px solid #2a2f3a;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word;"></pre>
 		</div>
@@ -81,9 +82,10 @@
 		const sourceSel = document.getElementById('admin-log-source');
 		const refreshSel = document.getElementById('admin-log-refresh');
 		const refreshBtn = document.getElementById('admin-log-refresh-now');
-		const levelSel = document.getElementById('admin-log-level');
-		const levelPass = document.getElementById('admin-log-level-password');
-		const levelApplyBtn = document.getElementById('admin-log-level-apply');
+			const debugChk = document.getElementById('admin-log-flag-debug');
+			const netDebugChk = document.getElementById('admin-log-flag-net-debug');
+			const flagsPass = document.getElementById('admin-log-flags-password');
+			const flagsApplyBtn = document.getElementById('admin-log-flags-apply');
 		const outEl = document.getElementById('admin-log-output');
 		const metaEl = document.getElementById('admin-log-meta');
 		if (!sourceSel || !refreshSel || !outEl || !metaEl) return;
@@ -141,43 +143,48 @@
 		});
 		refreshSel.addEventListener('change', restartTimer);
 		if (refreshBtn) refreshBtn.addEventListener('click', fetchLogs);
-		if (levelApplyBtn && levelSel && levelPass) {
-			levelApplyBtn.addEventListener('click', async () => {
-				const level = String(levelSel.value || '').trim();
-				const password = String(levelPass.value || '');
-				if (!level) {
-					setMeta('Choose a log level.');
-					return;
-				}
-				if (!password) {
-					setMeta('Admin password is required to change log level.');
-					return;
-				}
-				levelApplyBtn.disabled = true;
-				try {
-					const body = new URLSearchParams();
-					body.set('log_level', level);
-					body.set('password', password);
-					const res = await fetch('/admin/logs/log-level', {
-						method: 'POST',
-						credentials: 'same-origin',
-						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-						body: body.toString(),
-					});
-					if (!res.ok) {
-						setMeta(`Failed to update log level (${res.status}).`);
+			if (flagsApplyBtn && debugChk && netDebugChk && flagsPass) {
+				flagsApplyBtn.addEventListener('click', async () => {
+					const debug = !!debugChk.checked;
+					const netDebug = !!netDebugChk.checked;
+					const password = String(flagsPass.value || '');
+					if (!password) {
+						setMeta('Admin password is required to change logging flags.');
 						return;
 					}
-					setMeta(`Log level updated to ${level}.`);
-					levelPass.value = '';
-					await fetchLogs();
-				} catch (_) {
-					setMeta('Failed to update log level.');
-				} finally {
-					levelApplyBtn.disabled = false;
-				}
-			});
-		}
+					flagsApplyBtn.disabled = true;
+					try {
+						const body = new URLSearchParams();
+						body.set('debug', debug ? '1' : '0');
+						body.set('net_debug', netDebug ? '1' : '0');
+						body.set('password', password);
+						const res = await fetch('/admin/logs/flags', {
+							method: 'POST',
+							credentials: 'same-origin',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+						body: body.toString(),
+					});
+						if (!res.ok) {
+							setMeta(`Failed to update logging flags (${res.status}).`);
+							return;
+						}
+						const data = await res.json().catch(() => ({}));
+						if (data && typeof data.debug === 'boolean') debugChk.checked = data.debug;
+						if (data && typeof data.net_debug === 'boolean' && netDebugChk) netDebugChk.checked = data.net_debug;
+						if (data && data.error) {
+							setMeta(String(data.error));
+						} else {
+							setMeta(`Logging flags updated: debug=${debugChk.checked ? 'on' : 'off'}, net-debug=${netDebugChk.checked ? 'on' : 'off'}.`);
+						}
+						flagsPass.value = '';
+						await fetchLogs();
+					} catch (_) {
+						setMeta('Failed to update logging flags.');
+					} finally {
+						flagsApplyBtn.disabled = false;
+					}
+				});
+			}
 
 		restartTimer();
 		fetchLogs();
