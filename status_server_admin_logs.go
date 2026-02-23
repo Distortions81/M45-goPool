@@ -183,6 +183,18 @@ func (s *StatusServer) handleAdminLogsSetFlags(w http.ResponseWriter, r *http.Re
 	cfg.LogNetDebug = netDebugEnabledRequested
 	s.UpdateConfig(cfg)
 
+	debugErrMsg := ""
+	if debugEnabledRequested {
+		path, pathErr := initDebugLogOutput(cfg, "", "")
+		if pathErr != nil {
+			debugErrMsg = pathErr.Error()
+		} else {
+			logger.setDebugWriter(newDailyRollingFileWriter(path))
+		}
+	} else {
+		logger.setDebugWriter(nil)
+	}
+
 	if cfg.LogDebug {
 		setLogLevel(logLevelDebug)
 	} else {
@@ -224,13 +236,17 @@ func (s *StatusServer) handleAdminLogsSetFlags(w http.ResponseWriter, r *http.Re
 		NetDebugSupport bool   `json:"net_debug_supported"`
 		Error           string `json:"error,omitempty"`
 	}{
-		OK:              netDebugErrMsg == "",
+		OK:              debugErrMsg == "" && netDebugErrMsg == "",
 		Debug:           debugLogging,
 		NetDebug:        netLogRuntimeEnabled(),
 		NetDebugSupport: netDebugSupported,
 	}
 	_ = netDebugApplied
-	if netDebugErrMsg != "" {
+	if debugErrMsg != "" && netDebugErrMsg != "" {
+		resp.Error = fmt.Sprintf("debug toggle failed: %s; net-debug toggle failed: %s", debugErrMsg, netDebugErrMsg)
+	} else if debugErrMsg != "" {
+		resp.Error = fmt.Sprintf("debug toggle failed: %s", debugErrMsg)
+	} else if netDebugErrMsg != "" {
 		resp.Error = fmt.Sprintf("net-debug toggle failed: %s", netDebugErrMsg)
 	}
 	setShortJSONCacheHeaders(w, true)
