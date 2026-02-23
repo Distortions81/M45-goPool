@@ -233,6 +233,7 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (configChanged bool, mi
 		cfg.StratumPassword = ""
 	}
 	cfg.StratumPasswordPublic = fc.Stratum.StratumPasswordPublic
+	cfg.SafeMode = fc.Stratum.SafeMode
 	if fc.Node.RPCURL != "" {
 		cfg.RPCURL = fc.Node.RPCURL
 	}
