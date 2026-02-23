@@ -16,7 +16,7 @@ func (mc *MinerConn) buildShareDetailFromCoinbase(job *Job, coinbaseTx []byte) *
 	// Share detail capture is intentionally disabled unless debug/verbose
 	// logging is enabled, to avoid per-share allocations and large hex strings
 	// (coinbase/header payloads) being retained in memory.
-	if !debugLogging && !verboseLogging {
+	if !debugLogging && !verboseRuntimeLogging {
 		return nil
 	}
 

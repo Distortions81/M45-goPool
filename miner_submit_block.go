@@ -101,7 +101,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 				mc.metrics.RecordErrorEvent("submitblock", err.Error(), now)
 			}
 			logger.Error("submitblock build error", "remote", mc.id, "error", err)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 			return
 		}
 	}
@@ -122,7 +122,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 		// that the block was accepted; it only preserves the data needed for
 		// a later submitblock attempt.
 		mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 		return
 	}
 	if mc.metrics != nil {

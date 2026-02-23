@@ -306,7 +306,7 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else if _, err := w.Write(out); err != nil {
-		logger.Error("saved workers json write", "error", err)
+		logger.Debug("saved workers json write", "error", err)
 	}
 }
 
@@ -346,7 +346,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *h
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else if _, err := w.Write(out); err != nil {
-		logger.Error("one time code json write", "error", err)
+		logger.Debug("one time code json write", "error", err)
 	}
 }
 
@@ -373,9 +373,13 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 		var parsed req
 		if err := json.NewDecoder(r.Body).Decode(&parsed); err == nil {
 			code = strings.TrimSpace(parsed.Code)
+		} else {
+			logger.Warn("one time code clear decode failed", "error", err)
 		}
 	} else {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			logger.Warn("one time code clear parse form failed", "error", err)
+		}
 		code = strings.TrimSpace(r.FormValue("code"))
 	}
 
@@ -394,7 +398,7 @@ func (s *StatusServer) handleSavedWorkersOneTimeCodeClear(w http.ResponseWriter,
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else if _, err := w.Write(out); err != nil {
-		logger.Error("one time code clear json write", "error", err)
+		logger.Debug("one time code clear json write", "error", err)
 	}
 }
 
@@ -419,9 +423,13 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 	}
 	var parsed req
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		_ = json.NewDecoder(r.Body).Decode(&parsed)
+		if err := json.NewDecoder(r.Body).Decode(&parsed); err != nil {
+			logger.Warn("saved worker notify toggle decode failed", "error", err, "user_id", user.UserID)
+		}
 	} else {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			logger.Warn("saved worker notify toggle parse form failed", "error", err, "user_id", user.UserID)
+		}
 		parsed.Hash = r.FormValue("hash")
 		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
 			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
@@ -475,7 +483,9 @@ func (s *StatusServer) handleSavedWorkersNotifyEnabled(w http.ResponseWriter, r 
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else {
-		_, _ = w.Write(out)
+		if _, err := w.Write(out); err != nil {
+			logger.Debug("saved worker notify toggle json write failed", "error", err, "user_id", user.UserID)
+		}
 	}
 }
 
@@ -503,9 +513,13 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 	}
 	var parsed req
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		_ = json.NewDecoder(r.Body).Decode(&parsed)
+		if err := json.NewDecoder(r.Body).Decode(&parsed); err != nil {
+			logger.Warn("discord notify toggle decode failed", "error", err, "user_id", user.UserID)
+		}
 	} else {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			logger.Warn("discord notify toggle parse form failed", "error", err, "user_id", user.UserID)
+		}
 		if v := strings.TrimSpace(r.FormValue("enabled")); v != "" {
 			b := v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "on") || strings.EqualFold(v, "yes")
 			parsed.Enabled = &b
@@ -540,7 +554,9 @@ func (s *StatusServer) handleDiscordNotifyEnabled(w http.ResponseWriter, r *http
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else {
-		_, _ = w.Write(out)
+		if _, err := w.Write(out); err != nil {
+			logger.Debug("discord notify toggle json write failed", "error", err, "user_id", user.UserID)
+		}
 	}
 }
 

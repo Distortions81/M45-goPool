@@ -24,7 +24,11 @@ func (s *workerListStore) Add(userID, worker string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logger.Debug("saved workers add rollback failed", "error", err, "user_id", userID)
+		}
+	}()
 
 	var count int
 	if err := tx.QueryRow("SELECT COUNT(*) FROM saved_workers WHERE user_id = ?", userID).Scan(&count); err != nil {
@@ -314,7 +318,9 @@ func (s *workerListStore) RemoveUser(userID string) error {
 	}
 	for _, stmt := range stmts {
 		if _, execErr := tx.Exec(stmt, userID); execErr != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
+				logger.Debug("saved workers remove user rollback failed", "error", rbErr, "user_id", userID)
+			}
 			return execErr
 		}
 	}

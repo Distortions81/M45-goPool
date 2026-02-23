@@ -25,6 +25,7 @@ type backblazeBackupService struct {
 	dbPath       string
 	interval     time.Duration
 	objectPrefix string
+	now          func() time.Time
 
 	b2Enabled     bool
 	b2BucketName  string
@@ -135,6 +136,7 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 		dbPath:              dbPath,
 		objectPrefix:        objectPrefix,
 		interval:            interval,
+		now:                 time.Now,
 		b2Enabled:           b2Enabled,
 		b2BucketName:        strings.TrimSpace(cfg.BackblazeBucket),
 		b2AccountID:         strings.TrimSpace(cfg.BackblazeAccountID),
@@ -160,12 +162,19 @@ func newBackblazeBackupService(ctx context.Context, cfg Config, dbPath string) (
 	return svc, nil
 }
 
+func (s *backblazeBackupService) nowTime() time.Time {
+	if s == nil || s.now == nil {
+		return time.Now()
+	}
+	return s.now()
+}
+
 func (s *backblazeBackupService) warnB2InitThrottled(msg string, attrs ...any) {
 	if s == nil {
 		return
 	}
 	msg = strings.TrimSpace(msg)
-	now := time.Now()
+	now := s.nowTime()
 	const throttle = 10 * time.Minute
 	if msg != "" && msg == s.lastB2InitMsg && !s.lastB2InitLogAt.IsZero() && now.Sub(s.lastB2InitLogAt) < throttle {
 		return
@@ -206,7 +215,7 @@ func (s *backblazeBackupService) infoSkipThrottled(msg string, attrs ...any) {
 		return
 	}
 	msg = strings.TrimSpace(msg)
-	now := time.Now()
+	now := s.nowTime()
 	const throttle = 10 * time.Minute
 	if msg != "" && msg == s.lastSkipMsg && !s.lastSkipLogAt.IsZero() && now.Sub(s.lastSkipLogAt) < throttle {
 		return
@@ -291,7 +300,7 @@ func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, f
 		}
 	}
 
-	now := time.Now()
+	now := s.nowTime()
 	if !force && !s.lastAttemptAt.IsZero() && now.Sub(s.lastAttemptAt) < s.interval {
 		wait := max(s.interval-now.Sub(s.lastAttemptAt), 0)
 		if logger.Enabled(logLevelDebug) {
@@ -328,7 +337,7 @@ func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, f
 		return
 	}
 
-	start := time.Now()
+	start := s.nowTime()
 	s.lastAttemptAt = now
 	_ = writeLastBackupStampToDB(getSharedStateDB(), backupStateKeyWorkerDBAttempt, now, 0)
 
@@ -407,7 +416,7 @@ func (s *backblazeBackupService) runLocked(ctx context.Context, reason string, f
 	}
 	if logger.Enabled(logLevelInfo) {
 		logger.Info("backblaze backup completed",
-			"elapsed", time.Since(start).Truncate(time.Millisecond).String(),
+			"elapsed", s.nowTime().Sub(start).Truncate(time.Millisecond).String(),
 			"reason", reason,
 			"force", force,
 			"data_version", dataVersion,

@@ -17,7 +17,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
 		logger.Warn("submit bad extranonce2", "remote", mc.id)
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid extranonce2")})
 		return shareContext{}, false
 	}
 
@@ -100,7 +100,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 			mc.writeResponse(StratumResponse{
 				ID:     reqID,
 				Result: false,
-				Error:  newStratumError(20, "invalid coinbase"),
+				Error:  newStratumError(stratumErrCodeInvalidRequest, "invalid coinbase"),
 			})
 			return shareContext{}, false
 		}
@@ -114,7 +114,7 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 		if !merkleOK {
 			logger.Warn("submit merkle build failed", "remote", mc.id)
 			mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", nil, now)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid merkle")})
 			return shareContext{}, false
 		}
 		header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
@@ -124,9 +124,9 @@ func (mc *MinerConn) prepareShareContextSolo(task submissionTask) (shareContext,
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
 				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
-				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 			} else {
-				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 			}
 			return shareContext{}, false
 		}
@@ -169,7 +169,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 	if job == nil || job.Extranonce2Size <= 0 || len(en2) != job.Extranonce2Size {
 		logger.Warn("submit bad extranonce2", "remote", mc.id)
 		mc.recordShare(workerName, false, 0, 0, rejectInvalidExtranonce2.String(), "", nil, now)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid extranonce2")})
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid extranonce2")})
 		return shareContext{}, false
 	}
 
@@ -261,7 +261,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			mc.writeResponse(StratumResponse{
 				ID:     reqID,
 				Result: false,
-				Error:  newStratumError(20, "invalid coinbase"),
+				Error:  newStratumError(stratumErrCodeInvalidRequest, "invalid coinbase"),
 			})
 			return shareContext{}, false
 		}
@@ -273,7 +273,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 		if !merkleOK {
 			logger.Warn("submit merkle build failed", "remote", mc.id)
 			mc.recordShare(workerName, false, 0, 0, rejectInvalidMerkle.String(), "", nil, now)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, "invalid merkle")})
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "invalid merkle")})
 			return shareContext{}, false
 		}
 		header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
@@ -283,9 +283,9 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
 				mc.sendClientShowMessage("Banned: " + mc.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
-				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(24, "banned")})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
 			} else {
-				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(20, err.Error())})
+				mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 			}
 			return shareContext{}, false
 		}
@@ -311,7 +311,7 @@ func (mc *MinerConn) prepareShareContextStrict(task submissionTask) (shareContex
 		isBlock:   isBlock,
 	}
 	// Only keep large buffers when detail logging is enabled.
-	if debugLogging || verboseLogging {
+	if debugLogging || verboseRuntimeLogging {
 		hashLE := make([]byte, len(headerHashLE))
 		copy(hashLE, headerHashLE[:])
 		ctx.header = header

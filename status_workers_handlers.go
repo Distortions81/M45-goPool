@@ -333,7 +333,9 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 					payload := entry.payload
 					s.workerPageMu.RUnlock()
 					setShortHTMLCacheHeaders(w, true)
-					_, _ = w.Write(payload)
+					if _, err := w.Write(payload); err != nil {
+						logger.Debug("worker page cache write failed", "error", err, "worker_hash", workerHash)
+					}
 					return
 				}
 				s.workerPageMu.RUnlock()
@@ -400,7 +402,9 @@ func (s *StatusServer) handleWorkerStatusBySHA256(w http.ResponseWriter, r *http
 		}
 		s.cacheWorkerPage(cacheKey, now, buf.Bytes())
 	}
-	_, _ = w.Write(buf.Bytes())
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		logger.Debug("worker status write failed", "error", err, "worker_hash", workerHash)
+	}
 }
 
 func (s *StatusServer) lookupPathIdentifier(w http.ResponseWriter, r *http.Request, prefix, label string) (string, bool) {

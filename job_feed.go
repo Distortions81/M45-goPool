@@ -57,7 +57,7 @@ func (jm *JobManager) markZMQHealthy(topics []string, addr string) {
 		return
 	}
 
-	logger.Info("zmq watcher healthy", "addr", addr, "topics", topics)
+	logger.Info("zmq watcher healthy", "component", "zmq", "kind", "health", "addr", addr, "topics", topics)
 	atomic.AddUint64(&jm.zmqReconnects, 1)
 	if jm.metrics != nil {
 		verb := "connected"
@@ -95,8 +95,10 @@ func (jm *JobManager) markZMQUnhealthy(topics []string, addr string, reason stri
 	}
 	if prevAny && !jm.zmqAnyHealthy() {
 		atomic.AddUint64(&jm.zmqDisconnects, 1)
+		fields = append([]any{"component", "zmq", "kind", "health"}, fields...)
 		logger.Warn("zmq watcher unhealthy", fields...)
 	} else if err != nil {
+		fields = append([]any{"component", "zmq", "kind", "health"}, fields...)
 		logger.Error("zmq watcher error", fields...)
 	}
 }
@@ -109,7 +111,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		job := jm.CurrentJob()
 		if job == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
-				logger.Error("longpoll refresh (no job) error", "error", err)
+				logger.Error("longpoll refresh (no job) error", "component", "rpc", "kind", "longpoll", "error", err)
 				if err := jm.sleepRetry(ctx); err != nil {
 					return
 				}
@@ -119,9 +121,9 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		}
 
 		if job.Template.LongPollID == "" {
-			logger.Warn("longpollid missing; refreshing job normally")
+			logger.Warn("longpollid missing; refreshing job normally", "component", "rpc", "kind", "longpoll")
 			if err := jm.refreshJobCtx(ctx); err != nil {
-				logger.Error("job refresh error", "error", err)
+				logger.Error("job refresh error", "component", "rpc", "kind", "template_refresh", "error", err)
 			}
 			if err := jm.sleepRetry(ctx); err != nil {
 				return
@@ -142,9 +144,9 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				logger.Warn("longpoll gbt canceled; retrying", "error", err)
+				logger.Warn("longpoll gbt canceled; retrying", "component", "rpc", "kind", "longpoll", "error", err)
 			} else {
-				logger.Error("longpoll gbt error", "error", err)
+				logger.Error("longpoll gbt error", "component", "rpc", "kind", "longpoll", "error", err)
 			}
 			if err := jm.sleepRetry(ctx); err != nil {
 				return
@@ -153,10 +155,10 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		}
 
 		if err := jm.refreshFromTemplate(ctx, tpl); err != nil {
-			logger.Error("longpoll refresh error", "error", err)
+			logger.Error("longpoll refresh error", "component", "rpc", "kind", "longpoll", "error", err)
 			if errors.Is(err, errStaleTemplate) {
 				if err := jm.refreshJobCtx(ctx); err != nil {
-					logger.Error("fallback refresh after stale template", "error", err)
+					logger.Error("fallback refresh after stale template", "component", "rpc", "kind", "template_refresh", "error", err)
 				}
 			}
 			if err := jm.sleepRetry(ctx); err != nil {
@@ -171,13 +173,13 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 	switch topic {
 	case "hashblock":
 		blockHash := hex.EncodeToString(payload)
-		logger.Info("zmq block notification", "block_hash", blockHash)
+		logger.Info("zmq block notification", "component", "zmq", "kind", "notify", "block_hash", blockHash)
 		return jm.refreshJobCtxForce(ctx)
 	case "rawblock":
 		tip, err := parseRawBlockTip(payload)
 		if err != nil {
 			if debugLogging {
-				logger.Debug("parse raw block tip failed", "error", err)
+				logger.Debug("parse raw block tip failed", "component", "zmq", "kind", "parse", "error", err)
 			}
 		} else {
 			jm.recordBlockTip(tip)
@@ -204,8 +206,12 @@ func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket, rem
 	if err != nil {
 		return nil, err
 	}
-	_ = mon.SetLinger(0)
-	_ = mon.SetRcvtimeo(time.Second)
+	if err := mon.SetLinger(0); err != nil {
+		logger.Debug("zmq monitor set linger failed (ignored)", "component", "zmq", "kind", "socket_option", "error", err, "addr", remoteAddr, "topics", topics)
+	}
+	if err := mon.SetRcvtimeo(time.Second); err != nil {
+		logger.Debug("zmq monitor set recv timeout failed (ignored)", "component", "zmq", "kind", "socket_option", "error", err, "addr", remoteAddr, "topics", topics)
+	}
 	if err := mon.Connect(inprocAddr); err != nil {
 		mon.Close()
 		return nil, err
@@ -312,7 +318,9 @@ zmqLoop:
 			}
 			continue
 		}
-		_ = sub.SetLinger(0)
+		if err := sub.SetLinger(0); err != nil {
+			logger.Debug("zmq set linger failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
 
 		for _, topic := range topics {
 			if err := sub.SetSubscribe(topic); err != nil {
@@ -346,14 +354,24 @@ zmqLoop:
 			continue
 		}
 
-		if err := sub.SetConnectTimeout(defaultZMQConnectTimeout); err != nil && debugLogging {
-			logger.Debug("zmq set connect timeout failed (ignored)", "error", err)
+		if err := sub.SetConnectTimeout(defaultZMQConnectTimeout); err != nil {
+			logger.Debug("zmq set connect timeout failed (ignored)", "error", err, "addr", addr, "topics", topics)
 		}
-		_ = sub.SetReconnectIvl(defaultZMQReconnectInterval)
-		_ = sub.SetReconnectIvlMax(defaultZMQReconnectMax)
-		_ = sub.SetHeartbeatIvl(defaultZMQHeartbeatInterval)
-		_ = sub.SetHeartbeatTimeout(defaultZMQHeartbeatTimeout)
-		_ = sub.SetHeartbeatTtl(defaultZMQHeartbeatTTL)
+		if err := sub.SetReconnectIvl(defaultZMQReconnectInterval); err != nil {
+			logger.Debug("zmq set reconnect interval failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
+		if err := sub.SetReconnectIvlMax(defaultZMQReconnectMax); err != nil {
+			logger.Debug("zmq set reconnect interval max failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
+		if err := sub.SetHeartbeatIvl(defaultZMQHeartbeatInterval); err != nil {
+			logger.Debug("zmq set heartbeat interval failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
+		if err := sub.SetHeartbeatTimeout(defaultZMQHeartbeatTimeout); err != nil {
+			logger.Debug("zmq set heartbeat timeout failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
+		if err := sub.SetHeartbeatTtl(defaultZMQHeartbeatTTL); err != nil {
+			logger.Debug("zmq set heartbeat ttl failed (ignored)", "error", err, "addr", addr, "topics", topics)
+		}
 
 		mon, err := jm.startZMQMonitor(ctx, sub, addr, topics)
 		if err != nil {

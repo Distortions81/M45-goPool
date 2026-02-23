@@ -157,14 +157,15 @@ type Config struct {
 	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
 	ShareRequireJobID                bool    // reject empty job_id in mining.submit (default false)
 
-	ShareJobFreshnessMode            int    // 0=off, 1=job_id, 2=job_id+prevhash
-	ShareCheckNTimeWindow            bool   // reject ntime outside configured window
-	ShareCheckVersionRolling         bool   // reject invalid version rolling policy violations
-	ShareRequireAuthorizedConnection bool   // reject submits from unauthorized connections
-	ShareCheckParamFormat            bool   // enforce strict submit field format/length checks
-	ShareRequireWorkerMatch          bool   // enforce submit worker name must match authorized worker
-	SubmitProcessInline              bool   // process submits on connection goroutine (bypass worker pool)
-	LogLevel                         string // log level: debug, info, warn, error
+	ShareJobFreshnessMode            int  // 0=off, 1=job_id, 2=job_id+prevhash
+	ShareCheckNTimeWindow            bool // reject ntime outside configured window
+	ShareCheckVersionRolling         bool // reject invalid version rolling policy violations
+	ShareRequireAuthorizedConnection bool // reject submits from unauthorized connections
+	ShareCheckParamFormat            bool // enforce strict submit field format/length checks
+	ShareRequireWorkerMatch          bool // enforce submit worker name must match authorized worker
+	SubmitProcessInline              bool // process submits on connection goroutine (bypass worker pool)
+	LogDebug                         bool // enable debug logs and detailed runtime traces
+	LogNetDebug                      bool // enable raw network debug logging (when supported)
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup
@@ -270,7 +271,8 @@ type EffectiveConfig struct {
 	ShareNTimeMaxForwardSeconds       int      `json:"share_ntime_max_forward_seconds,omitempty"`
 	ShareCheckDuplicate               bool     `json:"share_check_duplicate,omitempty"`
 	ShareRequireJobID                 bool     `json:"share_require_job_id,omitempty"`
-	LogLevel                          string   `json:"log_level,omitempty"`
+	LogDebug                          bool     `json:"log_debug,omitempty"`
+	LogNetDebug                       bool     `json:"log_net_debug,omitempty"`
 	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`
 	BanInvalidSubmissionsAfter        int      `json:"ban_invalid_submissions_after,omitempty"`
 	BanInvalidSubmissionsWindow       string   `json:"ban_invalid_submissions_window,omitempty"`

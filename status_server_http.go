@@ -120,5 +120,9 @@ func (s *StatusServer) serveOverviewOrNodeDown(w http.ResponseWriter) error {
 	}
 	setShortHTMLCacheHeaders(w, false)
 	_, err := w.Write(buf.Bytes())
-	return err
+	if err != nil {
+		logResponseWriteDebug("write overview html response", err, "template", templateName)
+		return nil
+	}
+	return nil
 }

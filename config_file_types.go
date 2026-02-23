@@ -74,7 +74,8 @@ type nodeConfigRead struct {
 }
 
 type loggingConfig struct {
-	Level string `toml:"level"`
+	Debug    *bool `toml:"debug"`
+	NetDebug *bool `toml:"net_debug"`
 }
 
 type backblazeBackupConfig struct {

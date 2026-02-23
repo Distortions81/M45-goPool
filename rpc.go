@@ -130,6 +130,11 @@ func (c *RPCClient) initCookieStat() {
 	}
 	info, err := os.Stat(c.cookiePath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Warn("stat rpc cookie", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath, "error", err)
+		} else if debugLogging {
+			logger.Debug("rpc cookie not found during init", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath)
+		}
 		return
 	}
 	c.authMu.Lock()
@@ -153,6 +158,11 @@ func (c *RPCClient) reloadCookieIfChanged() {
 	}
 	info, err := os.Stat(c.cookiePath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Warn("stat rpc cookie", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath, "error", err)
+		} else if debugLogging {
+			logger.Debug("rpc cookie not found", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath)
+		}
 		return
 	}
 	c.authMu.RLock()
@@ -168,7 +178,7 @@ func (c *RPCClient) reloadCookieIfChanged() {
 	}
 	newUser, newPass, err := readRPCCookie(c.cookiePath)
 	if err != nil {
-		logger.Warn("reload rpc cookie", "path", c.cookiePath, "error", err)
+		logger.Warn("reload rpc cookie", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath, "error", err)
 		return
 	}
 	c.authMu.Lock()
@@ -178,9 +188,9 @@ func (c *RPCClient) reloadCookieIfChanged() {
 	c.cookieSize = info.Size()
 	c.authMu.Unlock()
 	if changed {
-		logger.Info("rpc cookie reloaded", "path", c.cookiePath)
+		logger.Info("rpc cookie reloaded", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath)
 	} else {
-		logger.Info("rpc cookie loaded", "path", c.cookiePath)
+		logger.Info("rpc cookie loaded", "component", "rpc", "kind", "auth_cookie", "path", c.cookiePath)
 	}
 }
 

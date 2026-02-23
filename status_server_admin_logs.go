@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,6 +35,12 @@ var adminLogSources = []adminLogSourceInfo{
 func adminLogSourceKeys() []string {
 	keys := make([]string, 0, len(adminLogSources))
 	for _, src := range adminLogSources {
+		// errors.log routing is disabled; hide it from the admin UI source list.
+		// We still keep the source registered so historical errors-*.log files can
+		// be accessed directly via ?source=errors.
+		if src.Key == "errors" {
+			continue
+		}
 		keys = append(keys, src.Key)
 	}
 	return keys
@@ -128,10 +135,17 @@ func (s *StatusServer) handleAdminLogsTail(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
-	_, _ = w.Write(out)
+	if _, err := w.Write(out); err != nil {
+		logger.Debug("admin logs json write failed", "error", err, "source", src.Key)
+	}
 }
 
-func (s *StatusServer) handleAdminLogsSetLogLevel(w http.ResponseWriter, r *http.Request) {
+func parseAdminBool(raw string) bool {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	return v == "1" || v == "true" || v == "on" || v == "yes"
+}
+
+func (s *StatusServer) handleAdminLogsSetFlags(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -159,26 +173,65 @@ func (s *StatusServer) handleAdminLogsSetLogLevel(w http.ResponseWriter, r *http
 		return
 	}
 
-	levelName := strings.ToLower(strings.TrimSpace(r.FormValue("log_level")))
-	level, err := parseLogLevel(levelName)
-	if err != nil {
-		http.Error(w, "invalid log level", http.StatusBadRequest)
-		return
-	}
+	debugEnabledRequested := parseAdminBool(r.FormValue("debug"))
+	netDebugEnabledRequested := parseAdminBool(r.FormValue("net_debug"))
+
+	// Simplified operator model: app logs are always INFO+ in pool.log; debug
+	// toggles additional DEBUG logs (and verbose runtime traces).
 	cfg := s.Config()
-	cfg.LogLevel = levelName
+	cfg.LogDebug = debugEnabledRequested
+	cfg.LogNetDebug = netDebugEnabledRequested
 	s.UpdateConfig(cfg)
-	setLogLevel(level)
+
+	if cfg.LogDebug {
+		setLogLevel(logLevelDebug)
+	} else {
+		setLogLevel(logLevelInfo)
+	}
 	debugLogging = debugEnabled()
-	verboseLogging = verboseEnabled()
-	logger.Info("admin updated log level from logs page", "log_level", levelName)
+	verboseRuntimeLogging = verboseRuntimeEnabled()
+
+	netDebugApplied := false
+	netDebugSupported := netLogRuntimeSupported()
+	netDebugErrMsg := ""
+	if netDebugEnabledRequested {
+		path, pathErr := initNetLogOutput(cfg, "", "")
+		if pathErr != nil {
+			netDebugErrMsg = pathErr.Error()
+		} else if err := setNetLogRuntime(true, newDailyRollingFileWriter(path)); err != nil {
+			netDebugErrMsg = err.Error()
+		} else {
+			netDebugApplied = true
+		}
+	} else {
+		if err := setNetLogRuntime(false, nil); err != nil {
+			netDebugErrMsg = err.Error()
+		}
+	}
+
+	logger.Info("admin updated logging flags",
+		"component", "admin",
+		"kind", "logging",
+		"debug", debugEnabledRequested,
+		"net_debug", netDebugEnabledRequested,
+		"net_debug_supported", netDebugSupported,
+	)
 
 	resp := struct {
-		OK       bool   `json:"ok"`
-		LogLevel string `json:"log_level"`
+		OK              bool   `json:"ok"`
+		Debug           bool   `json:"debug"`
+		NetDebug        bool   `json:"net_debug"`
+		NetDebugSupport bool   `json:"net_debug_supported"`
+		Error           string `json:"error,omitempty"`
 	}{
-		OK:       true,
-		LogLevel: levelName,
+		OK:              netDebugErrMsg == "",
+		Debug:           debugLogging,
+		NetDebug:        netLogRuntimeEnabled(),
+		NetDebugSupport: netDebugSupported,
+	}
+	_ = netDebugApplied
+	if netDebugErrMsg != "" {
+		resp.Error = fmt.Sprintf("net-debug toggle failed: %s", netDebugErrMsg)
 	}
 	setShortJSONCacheHeaders(w, true)
 	out, err := sonic.Marshal(resp)
@@ -186,7 +239,9 @@ func (s *StatusServer) handleAdminLogsSetLogLevel(w http.ResponseWriter, r *http
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
-	_, _ = w.Write(out)
+	if _, err := w.Write(out); err != nil {
+		logger.Debug("admin set log flags json write failed", "component", "http", "kind", "write", "error", err)
+	}
 }
 
 func (s *StatusServer) latestAdminLogPath(src adminLogSourceInfo) (string, time.Time, error) {

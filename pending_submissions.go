@@ -248,7 +248,9 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 		}
 		logger.Info("pending block submitted", "height", rec.Height, "hash", rec.Hash)
 		pendingReplayBackoff.reset(item.Key)
-		_, _ = db.Exec("UPDATE pending_submissions SET status = 'submitted', rpc_error = '' WHERE submission_key = ?", item.Key)
+		if _, err := db.Exec("UPDATE pending_submissions SET status = 'submitted', rpc_error = '' WHERE submission_key = ?", item.Key); err != nil {
+			logger.Warn("pending submission status update failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", err)
+		}
 	}
 }
 

@@ -295,8 +295,11 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (configChanged bool, mi
 	if fc.Mining.PoolTagPrefix != "" {
 		cfg.PoolTagPrefix = filterAlphanumeric(strings.TrimSpace(fc.Mining.PoolTagPrefix))
 	}
-	if fc.Logging.Level != "" {
-		cfg.LogLevel = strings.ToLower(strings.TrimSpace(fc.Logging.Level))
+	if fc.Logging.Debug != nil {
+		cfg.LogDebug = *fc.Logging.Debug
+	}
+	if fc.Logging.NetDebug != nil {
+		cfg.LogNetDebug = *fc.Logging.NetDebug
 	}
 
 	// Legacy config.toml -> services.toml migration:

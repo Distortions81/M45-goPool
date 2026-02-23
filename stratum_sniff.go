@@ -43,11 +43,7 @@ var (
 )
 
 func sniffStratumMethodIDTagRawID(data []byte) (stratumMethodTag, []byte, bool) {
-	idIdx := bytes.Index(data, stratumKeyIDBytes)
-	if idIdx < 0 {
-		return stratumMethodUnknown, nil, false
-	}
-	idStart, ok := findValueStart(data, idIdx+len(stratumKeyIDBytes))
+	idStart, ok := findTopLevelObjectKeyValueStart(data, stratumKeyIDBytes)
 	if !ok {
 		return stratumMethodUnknown, nil, false
 	}
@@ -56,11 +52,7 @@ func sniffStratumMethodIDTagRawID(data []byte) (stratumMethodTag, []byte, bool) 
 		return stratumMethodUnknown, nil, false
 	}
 
-	methodIdx := bytes.Index(data, stratumKeyMethodBytes)
-	if methodIdx < 0 {
-		return stratumMethodUnknown, nil, false
-	}
-	methodStart, ok := findValueStart(data, methodIdx+len(stratumKeyMethodBytes))
+	methodStart, ok := findTopLevelObjectKeyValueStart(data, stratumKeyMethodBytes)
 	if !ok {
 		return stratumMethodUnknown, nil, false
 	}
@@ -129,12 +121,11 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 	if limit <= 0 {
 		return nil, false
 	}
-	idx := bytes.Index(data, stratumKeyParamsBytes)
-	if idx < 0 {
+	start, ok := findTopLevelObjectKeyValueStart(data, stratumKeyParamsBytes)
+	if !ok {
 		return nil, false
 	}
-	start, ok := findValueStart(data, idx+len(stratumKeyParamsBytes))
-	if !ok || start >= len(data) || data[start] != '[' {
+	if start >= len(data) || data[start] != '[' {
 		return nil, false
 	}
 
@@ -193,12 +184,11 @@ func sniffStratumStringParams(data []byte, limit int) ([]string, bool) {
 func sniffStratumSubmitParamsBytes(data []byte) (worker, jobID, extranonce2, ntime, nonce, version []byte, haveVersion bool, ok bool) {
 	// mining.submit params are typically 5 or 6 JSON strings:
 	// [worker_name, job_id, extranonce2, ntime, nonce, (optional) version]
-	idx := bytes.Index(data, stratumKeyParamsBytes)
-	if idx < 0 {
+	start, ok := findTopLevelObjectKeyValueStart(data, stratumKeyParamsBytes)
+	if !ok {
 		return nil, nil, nil, nil, nil, nil, false, false
 	}
-	start, ok := findValueStart(data, idx+len(stratumKeyParamsBytes))
-	if !ok || start >= len(data) || data[start] != '[' {
+	if start >= len(data) || data[start] != '[' {
 		return nil, nil, nil, nil, nil, nil, false, false
 	}
 
@@ -260,6 +250,91 @@ func skipSpaces(data []byte, idx int) int {
 		}
 	}
 	return idx
+}
+
+func findTopLevelObjectKeyValueStart(data []byte, key []byte) (int, bool) {
+	i := skipSpaces(data, 0)
+	if i >= len(data) || data[i] != '{' {
+		return 0, false
+	}
+	i++
+	for i < len(data) {
+		i = skipSpaces(data, i)
+		if i >= len(data) {
+			return 0, false
+		}
+		if data[i] == '}' {
+			return 0, false
+		}
+		if data[i] == ',' {
+			i++
+			continue
+		}
+		if data[i] != '"' {
+			return 0, false
+		}
+		keyRaw, next, ok := parseJSONValueRaw(data, i)
+		if !ok {
+			return 0, false
+		}
+		i = skipSpaces(data, next)
+		if i >= len(data) || data[i] != ':' {
+			return 0, false
+		}
+		i++
+		valStart := skipSpaces(data, i)
+		if valStart >= len(data) {
+			return 0, false
+		}
+		if bytes.Equal(keyRaw, key) {
+			return valStart, true
+		}
+		_, next, ok = skipJSONValueRaw(data, valStart)
+		if !ok {
+			return 0, false
+		}
+		i = next
+	}
+	return 0, false
+}
+
+func skipJSONValueRaw(data []byte, idx int) ([]byte, int, bool) {
+	if idx >= len(data) {
+		return nil, idx, false
+	}
+	if raw, next, ok := parseJSONValueRaw(data, idx); ok {
+		return raw, next, true
+	}
+	switch data[idx] {
+	case '{', '[':
+		open := data[idx]
+		closeCh := byte('}')
+		if open == '[' {
+			closeCh = ']'
+		}
+		depth := 0
+		i := idx
+		for i < len(data) {
+			switch data[i] {
+			case '"':
+				_, next, ok := parseJSONValueRaw(data, i)
+				if !ok {
+					return nil, idx, false
+				}
+				i = next
+				continue
+			case open:
+				depth++
+			case closeCh:
+				depth--
+				if depth == 0 {
+					return data[idx : i+1], i + 1, true
+				}
+			}
+			i++
+		}
+	}
+	return nil, idx, false
 }
 
 func parseJSONValue(data []byte, idx int) (any, int, bool) {
