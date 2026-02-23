@@ -1,5 +1,8 @@
 # Generated policy config example (copy to a real config and edit as needed)
 
+# Stratum policy ([stratum])
+# - ckpool_emulate: CKPool-style subscribe response compatibility shape.
+#
 # Mining policy ([mining])
 # - share_job_freshness_mode: 0=off, 1=job_id, 2=job_id+prevhash.
 # - share_check_ntime_window: Enforce nTime policy window.
@@ -48,6 +51,9 @@
   share_require_job_id = true
   share_require_worker_match = false
   submit_process_inline = true
+
+[stratum]
+  ckpool_emulate = true
 
 [timeouts]
   connection_timeout_seconds = 180

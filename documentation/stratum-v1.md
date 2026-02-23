@@ -16,7 +16,7 @@ Code pointers:
 - `mining.subscribe`
   - Accepts a best-effort **client identifier** in `params[0]` (used for UI aggregation).
   - Accepts a best-effort **session/resume token** in `params[1]` and uses it as the per-connection session ID (also returned in the subscribe response).
-  - Subscribe response shape is controlled by the runtime startup flag `-ckpool-emulate` (not `config.toml`):
+  - Subscribe response shape is controlled by `policy.toml` (`[stratum].ckpool_emulate`), with optional runtime override via `-ckpool-emulate`:
     - `true` (default): CKPool-style tuple list with `mining.notify` only.
     - `false`: extended tuple list includes `mining.set_difficulty`, `mining.notify`, `mining.set_extranonce`, and `mining.set_version_mask`.
 - `mining.authorize`

@@ -94,7 +94,7 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
-# - Stratum runtime-only startup flags (not in config.toml): --ckpool-emulate, --stratum-fast-decode, --stratum-fast-encode, --stratum-tcp-read-buffer, --stratum-tcp-write-buffer.
+# - Stratum runtime-only startup flags (not in config.toml): --stratum-fast-decode, --stratum-fast-encode, --stratum-tcp-read-buffer, --stratum-tcp-write-buffer.
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
@@ -156,7 +156,10 @@ func tuningConfigDocComments() []byte {
 }
 
 func policyConfigDocComments() []byte {
-	return []byte(`# Mining policy ([mining])
+	return []byte(`# Stratum policy ([stratum])
+# - ckpool_emulate: CKPool-style subscribe response compatibility shape.
+#
+# Mining policy ([mining])
 # - share_job_freshness_mode: 0=off, 1=job_id, 2=job_id+prevhash.
 # - share_check_ntime_window: Enforce nTime policy window.
 # - share_check_version_rolling: Enforce version-rolling policy.

@@ -228,8 +228,13 @@ type policyHashrateConfig struct {
 	ShareNTimeMaxForwardSeconds *int `toml:"share_ntime_max_forward_seconds"`
 }
 
+type policyStratumConfig struct {
+	CKPoolEmulate *bool `toml:"ckpool_emulate"`
+}
+
 type policyFileConfig struct {
 	Mining   policyMiningConfig   `toml:"mining"`
+	Stratum  policyStratumConfig  `toml:"stratum"`
 	Hashrate policyHashrateConfig `toml:"hashrate"`
 	Version  versionTuning        `toml:"version"`
 	Bans     banTuning            `toml:"bans"`

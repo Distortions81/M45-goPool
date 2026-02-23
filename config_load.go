@@ -554,6 +554,9 @@ func applyFileOverrides(cfg *Config, fc fileOverrideConfig) {
 }
 
 func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
+	if fc.Stratum.CKPoolEmulate != nil {
+		cfg.CKPoolEmulate = *fc.Stratum.CKPoolEmulate
+	}
 	if fc.Mining.ShareJobFreshnessMode != nil {
 		mode := normalizeShareJobFreshnessMode(*fc.Mining.ShareJobFreshnessMode)
 		if mode >= 0 {

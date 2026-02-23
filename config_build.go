@@ -87,6 +87,9 @@ func buildServicesFileConfig(cfg Config) servicesFileConfig {
 
 func buildPolicyFileConfig(cfg Config) policyFileConfig {
 	return policyFileConfig{
+		Stratum: policyStratumConfig{
+			CKPoolEmulate: new(cfg.CKPoolEmulate),
+		},
 		Mining: policyMiningConfig{
 			ShareJobFreshnessMode:            new(cfg.ShareJobFreshnessMode),
 			ShareCheckNTimeWindow:            new(cfg.ShareCheckNTimeWindow),
