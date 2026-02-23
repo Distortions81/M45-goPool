@@ -1,5 +1,5 @@
 {{/* Admin control panel template */}}
-{{define "restart-required"}}<span class="restart-required">↻</span>{{end}}
+{{define "restart-required"}}<span class="restart-required">&#x21bb;</span>{{end}}
 {{define "sensitive"}}<span class="sensitive">[PROTECTED]</span>{{end}}
 {{define "admin-nav"}}
 <div class="admin-tabs">
@@ -17,7 +17,7 @@
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Control Panel</title>
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - Admin Control Panel</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -63,8 +63,9 @@
 				<div class="label">Live settings</div>
 				<p class="text-sm" style="margin:4px 0 10px 0;">
 					This updates goPool's in-memory configuration immediately. Some settings (listeners, Stratum behavior) still require a reboot to fully take effect.
-					Each field includes a note with extra detail. <span class="restart-required">↻</span> indicates a restart is required.
+					Each field includes a note with extra detail. {{template "restart-required" .}} indicates a restart is required.
 					Fields marked <span class="sensitive">[PROTECTED]</span> are intentionally read-only for security and can only be changed in config files.
+					Most day-to-day operators only need the visible section below; the rest is under Advanced settings.
 				</p>
 				{{if .AdminApplyError}}
 				<p class="text-sm" style="color:#f88d8d;">{{.AdminApplyError}}</p>
@@ -106,6 +107,15 @@
 					</div>
 				</div>
 
+				<details class="admin-protected" style="margin-top:16px;">
+					<summary class="admin-protected-summary">
+						<span class="admin-protected-title">Advanced settings</span>
+						<span class="admin-protected-hint">Click to expand</span>
+					</summary>
+					<p class="text-sm" style="margin:8px 0 8px 0;">
+						Limits, protocol/runtime tuning, ban thresholds, and protected read-only config values.
+					</p>
+
 				<h3 style="margin:18px 0 8px 0;">Limits</h3>
 				<p class="text-sm" style="margin:0 0 8px 0;">
 					These controls affect how quickly new miner connections are accepted and how much reconnect pressure the pool will tolerate after restarts.
@@ -116,18 +126,10 @@
 						<input name="max_conns" type="number" min="10" max="1000000" class="textfield" value="{{.Settings.MaxConns}}">
 					</div>
 					<div>
-						<div class="label">disable_connect_rate_limits {{template "restart-required" .}}<div class="label-note">Disable connect/accept rate limiting entirely (intended for local-only pools on trusted networks).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="disable_connect_rate_limits" value="1" {{if .Settings.DisableConnectRateLimits}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="disable_connect_rate_limits" value="1" {{if .Settings.DisableConnectRateLimits}}checked{{end}}><span>disable_connect_rate_limits {{template "restart-required" .}}</span></label><div class="label-note">Disable connect/accept rate limiting entirely (intended for local-only pools on trusted networks).</div></div>
 					</div>
 					<div>
-						<div class="label">auto_accept_rate_limits {{template "restart-required" .}}<div class="label-note">When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; ignored when disable_connect_rate_limits is enabled).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="auto_accept_rate_limits" value="1" {{if .Settings.AutoAcceptRateLimits}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="auto_accept_rate_limits" value="1" {{if .Settings.AutoAcceptRateLimits}}checked{{end}}><span>auto_accept_rate_limits {{template "restart-required" .}}</span></label><div class="label-note">When enabled, goPool auto-computes accept throttles from max_conns on startup (overrides explicit accept_* values; ignored when disable_connect_rate_limits is enabled).</div></div>
 					</div>
 					<div>
 						<div class="label">max_accepts_per_second {{template "restart-required" .}}<div class="label-note">Connection accept throttle (accepts/sec) for the initial restart/reconnect window.</div></div>
@@ -162,11 +164,11 @@
 						<input name="accept_steady_state_reconnect_window" type="number" class="textfield" value="{{.Settings.AcceptSteadyStateReconnectWindow}}">
 					</div>
 					<div>
-						<div class="label">stratum_messages_per_minute {{template "restart-required" .}}<div class="label-note">Per-connection Stratum message cap per minute (0 disables; otherwise minimum 10).</div></div>
+						<div class="label">stratum_messages_per_minute<div class="label-note">Per-connection Stratum message cap per minute (0 disables; otherwise minimum 10). Applies to connected miners on live apply.</div></div>
 						<input name="stratum_messages_per_minute" type="number" min="0" max="1000000" class="textfield" value="{{.Settings.StratumMessagesPerMinute}}">
 					</div>
 					<div>
-						<div class="label">max_recent_jobs {{template "restart-required" .}}<div class="label-note">Recent job IDs cached per miner for stale-share handling and duplicate checks.</div></div>
+						<div class="label">max_recent_jobs<div class="label-note">Recent job IDs cached per miner for stale-share handling and duplicate checks. Fully applies to new connections; live apply updates the limit for existing connections but does not resize existing caches.</div></div>
 						<input name="max_recent_jobs" type="number" min="8" max="10000" class="textfield" value="{{.Settings.MaxRecentJobs}}">
 					</div>
 				</div>
@@ -177,44 +179,32 @@
 				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label">min_difficulty {{template "restart-required" .}}<div class="label-note">Minimum VarDiff target difficulty for miner connections (0 disables the minimum clamp).</div></div>
+						<div class="label">min_difficulty<div class="label-note">Minimum VarDiff target difficulty for miner connections (0 disables the minimum clamp). Applies on live apply.</div></div>
 						<input name="min_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MinDifficulty}}">
 					</div>
 					<div>
-						<div class="label">max_difficulty {{template "restart-required" .}}<div class="label-note">Maximum VarDiff target difficulty for miner connections (0 disables the maximum clamp).</div></div>
+						<div class="label">max_difficulty<div class="label-note">Maximum VarDiff target difficulty for miner connections (0 disables the maximum clamp). Applies on live apply.</div></div>
 						<input name="max_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.MaxDifficulty}}">
 					</div>
 					<div>
-						<div class="label">default_difficulty {{template "restart-required" .}}<div class="label-note">Starting difficulty before VarDiff has enough evidence (0 uses min_difficulty).</div></div>
+						<div class="label">default_difficulty<div class="label-note">Starting difficulty before VarDiff has enough evidence (0 uses min_difficulty). Applies to new connections; existing miners keep their current assigned difficulty.</div></div>
 						<input name="default_difficulty" type="text" class="textfield" value="{{printf "%.8f" .Settings.DefaultDifficulty}}">
 					</div>
 					<div>
-						<div class="label">target_shares_per_min {{template "restart-required" .}}<div class="label-note">VarDiff target share cadence in shares per minute.</div></div>
+						<div class="label">target_shares_per_min<div class="label-note">VarDiff target share cadence in shares per minute. Applies on live apply.</div></div>
 						<input name="target_shares_per_min" type="number" min="0.1" max="120" step="0.1" class="textfield" value="{{printf "%.4f" .Settings.TargetSharesPerMin}}">
 					</div>
 					<div>
-						<div class="label">vardiff_enabled {{template "restart-required" .}}<div class="label-note">Enable automatic difficulty retargeting. Disable to keep connection difficulty static unless explicitly changed.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="vardiff_enabled" value="1" {{if .Settings.VarDiffEnabled}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="vardiff_enabled" value="1" {{if .Settings.VarDiffEnabled}}checked{{end}}><span>vardiff_enabled</span></label><div class="label-note">Enable automatic difficulty retargeting. Disable to keep connection difficulty static unless explicitly changed. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">lock_suggested_difficulty {{template "restart-required" .}}<div class="label-note">When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="lock_suggested_difficulty" value="1" {{if .Settings.LockSuggestedDifficulty}}checked{{end}}><span>lock_suggested_difficulty</span></label><div class="label-note">When enabled, the first mining.suggest_difficulty / mining.suggest_target locks that connection to the suggested difficulty (disables VarDiff). Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">enforce_suggested_difficulty_limits {{template "restart-required" .}}<div class="label-note">Reject/ban suggested difficulties outside configured min/max bounds.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="enforce_suggested_difficulty_limits" value="1" {{if .Settings.EnforceSuggestedDifficultyLimits}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="enforce_suggested_difficulty_limits" value="1" {{if .Settings.EnforceSuggestedDifficultyLimits}}checked{{end}}><span>enforce_suggested_difficulty_limits</span></label><div class="label-note">Reject/ban suggested difficulties outside configured min/max bounds. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">difficulty_step_granularity {{template "restart-required" .}}<div class="label-note">Difficulty quantization granularity for mining.set_difficulty (1=power-of-two, 2=half, 3=third, 4=quarter).</div></div>
+						<div class="label">difficulty_step_granularity<div class="label-note">Difficulty quantization granularity for mining.set_difficulty (1=power-of-two, 2=half, 3=third, 4=quarter). Applies on live apply.</div></div>
 						<input name="difficulty_step_granularity" type="number" min="1" class="textfield" value="{{.Settings.DifficultyStepGranularity}}">
 					</div>
 				</div>
@@ -225,34 +215,30 @@
 				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label">clean_expired_on_startup {{template "restart-required" .}}<div class="label-note">When enabled, expired bans are removed from disk at startup (startup-only).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="clean_expired_on_startup" value="1" {{if .Settings.CleanExpiredBansOnStartup}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="clean_expired_on_startup" value="1" {{if .Settings.CleanExpiredBansOnStartup}}checked{{end}}><span>clean_expired_on_startup {{template "restart-required" .}}</span></label><div class="label-note">When enabled, expired bans are removed from disk at startup (startup-only).</div></div>
 					</div>
 					<div>
-						<div class="label">ban_invalid_submissions_after {{template "restart-required" .}}<div class="label-note">Ban a worker after this many invalid submissions within the window (minimum 3).</div></div>
+						<div class="label">ban_invalid_submissions_after<div class="label-note">Ban a worker after this many invalid submissions within the window (minimum 3). Applies on live apply.</div></div>
 						<input name="ban_invalid_submissions_after" type="number" min="3" max="10000" class="textfield" value="{{.Settings.BanInvalidSubmissionsAfter}}">
 					</div>
 					<div>
-						<div class="label">ban_invalid_submissions_window_seconds {{template "restart-required" .}}<div class="label-note">Window size (seconds) for invalid submission counting.</div></div>
+						<div class="label">ban_invalid_submissions_window_seconds<div class="label-note">Window size (seconds) for invalid submission counting. Applies on live apply.</div></div>
 						<input name="ban_invalid_submissions_window_seconds" type="number" min="10" max="86400" class="textfield" value="{{.Settings.BanInvalidSubmissionsWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label">ban_invalid_submissions_duration_seconds {{template "restart-required" .}}<div class="label-note">Ban duration (seconds) once the invalid threshold is hit.</div></div>
+						<div class="label">ban_invalid_submissions_duration_seconds<div class="label-note">Ban duration (seconds) once the invalid threshold is hit. Applies on live apply.</div></div>
 						<input name="ban_invalid_submissions_duration_seconds" type="number" min="10" max="604800" class="textfield" value="{{.Settings.BanInvalidSubmissionsDurationSeconds}}">
 					</div>
 					<div>
-						<div class="label">reconnect_ban_threshold {{template "restart-required" .}}<div class="label-note">Ban a host after this many reconnects within the window (minimum 3).</div></div>
+						<div class="label">reconnect_ban_threshold<div class="label-note">Ban a host after this many reconnects within the window (minimum 3). Applies to new reconnect events immediately.</div></div>
 						<input name="reconnect_ban_threshold" type="number" min="3" max="10000" class="textfield" value="{{.Settings.ReconnectBanThreshold}}">
 					</div>
 					<div>
-						<div class="label">reconnect_ban_window_seconds {{template "restart-required" .}}<div class="label-note">Reconnect ban counting window (seconds).</div></div>
+						<div class="label">reconnect_ban_window_seconds<div class="label-note">Reconnect ban counting window (seconds). Applies to new reconnect events immediately.</div></div>
 						<input name="reconnect_ban_window_seconds" type="number" min="10" max="86400" class="textfield" value="{{.Settings.ReconnectBanWindowSeconds}}">
 					</div>
 					<div>
-						<div class="label">reconnect_ban_duration_seconds {{template "restart-required" .}}<div class="label-note">Reconnect ban duration (seconds) once threshold is hit.</div></div>
+						<div class="label">reconnect_ban_duration_seconds<div class="label-note">Reconnect ban duration (seconds) once threshold is hit. Applies to new reconnect events immediately.</div></div>
 						<input name="reconnect_ban_duration_seconds" type="number" min="10" max="604800" class="textfield" value="{{.Settings.ReconnectBanDurationSeconds}}">
 					</div>
 				</div>
@@ -263,11 +249,7 @@
 				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label">peer_cleanup_enabled<div class="label-note">Enable best-effort pruning of high-latency peers (applies to node-info display and warnings).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="peer_cleanup_enabled" value="1" {{if .Settings.PeerCleanupEnabled}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="peer_cleanup_enabled" value="1" {{if .Settings.PeerCleanupEnabled}}checked{{end}}><span>peer_cleanup_enabled</span></label><div class="label-note">Enable best-effort pruning of high-latency peers (applies to node-info display and warnings).</div></div>
 					</div>
 					<div>
 						<div class="label">peer_cleanup_max_ping_ms<div class="label-note">Max peer ping (ms) above which peers are considered unhealthy.</div></div>
@@ -285,11 +267,11 @@
 					</p>
 					<div class="grid admin-grid">
 					<div>
-						<div class="label">connection_timeout_seconds {{template "restart-required" .}}<div class="label-note">Miner connection idle timeout (seconds).</div></div>
+						<div class="label">connection_timeout_seconds<div class="label-note">Miner connection idle timeout (seconds). Applies on live apply.</div></div>
 						<input name="connection_timeout_seconds" type="number" min="30" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
 						<div>
-							<div class="label">share_job_freshness_mode {{template "restart-required" .}}<div class="label-note">Job freshness policy for submit validation.</div></div>
+							<div class="label">share_job_freshness_mode<div class="label-note">Job freshness policy for submit validation. Applies on live apply.</div></div>
 						<select name="share_job_freshness_mode" class="textfield">
 							<option value="0" {{if eq .Settings.ShareJobFreshnessMode 0}}selected{{end}}>0 (off)</option>
 							<option value="1" {{if eq .Settings.ShareJobFreshnessMode 1}}selected{{end}}>1 (job_id)</option>
@@ -297,75 +279,43 @@
 						</select>
 					</div>
 					<div>
-						<div class="label">share_check_ntime_window {{template "restart-required" .}}<div class="label-note">Rejects submits when nTime is outside the configured min/max window.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_check_ntime_window" value="1" {{if .Settings.ShareCheckNTimeWindow}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_check_ntime_window" value="1" {{if .Settings.ShareCheckNTimeWindow}}checked{{end}}><span>share_check_ntime_window</span></label><div class="label-note">Rejects submits when nTime is outside the configured min/max window. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_check_version_rolling {{template "restart-required" .}}<div class="label-note">Rejects submits that violate negotiated version-rolling policy (mask/min-bits/version-roll enablement).</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_check_version_rolling" value="1" {{if .Settings.ShareCheckVersionRolling}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_check_version_rolling" value="1" {{if .Settings.ShareCheckVersionRolling}}checked{{end}}><span>share_check_version_rolling</span></label><div class="label-note">Rejects submits that violate negotiated version-rolling policy (mask/min-bits/version-roll enablement). Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_require_authorized_connection {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the connection has not authorized or the worker identity check fails.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_require_authorized_connection" value="1" {{if .Settings.ShareRequireAuthorizedConnection}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_require_authorized_connection" value="1" {{if .Settings.ShareRequireAuthorizedConnection}}checked{{end}}><span>share_require_authorized_connection</span></label><div class="label-note">Rejects mining.submit when the connection has not authorized or the worker identity check fails. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_check_param_format {{template "restart-required" .}}<div class="label-note">Enforces strict mining.submit field length/format checks before share processing.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_check_param_format" value="1" {{if .Settings.ShareCheckParamFormat}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_check_param_format" value="1" {{if .Settings.ShareCheckParamFormat}}checked{{end}}><span>share_check_param_format</span></label><div class="label-note">Enforces strict mining.submit field length/format checks before share processing. Applies on live apply.</div></div>
 					</div>
 						<div>
-							<div class="label">share_require_worker_match {{template "restart-required" .}}<div class="label-note">Rejects mining.submit when the submitted worker name does not match the worker authorized on this connection.</div></div>
-							<label class="label" style="font-weight:500;margin-top:10px;">
-								<input type="checkbox" name="share_require_worker_match" value="1" {{if .Settings.ShareRequireWorkerMatch}}checked{{end}}>
-								<span style="margin-left:8px;">Enabled</span>
-							</label>
+							<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_require_worker_match" value="1" {{if .Settings.ShareRequireWorkerMatch}}checked{{end}}><span>share_require_worker_match</span></label><div class="label-note">Rejects mining.submit when the submitted worker name does not match the worker authorized on this connection. Applies on live apply.</div></div>
 						</div>
 						<div>
-						<div class="label">submit_process_inline {{template "restart-required" .}}<div class="label-note">Processes mining.submit inline on the miner connection goroutine instead of a worker queue. Usually gives materially lower submit latency; consider disabling mainly for very large pools (for example, tens of thousands of miners) where queue isolation is preferred.</div></div>
-							<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="submit_process_inline" value="1" {{if .Settings.SubmitProcessInline}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="submit_process_inline" value="1" {{if .Settings.SubmitProcessInline}}checked{{end}}><span>submit_process_inline</span></label><div class="label-note">Processes mining.submit inline on the miner connection goroutine instead of a worker queue. Usually gives materially lower submit latency; consider disabling mainly for very large pools (for example, tens of thousands of miners) where queue isolation is preferred. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_check_duplicate {{template "restart-required" .}}<div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_check_duplicate" value="1" {{if .Settings.ShareCheckDuplicate}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_check_duplicate" value="1" {{if .Settings.ShareCheckDuplicate}}checked{{end}}><span>share_check_duplicate</span></label><div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_require_job_id {{template "restart-required" .}}<div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_require_job_id" value="1" {{if .Settings.ShareRequireJobID}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_require_job_id" value="1" {{if .Settings.ShareRequireJobID}}checked{{end}}><span>share_require_job_id</span></label><div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">extranonce2_size {{template "restart-required" .}}<div class="label-note">Per-share extranonce2 byte length for submitted shares.</div></div>
+						<div class="label">extranonce2_size<div class="label-note">Per-share extranonce2 byte length for submitted shares. Applies to new connections; existing miners keep their assigned extranonce format.</div></div>
 						<input name="extranonce2_size" type="number" min="1" max="8" class="textfield" value="{{.Settings.Extranonce2Size}}">
 					</div>
 					<div>
-						<div class="label">template_extranonce2_size {{template "restart-required" .}}<div class="label-note">Template extranonce2 byte length used in generated jobs.</div></div>
+						<div class="label">template_extranonce2_size<div class="label-note">Template extranonce2 byte length used in generated jobs. Applies to newly generated jobs after live apply.</div></div>
 						<input name="template_extranonce2_size" type="number" min="1" max="16" class="textfield" value="{{.Settings.TemplateExtraNonce2Size}}">
 					</div>
 					<div>
-						<div class="label">job_entropy {{template "restart-required" .}}<div class="label-note">Entropy bytes added to per-job tags in coinbase.</div></div>
+						<div class="label">job_entropy<div class="label-note">Entropy bytes added to per-job tags in coinbase. Applies to newly generated jobs after live apply.</div></div>
 						<input name="job_entropy" type="number" min="0" class="textfield" value="{{.Settings.JobEntropy}}">
 					</div>
 					<div>
-						<div class="label">coinbase_scriptsig_max_bytes {{template "restart-required" .}}<div class="label-note">Maximum allowed coinbase scriptSig size in bytes.</div></div>
+						<div class="label">coinbase_scriptsig_max_bytes<div class="label-note">Maximum allowed coinbase scriptSig size in bytes. Applies to newly generated jobs after live apply.</div></div>
 						<input name="coinbase_scriptsig_max_bytes" type="number" min="2" class="textfield" value="{{.Settings.CoinbaseScriptSigMaxBytes}}">
 					</div>
 				</div>
@@ -376,41 +326,29 @@
 				</p>
 				<div class="grid admin-grid">
 					<div>
-						<div class="label">discord_worker_notify_threshold_seconds {{template "restart-required" .}}<div class="label-note">Minimum seconds online/offline before Discord worker notifications are sent.</div></div>
+						<div class="label">discord_worker_notify_threshold_seconds<div class="label-note">Minimum seconds online/offline before Discord worker notifications are sent. Applies on live apply.</div></div>
 						<input name="discord_worker_notify_threshold_seconds" type="number" min="0" max="86400" class="textfield" value="{{.Settings.DiscordWorkerNotifyThresholdSeconds}}">
 					</div>
 					<div>
-						<div class="label">hashrate_ema_tau_seconds {{template "restart-required" .}}<div class="label-note">EMA time constant for hashrate smoothing (seconds).</div></div>
+						<div class="label">hashrate_ema_tau_seconds<div class="label-note">EMA time constant for hashrate smoothing (seconds). Applies on live apply.</div></div>
 						<input name="hashrate_ema_tau_seconds" type="number" min="1" step="1" class="textfield" value="{{printf "%.0f" .Settings.HashrateEMATauSeconds}}">
 					</div>
 					<div>
-						<div class="label">hashrate_cumulative_enabled {{template "restart-required" .}}<div class="label-note">Blend EMA with cumulative hashrate (long-horizon) for per-worker display.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="hashrate_cumulative_enabled" value="1" {{if .Settings.HashrateCumulativeEnabled}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="hashrate_cumulative_enabled" value="1" {{if .Settings.HashrateCumulativeEnabled}}checked{{end}}><span>hashrate_cumulative_enabled</span></label><div class="label-note">Blend EMA with cumulative hashrate (long-horizon) for per-worker display. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">hashrate_recent_cumulative_enabled {{template "restart-required" .}}<div class="label-note">Allow short-window cumulative (vardiff window) to influence per-worker display.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="hashrate_recent_cumulative_enabled" value="1" {{if .Settings.HashrateRecentCumulativeEnabled}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="hashrate_recent_cumulative_enabled" value="1" {{if .Settings.HashrateRecentCumulativeEnabled}}checked{{end}}><span>hashrate_recent_cumulative_enabled</span></label><div class="label-note">Allow short-window cumulative (vardiff window) to influence per-worker display. Applies on live apply.</div></div>
 					</div>
 					<div>
-						<div class="label">share_ntime_max_forward_seconds {{template "restart-required" .}}<div class="label-note">Maximum seconds a miner can roll nTime forward.</div></div>
+						<div class="label">share_ntime_max_forward_seconds<div class="label-note">Maximum seconds a miner can roll nTime forward. Applies on live apply.</div></div>
 						<input name="share_ntime_max_forward_seconds" type="number" min="1" class="textfield" value="{{.Settings.ShareNTimeMaxForwardSeconds}}">
 					</div>
 					<div>
-						<div class="label">min_version_bits {{template "restart-required" .}}<div class="label-note">Minimum number of version-rolling bits required when version mask is active.</div></div>
+						<div class="label">min_version_bits<div class="label-note">Minimum number of version-rolling bits required when version mask is active. Applies on live apply.</div></div>
 						<input name="min_version_bits" type="number" min="0" class="textfield" value="{{.Settings.MinVersionBits}}">
 					</div>
 					<div>
-						<div class="label">share_allow_degraded_version_bits {{template "restart-required" .}}<div class="label-note">Allow version rolling even when miners advertise fewer bits than required.</div></div>
-						<label class="label" style="font-weight:500;margin-top:10px;">
-							<input type="checkbox" name="share_allow_degraded_version_bits" value="1" {{if .Settings.ShareAllowDegradedVersionBits}}checked{{end}}>
-							<span style="margin-left:8px;">Enabled</span>
-						</label>
+						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_allow_degraded_version_bits" value="1" {{if .Settings.ShareAllowDegradedVersionBits}}checked{{end}}><span>share_allow_degraded_version_bits</span></label><div class="label-note">Allow version rolling even when miners advertise fewer bits than required. Applies on live apply.</div></div>
 					</div>
 				</div>
 
@@ -484,6 +422,7 @@
 						<input name="stratum_tls_listen" type="text" class="textfield" value="{{.Settings.StratumTLSListen}}" disabled>
 					</div>
 					</div>
+				</details>
 				</details>
 
 				<label class="label" for="apply-password" style="margin-top:16px;">Admin password (required)</label>
