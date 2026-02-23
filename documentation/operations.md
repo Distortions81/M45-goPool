@@ -110,7 +110,8 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel.
 - `policy.toml [stratum]`: `ckpool_emulate` controls CKPool-style subscribe response compatibility.
-- Runtime-only Stratum startup flags (not in config files): `-stratum-fast-decode`, `-stratum-fast-encode`, `-stratum-tcp-read-buffer`, and `-stratum-tcp-write-buffer`.
+- `tuning.toml [stratum]`: `fast_decode_enabled`, `fast_encode_enabled`, `tcp_read_buffer_bytes`, and `tcp_write_buffer_bytes` control Stratum fast-path and socket buffer tuning.
+- Optional runtime overrides (temporary): `-ckpool-emulate`, `-stratum-fast-decode`, `-stratum-fast-encode`, `-stratum-tcp-read-buffer`, and `-stratum-tcp-write-buffer`.
 - `[node]`: `rpc_url`, `rpc_cookie_path`, and ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`).
 - `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
 - `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.

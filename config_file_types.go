@@ -247,11 +247,19 @@ type tuningHashrateConfig struct {
 	HashrateRecentCumulativeEnabled *bool    `toml:"hashrate_recent_cumulative_enabled"`
 }
 
+type tuningStratumConfig struct {
+	FastDecodeEnabled   *bool `toml:"fast_decode_enabled"`
+	FastEncodeEnabled   *bool `toml:"fast_encode_enabled"`
+	TCPReadBufferBytes  *int  `toml:"tcp_read_buffer_bytes"`
+	TCPWriteBufferBytes *int  `toml:"tcp_write_buffer_bytes"`
+}
+
 type tuningFileConfig struct {
 	RateLimits   rateLimitTuning      `toml:"rate_limits"`
 	Difficulty   difficultyTuning     `toml:"difficulty"`
 	Mining       miningTuning         `toml:"mining"`
 	Hashrate     tuningHashrateConfig `toml:"hashrate"`
+	Stratum      tuningStratumConfig  `toml:"stratum"`
 	PeerCleaning peerCleaningTuning   `toml:"peer_cleaning"`
 }
 

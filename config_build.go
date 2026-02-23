@@ -162,6 +162,12 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			HashrateCumulativeEnabled:       new(cfg.HashrateCumulativeEnabled),
 			HashrateRecentCumulativeEnabled: new(cfg.HashrateRecentCumulativeEnabled),
 		},
+		Stratum: tuningStratumConfig{
+			FastDecodeEnabled:   new(cfg.StratumFastDecodeEnabled),
+			FastEncodeEnabled:   new(cfg.StratumFastEncodeEnabled),
+			TCPReadBufferBytes:  new(cfg.StratumTCPReadBufferBytes),
+			TCPWriteBufferBytes: new(cfg.StratumTCPWriteBufferBytes),
+		},
 		PeerCleaning: peerCleaningTuning{
 			Enabled:   new(cfg.PeerCleanupEnabled),
 			MaxPingMs: new(cfg.PeerCleanupMaxPingMs),

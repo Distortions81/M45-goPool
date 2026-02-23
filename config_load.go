@@ -599,6 +599,18 @@ func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
 }
 
 func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
+	if fc.Stratum.FastDecodeEnabled != nil {
+		cfg.StratumFastDecodeEnabled = *fc.Stratum.FastDecodeEnabled
+	}
+	if fc.Stratum.FastEncodeEnabled != nil {
+		cfg.StratumFastEncodeEnabled = *fc.Stratum.FastEncodeEnabled
+	}
+	if fc.Stratum.TCPReadBufferBytes != nil {
+		cfg.StratumTCPReadBufferBytes = *fc.Stratum.TCPReadBufferBytes
+	}
+	if fc.Stratum.TCPWriteBufferBytes != nil {
+		cfg.StratumTCPWriteBufferBytes = *fc.Stratum.TCPWriteBufferBytes
+	}
 	t := fileOverrideConfig{
 		RateLimits:   fc.RateLimits,
 		Difficulty:   fc.Difficulty,

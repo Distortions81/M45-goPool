@@ -36,6 +36,11 @@
 # Peer cleaning ([peer_cleaning])
 # - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.
 #
+# Stratum tuning ([stratum])
+# - fast_decode_enabled: Enable fast-path decoding/sniffing for common Stratum methods (restart to apply).
+# - fast_encode_enabled: Enable fast-path response encoding for common Stratum responses (restart to apply).
+# - tcp_read_buffer_bytes / tcp_write_buffer_bytes: Socket buffer sizes in bytes (0 = OS default; restart to apply).
+#
 #
 
 [difficulty]
@@ -78,3 +83,9 @@
   max_accepts_per_second = 500
   max_conns = 50000
   stratum_messages_per_minute = 0
+
+[stratum]
+  fast_decode_enabled = false
+  fast_encode_enabled = false
+  tcp_read_buffer_bytes = 0
+  tcp_write_buffer_bytes = 0
