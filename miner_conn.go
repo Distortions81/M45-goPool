@@ -110,46 +110,8 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		maxRecentJobs = defaultRecentJobs
 	}
 
-	mask := cfg.VersionMask
-	if mask == 0 && !cfg.VersionMaskConfigured {
-		mask = defaultVersionMask
-	}
-	minBits := cfg.MinVersionBits
-	if mask == 0 {
-		minBits = 0
-	} else {
-		if minBits <= 0 {
-			minBits = 1
-		}
-		if minBits > bits.OnesCount32(mask) {
-			minBits = bits.OnesCount32(mask)
-		}
-	}
-
-	vdiff := defaultVarDiff
-	if cfg.TargetSharesPerMin > 0 {
-		vdiff.TargetSharesPerMin = cfg.TargetSharesPerMin
-	}
-	// Difficulty clamps:
-	// - cfg.MinDifficulty == 0 disables the minimum clamp (no lower bound).
-	// - cfg.MaxDifficulty == 0 disables the maximum clamp (no upper bound).
-	// - values > 0 enable a clamp at that value.
-	if cfg.MinDifficulty == 0 {
-		vdiff.MinDiff = 0
-	} else if cfg.MinDifficulty > 0 {
-		vdiff.MinDiff = cfg.MinDifficulty
-	}
-	if cfg.MaxDifficulty == 0 {
-		vdiff.MaxDiff = 0
-	} else if cfg.MaxDifficulty > 0 {
-		// If the defaults ever include a max clamp, use the tighter one.
-		if vdiff.MaxDiff <= 0 || cfg.MaxDifficulty < vdiff.MaxDiff {
-			vdiff.MaxDiff = cfg.MaxDifficulty
-		}
-	}
-	if vdiff.MaxDiff > 0 && vdiff.MinDiff > vdiff.MaxDiff {
-		vdiff.MinDiff = vdiff.MaxDiff
-	}
+	mask, minBits := versionRollingPolicyFromConfig(cfg)
+	vdiff := buildVarDiffConfig(cfg)
 
 	// Start connections at the configured default difficulty when set; otherwise
 	// use the minimum clamp or a conservative fallback and let VarDiff adjust.
@@ -223,6 +185,94 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	go mc.statsWorker()
 
 	return mc
+}
+
+func buildVarDiffConfig(cfg Config) VarDiffConfig {
+	vdiff := defaultVarDiff
+	if cfg.TargetSharesPerMin > 0 {
+		vdiff.TargetSharesPerMin = cfg.TargetSharesPerMin
+	}
+	if cfg.MinDifficulty == 0 {
+		vdiff.MinDiff = 0
+	} else if cfg.MinDifficulty > 0 {
+		vdiff.MinDiff = cfg.MinDifficulty
+	}
+	if cfg.MaxDifficulty == 0 {
+		vdiff.MaxDiff = 0
+	} else if cfg.MaxDifficulty > 0 {
+		if vdiff.MaxDiff <= 0 || cfg.MaxDifficulty < vdiff.MaxDiff {
+			vdiff.MaxDiff = cfg.MaxDifficulty
+		}
+	}
+	if vdiff.MaxDiff > 0 && vdiff.MinDiff > vdiff.MaxDiff {
+		vdiff.MinDiff = vdiff.MaxDiff
+	}
+	return vdiff
+}
+
+func versionRollingPolicyFromConfig(cfg Config) (uint32, int) {
+	mask := cfg.VersionMask
+	if mask == 0 && !cfg.VersionMaskConfigured {
+		mask = defaultVersionMask
+	}
+	minBits := cfg.MinVersionBits
+	if mask == 0 {
+		return mask, 0
+	}
+	if minBits <= 0 {
+		minBits = 1
+	}
+	if minBits > bits.OnesCount32(mask) {
+		minBits = bits.OnesCount32(mask)
+	}
+	return mask, minBits
+}
+
+// ApplyRuntimeConfig updates runtime-safe Stratum policy settings for an
+// already-connected miner. Some structural settings still only apply fully on
+// reconnect (for example listener-level throttles and cache preallocation).
+func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	defer mc.stateMu.Unlock()
+
+	mc.cfg = cfg
+	mc.vardiff = buildVarDiffConfig(cfg)
+	mc.poolMask, mc.minVerBits = versionRollingPolicyFromConfig(cfg)
+	if cfg.MaxRecentJobs > 0 {
+		mc.maxRecentJobs = cfg.MaxRecentJobs
+	}
+
+	if cfg.ShareCheckDuplicate && mc.shareCache == nil {
+		capHint := mc.maxRecentJobs
+		if capHint <= 0 {
+			capHint = defaultRecentJobs
+		}
+		mc.shareCache = make(map[string]*duplicateShareSet, capHint)
+		mc.evictedShareCache = make(map[string]*evictedCacheEntry, capHint)
+	}
+	if cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds == nil {
+		capHint := mc.maxRecentJobs
+		if capHint <= 0 {
+			capHint = defaultRecentJobs
+		}
+		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, capHint)
+	}
+
+	curDiff := atomicLoadFloat64(&mc.difficulty)
+	clamped := curDiff
+	if mc.vardiff.MinDiff > 0 && clamped < mc.vardiff.MinDiff {
+		clamped = mc.vardiff.MinDiff
+	}
+	if mc.vardiff.MaxDiff > 0 && clamped > mc.vardiff.MaxDiff {
+		clamped = mc.vardiff.MaxDiff
+	}
+	if clamped > 0 && clamped != curDiff {
+		atomicStoreFloat64(&mc.difficulty, clamped)
+		mc.shareTarget.Store(targetFromDifficulty(clamped))
+	}
 }
 
 func (mc *MinerConn) handle() {
