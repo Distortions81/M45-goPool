@@ -5,6 +5,7 @@
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="refresh" content="10">
 	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — {{.Title}}</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
@@ -36,6 +37,28 @@
 		</div>
 		{{template "footer" .}}
 	</main>
+	<script>
+	(function () {
+		const VISIBLE_REFRESH_MS = 5000;
+		const HIDDEN_REFRESH_MS = 15000;
+		let timer = null;
+
+		function refreshDelay() {
+			return document.hidden ? HIDDEN_REFRESH_MS : VISIBLE_REFRESH_MS;
+		}
+
+		function schedule() {
+			if (timer) clearTimeout(timer);
+			timer = setTimeout(() => {
+				// Re-request the page so it can switch back to the overview as soon
+				// as the node is healthy and fresh work is available.
+				window.location.reload();
+			}, refreshDelay());
+		}
+
+		document.addEventListener('visibilitychange', schedule);
+		schedule();
+	})();
+	</script>
 </body>
 </html>
-
