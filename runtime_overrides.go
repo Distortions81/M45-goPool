@@ -177,9 +177,6 @@ func applySafeModeProfile(cfg *Config) {
 	cfg.StratumTCPReadBufferBytes = 0
 	cfg.StratumTCPWriteBufferBytes = 0
 
-	cfg.LogDebug = false
-	cfg.LogNetDebug = false
-
 	cfg.ShareRequireAuthorizedConnection = true
 	cfg.ShareCheckParamFormat = true
 	cfg.ShareCheckDuplicate = true
