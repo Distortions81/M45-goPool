@@ -94,10 +94,7 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
-# - [stratum].ckpool_emulate: Use CKPool-style subscribe response shape for compatibility (default true; requires restart).
-# - [stratum].fast_decode_enabled: Enable fast-path decoding (sniffing) for common Stratum methods (requires restart).
-# - [stratum].fast_encode_enabled: Enable fast-path response encoding (canned/manual JSON) for common Stratum responses (requires restart).
-# - [stratum].tcp_read_buffer_bytes / tcp_write_buffer_bytes: Set TCP socket buffer sizes in bytes (0 = OS default; requires restart).
+# - Stratum runtime-only startup flags (not in config.toml): --ckpool-emulate, --stratum-fast-decode, --stratum-fast-encode, --stratum-tcp-read-buffer, --stratum-tcp-write-buffer.
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).

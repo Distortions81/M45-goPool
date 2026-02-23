@@ -195,7 +195,7 @@ func sniffStratumSubmitParamsBytes(data []byte) (worker, jobID, extranonce2, nti
 	i := start + 1
 	var fields [6][]byte
 	n := 0
-	for i < len(data) && n < len(fields) {
+	for i < len(data) {
 		i = skipSpaces(data, i)
 		if i >= len(data) {
 			return nil, nil, nil, nil, nil, nil, false, false
@@ -213,6 +213,9 @@ func sniffStratumSubmitParamsBytes(data []byte) (worker, jobID, extranonce2, nti
 			i++
 			continue
 		case '"':
+			if n >= len(fields) {
+				return nil, nil, nil, nil, nil, nil, false, false
+			}
 			j := i + 1
 			for j < len(data) {
 				if data[j] == '\\' {

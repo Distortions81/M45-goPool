@@ -177,3 +177,17 @@ func TestSniffSubmitParamsUsesTopLevelParamsKey(t *testing.T) {
 		t.Fatalf("unexpected submit fields: worker=%q job=%q en2=%q ntime=%q nonce=%q", worker, jobID, en2, ntime, nonce)
 	}
 }
+
+func TestSniffSubmitParamsWithVersionField(t *testing.T) {
+	line := []byte(`{"id":1,"method":"mining.submit","params":["worker","1","00000001","5f5e1000","00000001","20000000"]}`)
+	worker, jobID, en2, ntime, nonce, ver, haveVer, ok := sniffStratumSubmitParamsBytes(line)
+	if !ok {
+		t.Fatalf("expected submit sniff ok with version field")
+	}
+	if !haveVer || ver == nil {
+		t.Fatalf("expected version field to be present")
+	}
+	if string(worker) != "worker" || string(jobID) != "1" || string(en2) != "00000001" || string(ntime) != "5f5e1000" || string(nonce) != "00000001" || string(ver) != "20000000" {
+		t.Fatalf("unexpected submit fields/version: worker=%q job=%q en2=%q ntime=%q nonce=%q ver=%q", worker, jobID, en2, ntime, nonce, ver)
+	}
+}
