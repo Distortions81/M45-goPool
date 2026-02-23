@@ -31,8 +31,8 @@ go test -v ./...
 # Run specific test
 go test -v ./... -run TestBuildBlock_ParsesWithBtcdAndHasValidMerkle
 
-# Run tests in specific package
-go test -v ./stratum
+# Run tests in the root package (this repo is a single Go package)
+go test -v .
 
 # Run with race detector
 go test -race ./...
@@ -48,7 +48,8 @@ go test -race ./...
 
 ### Status / API / Security
 - **`path_traversal_test.go`** - Static file serving and path traversal hardening
-- **`worker_status_test.go`** - Worker status view and privacy redaction
+- **`status_server_json_test.go`** - JSON endpoint behavior and response shaping
+- **`status_workers_*_test.go`** - Worker page routing, saved-worker flows, and status helpers
 
 ### Compatibility Tests (btcd/pogolo)
 - **`cross_impl_sanity_test.go`** - Address parsing, merkle trees, compact difficulty bits, script encoding
@@ -66,7 +67,7 @@ go test -race ./...
 ### Accounting / Payouts
 - **`payout_test.go`** - Payout accounting logic
 - **`payout_debug_test.go`** - Debugging helpers for payout calculations
-- **`worker_status_test.go`** - Worker accounting and best-share tracking
+- **`worker_list_store_*_test.go`** - Saved-worker storage, migrations, and worker tracking persistence
 
 ### Performance / Timing
 - **`submit_timing_test.go`** - Measures latency from `handleBlockShare` entry to `submitblock` invocation
@@ -130,17 +131,17 @@ go tool cover -html=coverage.out
 
 ### Current Coverage
 
-As of the latest changes, overall coverage is approximately **24.6% of statements**. Highest coverage areas:
+As of February 23, 2026, `go test ./... -cover` reports approximately **36.0% of statements** covered. Highest coverage areas:
 
 - **Share validation and block construction** - `block_test.go`, `coinbase_test.go`, `found_block_test.go`
-- **Accounting and payout logic** - `payout_test.go`, `payout_debug_test.go`, `worker_status_test.go`
+- **Accounting and payout logic** - `payout_test.go`, `payout_debug_test.go`, `payout_wrapper_selection_test.go`
 - **Compatibility layers** - `cross_impl_sanity_test.go`, `pogolo_compat_test.go`, `*_compat_test.go`
 
 ## Helper Scripts
 
 ### Run Tests Script
 
-The [scripts/run-tests.sh](scripts/run-tests.sh) script runs the full test suite with verbose output:
+The [scripts/run-tests.sh](../scripts/run-tests.sh) script runs the full test suite with verbose output:
 
 ```bash
 # Run all tests
