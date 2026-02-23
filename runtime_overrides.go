@@ -12,6 +12,11 @@ type runtimeOverrides struct {
 	statusAddr          string
 	statusTLSAddr       string
 	stratumTLSListen    string
+	ckpoolEmulate       *bool
+	stratumFastDecode   *bool
+	stratumFastEncode   *bool
+	stratumTCPReadBuf   *int
+	stratumTCPWriteBuf  *int
 	rpcURL              string
 	rpcCookiePath       string
 	dataDir             string
@@ -122,6 +127,21 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	}
 	if strings.TrimSpace(overrides.stratumTLSListen) != "" {
 		cfg.StratumTLSListen = strings.TrimSpace(overrides.stratumTLSListen)
+	}
+	if overrides.ckpoolEmulate != nil {
+		cfg.CKPoolEmulate = *overrides.ckpoolEmulate
+	}
+	if overrides.stratumFastDecode != nil {
+		cfg.StratumFastDecodeEnabled = *overrides.stratumFastDecode
+	}
+	if overrides.stratumFastEncode != nil {
+		cfg.StratumFastEncodeEnabled = *overrides.stratumFastEncode
+	}
+	if overrides.stratumTCPReadBuf != nil {
+		cfg.StratumTCPReadBufferBytes = *overrides.stratumTCPReadBuf
+	}
+	if overrides.stratumTCPWriteBuf != nil {
+		cfg.StratumTCPWriteBufferBytes = *overrides.stratumTCPWriteBuf
 	}
 
 	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {

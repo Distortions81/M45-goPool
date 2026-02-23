@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	debugpkg "runtime/debug"
 	pprof "runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,6 +44,57 @@ func main() {
 	statusAddrFlag := flag.String("status", "", "override status HTTP listen address (e.g. :80)")
 	statusTLSAddrFlag := flag.String("status-tls", "", "override status HTTPS listen address (e.g. :443)")
 	stratumTLSFlag := flag.String("stratum-tls", "", "override stratum TLS listen address (e.g. :24333)")
+	var ckpoolEmulateFlag *bool
+	flag.Func("ckpool-emulate", "override Stratum subscribe response shape compatibility (true/false)", func(v string) error {
+		b, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		ckpoolEmulateFlag = &b
+		return nil
+	})
+	var fastDecodeFlag *bool
+	flag.Func("stratum-fast-decode", "override fast-path Stratum decode/sniffing (true/false)", func(v string) error {
+		b, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		fastDecodeFlag = &b
+		return nil
+	})
+	var fastEncodeFlag *bool
+	flag.Func("stratum-fast-encode", "override fast-path Stratum response encoding (true/false)", func(v string) error {
+		b, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		fastEncodeFlag = &b
+		return nil
+	})
+	var stratumTCPReadBufFlag *int
+	flag.Func("stratum-tcp-read-buffer", "override Stratum TCP read buffer bytes (0 = OS default)", func(v string) error {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		if n < 0 {
+			return fmt.Errorf("must be >= 0")
+		}
+		stratumTCPReadBufFlag = &n
+		return nil
+	})
+	var stratumTCPWriteBufFlag *int
+	flag.Func("stratum-tcp-write-buffer", "override Stratum TCP write buffer bytes (0 = OS default)", func(v string) error {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		if n < 0 {
+			return fmt.Errorf("must be >= 0")
+		}
+		stratumTCPWriteBufFlag = &n
+		return nil
+	})
 	rpcURLFlag := flag.String("rpc-url", "", "override RPC URL")
 	rpcCookieFlag := flag.String("rpc-cookie", "", "override RPC cookie path")
 	dataDirFlag := flag.String("data-dir", "", "override data directory")
@@ -73,6 +125,11 @@ func main() {
 		statusAddr:          *statusAddrFlag,
 		statusTLSAddr:       *statusTLSAddrFlag,
 		stratumTLSListen:    *stratumTLSFlag,
+		ckpoolEmulate:       ckpoolEmulateFlag,
+		stratumFastDecode:   fastDecodeFlag,
+		stratumFastEncode:   fastEncodeFlag,
+		stratumTCPReadBuf:   stratumTCPReadBufFlag,
+		stratumTCPWriteBuf:  stratumTCPWriteBufFlag,
 		rpcURL:              *rpcURLFlag,
 		rpcCookiePath:       *rpcCookieFlag,
 		dataDir:             *dataDirFlag,

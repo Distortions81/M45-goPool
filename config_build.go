@@ -28,11 +28,6 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumPasswordEnabled: cfg.StratumPasswordEnabled,
 			StratumPassword:        cfg.StratumPassword,
 			StratumPasswordPublic:  cfg.StratumPasswordPublic,
-			CKPoolEmulate:          new(cfg.CKPoolEmulate),
-			FastDecodeEnabled:      new(cfg.StratumFastDecodeEnabled),
-			FastEncodeEnabled:      new(cfg.StratumFastEncodeEnabled),
-			TCPReadBufferBytes:     new(cfg.StratumTCPReadBufferBytes),
-			TCPWriteBufferBytes:    new(cfg.StratumTCPWriteBufferBytes),
 		},
 		Node: nodeConfig{
 			RPCURL:           cfg.RPCURL,
