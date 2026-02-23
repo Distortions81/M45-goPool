@@ -44,6 +44,15 @@ func main() {
 	statusAddrFlag := flag.String("status", "", "override status HTTP listen address (e.g. :80)")
 	statusTLSAddrFlag := flag.String("status-tls", "", "override status HTTPS listen address (e.g. :443)")
 	stratumTLSFlag := flag.String("stratum-tls", "", "override stratum TLS listen address (e.g. :24333)")
+	var safeModeFlag *bool
+	flag.Func("safe-mode", "force conservative compatibility/safety profile (true/false)", func(v string) error {
+		b, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return err
+		}
+		safeModeFlag = &b
+		return nil
+	})
 	var ckpoolEmulateFlag *bool
 	flag.Func("ckpool-emulate", "override Stratum subscribe response shape compatibility (true/false)", func(v string) error {
 		b, err := strconv.ParseBool(strings.TrimSpace(v))
@@ -125,6 +134,7 @@ func main() {
 		statusAddr:          *statusAddrFlag,
 		statusTLSAddr:       *statusTLSAddrFlag,
 		stratumTLSListen:    *stratumTLSFlag,
+		safeMode:            safeModeFlag,
 		ckpoolEmulate:       ckpoolEmulateFlag,
 		stratumFastDecode:   fastDecodeFlag,
 		stratumFastEncode:   fastEncodeFlag,
@@ -311,6 +321,7 @@ func main() {
 		"component", "startup",
 		"kind", "config",
 		"listen_addr", cfg.ListenAddr,
+		"safe_mode", cfg.SafeMode,
 		"stratum_tls_listen", cfg.StratumTLSListen,
 		"status_addr", cfg.StatusAddr,
 		"status_tls_addr", cfg.StatusTLSAddr,

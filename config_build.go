@@ -28,6 +28,7 @@ func buildBaseFileConfig(cfg Config) baseFileConfig {
 			StratumPasswordEnabled: cfg.StratumPasswordEnabled,
 			StratumPassword:        cfg.StratumPassword,
 			StratumPasswordPublic:  cfg.StratumPasswordPublic,
+			SafeMode:               cfg.SafeMode,
 		},
 		Node: nodeConfig{
 			RPCURL:           cfg.RPCURL,
@@ -198,6 +199,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		StratumTLSListen:                  cfg.StratumTLSListen,
 		StratumFastDecodeEnabled:          cfg.StratumFastDecodeEnabled,
 		StratumFastEncodeEnabled:          cfg.StratumFastEncodeEnabled,
+		SafeMode:                          cfg.SafeMode,
 		CKPoolEmulate:                     cfg.CKPoolEmulate,
 		StratumTCPReadBufferBytes:         cfg.StratumTCPReadBufferBytes,
 		StratumTCPWriteBufferBytes:        cfg.StratumTCPWriteBufferBytes,

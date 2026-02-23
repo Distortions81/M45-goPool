@@ -39,6 +39,7 @@ type stratumConfig struct {
 	StratumPasswordEnabled bool   `toml:"stratum_password_enabled"`
 	StratumPassword        string `toml:"stratum_password"`
 	StratumPasswordPublic  bool   `toml:"stratum_password_public"`
+	SafeMode               bool   `toml:"safe_mode"`
 }
 
 type authConfig struct {

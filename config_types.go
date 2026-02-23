@@ -61,6 +61,8 @@ type Config struct {
 	// Stratum fast encode: enables canned/manual JSON encoding for common Stratum
 	// responses to reduce allocations (encode path only).
 	StratumFastEncodeEnabled bool
+	// Safe mode: force conservative compatibility/safety-oriented runtime behavior.
+	SafeMode bool
 	// CKPool compatibility mode: advertise a minimal CKPool-style subscribe
 	// result (mining.notify tuple only) while keeping other compatibility paths.
 	CKPoolEmulate bool
@@ -205,6 +207,7 @@ type EffectiveConfig struct {
 	StratumTLSListen                  string   `json:"stratum_tls_listen,omitempty"`
 	StratumFastDecodeEnabled          bool     `json:"stratum_fast_decode_enabled"`
 	StratumFastEncodeEnabled          bool     `json:"stratum_fast_encode_enabled"`
+	SafeMode                          bool     `json:"safe_mode,omitempty"`
 	CKPoolEmulate                     bool     `json:"ckpool_emulate"`
 	StratumTCPReadBufferBytes         int      `json:"stratum_tcp_read_buffer_bytes,omitempty"`
 	StratumTCPWriteBufferBytes        int      `json:"stratum_tcp_write_buffer_bytes,omitempty"`

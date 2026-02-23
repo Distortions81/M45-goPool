@@ -12,6 +12,7 @@ type runtimeOverrides struct {
 	statusAddr          string
 	statusTLSAddr       string
 	stratumTLSListen    string
+	safeMode            *bool
 	ckpoolEmulate       *bool
 	stratumFastDecode   *bool
 	stratumFastEncode   *bool
@@ -78,7 +79,6 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if overrides.allowPublicRPC {
 		cfg.AllowPublicRPC = true
 	}
-
 	if overrides.bind != "" {
 		_, port, err := net.SplitHostPort(cfg.ListenAddr)
 		if err != nil {
@@ -131,6 +131,9 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if overrides.ckpoolEmulate != nil {
 		cfg.CKPoolEmulate = *overrides.ckpoolEmulate
 	}
+	if overrides.safeMode != nil {
+		cfg.SafeMode = *overrides.safeMode
+	}
 	if overrides.stratumFastDecode != nil {
 		cfg.StratumFastDecodeEnabled = *overrides.stratumFastDecode
 	}
@@ -154,6 +157,39 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if cfg.ZMQHashBlockAddr == "" && cfg.ZMQRawBlockAddr == "" {
 		logger.Warn("zmq is not configured; using RPC/longpoll-only mode", "hint", "set node.zmq_hashblock_addr/node.zmq_rawblock_addr in config.toml to enable ZMQ (legacy node.zmq_block_addr is read-only for migration)")
 	}
+	if cfg.SafeMode {
+		applySafeModeProfile(cfg)
+	}
 
 	return nil
+}
+
+func applySafeModeProfile(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.SafeMode = true
+
+	// Conservative compatibility/safety defaults for troubleshooting and broad miner support.
+	cfg.CKPoolEmulate = true
+	cfg.StratumFastDecodeEnabled = false
+	cfg.StratumFastEncodeEnabled = false
+	cfg.StratumTCPReadBufferBytes = 0
+	cfg.StratumTCPWriteBufferBytes = 0
+
+	cfg.LogDebug = false
+	cfg.LogNetDebug = false
+
+	cfg.ShareRequireAuthorizedConnection = true
+	cfg.ShareCheckParamFormat = true
+	cfg.ShareCheckDuplicate = true
+	cfg.ShareRequireJobID = true
+	cfg.SubmitProcessInline = false
+
+	// Prefer widest miner compatibility over stricter policy checks.
+	cfg.ShareCheckNTimeWindow = false
+	cfg.ShareCheckVersionRolling = false
+	cfg.ShareRequireWorkerMatch = false
+
+	cfg.DisableConnectRateLimits = true
 }

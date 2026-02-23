@@ -94,6 +94,8 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
+# - [stratum].safe_mode: Force conservative compatibility/safety behavior (disables fast-path Stratum tuning and unsafe debug/public-RPC toggles).
+# - Runtime override: --safe-mode=true/false
 #
 # Logging
 # - [logging].level: debug, info, warn, error (requires restart).
