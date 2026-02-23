@@ -402,6 +402,19 @@ func (jm *JobManager) Start(ctx context.Context) {
 	jm.startZMQLoops(ctx)
 }
 
+// ApplyRuntimeConfig updates future job-building settings and payout scripts in
+// memory so admin Apply can take effect without a process restart.
+func (jm *JobManager) ApplyRuntimeConfig(cfg Config, payoutScript, donationScript []byte) {
+	if jm == nil {
+		return
+	}
+	jm.applyMu.Lock()
+	jm.cfg = cfg
+	jm.payoutScript = append(jm.payoutScript[:0], payoutScript...)
+	jm.donationScript = append(jm.donationScript[:0], donationScript...)
+	jm.applyMu.Unlock()
+}
+
 func (jm *JobManager) heartbeatLoop(ctx context.Context) {
 	ticker := time.NewTicker(stratumHeartbeatInterval)
 	defer ticker.Stop()

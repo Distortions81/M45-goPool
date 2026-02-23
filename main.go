@@ -794,7 +794,8 @@ func main() {
 				continue
 			}
 			disableTCPNagle(conn)
-			setTCPBuffers(conn, cfg.StratumTCPReadBufferBytes, cfg.StratumTCPWriteBufferBytes)
+			curCfg := statusServer.Config()
+			setTCPBuffers(conn, curCfg.StratumTCPReadBufferBytes, curCfg.StratumTCPWriteBufferBytes)
 			now := time.Now()
 			if now.Sub(startTime) >= stratumStartupGrace {
 				if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
@@ -835,13 +836,13 @@ func main() {
 					continue
 				}
 			}
-			atCapacity := cfg.MaxConns > 0 && registry.Count() >= cfg.MaxConns
+			atCapacity := curCfg.MaxConns > 0 && registry.Count() >= curCfg.MaxConns
 			if atCapacity {
-				logger.Warn("rejecting miner: at capacity", "component", "stratum", "kind", "capacity", "listener", label, "remote", conn.RemoteAddr().String(), "max_conns", cfg.MaxConns)
+				logger.Warn("rejecting miner: at capacity", "component", "stratum", "kind", "capacity", "listener", label, "remote", conn.RemoteAddr().String(), "max_conns", curCfg.MaxConns)
 				_ = conn.Close()
 				continue
 			}
-			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, cfg, metrics, accounting, workerRegistry, workerLists, notifier, label == "tls")
+			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, curCfg, metrics, accounting, workerRegistry, workerLists, notifier, label == "tls")
 			registry.Add(mc)
 
 			connWg.Add(1)

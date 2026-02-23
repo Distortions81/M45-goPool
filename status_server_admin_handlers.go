@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -243,6 +244,38 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 		return
 	}
 	s.UpdateConfig(cfg)
+	if s.registry != nil {
+		for _, mc := range s.registry.Snapshot() {
+			mc.ApplyRuntimeConfig(cfg)
+		}
+	}
+	if s.jobMgr != nil {
+		payoutScript, err := fetchPayoutScript(nil, cfg.PayoutAddress)
+		if err != nil {
+			data.AdminApplyError = fmt.Sprintf("Payout script error: %v", err)
+			data.Settings = buildAdminSettingsData(cfg)
+			s.renderAdminPage(w, r, data)
+			return
+		}
+		var donationScript []byte
+		if cfg.OperatorDonationPercent > 0 && strings.TrimSpace(cfg.OperatorDonationAddress) != "" {
+			donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
+			if err != nil {
+				data.AdminApplyError = fmt.Sprintf("Donation script error: %v", err)
+				data.Settings = buildAdminSettingsData(cfg)
+				s.renderAdminPage(w, r, data)
+				return
+			}
+		}
+		s.jobMgr.ApplyRuntimeConfig(cfg, payoutScript, donationScript)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.jobMgr.refreshJobCtxForce(ctx); err != nil && logger.Enabled(logLevelDebug) {
+				logger.Debug("admin-triggered job refresh after config apply failed", "component", "admin", "kind", "config_apply", "error", err)
+			}
+		}()
+	}
 	if cfg.LogDebug {
 		setLogLevel(logLevelDebug)
 	} else {
@@ -250,7 +283,7 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 	}
 	debugLogging = debugEnabled()
 	verboseRuntimeLogging = verboseRuntimeEnabled()
-	logger.Info("admin applied live settings (in memory)", "component", "admin", "kind", "config_apply")
+	logger.Info("admin applied live settings (in memory)", "component", "admin", "kind", "config_apply", "active_miners", s.registry.Count())
 	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
 }
 
