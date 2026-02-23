@@ -148,6 +148,19 @@ func (l *simpleLogger) configureWriters(pool, errWriter, debug io.Writer, stdout
 	l.writerMu.Unlock()
 }
 
+func (l *simpleLogger) setDebugWriter(debug io.Writer) {
+	if debug == nil {
+		debug = io.Discard
+	}
+	l.writerMu.Lock()
+	prev := l.debugWriter
+	l.debugWriter = debug
+	l.writerMu.Unlock()
+	if prev != nil && prev != debug {
+		closeWriter(prev)
+	}
+}
+
 func (l *simpleLogger) Stop() {
 	l.stopOnce.Do(func() {
 		l.closing.Store(true)
