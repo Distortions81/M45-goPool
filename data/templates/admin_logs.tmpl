@@ -5,7 +5,7 @@
 	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} — Admin Logs</title>
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - Admin Logs</title>
 	<link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -71,6 +71,7 @@
 						<button id="admin-log-flags-apply" class="btn btn-secondary" type="button">Apply logging flags</button>
 						<button id="admin-log-refresh-now" class="btn btn-secondary" type="button">Refresh now</button>
 					</div>
+				<div id="admin-log-notice" class="text-sm" style="display:none;margin:10px 0 0 0;padding:10px 12px;border-radius:10px;border:1px solid #3a4252;background:#131923;color:#dbe6ff;"></div>
 				<p class="text-sm" id="admin-log-meta" style="margin:10px 0 0 0;color:var(--text-muted);"></p>
 			<pre id="admin-log-output" class="mono" style="margin-top:12px;max-height:65vh;overflow:auto;background:#0b0d12;border:1px solid #2a2f3a;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word;"></pre>
 		</div>
@@ -88,14 +89,57 @@
 			const flagsApplyBtn = document.getElementById('admin-log-flags-apply');
 		const outEl = document.getElementById('admin-log-output');
 		const metaEl = document.getElementById('admin-log-meta');
-		if (!sourceSel || !refreshSel || !outEl || !metaEl) return;
+		const noticeEl = document.getElementById('admin-log-notice');
+		if (!sourceSel || !refreshSel || !outEl || !metaEl || !noticeEl) return;
 
 		let timer = null;
 		let pending = false;
 		let lastText = '';
+		let tailMetaText = '';
+		let noticeText = '';
+		let noticeKind = 'info';
+		let noticeTimer = null;
 
 		function setMeta(text) {
-			metaEl.textContent = text || '';
+			tailMetaText = text || '';
+			metaEl.textContent = tailMetaText;
+		}
+
+		function setNotice(text, ms, kind) {
+			noticeText = text || '';
+			noticeKind = kind || 'info';
+			if (noticeTimer) clearTimeout(noticeTimer);
+			noticeTimer = null;
+			if (noticeText) {
+				let border = '#3a4252';
+				let bg = '#131923';
+				let fg = '#dbe6ff';
+				if (noticeKind === 'error') {
+					border = '#6a2a33';
+					bg = '#241317';
+					fg = '#ffd7dc';
+				} else if (noticeKind === 'success') {
+					border = '#24563a';
+					bg = '#112018';
+					fg = '#d7ffe6';
+				}
+				noticeEl.style.display = 'block';
+				noticeEl.style.borderColor = border;
+				noticeEl.style.background = bg;
+				noticeEl.style.color = fg;
+				noticeEl.textContent = noticeText;
+			} else {
+				noticeEl.textContent = '';
+				noticeEl.style.display = 'none';
+			}
+			if (noticeText && ms > 0) {
+				noticeTimer = setTimeout(() => {
+					noticeText = '';
+					noticeTimer = null;
+					noticeEl.textContent = '';
+					noticeEl.style.display = 'none';
+				}, ms);
+			}
 		}
 
 		async function fetchLogs() {
@@ -105,7 +149,7 @@
 				const source = encodeURIComponent(sourceSel.value || 'pool');
 				const res = await fetch(`/admin/logs/tail?source=${source}`, { credentials: 'same-origin' });
 				if (!res.ok) {
-					setMeta(`Failed to load logs (${res.status}).`);
+					setNotice(`Failed to load logs (${res.status}).`, 8000, 'error');
 					return;
 				}
 				const data = await res.json();
@@ -125,7 +169,7 @@
 				if (data.truncated) parts.push('showing tail only');
 				setMeta(parts.join(' | '));
 			} catch (_) {
-				setMeta('Failed to load logs.');
+				setNotice('Failed to load logs.', 8000, 'error');
 			} finally {
 				pending = false;
 			}
@@ -149,7 +193,7 @@
 					const netDebug = !!netDebugChk.checked;
 					const password = String(flagsPass.value || '');
 					if (!password) {
-						setMeta('Admin password is required to change logging flags.');
+						setNotice('Admin password is required to change logging flags.', 10000, 'error');
 						return;
 					}
 					flagsApplyBtn.disabled = true;
@@ -165,21 +209,31 @@
 						body: body.toString(),
 					});
 						if (!res.ok) {
-							setMeta(`Failed to update logging flags (${res.status}).`);
+							let detail = '';
+							try {
+								detail = String((await res.text()) || '').trim();
+							} catch (_) {}
+							if (detail) {
+								setNotice(`Failed to update logging flags (${res.status}): ${detail}`, 12000, 'error');
+							} else {
+								setNotice(`Failed to update logging flags (${res.status}).`, 12000, 'error');
+							}
 							return;
 						}
 						const data = await res.json().catch(() => ({}));
 						if (data && typeof data.debug === 'boolean') debugChk.checked = data.debug;
 						if (data && typeof data.net_debug === 'boolean' && netDebugChk) netDebugChk.checked = data.net_debug;
 						if (data && data.error) {
-							setMeta(String(data.error));
+							setNotice(String(data.error), 12000, 'error');
 						} else {
-							setMeta(`Logging flags updated: debug=${debugChk.checked ? 'on' : 'off'}, net-debug=${netDebugChk.checked ? 'on' : 'off'}.`);
+							setNotice(`Logging flags updated: debug=${debugChk.checked ? 'on' : 'off'}, net-debug=${netDebugChk.checked ? 'on' : 'off'}.`, 8000, 'success');
 						}
 						flagsPass.value = '';
-						await fetchLogs();
-					} catch (_) {
-						setMeta('Failed to update logging flags.');
+						// Do not treat a follow-up refresh failure as a logging-flags failure.
+						fetchLogs();
+					} catch (err) {
+						const msg = err && err.message ? String(err.message) : 'unknown error';
+						setNotice(`Failed to update logging flags: ${msg}`, 12000, 'error');
 					} finally {
 						flagsApplyBtn.disabled = false;
 					}
