@@ -398,6 +398,103 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 }
 
+func TestSV2ConnReadLoopSkeleton_OpenExtendedThenSubmitExtended(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	walletAddr, walletScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), walletAddr, walletScript)
+	mc.stratumV1.notify.jobDifficulty[job.JobID] = 1e-30
+	atomicStoreFloat64(&mc.difficulty, 1e-30)
+	mc.shareTarget.Store(targetFromDifficulty(1e-30))
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       &in,
+		writer:       &out,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+
+	openFrame, err := encodeStratumV2OpenExtendedMiningChannelFrame(stratumV2WireOpenExtendedMiningChannel{
+		stratumV2WireOpenStandardMiningChannel: stratumV2WireOpenStandardMiningChannel{
+			RequestID:    101,
+			UserIdentity: mc.currentWorker(),
+		},
+		MinExtranonceSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("encode open extended: %v", err)
+	}
+	in.Write(testSV2SetupConnectionFrame(t))
+	in.Write(openFrame)
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop open extended: %v", err)
+	}
+	all := out.Bytes()
+	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(all[3:6]))
+	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen:])
+	if err != nil {
+		t.Fatalf("decode open extended response: %v", err)
+	}
+	openResp, ok := openMsg.(stratumV2WireOpenExtendedMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("open extended response type=%T want success", openMsg)
+	}
+	out.Reset()
+
+	// Extended path requires prefix + submit extranonce to form full extranonce2
+	// expected by the shared submit core (4 bytes in test fixtures).
+	if err := c.writeStratumV2SetExtranoncePrefix(stratumV2WireSetExtranoncePrefix{
+		ChannelID:        openResp.ChannelID,
+		ExtranoncePrefix: []byte{0x00, 0x00},
+	}); err != nil {
+		t.Fatalf("write set extranonce prefix: %v", err)
+	}
+	out.Reset()
+	if err := c.writeStratumV2NewMiningJob(stratumV2WireNewMiningJob{
+		ChannelID: openResp.ChannelID,
+		JobID:     7,
+		Version:   uint32(job.Template.Version),
+	}, job.JobID); err != nil {
+		t.Fatalf("write new mining job: %v", err)
+	}
+	out.Reset()
+	if err := c.writeStratumV2SetNewPrevHash(stratumV2WireSetNewPrevHash{
+		ChannelID: openResp.ChannelID,
+		JobID:     7,
+		MinNTime:  uint32(job.Template.CurTime),
+		NBits:     0x1d00ffff,
+	}); err != nil {
+		t.Fatalf("write set new prevhash: %v", err)
+	}
+	out.Reset()
+
+	submitFrame, err := encodeStratumV2SubmitSharesExtendedFrame(stratumV2WireSubmitSharesExtended{
+		ChannelID:      openResp.ChannelID,
+		SequenceNumber: 56,
+		JobID:          7,
+		Nonce:          1,
+		NTime:          uint32(job.Template.CurTime),
+		Version:        uint32(job.Template.Version),
+		Extranonce:     []byte{0x00, 0x00},
+	})
+	if err != nil {
+		t.Fatalf("encode extended submit: %v", err)
+	}
+	in.Write(submitFrame)
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop extended submit: %v", err)
+	}
+	respMsg, err := decodeStratumV2SubmitWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode extended submit response: %v", err)
+	}
+	if _, ok := respMsg.(stratumV2WireSubmitSharesSuccess); !ok {
+		t.Fatalf("extended submit response type=%T want stratumV2WireSubmitSharesSuccess", respMsg)
+	}
+}
+
 func TestSV2ConnWriteStratumV2MiningUpdates_UpdateMapperAndWriteFrames(t *testing.T) {
 	mc, job := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
@@ -520,5 +617,109 @@ func TestSV2ConnReadLoopSkeleton_MapperErrorWritesSubmitError(t *testing.T) {
 	}
 	if e.ErrorCode == "" {
 		t.Fatalf("expected non-empty error code")
+	}
+	if e.ErrorCode != "invalid-channel-id" {
+		t.Fatalf("error_code=%q want invalid-channel-id", e.ErrorCode)
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_UnknownJobOnNonActiveMapping_ReturnsStaleShare(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	mapper := newStratumV2SubmitMapperState()
+	mapper.registerChannel(10, stratumV2SubmitChannelMapping{
+		WorkerName:          mc.currentWorker(),
+		StandardExtranonce2: []byte{0x00, 0x00, 0x00, 0x00},
+	})
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	inFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
+		ChannelID:      10,
+		SequenceNumber: 88,
+		JobID:          7, // no mapping
+		Nonce:          1,
+		NTime:          1,
+		Version:        1,
+	})
+	if err != nil {
+		t.Fatalf("encode submit frame: %v", err)
+	}
+	in.Write(inFrame)
+
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       &in,
+		writer:       &out,
+		submitMapper: mapper,
+		channelPrevHash: map[uint32]stratumV2WireSetNewPrevHash{
+			10: {ChannelID: 10, JobID: 99},
+		},
+	}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+	msg, err := decodeStratumV2SubmitWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode error response frame: %v", err)
+	}
+	e, ok := msg.(stratumV2WireSubmitSharesError)
+	if !ok {
+		t.Fatalf("response type=%T want stratumV2WireSubmitSharesError", msg)
+	}
+	if e.ErrorCode != "stale-share" {
+		t.Fatalf("error_code=%q want stale-share", e.ErrorCode)
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_MappedOldJobOnNonActivePrevhash_ReturnsStaleShare(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	mapper := newStratumV2SubmitMapperState()
+	mapper.registerChannel(10, stratumV2SubmitChannelMapping{
+		WorkerName:          mc.currentWorker(),
+		StandardExtranonce2: []byte{0x00, 0x00, 0x00, 0x00},
+	})
+	mapper.registerJob(10, 7, job.JobID) // old mapped job still known
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	inFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
+		ChannelID:      10,
+		SequenceNumber: 89,
+		JobID:          7,
+		Nonce:          1,
+		NTime:          uint32(job.Template.CurTime),
+		Version:        uint32(job.Template.Version),
+	})
+	if err != nil {
+		t.Fatalf("encode submit frame: %v", err)
+	}
+	in.Write(inFrame)
+
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       &in,
+		writer:       &out,
+		submitMapper: mapper,
+		channelPrevHash: map[uint32]stratumV2WireSetNewPrevHash{
+			10: {ChannelID: 10, JobID: 99}, // active job is different
+		},
+	}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+	msg, err := decodeStratumV2SubmitWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode error response frame: %v", err)
+	}
+	e, ok := msg.(stratumV2WireSubmitSharesError)
+	if !ok {
+		t.Fatalf("response type=%T want stratumV2WireSubmitSharesError", msg)
+	}
+	if e.ErrorCode != "stale-share" {
+		t.Fatalf("error_code=%q want stale-share", e.ErrorCode)
 	}
 }

@@ -180,8 +180,12 @@ func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStanda
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesStandard(msg)
 	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
+		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
+		return responder.err
+	}
 	if err != nil {
-		responder.writeSubmitError(msg.SequenceNumber, stratumErrCodeInvalidRequest, err.Error(), false)
+		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, c.classifySV2SubmitMappingError(msg.ChannelID, msg.JobID, err))
 		return responder.err
 	}
 	task, ok := c.mc.prepareStratumV2SubmissionTask(norm, responder, time.Now())
@@ -199,8 +203,12 @@ func (c *sv2Conn) handleSubmitSharesExtended(msg stratumV2WireSubmitSharesExtend
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesExtended(msg)
 	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
+		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
+		return responder.err
+	}
 	if err != nil {
-		responder.writeSubmitError(msg.SequenceNumber, stratumErrCodeInvalidRequest, err.Error(), false)
+		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, c.classifySV2SubmitMappingError(msg.ChannelID, msg.JobID, err))
 		return responder.err
 	}
 	task, ok := c.mc.prepareStratumV2SubmissionTask(norm, responder, time.Now())
@@ -377,6 +385,37 @@ func (c *sv2Conn) writeStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) 
 	return nil
 }
 
+func (c *sv2Conn) classifySV2SubmitMappingError(channelID uint32, wireJobID uint32, err error) string {
+	if err == nil {
+		return "invalid-job-id"
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "unknown channel id") {
+		return "invalid-channel-id"
+	}
+	if strings.Contains(msg, "unknown job mapping") {
+		if active, ok := c.channelPrevHash[channelID]; ok && active.JobID != 0 && active.JobID != wireJobID {
+			return "stale-share"
+		}
+		return "invalid-job-id"
+	}
+	if strings.Contains(msg, "extranonce") {
+		return "invalid-job-id"
+	}
+	return "invalid-job-id"
+}
+
+func (c *sv2Conn) isActiveSV2SubmitJob(channelID uint32, wireJobID uint32) bool {
+	if c == nil || c.channelPrevHash == nil {
+		return true
+	}
+	active, ok := c.channelPrevHash[channelID]
+	if !ok || active.JobID == 0 {
+		return true
+	}
+	return active.JobID == wireJobID
+}
+
 func writeStratumV2SetTargetToWriter(w io.Writer, msg stratumV2WireSetTarget) error {
 	frame, err := encodeStratumV2SetTargetFrame(msg)
 	if err != nil {
@@ -428,6 +467,26 @@ func (r *stratumV2SubmitWireResponder) writeSubmitError(reqID any, errCode int, 
 		ChannelID:      r.channelID,
 		SequenceNumber: seq,
 		ErrorCode:      mapStratumErrorToSv2SubmitErrorCode(errCode, msg, banned),
+	})
+	if err != nil {
+		r.err = err
+		return
+	}
+	_, r.err = r.w.Write(frame)
+}
+
+func (r *stratumV2SubmitWireResponder) writeSubmitSV2ErrorCode(reqID any, code string) {
+	if r == nil || r.err != nil {
+		return
+	}
+	seq := r.sequenceNumber
+	if v, ok := reqID.(uint32); ok && v != 0 {
+		seq = v
+	}
+	frame, err := encodeStratumV2SubmitSharesErrorFrame(stratumV2WireSubmitSharesError{
+		ChannelID:      r.channelID,
+		SequenceNumber: seq,
+		ErrorCode:      code,
 	})
 	if err != nil {
 		r.err = err
