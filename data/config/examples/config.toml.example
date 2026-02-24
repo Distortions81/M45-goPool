@@ -59,6 +59,4 @@
   stratum_password_enabled = false
   stratum_password_public = false
   stratum_tls_listen = ":4333"
-  # Optional separate Stratum V2 listener (SV2 uses a separate port; no autodetect on the v1 port yet)
-  # Example: ":3334"
   stratum_v2_listen = ""
