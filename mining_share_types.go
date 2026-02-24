@@ -1,14 +1,7 @@
 package main
 
-type submitParams struct {
-	worker           string
-	jobID            string
-	extranonce2      string
-	ntime            string
-	nonce            string
-	submittedVersion uint32
-}
-
+// shareContext is protocol-neutral share evaluation output used by submit
+// handlers after request parsing/validation.
 type shareContext struct {
 	header     []byte
 	cbTx       []byte
