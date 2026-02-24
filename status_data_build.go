@@ -520,6 +520,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	return StatusData{
 		ListenAddr:                     s.Config().ListenAddr,
 		StratumTLSListen:               s.Config().StratumTLSListen,
+		StratumV2Listen:                s.Config().StratumV2Listen,
 		StratumPasswordEnabled:         s.Config().StratumPasswordEnabled,
 		StratumPasswordPublic:          s.Config().StratumPasswordPublic,
 		StratumPassword:                stratumPassword,

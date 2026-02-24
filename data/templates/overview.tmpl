@@ -70,6 +70,22 @@
 								</div>
 							</details>
 							{{end}}
+							{{if .StratumV2Listen}}
+							<details class="connect-advanced">
+								<summary>Optional: Stratum V2 connection</summary>
+								<div class="connect-advanced-body">
+									<p class="text-sm connect-hint">Use this only if your miner supports Stratum V2. Separate endpoint/port from Stratum V1.</p>
+									<div class="connect-copy-row">
+										<button type="button" class="copy-pill stratum-copy" data-copy-scheme="stratum+tcp://" data-copy-port="{{addrPort .StratumV2Listen}}" aria-label="Copy Stratum V2 pool URL">
+											<span class="copy-pill-action">Click to copy</span>
+											<span class="copy-pill-value">stratum+tcp://<span data-stratum-host></span>:{{addrPort .StratumV2Listen}}</span>
+										</button>
+										<span class="copy-feedback" aria-live="polite"></span>
+									</div>
+									<p class="text-sm connect-hint">Enable Stratum V2 mode in your miner and use your normal username/password format below.</p>
+								</div>
+							</details>
+							{{end}}
 						</div>
 					</div>
 

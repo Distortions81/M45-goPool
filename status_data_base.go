@@ -101,6 +101,7 @@ func (s *StatusServer) baseTemplateData(start time.Time) StatusData {
 	return StatusData{
 		ListenAddr:                      s.Config().ListenAddr,
 		StratumTLSListen:                s.Config().StratumTLSListen,
+		StratumV2Listen:                 s.Config().StratumV2Listen,
 		StratumPasswordEnabled:          s.Config().StratumPasswordEnabled,
 		StratumPasswordPublic:           s.Config().StratumPasswordPublic,
 		StratumPassword:                 stratumPassword,
