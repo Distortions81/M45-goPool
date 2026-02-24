@@ -226,6 +226,13 @@ func applyBaseConfig(cfg *Config, fc baseFileConfigRead) (configChanged bool, mi
 		}
 		cfg.StratumTLSListen = addr
 	}
+	if fc.Stratum.StratumV2Listen != "" {
+		addr := strings.TrimSpace(fc.Stratum.StratumV2Listen)
+		if addr != "" && !strings.Contains(addr, ":") {
+			addr = ":" + addr
+		}
+		cfg.StratumV2Listen = addr
+	}
 	cfg.StratumPasswordEnabled = fc.Stratum.StratumPasswordEnabled
 	if fc.Stratum.StratumPassword != "" {
 		cfg.StratumPassword = strings.TrimSpace(fc.Stratum.StratumPassword)

@@ -36,6 +36,7 @@ type brandingConfigRead struct {
 
 type stratumConfig struct {
 	StratumTLSListen       string `toml:"stratum_tls_listen"`
+	StratumV2Listen        string `toml:"stratum_v2_listen"`
 	StratumPasswordEnabled bool   `toml:"stratum_password_enabled"`
 	StratumPassword        string `toml:"stratum_password"`
 	StratumPasswordPublic  bool   `toml:"stratum_password_public"`

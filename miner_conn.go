@@ -49,6 +49,7 @@ func (mc *MinerConn) cleanup() {
 		if mc.jobMgr != nil && mc.jobCh != nil {
 			mc.jobMgr.Unsubscribe(mc.jobCh)
 		}
+		mc.detachSV2Conn()
 		if mc.conn != nil {
 			_ = mc.conn.Close()
 		}
@@ -61,6 +62,31 @@ func (mc *MinerConn) Close(reason string) {
 	}
 	logger.Info("closing miner", "component", "miner", "kind", "lifecycle", "remote", mc.id, "reason", reason)
 	mc.cleanup()
+}
+
+func (mc *MinerConn) attachSV2Conn(c *sv2Conn) {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	mc.sv2 = c
+	mc.stateMu.Unlock()
+	if c != nil && c.mc != mc {
+		c.mc = mc
+	}
+}
+
+func (mc *MinerConn) detachSV2Conn() {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	c := mc.sv2
+	mc.sv2 = nil
+	mc.stateMu.Unlock()
+	if c != nil && c.mc == mc {
+		c.mc = nil
+	}
 }
 
 func (mc *MinerConn) assignConnectionSeq() {
@@ -512,6 +538,23 @@ func (mc *MinerConn) handle() {
 	}
 }
 
+// serveSV2 runs the incremental SV2 connection skeleton using the existing
+// MinerConn lifecycle and cleanup machinery. It is a minimal entrypoint for
+// future listener wiring.
+func (mc *MinerConn) serveSV2() {
+	defer mc.cleanup()
+	if mc == nil {
+		return
+	}
+	if mc.reader == nil || mc.conn == nil {
+		return
+	}
+	c := newSV2ConnForMiner(mc, mc.reader, mc.conn)
+	if err := c.handleReadLoop(); err != nil && err != io.EOF && !errors.Is(err, net.ErrClosed) {
+		logger.Warn("sv2 read loop error", "component", "miner", "kind", "protocol", "remote", mc.id, "error", err)
+	}
+}
+
 func (mc *MinerConn) handleGetTransactions(req *StratumRequest) {
 	if req == nil {
 		return
@@ -617,7 +660,7 @@ func (mc *MinerConn) maybeSendInitialWorkDue(now time.Time) {
 }
 
 func (mc *MinerConn) sendInitialWork() {
-	if !mc.stratumV1.subscribed || !mc.stratumV1.authorized || !mc.listenerOn {
+	if mc.sv2 == nil && (!mc.stratumV1.subscribed || !mc.stratumV1.authorized || !mc.listenerOn) {
 		return
 	}
 
@@ -648,7 +691,7 @@ func (mc *MinerConn) sendInitialWork() {
 
 	// First job always has clean_jobs=true so the miner starts fresh.
 	if job := mc.jobMgr.CurrentJob(); job != nil {
-		mc.sendNotifyFor(job, true)
+		mc.sendWorkForProtocol(job, true)
 	}
 }
 
@@ -684,6 +727,19 @@ func (mc *MinerConn) listenJobs() {
 	}()
 
 	for job := range mc.jobCh {
-		mc.sendNotifyFor(job, false)
+		mc.sendWorkForProtocol(job, false)
 	}
+}
+
+func (mc *MinerConn) sendWorkForProtocol(job *Job, forceClean bool) {
+	if mc == nil || job == nil {
+		return
+	}
+	if mc.sv2 != nil {
+		if err := mc.sv2.writeStratumV2JobBundleForAllChannels(job); err != nil {
+			logger.Error("sv2 job update write error", "component", "miner", "kind", "notify", "remote", mc.id, "error", err)
+		}
+		return
+	}
+	mc.sendNotifyFor(job, forceClean)
 }

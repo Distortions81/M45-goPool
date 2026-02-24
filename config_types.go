@@ -51,6 +51,8 @@ type Config struct {
 
 	// Stratum TLS (empty to disable).
 	StratumTLSListen string
+	// Optional Stratum V2 plaintext listener (empty to disable).
+	StratumV2Listen string
 	// Stratum auth (optional; when enabled, require miners to send the password in mining.authorize).
 	StratumPasswordEnabled bool
 	StratumPassword        string
@@ -205,6 +207,7 @@ type EffectiveConfig struct {
 	GitHubURL                         string   `json:"github_url,omitempty"`
 	ServerLocation                    string   `json:"server_location,omitempty"`
 	StratumTLSListen                  string   `json:"stratum_tls_listen,omitempty"`
+	StratumV2Listen                   string   `json:"stratum_v2_listen,omitempty"`
 	StratumFastDecodeEnabled          bool     `json:"stratum_fast_decode_enabled"`
 	StratumFastEncodeEnabled          bool     `json:"stratum_fast_encode_enabled"`
 	SafeMode                          bool     `json:"safe_mode,omitempty"`

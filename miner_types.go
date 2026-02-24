@@ -118,6 +118,7 @@ type MinerConn struct {
 	rpc                  rpcCaller
 	cfg                  Config
 	stratumV1            minerConnStratumV1State
+	sv2                  *sv2Conn
 	jobCh                chan *Job
 	difficulty           atomic.Uint64 // float64 stored as bits
 	previousDifficulty   atomic.Uint64 // float64 stored as bits

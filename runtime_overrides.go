@@ -12,6 +12,7 @@ type runtimeOverrides struct {
 	statusAddr          string
 	statusTLSAddr       string
 	stratumTLSListen    string
+	stratumV2Listen     string
 	safeMode            *bool
 	ckpoolEmulate       *bool
 	stratumFastDecode   *bool
@@ -113,6 +114,14 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 				cfg.StratumTLSListen = net.JoinHostPort(overrides.bind, port)
 			}
 		}
+		if cfg.StratumV2Listen != "" {
+			_, port, err = net.SplitHostPort(cfg.StratumV2Listen)
+			if err != nil {
+				cfg.StratumV2Listen = net.JoinHostPort(overrides.bind, strings.TrimPrefix(cfg.StratumV2Listen, ":"))
+			} else {
+				cfg.StratumV2Listen = net.JoinHostPort(overrides.bind, port)
+			}
+		}
 	}
 
 	// Explicit listener overrides win over global bind rewrites.
@@ -127,6 +136,9 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	}
 	if strings.TrimSpace(overrides.stratumTLSListen) != "" {
 		cfg.StratumTLSListen = strings.TrimSpace(overrides.stratumTLSListen)
+	}
+	if strings.TrimSpace(overrides.stratumV2Listen) != "" {
+		cfg.StratumV2Listen = strings.TrimSpace(overrides.stratumV2Listen)
 	}
 	if overrides.ckpoolEmulate != nil {
 		cfg.CKPoolEmulate = *overrides.ckpoolEmulate

@@ -44,6 +44,7 @@ func main() {
 	statusAddrFlag := flag.String("status", "", "override status HTTP listen address (e.g. :80)")
 	statusTLSAddrFlag := flag.String("status-tls", "", "override status HTTPS listen address (e.g. :443)")
 	stratumTLSFlag := flag.String("stratum-tls", "", "override stratum TLS listen address (e.g. :24333)")
+	stratumV2Flag := flag.String("stratum-v2", "", "override stratum v2 listen address (e.g. :3444)")
 	var safeModeFlag *bool
 	flag.Func("safe-mode", "force conservative compatibility/safety profile (true/false)", func(v string) error {
 		b, err := strconv.ParseBool(strings.TrimSpace(v))
@@ -134,6 +135,7 @@ func main() {
 		statusAddr:          *statusAddrFlag,
 		statusTLSAddr:       *statusTLSAddrFlag,
 		stratumTLSListen:    *stratumTLSFlag,
+		stratumV2Listen:     *stratumV2Flag,
 		safeMode:            safeModeFlag,
 		ckpoolEmulate:       ckpoolEmulateFlag,
 		stratumFastDecode:   fastDecodeFlag,
@@ -323,9 +325,11 @@ func main() {
 		"listen_addr", cfg.ListenAddr,
 		"safe_mode", cfg.SafeMode,
 		"stratum_tls_listen", cfg.StratumTLSListen,
+		"stratum_v2_listen", cfg.StratumV2Listen,
 		"status_addr", cfg.StatusAddr,
 		"status_tls_addr", cfg.StatusTLSAddr,
 		"stratum_tls_enabled", strings.TrimSpace(cfg.StratumTLSListen) != "",
+		"stratum_v2_enabled", strings.TrimSpace(cfg.StratumV2Listen) != "",
 		"status_public_url_set", strings.TrimSpace(cfg.StatusPublicURL) != "",
 		"vardiff_enabled", cfg.VarDiffEnabled,
 		"share_checks", cfg.ShareCheckParamFormat,
@@ -778,6 +782,7 @@ func main() {
 	// Optional Stratum TLS listener for miners that support TLS. When
 	// configured, it shares the same auto-reloading certificate as the HTTPS status UI.
 	var tlsLn net.Listener
+	var sv2Ln net.Listener
 	if strings.TrimSpace(cfg.StratumTLSListen) != "" {
 		if certReloader == nil {
 			// Certificate reloader wasn't initialized yet (status server didn't need TLS)
@@ -801,6 +806,13 @@ func main() {
 			fatal("stratum tls listen error", err, "addr", cfg.StratumTLSListen)
 		}
 		logger.Info("stratum TLS listening", "component", "stratum", "kind", "listen", "addr", cfg.StratumTLSListen)
+	}
+	if strings.TrimSpace(cfg.StratumV2Listen) != "" {
+		sv2Ln, err = net.Listen("tcp", cfg.StratumV2Listen)
+		if err != nil {
+			fatal("stratum v2 listen error", err, "addr", cfg.StratumV2Listen)
+		}
+		logger.Info("stratum v2 listening", "component", "stratum", "kind", "listen", "addr", cfg.StratumV2Listen)
 	}
 
 	var acceptLimiter *acceptRateLimiter
@@ -844,9 +856,12 @@ func main() {
 		if tlsLn != nil {
 			tlsLn.Close()
 		}
+		if sv2Ln != nil {
+			sv2Ln.Close()
+		}
 	}()
 
-	serveStratum := func(label string, l net.Listener) {
+	serveStratum := func(label string, l net.Listener, isTLS bool, isSV2 bool) {
 		lastRefuseLog := time.Time{}
 		unhealthySince := time.Time{}
 		for {
@@ -910,7 +925,7 @@ func main() {
 				_ = conn.Close()
 				continue
 			}
-			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, curCfg, metrics, accounting, workerRegistry, workerLists, notifier, label == "tls")
+			mc := NewMinerConn(ctx, conn, jobMgr, rpcClient, curCfg, metrics, accounting, workerRegistry, workerLists, notifier, isTLS)
 			registry.Add(mc)
 
 			connWg.Add(1)
@@ -919,6 +934,10 @@ func main() {
 				// Always remove connection from the map when this goroutine ends.
 				defer registry.Remove(mc)
 
+				if isSV2 {
+					mc.serveSV2()
+					return
+				}
 				mc.handle()
 			}(mc)
 		}
@@ -927,9 +946,12 @@ func main() {
 	// lifetime is tied to the primary TCP listener. Optional TLS
 	// listener runs in a background goroutine.
 	if tlsLn != nil {
-		go serveStratum("tls", tlsLn)
+		go serveStratum("tls", tlsLn, true, false)
 	}
-	serveStratum("tcp", ln)
+	if sv2Ln != nil {
+		go serveStratum("sv2", sv2Ln, false, true)
+	}
+	serveStratum("tcp", ln, false, false)
 
 	logger.Info("shutdown requested; draining active miners", "component", "stratum", "kind", "shutdown")
 	shutdownStart := time.Now()

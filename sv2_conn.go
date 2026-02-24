@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -18,9 +19,23 @@ type sv2Conn struct {
 	channelTargets  map[uint32][32]byte
 	channelPrevHash map[uint32]stratumV2WireSetNewPrevHash
 	nextChannelID   uint32
+	nextWireJobID   uint32
 	setupDone       bool
 	setupVersion    uint16
 	setupFlags      uint32
+}
+
+func newSV2ConnForMiner(mc *MinerConn, reader io.Reader, writer io.Writer) *sv2Conn {
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       reader,
+		writer:       writer,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+	if mc != nil {
+		mc.attachSV2Conn(c)
+	}
+	return c
 }
 
 func (c *sv2Conn) handleReadLoop() error {
@@ -252,6 +267,15 @@ func (c *sv2Conn) allocateChannelID() uint32 {
 	return id
 }
 
+func (c *sv2Conn) allocateWireJobID() uint32 {
+	if c.nextWireJobID == 0 {
+		c.nextWireJobID = 1
+	}
+	id := c.nextWireJobID
+	c.nextWireJobID++
+	return id
+}
+
 func (c *sv2Conn) currentSV2TargetBytes() [32]byte {
 	if c == nil || c.mc == nil {
 		return [32]byte{}
@@ -382,6 +406,67 @@ func (c *sv2Conn) writeStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) 
 		return err
 	}
 	c.applyStratumV2SetNewPrevHash(msg)
+	return nil
+}
+
+// writeStratumV2JobBundleForLocalJob emits the core mining updates needed for a
+// channel to start hashing on a pool Job and keeps SV2 connection state/mappers
+// in sync. Merkle root derivation for standard-channel NewMiningJob is left as
+// a follow-up; this emits the consensus header fields and local/wire job mapping.
+func (c *sv2Conn) writeStratumV2JobBundleForLocalJob(channelID uint32, wireJobID uint32, job *Job) error {
+	if c == nil || job == nil {
+		return fmt.Errorf("missing sv2 conn or job")
+	}
+	nbits, err := parseUint32BEHex(job.Template.Bits)
+	if err != nil {
+		return fmt.Errorf("parse job bits: %w", err)
+	}
+	prevHash := job.prevHashBytes
+	if prevHash == ([32]byte{}) && job.Template.Previous != "" {
+		if err := decodeHexToFixedBytes(prevHash[:], job.Template.Previous); err != nil {
+			return fmt.Errorf("decode prevhash: %w", err)
+		}
+	}
+	if err := c.writeStratumV2SetTarget(stratumV2WireSetTarget{
+		ChannelID:     channelID,
+		MaximumTarget: c.currentSV2TargetBytes(),
+	}); err != nil {
+		return err
+	}
+	if err := c.writeStratumV2NewMiningJob(stratumV2WireNewMiningJob{
+		ChannelID: channelID,
+		JobID:     wireJobID,
+		Version:   uint32(job.Template.Version),
+		// TODO: derive per-channel merkle root for standards/jobs from job data.
+	}, job.JobID); err != nil {
+		return err
+	}
+	return c.writeStratumV2SetNewPrevHash(stratumV2WireSetNewPrevHash{
+		ChannelID: channelID,
+		JobID:     wireJobID,
+		PrevHash:  prevHash,
+		MinNTime:  uint32(job.Template.CurTime),
+		NBits:     nbits,
+	})
+}
+
+func (c *sv2Conn) writeStratumV2JobBundleForAllChannels(job *Job) error {
+	if c == nil || job == nil {
+		return fmt.Errorf("missing sv2 conn or job")
+	}
+	if c.submitMapper == nil || len(c.submitMapper.channels) == 0 {
+		return nil
+	}
+	channelIDs := make([]uint32, 0, len(c.submitMapper.channels))
+	for id := range c.submitMapper.channels {
+		channelIDs = append(channelIDs, id)
+	}
+	sort.Slice(channelIDs, func(i, j int) bool { return channelIDs[i] < channelIDs[j] })
+	for _, channelID := range channelIDs {
+		if err := c.writeStratumV2JobBundleForLocalJob(channelID, c.allocateWireJobID(), job); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

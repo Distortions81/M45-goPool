@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"net"
 	"testing"
 )
 
@@ -177,6 +179,192 @@ func TestSV2ConnWriteStratumV2SetNewPrevHash_WritesFrameAndTracksState(t *testin
 	tracked, ok := c.channelPrevHash[msg.ChannelID]
 	if !ok || tracked != msg {
 		t.Fatalf("channel prevhash tracking mismatch: ok=%v tracked=%#v want=%#v", ok, tracked, msg)
+	}
+}
+
+func TestSV2ConnWriteStratumV2JobBundleForLocalJob_WritesFramesAndSyncsState(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	mc.shareTarget.Store(targetFromDifficulty(3))
+
+	var out bytes.Buffer
+	c := &sv2Conn{
+		mc:           mc,
+		writer:       &out,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+	c.submitMapper.registerChannel(21, stratumV2SubmitChannelMapping{
+		WorkerName:          mc.currentWorker(),
+		StandardExtranonce2: []byte{0, 0, 0, 0},
+	})
+
+	if err := c.writeStratumV2JobBundleForLocalJob(21, 700, job); err != nil {
+		t.Fatalf("writeStratumV2JobBundleForLocalJob: %v", err)
+	}
+
+	b := out.Bytes()
+	// Frame 1: SetTarget
+	n1 := stratumV2FrameHeaderLen + int(readUint24LE(b[3:6]))
+	msg1, err := decodeStratumV2MiningWireFrame(b[:n1])
+	if err != nil {
+		t.Fatalf("decode frame1: %v", err)
+	}
+	if _, ok := msg1.(stratumV2WireSetTarget); !ok {
+		t.Fatalf("frame1 type=%T want stratumV2WireSetTarget", msg1)
+	}
+	// Frame 2: NewMiningJob
+	n2 := stratumV2FrameHeaderLen + int(readUint24LE(b[n1+3:n1+6]))
+	msg2, err := decodeStratumV2MiningWireFrame(b[n1 : n1+n2])
+	if err != nil {
+		t.Fatalf("decode frame2: %v", err)
+	}
+	if got, ok := msg2.(stratumV2WireNewMiningJob); !ok || got.ChannelID != 21 || got.JobID != 700 {
+		t.Fatalf("frame2 type/value unexpected: %#v", msg2)
+	}
+	// Frame 3: SetNewPrevHash
+	msg3, err := decodeStratumV2MiningWireFrame(b[n1+n2:])
+	if err != nil {
+		t.Fatalf("decode frame3: %v", err)
+	}
+	if got, ok := msg3.(stratumV2WireSetNewPrevHash); !ok || got.ChannelID != 21 || got.JobID != 700 {
+		t.Fatalf("frame3 type/value unexpected: %#v", msg3)
+	}
+
+	if got, ok := c.submitMapper.jobs[stratumV2ChannelJobKey{ChannelID: 21, WireJobID: 700}]; !ok || got != job.JobID {
+		t.Fatalf("job mapping not synced: got=%q ok=%v want=%q", got, ok, job.JobID)
+	}
+	if _, ok := c.channelTargets[21]; !ok {
+		t.Fatalf("expected channel target state for channel 21")
+	}
+	if ph, ok := c.channelPrevHash[21]; !ok || ph.JobID != 700 {
+		t.Fatalf("expected channel prevhash state for channel 21 job 700, got=%#v ok=%v", ph, ok)
+	}
+}
+
+func TestSV2ConnWriteStratumV2JobBundleForAllChannels_WritesPerChannelBundles(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := &sv2Conn{
+		mc:           mc,
+		writer:       &out,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+	c.submitMapper.registerChannel(2, stratumV2SubmitChannelMapping{WorkerName: mc.currentWorker(), StandardExtranonce2: []byte{0, 0, 0, 0}})
+	c.submitMapper.registerChannel(5, stratumV2SubmitChannelMapping{WorkerName: mc.currentWorker(), StandardExtranonce2: []byte{0, 0, 0, 0}})
+
+	if err := c.writeStratumV2JobBundleForAllChannels(job); err != nil {
+		t.Fatalf("writeStratumV2JobBundleForAllChannels: %v", err)
+	}
+	if len(c.submitMapper.jobs) != 2 {
+		t.Fatalf("expected 2 wire job mappings, got %d", len(c.submitMapper.jobs))
+	}
+	if len(c.channelTargets) != 2 {
+		t.Fatalf("expected 2 channel targets, got %d", len(c.channelTargets))
+	}
+	if len(c.channelPrevHash) != 2 {
+		t.Fatalf("expected 2 channel prevhash states, got %d", len(c.channelPrevHash))
+	}
+	if out.Len() == 0 {
+		t.Fatalf("expected frames to be written")
+	}
+}
+
+func TestMinerConnSendWorkForProtocol_UsesSV2WhenAttached(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := newSV2ConnForMiner(mc, nil, &out)
+	c.submitMapper.registerChannel(9, stratumV2SubmitChannelMapping{WorkerName: mc.currentWorker(), StandardExtranonce2: []byte{0, 0, 0, 0}})
+
+	mc.sendWorkForProtocol(job, true)
+
+	if len(c.submitMapper.jobs) != 1 {
+		t.Fatalf("expected sv2 job mapping update, got %d", len(c.submitMapper.jobs))
+	}
+	if out.Len() == 0 {
+		t.Fatalf("expected sv2 frames written")
+	}
+}
+
+func TestMinerConnAttachDetachSV2Conn_Lifecycle(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+
+	c := newSV2ConnForMiner(mc, nil, &out)
+	if mc.sv2 != c {
+		t.Fatalf("expected mc.sv2 to be attached")
+	}
+	if c.mc != mc {
+		t.Fatalf("expected sv2Conn.mc backref to be set")
+	}
+
+	mc.detachSV2Conn()
+	if mc.sv2 != nil {
+		t.Fatalf("expected mc.sv2 to be nil after detach")
+	}
+	if c.mc != nil {
+		t.Fatalf("expected sv2Conn.mc to be nil after detach")
+	}
+}
+
+func TestMinerConnCleanup_DetachesSV2Conn(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := newSV2ConnForMiner(mc, nil, &out)
+
+	mc.cleanup()
+
+	if mc.sv2 != nil {
+		t.Fatalf("expected cleanup to clear mc.sv2")
+	}
+	if c.mc != nil {
+		t.Fatalf("expected cleanup to clear sv2Conn backref")
+	}
+}
+
+func TestNewSV2ConnForMiner_AttachesAndInitializesMapper(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := newSV2ConnForMiner(mc, nil, &out)
+	if c == nil {
+		t.Fatalf("expected sv2 conn")
+	}
+	if c.submitMapper == nil {
+		t.Fatalf("expected submitMapper to be initialized")
+	}
+	if mc.sv2 != c {
+		t.Fatalf("expected miner conn attachment")
+	}
+}
+
+func TestMinerConnServeSV2_RunsSetupAndCleansUp(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	client, server := net.Pipe()
+	t.Cleanup(func() { _ = client.Close() })
+	mc.conn = server
+	mc.reader = bufio.NewReader(server)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mc.serveSV2()
+	}()
+
+	setupFrame := testSV2SetupConnectionFrame(t)
+	if _, err := client.Write(setupFrame); err != nil {
+		t.Fatalf("client write setup: %v", err)
+	}
+	_ = client.Close() // terminate read loop
+	<-done
+
+	if mc.sv2 != nil {
+		t.Fatalf("expected serveSV2 cleanup to detach sv2 conn")
 	}
 }
 
