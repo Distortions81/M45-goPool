@@ -114,6 +114,28 @@ func TestStratumV2OpenStandardMiningChannelSuccessWireCodecRoundTrip(t *testing.
 	}
 }
 
+func TestStratumV2SetTargetWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetTarget{
+		ChannelID:     33,
+		MaximumTarget: [32]byte{0xde, 0xad, 0xbe, 0xef},
+	}
+	enc, err := encodeStratumV2SetTargetFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetTargetFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetTarget)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
 func TestStratumV2SubmitSharesExtendedWireCodecRoundTrip(t *testing.T) {
 	in := stratumV2WireSubmitSharesExtended{
 		ChannelID:      100,

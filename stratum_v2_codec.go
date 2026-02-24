@@ -20,6 +20,7 @@ const (
 	stratumV2MsgTypeOpenStandardMiningChannelSuccess = uint8(0x11)
 	stratumV2MsgTypeOpenExtendedMiningChannel        = uint8(0x13)
 	stratumV2MsgTypeOpenExtendedMiningChannelSuccess = uint8(0x14)
+	stratumV2MsgTypeSetTarget                        = uint8(0x21)
 )
 
 type stratumV2Frame struct {
@@ -298,6 +299,27 @@ func decodeStratumV2OpenExtendedMiningChannelSuccessPayload(payload []byte) (str
 	return out, nil
 }
 
+func encodeStratumV2SetTargetFrame(msg stratumV2WireSetTarget) ([]byte, error) {
+	payload := make([]byte, 36)
+	binary.LittleEndian.PutUint32(payload[0:4], msg.ChannelID)
+	copy(payload[4:36], msg.MaximumTarget[:])
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType | stratumV2ChannelMsgBit,
+		MsgType:       stratumV2MsgTypeSetTarget,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetTargetPayload(payload []byte) (stratumV2WireSetTarget, error) {
+	if len(payload) != 36 {
+		return stratumV2WireSetTarget{}, fmt.Errorf("settarget payload len=%d want 36", len(payload))
+	}
+	var out stratumV2WireSetTarget
+	out.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	copy(out.MaximumTarget[:], payload[4:36])
+	return out, nil
+}
+
 func encodeStratumV2SubmitSharesStandardFrame(msg stratumV2WireSubmitSharesStandard) ([]byte, error) {
 	payload := make([]byte, 24)
 	binary.LittleEndian.PutUint32(payload[0:4], msg.ChannelID)
@@ -482,6 +504,11 @@ func decodeStratumV2MiningWireFrame(b []byte) (any, error) {
 			return nil, fmt.Errorf("openextendedminingchannel.success must not set channel_msg bit")
 		}
 		return decodeStratumV2OpenExtendedMiningChannelSuccessPayload(frame.Payload)
+	case stratumV2MsgTypeSetTarget:
+		if !frame.isChannelMessage() {
+			return nil, fmt.Errorf("settarget must set channel_msg bit")
+		}
+		return decodeStratumV2SetTargetPayload(frame.Payload)
 	case stratumV2MsgTypeSubmitSharesStandard, stratumV2MsgTypeSubmitSharesExtended, stratumV2MsgTypeSubmitSharesSuccess, stratumV2MsgTypeSubmitSharesError:
 		return decodeStratumV2SubmitWireFrame(b)
 	default:

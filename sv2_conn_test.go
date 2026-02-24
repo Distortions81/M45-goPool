@@ -5,6 +5,38 @@ import (
 	"testing"
 )
 
+func TestSV2SubmitWireResponder_SendSetTarget_WritesFrame(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	mc.shareTarget.Store(targetFromDifficulty(2))
+
+	var out bytes.Buffer
+	r := &stratumV2SubmitWireResponder{
+		mc:        mc,
+		w:         &out,
+		channelID: 44,
+	}
+	r.sendSetTarget(nil)
+	if r.err != nil {
+		t.Fatalf("sendSetTarget err: %v", r.err)
+	}
+	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode settarget frame: %v", err)
+	}
+	got, ok := msg.(stratumV2WireSetTarget)
+	if !ok {
+		t.Fatalf("decoded type=%T want stratumV2WireSetTarget", msg)
+	}
+	if got.ChannelID != 44 {
+		t.Fatalf("settarget.ChannelID=%d want 44", got.ChannelID)
+	}
+	wantTarget := uint256BEFromBigInt(mc.shareTargetOrDefault())
+	if got.MaximumTarget != wantTarget {
+		t.Fatalf("settarget target mismatch")
+	}
+}
+
 func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testing.T) {
 	mc, _ := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}

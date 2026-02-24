@@ -123,7 +123,7 @@ func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStanda
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesStandard(msg)
-	responder := &stratumV2SubmitWireResponder{w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if err != nil {
 		responder.writeSubmitError(msg.SequenceNumber, stratumErrCodeInvalidRequest, err.Error(), false)
 		return responder.err
@@ -142,7 +142,7 @@ func (c *sv2Conn) handleSubmitSharesExtended(msg stratumV2WireSubmitSharesExtend
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesExtended(msg)
-	responder := &stratumV2SubmitWireResponder{w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if err != nil {
 		responder.writeSubmitError(msg.SequenceNumber, stratumErrCodeInvalidRequest, err.Error(), false)
 		return responder.err
@@ -221,6 +221,7 @@ func (c *sv2Conn) noteSentStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, l
 }
 
 type stratumV2SubmitWireResponder struct {
+	mc             *MinerConn
 	w              io.Writer
 	channelID      uint32
 	sequenceNumber uint32
@@ -270,8 +271,22 @@ func (r *stratumV2SubmitWireResponder) writeSubmitError(reqID any, errCode int, 
 }
 
 func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
-	// Not implemented in the skeleton yet. The submit core can request a target
-	// update, but full SV2 SetTarget encoding/channel state is wired later.
+	if r == nil || r.err != nil {
+		return
+	}
+	var target [32]byte
+	if r.mc != nil {
+		target = uint256BEFromBigInt(r.mc.shareTargetOrDefault())
+	}
+	frame, err := encodeStratumV2SetTargetFrame(stratumV2WireSetTarget{
+		ChannelID:     r.channelID,
+		MaximumTarget: target,
+	})
+	if err != nil {
+		r.err = err
+		return
+	}
+	_, r.err = r.w.Write(frame)
 }
 
 func mapStratumErrorToSv2SubmitErrorCode(errCode int, msg string, banned bool) string {

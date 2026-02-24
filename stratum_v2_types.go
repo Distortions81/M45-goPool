@@ -110,3 +110,8 @@ type stratumV2WireNewMiningJob struct {
 	ChannelID uint32
 	JobID     uint32
 }
+
+type stratumV2WireSetTarget struct {
+	ChannelID     uint32
+	MaximumTarget [32]byte // U256
+}
