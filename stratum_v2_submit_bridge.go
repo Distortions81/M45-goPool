@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"encoding/hex"
+	"fmt"
+	"time"
+)
 
 // stratumV2NormalizedSubmitShare is a temporary SV2-facing normalized submit
 // request used before the binary SV2 codec/handlers are in place. Fields are
@@ -14,6 +18,27 @@ type stratumV2NormalizedSubmitShare struct {
 	NTimeHex         string
 	NonceHex         string
 	SubmittedVersion uint32
+}
+
+func decodeStratumV2SubmitSharesMessage(msg stratumV2SubmitSharesMessage) (stratumV2NormalizedSubmitShare, error) {
+	if msg.JobID == "" {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing job id")
+	}
+	if len(msg.Extranonce2) == 0 {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing extranonce2")
+	}
+	out := stratumV2NormalizedSubmitShare{
+		RequestID:      msg.RequestID,
+		WorkerName:     msg.WorkerName,
+		JobID:          msg.JobID,
+		Extranonce2Hex: hex.EncodeToString(msg.Extranonce2),
+		NTimeHex:       uint32ToHex8Lower(msg.NTime),
+		NonceHex:       uint32ToHex8Lower(msg.Nonce),
+	}
+	if msg.HasVersion {
+		out.SubmittedVersion = msg.Version
+	}
+	return out, nil
 }
 
 // parseStratumV2SubmitShareToMiningShareTaskInput converts a normalized SV2
@@ -54,4 +79,19 @@ func (mc *MinerConn) prepareStratumV2SubmissionTask(req stratumV2NormalizedSubmi
 	task := mc.newMiningShareSubmissionTask(in)
 	task.submitHooks = newStratumV2MiningShareSubmitHooks(mc, responder)
 	return task, true
+}
+
+func (mc *MinerConn) prepareStratumV2SubmissionTaskFromMessage(msg stratumV2SubmitSharesMessage, responder stratumV2SubmitResponder) (submissionTask, bool) {
+	now := msg.ReceivedAt
+	if now.IsZero() {
+		now = time.Now()
+	}
+	req, err := decodeStratumV2SubmitSharesMessage(msg)
+	if err != nil {
+		if responder != nil {
+			responder.writeSubmitError(msg.RequestID, stratumErrCodeInvalidRequest, err.Error(), false)
+		}
+		return submissionTask{}, false
+	}
+	return mc.prepareStratumV2SubmissionTask(req, responder, now)
 }

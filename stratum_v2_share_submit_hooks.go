@@ -11,6 +11,44 @@ type stratumV2SubmitResponder interface {
 	sendSetTarget(job *Job)
 }
 
+type stratumV2SubmitMessageResponder struct {
+	outbound []any
+}
+
+func (r *stratumV2SubmitMessageResponder) Messages() []any {
+	if r == nil {
+		return nil
+	}
+	return append([]any(nil), r.outbound...)
+}
+
+func (r *stratumV2SubmitMessageResponder) writeSubmitOK(reqID any) {
+	id, ok := reqID.(uint32)
+	if !ok {
+		// Incremental bridge keeps `any` for parity with v1; fall back to zero for
+		// non-uint32 request IDs until the SV2 wire path owns request-id typing.
+		id = 0
+	}
+	r.outbound = append(r.outbound, stratumV2SubmitSharesSuccessMessage{RequestID: id})
+}
+
+func (r *stratumV2SubmitMessageResponder) writeSubmitError(reqID any, errCode int, msg string, banned bool) {
+	id, ok := reqID.(uint32)
+	if !ok {
+		id = 0
+	}
+	r.outbound = append(r.outbound, stratumV2SubmitSharesErrorMessage{
+		RequestID: id,
+		Code:      errCode,
+		Message:   msg,
+		Banned:    banned,
+	})
+}
+
+func (r *stratumV2SubmitMessageResponder) sendSetTarget(job *Job) {
+	r.outbound = append(r.outbound, stratumV2SetTargetMessage{Job: job})
+}
+
 type stratumV2MiningShareSubmitHooks struct {
 	mc        *MinerConn
 	responder stratumV2SubmitResponder
