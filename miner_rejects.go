@@ -120,7 +120,7 @@ func isBanEligibleInvalidReason(reason shareRejectReason) bool {
 }
 
 func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason shareRejectReason, effectiveInvalid int) {
-	if mc == nil || !mc.authorized {
+	if mc == nil || !mc.stratumV1.authorized {
 		return
 	}
 	if !isBanEligibleInvalidReason(reason) {
@@ -154,7 +154,7 @@ func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason shareR
 }
 
 func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
-	if mc == nil || !mc.authorized {
+	if mc == nil || !mc.stratumV1.authorized {
 		return
 	}
 	const (
@@ -1398,7 +1398,7 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 	}
 
 	// Don't send pool->miner notifications until the miner has subscribed.
-	if !mc.subscribed {
+	if !mc.stratumV1.subscribed {
 		return
 	}
 
@@ -1441,13 +1441,13 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 }
 
 func (mc *MinerConn) sendVersionMask() {
-	if !mc.subscribed {
+	if !mc.stratumV1.subscribed {
 		return
 	}
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_version_mask",
-		"params": []any{uint32ToHex8Lower(mc.versionMask)},
+		"params": []any{uint32ToHex8Lower(mc.stratumV1.versionMask)},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("version mask write error", "remote", mc.id, "error", err)
@@ -1456,62 +1456,62 @@ func (mc *MinerConn) sendVersionMask() {
 
 func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 	changed := false
-	if mc.poolMask != poolMask {
-		mc.poolMask = poolMask
+	if mc.stratumV1.poolMask != poolMask {
+		mc.stratumV1.poolMask = poolMask
 		changed = true
 	}
 
-	if !mc.versionRoll {
-		if mc.minerMask != 0 {
-			final := poolMask & mc.minerMask
+	if !mc.stratumV1.versionRoll {
+		if mc.stratumV1.minerMask != 0 {
+			final := poolMask & mc.stratumV1.minerMask
 			if final != 0 {
 				available := bits.OnesCount32(final)
-				if mc.minVerBits <= 0 {
-					mc.minVerBits = 1
+				if mc.stratumV1.minVerBits <= 0 {
+					mc.stratumV1.minVerBits = 1
 				}
-				if mc.minVerBits > available {
-					mc.minVerBits = available
+				if mc.stratumV1.minVerBits > available {
+					mc.stratumV1.minVerBits = available
 					changed = true
 				}
-				if mc.versionMask != final {
+				if mc.stratumV1.versionMask != final {
 					changed = true
 				}
-				mc.versionMask = final
-				mc.versionRoll = true
+				mc.stratumV1.versionMask = final
+				mc.stratumV1.versionRoll = true
 				return changed
 			}
 		}
-		if mc.versionMask != poolMask {
+		if mc.stratumV1.versionMask != poolMask {
 			changed = true
 		}
-		mc.versionMask = poolMask
+		mc.stratumV1.versionMask = poolMask
 		return changed
 	}
 
-	finalMask := poolMask & mc.minerMask
+	finalMask := poolMask & mc.stratumV1.minerMask
 	if finalMask == 0 {
-		if mc.versionMask != 0 {
+		if mc.stratumV1.versionMask != 0 {
 			changed = true
 		}
-		mc.versionMask = 0
-		mc.versionRoll = false
+		mc.stratumV1.versionMask = 0
+		mc.stratumV1.versionRoll = false
 		return changed
 	}
 
 	available := bits.OnesCount32(finalMask)
-	if mc.minVerBits > available {
-		mc.minVerBits = available
+	if mc.stratumV1.minVerBits > available {
+		mc.stratumV1.minVerBits = available
 		changed = true
 	}
-	if mc.versionMask != finalMask {
+	if mc.stratumV1.versionMask != finalMask {
 		changed = true
 	}
-	mc.versionMask = finalMask
+	mc.stratumV1.versionMask = finalMask
 	return changed
 }
 
 func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
-	if !mc.subscribed {
+	if !mc.stratumV1.subscribed {
 		return
 	}
 	msg := map[string]any{
@@ -1525,10 +1525,10 @@ func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
 }
 
 func (mc *MinerConn) handleExtranonceSubscribe(req *StratumRequest) {
-	mc.extranonceSubscribed = true
+	mc.stratumV1.extranonceSubscribed = true
 	mc.writeTrueResponse(req.ID)
 
-	ex1 := hex.EncodeToString(mc.extranonce1)
+	ex1 := hex.EncodeToString(mc.stratumV1.extranonce1)
 	en2Size := mc.cfg.Extranonce2Size
 	if en2Size <= 0 {
 		en2Size = 4

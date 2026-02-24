@@ -129,7 +129,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 
 		cbTx, cbTxid, err := serializeCoinbaseTxPredecoded(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
 			payoutScript,
@@ -158,7 +158,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 		// Same nonce with fallback scriptTime should not be a block (high probability).
 		cbTx2, cbTxid2, err := serializeCoinbaseTxPredecoded(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			ex2,
 			job.TemplateExtraNonce2Size,
 			payoutScript,

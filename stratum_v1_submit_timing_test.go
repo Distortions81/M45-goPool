@@ -76,10 +76,12 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	// and handleBlockShare uses the single-output block builder path.
 	trpc := &timingRPC{}
 	mc := &MinerConn{
-		id:          "timing-test-miner",
-		rpc:         trpc,
-		cfg:         Config{PoolFeePercent: 0},
-		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+		id:  "timing-test-miner",
+		rpc: trpc,
+		cfg: Config{PoolFeePercent: 0},
+		stratumV1: minerConnStratumV1State{
+			extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+		},
 	}
 	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 	// Ensure handleBlockShare uses the scriptTime that matches what was notified.

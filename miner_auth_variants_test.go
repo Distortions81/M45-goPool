@@ -130,9 +130,11 @@ func TestParseWorkerDifficultyHintVariants(t *testing.T) {
 func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
-		id:       "configure-variants",
-		conn:     conn,
-		poolMask: 0x1fffe000,
+		id:   "configure-variants",
+		conn: conn,
+		stratumV1: minerConnStratumV1State{
+			poolMask: 0x1fffe000,
+		},
 	}
 
 	req := &StratumRequest{
@@ -148,10 +150,10 @@ func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 	}
 	mc.handleConfigure(req)
 
-	if !mc.versionRoll {
+	if !mc.stratumV1.versionRoll {
 		t.Fatalf("expected version rolling to be enabled")
 	}
-	if mc.versionMask == 0 {
+	if mc.stratumV1.versionMask == 0 {
 		t.Fatalf("expected negotiated version mask to be non-zero")
 	}
 	out := conn.String()
@@ -166,11 +168,13 @@ func TestHandleConfigureSupportsVariantShapes(t *testing.T) {
 func TestHandleConfigureSubscribeExtranonceSendsSetExtranonce(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
-		id:             "configure-extranonce",
-		conn:           conn,
-		extranonce1Hex: "abcdef01",
-		subscribed:     true,
-		cfg:            Config{Extranonce2Size: 4},
+		id:   "configure-extranonce",
+		conn: conn,
+		stratumV1: minerConnStratumV1State{
+			extranonce1Hex: "abcdef01",
+			subscribed:     true,
+		},
+		cfg: Config{Extranonce2Size: 4},
 	}
 
 	req := &StratumRequest{
@@ -180,7 +184,7 @@ func TestHandleConfigureSubscribeExtranonceSendsSetExtranonce(t *testing.T) {
 	}
 	mc.handleConfigure(req)
 
-	if !mc.extranonceSubscribed {
+	if !mc.stratumV1.extranonceSubscribed {
 		t.Fatalf("expected extranonceSubscribed to be enabled")
 	}
 	out := conn.String()

@@ -14,7 +14,7 @@ func newSubmitReadyMinerConnForModesTest(t *testing.T) (*MinerConn, *Job) {
 	mc.cfg.ShareRequireAuthorizedConnection = true
 	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobID
 	mc.cfg.ShareCheckParamFormat = true
-	mc.authorized = true
+	mc.stratumV1.authorized = true
 
 	authorizedWorker := "authorized.worker"
 	mc.stats.Worker = authorizedWorker

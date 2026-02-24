@@ -93,7 +93,7 @@ func (mc *MinerConn) currentWorkerHash() string {
 func (mc *MinerConn) currentSessionID() string {
 	mc.stateMu.Lock()
 	defer mc.stateMu.Unlock()
-	return strings.TrimSpace(mc.sessionID)
+	return strings.TrimSpace(mc.stratumV1.sessionID)
 }
 
 func (mc *MinerConn) updateWorker(worker string) string {

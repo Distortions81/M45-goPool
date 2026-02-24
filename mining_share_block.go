@@ -33,7 +33,7 @@ func (mc *MinerConn) handleBlockShareWithHooks(hooks miningShareSubmitHooks, req
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -50,7 +50,7 @@ func (mc *MinerConn) handleBlockShareWithHooks(hooks miningShareSubmitHooks, req
 		} else {
 			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -98,7 +98,7 @@ func (mc *MinerConn) handleBlockShareWithHooks(hooks miningShareSubmitHooks, req
 		// Fallback to single-output block build if dual-payout params are
 		// unavailable or any step fails. This reuses the existing helper that
 		// constructs a canonical block for submission.
-		blockHex, _, _, _, err = buildBlockWithScriptTime(job, mc.extranonce1, en2, ntime, nonce, int32(useVersion), mc.singlePayoutScript(job, workerName), scriptTime)
+		blockHex, _, _, _, err = buildBlockWithScriptTime(job, mc.stratumV1.extranonce1, en2, ntime, nonce, int32(useVersion), mc.singlePayoutScript(job, workerName), scriptTime)
 		if err != nil {
 			if mc.metrics != nil {
 				mc.metrics.RecordBlockSubmission("error")

@@ -117,8 +117,7 @@ type MinerConn struct {
 	jobMgr               *JobManager
 	rpc                  rpcCaller
 	cfg                  Config
-	extranonce1          []byte
-	extranonce1Hex       string
+	stratumV1            minerConnStratumV1State
 	jobCh                chan *Job
 	difficulty           atomic.Uint64 // float64 stored as bits
 	previousDifficulty   atomic.Uint64 // float64 stored as bits
@@ -163,11 +162,6 @@ type MinerConn struct {
 	validSubsForBan      int
 	lastProtoViolation   time.Time
 	protoViolations      int
-	versionRoll          bool
-	versionMask          uint32
-	poolMask             uint32
-	minerMask            uint32
-	minVerBits           int
 	lastShareHash        string
 	lastShareAccepted    bool
 	lastShareDifficulty  float64
@@ -175,8 +169,6 @@ type MinerConn struct {
 	lastRejectReason     string
 	walletMu             sync.Mutex
 	workerWallets        map[string]workerWalletState
-	subscribed           bool
-	authorized           bool
 	cleanupOnce          sync.Once
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
@@ -205,7 +197,6 @@ type MinerConn struct {
 	minerType            string
 	minerClientName      string
 	minerClientVersion   string
-	extranonceSubscribed bool
 	// connectedAt is the time this miner connection was established,
 	// used as the zero point for per-share timing in detail logs.
 	connectedAt time.Time
@@ -280,14 +271,32 @@ type MinerConn struct {
 	connectionSeq   uint64
 	// sessionID is an optional client-provided token sometimes sent in
 	// mining.subscribe to allow miners/proxies to resume sessions.
+	initialWorkScheduled bool
+	initialWorkDue       time.Time
+	initialWorkSent      bool
+}
+
+type minerConnStratumV1State struct {
+	extranonce1    []byte
+	extranonce1Hex string
+
+	versionRoll bool
+	versionMask uint32
+	poolMask    uint32
+	minerMask   uint32
+	minVerBits  int
+
+	subscribed           bool
+	authorized           bool
+	extranonceSubscribed bool
+
+	// sessionID is an optional client-provided token sometimes sent in
+	// mining.subscribe to allow miners/proxies to resume sessions.
 	sessionID string
 	// suggestDiffProcessed tracks whether we've already processed mining.suggest_difficulty
 	// during the initialization phase. Subsequent suggests will be ignored to prevent
 	// repeated keepalive messages from disrupting vardiff adjustments.
 	suggestDiffProcessed bool
-	initialWorkScheduled bool
-	initialWorkDue       time.Time
-	initialWorkSent      bool
 }
 
 type rpcCaller interface {

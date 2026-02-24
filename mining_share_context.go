@@ -43,7 +43,7 @@ func (mc *MinerConn) prepareShareContextSoloWithHooks(task submissionTask, hooks
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			_, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -60,7 +60,7 @@ func (mc *MinerConn) prepareShareContextSoloWithHooks(task submissionTask, hooks
 		} else {
 			_, cbTxid, err = serializeDualCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -88,7 +88,7 @@ func (mc *MinerConn) prepareShareContextSoloWithHooks(task submissionTask, hooks
 	if header == nil || err != nil || len(cbTxid) != 32 {
 		_, cbTxid, err = serializeCoinbaseTxPredecoded(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			en2,
 			job.TemplateExtraNonce2Size,
 			mc.singlePayoutScript(job, workerName),
@@ -195,7 +195,7 @@ func (mc *MinerConn) prepareShareContextStrictWithHooks(task submissionTask, hoo
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -212,7 +212,7 @@ func (mc *MinerConn) prepareShareContextStrictWithHooks(task submissionTask, hoo
 		} else {
 			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -249,7 +249,7 @@ func (mc *MinerConn) prepareShareContextStrictWithHooks(task submissionTask, hoo
 		}
 		cbTx, cbTxid, err = serializeCoinbaseTxPredecoded(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			en2,
 			job.TemplateExtraNonce2Size,
 			mc.singlePayoutScript(job, workerName),

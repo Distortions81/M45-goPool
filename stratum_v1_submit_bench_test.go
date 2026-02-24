@@ -65,11 +65,13 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 		cfg:            cfg,
 		vardiff:        defaultVarDiff,
 		metrics:        metrics,
-		extranonce1:    []byte{0x01, 0x02, 0x03, 0x04},
 		lockDifficulty: true,
 		connectedAt:    time.Now(),
-		authorized:     true,
-		subscribed:     true,
+		stratumV1: minerConnStratumV1State{
+			extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+			authorized:  true,
+			subscribed:  true,
+		},
 		stats: MinerStats{
 			Worker:       benchWorker,
 			WorkerSHA256: workerNameHash(benchWorker),

@@ -28,11 +28,13 @@ func TestHandleAuthorizeRejectsPersistedWorkerBan(t *testing.T) {
 
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
-		id:           "banned-miner",
-		cfg:          Config{},
-		conn:         conn,
-		accounting:   accounting,
-		subscribed:   true,
+		id:         "banned-miner",
+		cfg:        Config{},
+		conn:       conn,
+		accounting: accounting,
+		stratumV1: minerConnStratumV1State{
+			subscribed: true,
+		},
 		statsUpdates: make(chan statsUpdate),
 	}
 
@@ -46,7 +48,7 @@ func TestHandleAuthorizeRejectsPersistedWorkerBan(t *testing.T) {
 	if !conn.closed {
 		t.Fatalf("expected banned miner connection to be closed")
 	}
-	if mc.authorized {
+	if mc.stratumV1.authorized {
 		t.Fatalf("expected banned miner authorization to fail")
 	}
 	out := conn.String()

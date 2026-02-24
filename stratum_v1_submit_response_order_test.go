@@ -60,13 +60,15 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 
 	conn := &recordConn{}
 	mc := &MinerConn{
-		id:          "submit-order-miner",
-		cfg:         Config{PoolFeePercent: 0},
-		conn:        conn,
-		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
-		vardiff:     defaultVarDiff,
-		authorized:  true,
-		subscribed:  true,
+		id:      "submit-order-miner",
+		cfg:     Config{PoolFeePercent: 0},
+		conn:    conn,
+		vardiff: defaultVarDiff,
+		stratumV1: minerConnStratumV1State{
+			extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+			authorized:  true,
+			subscribed:  true,
+		},
 		stats: MinerStats{
 			Worker:       workerName,
 			WorkerSHA256: workerNameHash(workerName),

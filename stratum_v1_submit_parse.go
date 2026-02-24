@@ -371,7 +371,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 	submittedVersion := params.submittedVersion
 	validateFields := mc.cfg.ShareCheckParamFormat
 
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
+	if mc.cfg.ShareRequireAuthorizedConnection && !mc.stratumV1.authorized {
 		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
@@ -449,7 +449,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 	baseVersion := uint32(job.Template.Version)
 	useVersion := baseVersion
 	if submittedVersion != 0 {
-		if submittedVersion&^mc.versionMask == 0 {
+		if submittedVersion&^mc.stratumV1.versionMask == 0 {
 			useVersion = baseVersion ^ submittedVersion
 		} else {
 			useVersion = submittedVersion
@@ -495,7 +495,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 	submittedVersion := params.submittedVersion
 	validateFields := mc.cfg.ShareCheckParamFormat
 
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
+	if mc.cfg.ShareRequireAuthorizedConnection && !mc.stratumV1.authorized {
 		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
@@ -582,7 +582,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 	baseVersion := uint32(job.Template.Version)
 	useVersion := baseVersion
 	if submittedVersion != 0 {
-		if submittedVersion&^mc.versionMask == 0 {
+		if submittedVersion&^mc.stratumV1.versionMask == 0 {
 			useVersion = baseVersion ^ submittedVersion
 		} else {
 			useVersion = submittedVersion
@@ -624,7 +624,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	submittedVersion := params.submittedVersion
 	validateFields := mc.cfg.ShareCheckParamFormat
 
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
+	if mc.cfg.ShareRequireAuthorizedConnection && !mc.stratumV1.authorized {
 		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
@@ -727,7 +727,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	useVersion := baseVersion
 	versionDiff := uint32(0)
 	if submittedVersion != 0 {
-		if submittedVersion&^mc.versionMask == 0 {
+		if submittedVersion&^mc.stratumV1.versionMask == 0 {
 			useVersion = baseVersion ^ submittedVersion
 			versionDiff = submittedVersion
 		} else {
@@ -746,27 +746,27 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	}
 
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
-		maskedDiff := versionDiff & mc.versionMask
+		maskedDiff := versionDiff & mc.stratumV1.versionMask
 
-		if !mc.versionRoll {
+		if !mc.stratumV1.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
 				policyReject = sharePolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
-		if versionDiff&^mc.versionMask != 0 {
-			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
+		if versionDiff&^mc.stratumV1.versionMask != 0 {
+			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.stratumV1.versionMask))
 			if policyReject.reason == rejectUnknown {
 				policyReject = sharePolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
-		if mc.minVerBits > 0 {
+		if mc.stratumV1.minVerBits > 0 {
 			usedBits := bits.OnesCount32(maskedDiff)
-			if usedBits < mc.minVerBits {
+			if usedBits < mc.stratumV1.minVerBits {
 				if !mc.cfg.ShareAllowDegradedVersionBits {
-					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
+					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.stratumV1.minVerBits)
 					if policyReject.reason == rejectUnknown {
 						policyReject = sharePolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
@@ -774,7 +774,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
 						"remote", mc.id, "version", uint32ToHex8Lower(useVersion),
 						"used_bits", usedBits,
-						"negotiated_minimum", mc.minVerBits)
+						"negotiated_minimum", mc.stratumV1.minVerBits)
 				}
 			}
 		}
@@ -810,7 +810,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	submittedVersion := params.submittedVersion
 	validateFields := mc.cfg.ShareCheckParamFormat
 
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
+	if mc.cfg.ShareRequireAuthorizedConnection && !mc.stratumV1.authorized {
 		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
 		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
 		if mc.metrics != nil {
@@ -927,7 +927,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		// ESP-Miner sends the delta (rolled_version ^ base_version), while other
 		// miners send the full rolled version. Treat values that fit entirely
 		// inside the negotiated mask as a delta, otherwise as a full version.
-		if submittedVersion&^mc.versionMask == 0 {
+		if submittedVersion&^mc.stratumV1.versionMask == 0 {
 			useVersion = baseVersion ^ submittedVersion
 			versionDiff = submittedVersion
 		} else {
@@ -937,27 +937,27 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 	}
 
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
-		maskedDiff := versionDiff & mc.versionMask
+		maskedDiff := versionDiff & mc.stratumV1.versionMask
 
-		if !mc.versionRoll {
+		if !mc.stratumV1.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
 				policyReject = sharePolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
-		if versionDiff&^mc.versionMask != 0 {
-			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
+		if versionDiff&^mc.stratumV1.versionMask != 0 {
+			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.stratumV1.versionMask))
 			if policyReject.reason == rejectUnknown {
 				policyReject = sharePolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
-		if mc.minVerBits > 0 {
+		if mc.stratumV1.minVerBits > 0 {
 			usedBits := bits.OnesCount32(maskedDiff)
-			if usedBits < mc.minVerBits {
+			if usedBits < mc.stratumV1.minVerBits {
 				if !mc.cfg.ShareAllowDegradedVersionBits {
-					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
+					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.stratumV1.minVerBits)
 					if policyReject.reason == rejectUnknown {
 						policyReject = sharePolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
@@ -966,7 +966,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
 						"remote", mc.id, "version", uint32ToHex8Lower(useVersion),
 						"used_bits", usedBits,
-						"negotiated_minimum", mc.minVerBits)
+						"negotiated_minimum", mc.stratumV1.minVerBits)
 				}
 			}
 		}

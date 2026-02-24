@@ -22,24 +22,26 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		if !changed {
 			t.Fatalf("expected change when setting initial pool mask")
 		}
-		if mc.poolMask != standardMask {
-			t.Fatalf("poolMask mismatch: got %#08x want %#08x", mc.poolMask, standardMask)
+		if mc.stratumV1.poolMask != standardMask {
+			t.Fatalf("poolMask mismatch: got %#08x want %#08x", mc.stratumV1.poolMask, standardMask)
 		}
-		if mc.versionMask != standardMask {
-			t.Fatalf("versionMask mismatch: got %#08x want %#08x", mc.versionMask, standardMask)
+		if mc.stratumV1.versionMask != standardMask {
+			t.Fatalf("versionMask mismatch: got %#08x want %#08x", mc.stratumV1.versionMask, standardMask)
 		}
-		if mc.versionRoll {
+		if mc.stratumV1.versionRoll {
 			t.Fatalf("versionRoll should remain false when no miner mask is negotiated")
 		}
 	})
 
 	t.Run("enableVersionRollWithMinerMask", func(t *testing.T) {
 		mc := &MinerConn{
-			minVerBits: 3,
+			stratumV1: minerConnStratumV1State{
+				minVerBits: 3,
+			},
 		}
 		// Simulate a miner mask negotiated via mining.configure.
 		minerMask := uint32(0x00ff0000)
-		mc.minerMask = minerMask
+		mc.stratumV1.minerMask = minerMask
 
 		changed := mc.updateVersionMask(standardMask)
 
@@ -50,24 +52,24 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		if final == 0 {
 			t.Fatalf("test setup error: standardMask & minerMask must be non-zero")
 		}
-		if mc.versionMask != final {
-			t.Fatalf("versionMask mismatch: got %#08x want %#08x", mc.versionMask, final)
+		if mc.stratumV1.versionMask != final {
+			t.Fatalf("versionMask mismatch: got %#08x want %#08x", mc.stratumV1.versionMask, final)
 		}
-		if !mc.versionRoll {
+		if !mc.stratumV1.versionRoll {
 			t.Fatalf("expected versionRoll=true after applying miner mask")
 		}
 		available := bits.OnesCount32(final)
-		if mc.minVerBits <= 0 || mc.minVerBits > available {
-			t.Fatalf("minVerBits out of range after update: got %d, available %d", mc.minVerBits, available)
+		if mc.stratumV1.minVerBits <= 0 || mc.stratumV1.minVerBits > available {
+			t.Fatalf("minVerBits out of range after update: got %d, available %d", mc.stratumV1.minVerBits, available)
 		}
 	})
 
 	t.Run("shrinkPoolMaskToZeroIntersection", func(t *testing.T) {
 		// Start from a state where version rolling is enabled with a non-zero intersection.
 		mc := &MinerConn{}
-		mc.minerMask = standardMask
+		mc.stratumV1.minerMask = standardMask
 		_ = mc.updateVersionMask(standardMask)
-		if !mc.versionRoll || mc.versionMask == 0 {
+		if !mc.stratumV1.versionRoll || mc.stratumV1.versionMask == 0 {
 			t.Fatalf("expected versionRoll enabled with non-zero mask")
 		}
 
@@ -81,10 +83,10 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		if !changed {
 			t.Fatalf("expected change when intersection shrinks to zero")
 		}
-		if mc.versionMask != 0 {
-			t.Fatalf("versionMask should be zero when intersection is empty, got %#08x", mc.versionMask)
+		if mc.stratumV1.versionMask != 0 {
+			t.Fatalf("versionMask should be zero when intersection is empty, got %#08x", mc.stratumV1.versionMask)
 		}
-		if mc.versionRoll {
+		if mc.stratumV1.versionRoll {
 			t.Fatalf("versionRoll should be disabled when intersection is empty")
 		}
 	})
@@ -93,10 +95,10 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		// Start with a wider intersection supporting many bits.
 		mc := &MinerConn{}
 		widePool := uint32(0x00ff0000)
-		mc.minerMask = widePool
-		mc.minVerBits = 8
+		mc.stratumV1.minerMask = widePool
+		mc.stratumV1.minVerBits = 8
 		_ = mc.updateVersionMask(widePool)
-		if mc.versionMask == 0 || !mc.versionRoll {
+		if mc.stratumV1.versionMask == 0 || !mc.stratumV1.versionRoll {
 			t.Fatalf("expected version rolling enabled with wide mask")
 		}
 
@@ -107,16 +109,16 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		if !changed {
 			t.Fatalf("expected change when shrinking pool mask")
 		}
-		final := narrowPool & mc.minerMask
+		final := narrowPool & mc.stratumV1.minerMask
 		available := bits.OnesCount32(final)
 		if available == 0 {
 			t.Fatalf("test setup error: expected non-zero intersection for narrow mask")
 		}
-		if mc.versionMask != final {
-			t.Fatalf("versionMask mismatch after shrink: got %#08x want %#08x", mc.versionMask, final)
+		if mc.stratumV1.versionMask != final {
+			t.Fatalf("versionMask mismatch after shrink: got %#08x want %#08x", mc.stratumV1.versionMask, final)
 		}
-		if mc.minVerBits > available {
-			t.Fatalf("minVerBits should be clamped to available bits: got %d, available %d", mc.minVerBits, available)
+		if mc.stratumV1.minVerBits > available {
+			t.Fatalf("minVerBits should be clamped to available bits: got %d, available %d", mc.stratumV1.minVerBits, available)
 		}
 	})
 }

@@ -69,7 +69,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 	}
 
 	// Ignore duplicate subscribe requests - should only subscribe once
-	if mc.subscribed {
+	if mc.stratumV1.subscribed {
 		logger.Debug("subscribe rejected: already subscribed", "component", "miner", "kind", "protocol", "remote", mc.id)
 		mc.writeResponse(StratumResponse{
 			ID:     idVal,
@@ -123,8 +123,8 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 	if haveSessionID {
 		mc.stateMu.Lock()
-		if mc.sessionID == "" {
-			mc.sessionID = strings.TrimSpace(sessionID)
+		if mc.stratumV1.sessionID == "" {
+			mc.stratumV1.sessionID = strings.TrimSpace(sessionID)
 		}
 		mc.stateMu.Unlock()
 	}
@@ -134,21 +134,21 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 	mc.assignConnectionSeq()
 	if haveSessionID {
 		mc.stateMu.Lock()
-		if mc.sessionID == "" {
-			mc.sessionID = strings.TrimSpace(sessionID)
+		if mc.stratumV1.sessionID == "" {
+			mc.stratumV1.sessionID = strings.TrimSpace(sessionID)
 		}
 		mc.stateMu.Unlock()
 	} else {
 		mc.stateMu.Lock()
-		if mc.sessionID == "" {
-			mc.sessionID = mc.connectionIDString()
+		if mc.stratumV1.sessionID == "" {
+			mc.stratumV1.sessionID = mc.connectionIDString()
 		}
 		mc.stateMu.Unlock()
 	}
 
-	mc.subscribed = true
+	mc.stratumV1.subscribed = true
 
-	ex1 := mc.extranonce1Hex
+	ex1 := mc.stratumV1.extranonce1Hex
 	en2Size := mc.cfg.Extranonce2Size
 	if en2Size <= 0 {
 		en2Size = 4
@@ -158,7 +158,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 	// Support authorize-before-subscribe: if the miner already authorized,
 	// start the listener and schedule initial work now that subscribe is done.
-	if mc.authorized {
+	if mc.stratumV1.authorized {
 		if !mc.listenerOn {
 			if mc.jobCh != nil {
 				for {
@@ -184,7 +184,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 	if initialJob != nil {
 		mc.updateVersionMask(initialJob.VersionMask)
 	}
-	if mc.extranonceSubscribed {
+	if mc.stratumV1.extranonceSubscribed {
 		mc.sendSetExtranonce(ex1, en2Size)
 	}
 	if initialJob == nil {
@@ -203,7 +203,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool, sessionID string, haveSessionID bool) {
 	// Ignore duplicate subscribe requests - should only subscribe once
-	if mc.subscribed {
+	if mc.stratumV1.subscribed {
 		logger.Debug("subscribe rejected: already subscribed", "component", "miner", "kind", "protocol", "remote", mc.id)
 		mc.writeResponse(StratumResponse{
 			ID:     id,
@@ -260,19 +260,19 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	mc.assignConnectionSeq()
 	if haveSessionID {
 		mc.stateMu.Lock()
-		if mc.sessionID == "" {
-			mc.sessionID = strings.TrimSpace(sessionID)
+		if mc.stratumV1.sessionID == "" {
+			mc.stratumV1.sessionID = strings.TrimSpace(sessionID)
 		}
 		mc.stateMu.Unlock()
 	} else {
 		mc.stateMu.Lock()
-		if mc.sessionID == "" {
-			mc.sessionID = mc.connectionIDString()
+		if mc.stratumV1.sessionID == "" {
+			mc.stratumV1.sessionID = mc.connectionIDString()
 		}
 		mc.stateMu.Unlock()
 	}
 
-	mc.subscribed = true
+	mc.stratumV1.subscribed = true
 
 	// Result spec (simplified):
 	// [
@@ -280,7 +280,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	//   "extranonce1",
 	//   extranonce2_size
 	// ]
-	ex1 := mc.extranonce1Hex
+	ex1 := mc.stratumV1.extranonce1Hex
 	en2Size := mc.cfg.Extranonce2Size
 	if en2Size <= 0 {
 		en2Size = 4
@@ -290,7 +290,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 
 	// Support authorize-before-subscribe: if the miner already authorized,
 	// start the listener and schedule initial work now that subscribe is done.
-	if mc.authorized {
+	if mc.stratumV1.authorized {
 		if !mc.listenerOn {
 			if mc.jobCh != nil {
 				for {
@@ -321,7 +321,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	// unsolicited can confuse miners that don't expect it (e.g., NMAxe/Bitaxe)
 	// since the message arrives while they're still sending authorize/configure
 	// requests and expecting responses to those.
-	if mc.extranonceSubscribed {
+	if mc.stratumV1.extranonceSubscribed {
 		mc.sendSetExtranonce(ex1, en2Size)
 	}
 	if initialJob == nil {
@@ -500,14 +500,14 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
-	mc.authorized = true
+	mc.stratumV1.authorized = true
 
 	mc.writeTrueResponse(id)
 
 	// If the miner hasn't subscribed yet, accept authorization but don't start
 	// the job listener or send any pool->miner notifications until subscribe.
 	// Some miners (CKPool-oriented stacks) send authorize/auth before subscribe.
-	if !mc.subscribed {
+	if !mc.stratumV1.subscribed {
 		return
 	}
 
@@ -809,11 +809,11 @@ func parseWorkerDifficultyHint(worker string) (cleanWorker string, diff float64,
 }
 
 func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
-	if mc.suggestDiffProcessed {
+	if mc.stratumV1.suggestDiffProcessed {
 		logger.Debug("suggest_difficulty ignored (already processed once)", "remote", mc.id)
 		return
 	}
-	mc.suggestDiffProcessed = true
+	mc.stratumV1.suggestDiffProcessed = true
 
 	// If we just restored a recent difficulty for this worker on a short
 	// reconnect, ignore suggested-difficulty overrides and keep the
@@ -1046,7 +1046,7 @@ func (mc *MinerConn) maybeSendCleanJobAfterSuggest() {
 	if !alreadySent {
 		return
 	}
-	if !mc.authorized || !mc.listenerOn {
+	if !mc.stratumV1.authorized || !mc.listenerOn {
 		return
 	}
 	if job := mc.jobMgr.CurrentJob(); job != nil {
@@ -1106,11 +1106,11 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		switch normalizeOptionKey(name) {
 		case "versionrolling":
 			// BIP310 version-rolling negotiation (docs/protocols/bip-0310.mediawiki).
-			if mc.poolMask == 0 {
+			if mc.stratumV1.poolMask == 0 {
 				result["version-rolling"] = false
 				break
 			}
-			requestMask := mc.poolMask
+			requestMask := mc.stratumV1.poolMask
 			if opts != nil {
 				if rawMask, found := optionValueByAliases(opts,
 					"version-rolling.mask",
@@ -1129,31 +1129,31 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 					"version_rolling_min_bit_count",
 				); found {
 					if minBits, ok := parsePositiveInt(rawMinBits); ok {
-						mc.minVerBits = minBits
+						mc.stratumV1.minVerBits = minBits
 					}
 				}
 			}
-			mask := requestMask & mc.poolMask
+			mask := requestMask & mc.stratumV1.poolMask
 			if mask == 0 {
 				result["version-rolling"] = false
-				mc.versionRoll = false
-				mc.minerMask = requestMask
-				mc.updateVersionMask(mc.poolMask)
+				mc.stratumV1.versionRoll = false
+				mc.stratumV1.minerMask = requestMask
+				mc.updateVersionMask(mc.stratumV1.poolMask)
 				break
 			}
 			available := bits.OnesCount32(mask)
-			if mc.minVerBits <= 0 {
-				mc.minVerBits = 1
+			if mc.stratumV1.minVerBits <= 0 {
+				mc.stratumV1.minVerBits = 1
 			}
-			if mc.minVerBits > available {
-				mc.minVerBits = available
+			if mc.stratumV1.minVerBits > available {
+				mc.stratumV1.minVerBits = available
 			}
-			mc.minerMask = requestMask
-			mc.versionRoll = true
-			mc.versionMask = mask
+			mc.stratumV1.minerMask = requestMask
+			mc.stratumV1.versionRoll = true
+			mc.stratumV1.versionMask = mask
 			result["version-rolling"] = true
 			result["version-rolling.mask"] = uint32ToHex8Lower(mask)
-			result["version-rolling.min-bit-count"] = mc.minVerBits
+			result["version-rolling.min-bit-count"] = mc.stratumV1.minVerBits
 			// Important: some miners (including some cgminer-based firmwares)
 			// expect the immediate next line after mining.configure to be its
 			// JSON-RPC response. If we send an unsolicited notification before
@@ -1203,8 +1203,8 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			// mining.configure rather than calling mining.extranonce.subscribe.
 			// Treat it as an opt-in for mining.set_extranonce notifications.
 			result[name] = true
-			if !mc.extranonceSubscribed {
-				mc.extranonceSubscribed = true
+			if !mc.stratumV1.extranonceSubscribed {
+				mc.stratumV1.extranonceSubscribed = true
 				shouldSendExtranonce = true
 			}
 		default:
@@ -1228,7 +1228,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		mc.sendVersionMask()
 	}
 	if shouldSendExtranonce {
-		ex1 := mc.extranonce1Hex
+		ex1 := mc.stratumV1.extranonce1Hex
 		en2Size := mc.cfg.Extranonce2Size
 		if en2Size <= 0 {
 			en2Size = 4
@@ -1244,7 +1244,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 }
 
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
-	if !mc.subscribed {
+	if !mc.stratumV1.subscribed {
 		return
 	}
 	// Opportunistically adjust difficulty before notifying about the job.
@@ -1254,7 +1254,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
-	if maskChanged && mc.versionRoll {
+	if maskChanged && mc.stratumV1.versionRoll {
 		mc.sendVersionMask()
 	}
 
@@ -1293,7 +1293,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 			logger.Debug("using triple payout", "worker", worker, "donation_percent", job.OperatorDonationPercent)
 			coinb1, coinb2, err = buildTriplePayoutCoinbaseParts(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				job.Extranonce2Size,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -1310,7 +1310,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		} else {
 			coinb1, coinb2, err = buildDualPayoutCoinbaseParts(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				job.Extranonce2Size,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -1335,7 +1335,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		}
 		coinb1, coinb2, err = buildCoinbaseParts(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			job.Extranonce2Size,
 			job.TemplateExtraNonce2Size,
 			mc.singlePayoutScript(job, worker),

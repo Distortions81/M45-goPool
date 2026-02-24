@@ -141,8 +141,15 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		jobMgr:            jobMgr,
 		rpc:               rpc,
 		cfg:               cfg,
-		extranonce1:       en1,
-		extranonce1Hex:    hex.EncodeToString(en1),
+		stratumV1: minerConnStratumV1State{
+			extranonce1:    en1,
+			extranonce1Hex: hex.EncodeToString(en1),
+			versionRoll:    false,
+			versionMask:    0,
+			poolMask:       mask,
+			minerMask:      0,
+			minVerBits:     minBits,
+		},
 		jobCh:             jobCh,
 		vardiff:           vdiff,
 		metrics:           metrics,
@@ -162,11 +169,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,
 		lastPenalty:       time.Now(),
-		versionRoll:       false,
-		versionMask:       0,
-		poolMask:          mask,
-		minerMask:         0,
-		minVerBits:        minBits,
 		bootstrapDone:     false,
 		isTLSConnection:   isTLS,
 		statsUpdates:      make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
@@ -240,7 +242,7 @@ func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
 
 	mc.cfg = cfg
 	mc.vardiff = buildVarDiffConfig(cfg)
-	mc.poolMask, mc.minVerBits = versionRollingPolicyFromConfig(cfg)
+	mc.stratumV1.poolMask, mc.stratumV1.minVerBits = versionRollingPolicyFromConfig(cfg)
 	if cfg.MaxRecentJobs > 0 {
 		mc.maxRecentJobs = cfg.MaxRecentJobs
 	}
@@ -278,7 +280,7 @@ func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
 func (mc *MinerConn) handle() {
 	defer mc.cleanup()
 	if debugLogging || verboseRuntimeLogging {
-		logger.Info("miner connected", "component", "miner", "kind", "lifecycle", "remote", mc.id, "extranonce1", mc.extranonce1Hex)
+		logger.Info("miner connected", "component", "miner", "kind", "lifecycle", "remote", mc.id, "extranonce1", mc.stratumV1.extranonce1Hex)
 	}
 
 	for {
@@ -613,7 +615,7 @@ func (mc *MinerConn) maybeSendInitialWorkDue(now time.Time) {
 }
 
 func (mc *MinerConn) sendInitialWork() {
-	if !mc.subscribed || !mc.authorized || !mc.listenerOn {
+	if !mc.stratumV1.subscribed || !mc.stratumV1.authorized || !mc.listenerOn {
 		return
 	}
 
@@ -627,7 +629,7 @@ func (mc *MinerConn) sendInitialWork() {
 
 	// Respect suggested difficulty if already processed. Otherwise, fall back
 	// to a sane default/minimum so miners have a starting target.
-	if !mc.suggestDiffProcessed && !mc.restoredRecentDiff {
+	if !mc.stratumV1.suggestDiffProcessed && !mc.restoredRecentDiff {
 		diff := mc.cfg.DefaultDifficulty
 		if diff <= 0 {
 			// Default difficulty of 0 means "unset": treat it as the minimum

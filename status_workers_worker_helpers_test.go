@@ -22,8 +22,10 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 		ScriptTime:              1000,
 	}
 	mc := &MinerConn{
-		cfg:         Config{PoolFeePercent: 0},
-		extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
+		cfg: Config{PoolFeePercent: 0},
+		stratumV1: minerConnStratumV1State{
+			extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
+		},
 		jobScriptTime: map[string]int64{
 			"job-1": 2000,
 		},
@@ -32,7 +34,7 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 	mc.setWorkerWallet(workerName, workerAddr, workerScript)
 	coinb1, coinb2, err := buildCoinbaseParts(
 		job.Template.Height,
-		mc.extranonce1,
+		mc.stratumV1.extranonce1,
 		job.Extranonce2Size,
 		job.TemplateExtraNonce2Size,
 		workerScript,
@@ -60,7 +62,7 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 	}
 	expectedRaw, _, err := serializeCoinbaseTx(
 		job.Template.Height,
-		mc.extranonce1,
+		mc.stratumV1.extranonce1,
 		[]byte{0, 0, 0, 0},
 		job.TemplateExtraNonce2Size,
 		workerScript,

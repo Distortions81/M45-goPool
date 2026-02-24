@@ -47,7 +47,7 @@ func (mc *MinerConn) buildCurrentJobCoinbaseDetail(job *Job) *ShareDetail {
 	if !ok || parts.coinb1 == "" || parts.coinb2 == "" {
 		return nil
 	}
-	coinbaseHex := parts.coinb1 + hex.EncodeToString(mc.extranonce1) + hex.EncodeToString(en2) + parts.coinb2
+	coinbaseHex := parts.coinb1 + hex.EncodeToString(mc.stratumV1.extranonce1) + hex.EncodeToString(en2) + parts.coinb2
 	detail := &ShareDetail{Coinbase: coinbaseHex}
 	detail.DecodeCoinbaseFields()
 	return detail

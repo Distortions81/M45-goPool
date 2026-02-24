@@ -24,10 +24,10 @@ func TestHandleAuthorize_AllowsBeforeSubscribe(t *testing.T) {
 	worker := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.worker"
 	mc.handleAuthorizeID(1, worker, "")
 
-	if !mc.authorized {
+	if !mc.stratumV1.authorized {
 		t.Fatalf("expected authorized=true")
 	}
-	if mc.subscribed {
+	if mc.stratumV1.subscribed {
 		t.Fatalf("expected subscribed=false")
 	}
 	if mc.listenerOn {

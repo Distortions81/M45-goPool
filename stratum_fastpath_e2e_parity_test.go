@@ -110,8 +110,8 @@ func TestStratumFastpathEndToEndParity_AuthorizeEscapedFallback(t *testing.T) {
 func TestStratumFastpathEndToEndParity_Subscribe(t *testing.T) {
 	req := `{"id":"sub-1","method":"mining.subscribe","params":["cgminer/4.11.1","resume-fixed-session"]}`
 	assertFastpathParityMatrix(t, req, func(mc *MinerConn) {
-		mc.extranonce1Hex = "01020304"
-		mc.extranonce1 = []byte{1, 2, 3, 4}
+		mc.stratumV1.extranonce1Hex = "01020304"
+		mc.stratumV1.extranonce1 = []byte{1, 2, 3, 4}
 		mc.cfg.Extranonce2Size = 4
 	})
 }

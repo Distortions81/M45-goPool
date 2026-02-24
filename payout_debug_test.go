@@ -36,7 +36,7 @@ func buildBlockCoinbase(t *testing.T, mc *MinerConn, job *Job, worker string, en
 	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, worker); ok {
 		cbTx, _, err = serializeDualCoinbaseTx(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			en2,
 			job.TemplateExtraNonce2Size,
 			poolScript,
@@ -55,7 +55,7 @@ func buildBlockCoinbase(t *testing.T, mc *MinerConn, job *Job, worker string, en
 	if len(cbTx) == 0 {
 		cbTx, _, err = serializeCoinbaseTx(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			en2,
 			job.TemplateExtraNonce2Size,
 			job.PayoutScript,
@@ -151,8 +151,10 @@ func TestShareDetailCoinbaseMatchesBlockCoinbase(t *testing.T) {
 					PayoutAddress:  tt.poolAddress,
 					PoolFeePercent: tt.poolFeePercent,
 				},
-				accounting:  acct,
-				extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
+				accounting: acct,
+				stratumV1: minerConnStratumV1State{
+					extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
+				},
 			}
 
 			if tt.workerHasScript {

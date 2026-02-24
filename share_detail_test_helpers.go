@@ -24,7 +24,7 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, extranonce2 strin
 		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
 			cbTx, _, err = serializeTripleCoinbaseTx(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -44,7 +44,7 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, extranonce2 strin
 		} else {
 			cbTx, _, err = serializeDualCoinbaseTx(
 				job.Template.Height,
-				mc.extranonce1,
+				mc.stratumV1.extranonce1,
 				en2,
 				job.TemplateExtraNonce2Size,
 				poolScript,
@@ -64,7 +64,7 @@ func (mc *MinerConn) buildShareDetail(job *Job, worker string, extranonce2 strin
 	if len(cbTx) == 0 {
 		cbTx, _, err = serializeCoinbaseTx(
 			job.Template.Height,
-			mc.extranonce1,
+			mc.stratumV1.extranonce1,
 			en2,
 			job.TemplateExtraNonce2Size,
 			job.PayoutScript,

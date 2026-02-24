@@ -9,9 +9,11 @@ import (
 func TestWarnBeforeInvalidSubmitBanThreshold(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
-		id:         "warn-before-ban",
-		conn:       conn,
-		authorized: true,
+		id:   "warn-before-ban",
+		conn: conn,
+		stratumV1: minerConnStratumV1State{
+			authorized: true,
+		},
 		cfg: Config{
 			BanInvalidSubmissionsAfter:  3,
 			BanInvalidSubmissionsWindow: 5 * time.Minute,
@@ -36,10 +38,12 @@ func TestWarnBeforeInvalidSubmitBanThreshold(t *testing.T) {
 func TestWarnOnRepeatedDuplicateShares(t *testing.T) {
 	conn := &writeRecorderConn{}
 	mc := &MinerConn{
-		id:         "warn-dup",
-		conn:       conn,
-		authorized: true,
-		cfg:        Config{},
+		id:   "warn-dup",
+		conn: conn,
+		stratumV1: minerConnStratumV1State{
+			authorized: true,
+		},
+		cfg: Config{},
 	}
 
 	now := time.Now()

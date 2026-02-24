@@ -125,7 +125,9 @@ func TestPrepareShareContextStrict_SelectsSingleDualTripleWrappers(t *testing.T)
 					PoolFeePercent: tt.poolFeePercent,
 					PayoutAddress:  tt.payoutAddress,
 				},
-				extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+				stratumV1: minerConnStratumV1State{
+					extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
+				},
 			}
 
 			if tt.withWorkerWallet {
