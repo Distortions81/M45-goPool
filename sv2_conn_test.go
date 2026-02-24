@@ -250,6 +250,12 @@ func TestSV2ConnWriteStratumV2JobBundleForLocalJob_WritesFramesAndSyncsState(t *
 	if ph, ok := c.channelPrevHash[21]; !ok || ph.JobID != 700 {
 		t.Fatalf("expected channel prevhash state for channel 21 job 700, got=%#v ok=%v", ph, ok)
 	}
+	if got, ok := mc.activeJobs[job.JobID]; !ok || got == nil {
+		t.Fatalf("expected shared submit job cache to track SV2-announced job %q", job.JobID)
+	}
+	if mc.lastJob == nil || mc.lastJob.JobID != job.JobID {
+		t.Fatalf("expected lastJob to be synced to SV2-announced job %q", job.JobID)
+	}
 }
 
 func TestSV2ConnWriteStratumV2JobBundleForAllChannels_WritesPerChannelBundles(t *testing.T) {

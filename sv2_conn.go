@@ -552,6 +552,20 @@ func (c *sv2Conn) writeStratumV2JobBundleForLocalJob(channelID uint32, wireJobID
 	if c == nil || job == nil {
 		return fmt.Errorf("missing sv2 conn or job")
 	}
+	if c.mc != nil {
+		// Keep the shared submit parser's per-connection job cache in sync with
+		// SV2 job announcements, since the current SV2 bridge still reuses v1-era
+		// job lookup/validation helpers.
+		c.mc.trackJob(job, c.mc.cleanFlagFor(job))
+		c.mc.setJobDifficulty(job.JobID, c.mc.currentDifficulty())
+		if job.VersionMask != 0 {
+			c.mc.stratumV1.versionRoll = true
+			if c.mc.stratumV1.minerMask == 0 {
+				c.mc.stratumV1.minerMask = job.VersionMask
+			}
+			c.mc.updateVersionMask(job.VersionMask)
+		}
+	}
 	nbits, err := parseUint32BEHex(job.Template.Bits)
 	if err != nil {
 		return fmt.Errorf("parse job bits: %w", err)
