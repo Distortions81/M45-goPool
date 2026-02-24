@@ -146,8 +146,10 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 	if err != nil {
 		return err
 	}
-	_, err = c.writer.Write(frame)
-	return err
+	if _, err := c.writer.Write(frame); err != nil {
+		return err
+	}
+	return c.writeCurrentJobBundleForChannel(chID)
 }
 
 func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedMiningChannel) error {
@@ -185,8 +187,10 @@ func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedM
 	if err != nil {
 		return err
 	}
-	_, err = c.writer.Write(frame)
-	return err
+	if _, err := c.writer.Write(frame); err != nil {
+		return err
+	}
+	return c.writeCurrentJobBundleForChannel(chID)
 }
 
 func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStandard) error {
@@ -468,6 +472,31 @@ func (c *sv2Conn) writeStratumV2JobBundleForAllChannels(job *Job) error {
 		}
 	}
 	return nil
+}
+
+func (c *sv2Conn) writeCurrentJobBundleForChannel(channelID uint32) error {
+	if c == nil || c.mc == nil {
+		return nil
+	}
+	var job *Job
+	if c.mc.jobMgr != nil {
+		job = c.mc.jobMgr.CurrentJob()
+	}
+	if job == nil {
+		c.mc.jobMu.Lock()
+		if c.mc.lastJob != nil {
+			job = c.mc.lastJob
+		} else if len(c.mc.activeJobs) == 1 {
+			for _, j := range c.mc.activeJobs {
+				job = j
+			}
+		}
+		c.mc.jobMu.Unlock()
+	}
+	if job == nil {
+		return nil
+	}
+	return c.writeStratumV2JobBundleForLocalJob(channelID, c.allocateWireJobID(), job)
 }
 
 func (c *sv2Conn) classifySV2SubmitMappingError(channelID uint32, wireJobID uint32, err error) string {

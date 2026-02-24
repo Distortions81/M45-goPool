@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-Core-goPool)](https://go.dev)
 [![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
 
-goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and ships with a status UI + JSON APIs for monitoring.
+goPool is a solo Bitcoin mining pool that connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and includes an early Stratum v2 listener path on a separate port, plus a status UI + JSON APIs for monitoring.
 
 > **Downloads:** Pre-built binaries are available on GitHub Releases.
 
@@ -13,6 +13,7 @@ Stratum notes:
 
 - goPool accepts both `mining.authorize` and CKPool-style `mining.auth`, and tolerates authorize-before-subscribe (work starts after subscribe completes).
 - On startup and during runtime, Stratum is gated only when the node/job feed reports errors or the node is in a non-usable syncing/indexing state: new connections are refused and existing miners are disconnected to avoid wasted hashing.
+- Stratum v2 currently listens on a separate optional port (`[stratum].stratum_v2_listen` or CLI `-stratum-v2`) rather than autodetecting on the Stratum v1 port.
 
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
@@ -42,6 +43,7 @@ Counts above were collected on February 24, 2026.
 
 - `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.
 - TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
+- Stratum listeners are configured under `[stratum]`: `stratum_tls_listen` enables Stratum v1 over TLS, and `stratum_v2_listen` enables the separate Stratum v2 listener (leave empty to disable).
 - `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). First run writes helper examples to `data/config/examples/`.
 - Optional split files:
   - `data/config/services.toml` for service/integration settings (`auth`, `backblaze_backup`, `discord`, `status` links).
@@ -71,6 +73,7 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
 - **`documentation/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
 - **`documentation/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
 - **`documentation/TESTING.md`** – Test suite instructions and how to add or run existing tests.
+- **`documentation/stratum-v2.md`** – Stratum v2 setup notes and current support status.
 - **`LICENSE`** – Legal terms for using goPool.
 
 Need help? Open an issue on GitHub or refer to the documentation in `documentation/` before asking for assistance.

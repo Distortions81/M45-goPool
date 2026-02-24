@@ -410,7 +410,8 @@ func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testi
 		if first.UsedVersion != 2 {
 			t.Fatalf("setup used_version=%d want 2", first.UsedVersion)
 		}
-		msg, err = decodeStratumV2MiningWireFrame(allOut[firstLen:])
+		secondLen := stratumV2FrameHeaderLen + int(readUint24LE(allOut[firstLen+3:firstLen+6]))
+		msg, err = decodeStratumV2MiningWireFrame(allOut[firstLen : firstLen+secondLen])
 		if err != nil {
 			t.Fatalf("decode open response frame after setup: %v", err)
 		}
@@ -438,6 +439,15 @@ func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testi
 	}
 	if len(ch.StandardExtranonce2) != wantEx2Len {
 		t.Fatalf("standard extranonce2 len=%d want %d", len(ch.StandardExtranonce2), wantEx2Len)
+	}
+	if len(c.submitMapper.jobs) == 0 {
+		t.Fatalf("expected current-job mapping to be sent on open")
+	}
+	if _, ok := c.channelTargets[resp.ChannelID]; !ok {
+		t.Fatalf("expected set_target state for opened channel")
+	}
+	if ph, ok := c.channelPrevHash[resp.ChannelID]; !ok || ph.JobID == 0 {
+		t.Fatalf("expected set_new_prevhash state for opened channel, got=%#v ok=%v", ph, ok)
 	}
 }
 
@@ -543,7 +553,8 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	// read loop processed setup + open; decode second response frame (open success).
 	all := out.Bytes()
 	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(all[3:6]))
-	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen:])
+	secondLen := stratumV2FrameHeaderLen + int(readUint24LE(all[firstLen+3:firstLen+6]))
+	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen : firstLen+secondLen])
 	if err != nil {
 		t.Fatalf("decode open response: %v", err)
 	}
@@ -551,21 +562,16 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	if !ok {
 		t.Fatalf("open response type=%T want success", openMsg)
 	}
-	out.Reset()
+	out.Reset() // discard setup/open + immediate job bundle frames
 
-	if err := c.writeStratumV2NewMiningJob(stratumV2WireNewMiningJob{
-		ChannelID: openResp.ChannelID,
-		JobID:     7,
-		Version:   uint32(job.Template.Version),
-	}, job.JobID); err != nil {
-		t.Fatalf("write new mining job: %v", err)
+	activePrev, ok := c.channelPrevHash[openResp.ChannelID]
+	if !ok || activePrev.JobID == 0 {
+		t.Fatalf("expected active prevhash/job after open")
 	}
-	out.Reset() // keep submit response decode simple in this test
-
 	submitFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
 		ChannelID:      openResp.ChannelID,
 		SequenceNumber: 55,
-		JobID:          7,
+		JobID:          activePrev.JobID,
 		Nonce:          1,
 		NTime:          uint32(job.Template.CurTime),
 		Version:        uint32(job.Template.Version),
@@ -621,7 +627,8 @@ func TestSV2ConnReadLoopSkeleton_OpenExtendedThenSubmitExtended(t *testing.T) {
 	}
 	all := out.Bytes()
 	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(all[3:6]))
-	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen:])
+	secondLen := stratumV2FrameHeaderLen + int(readUint24LE(all[firstLen+3:firstLen+6]))
+	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen : firstLen+secondLen])
 	if err != nil {
 		t.Fatalf("decode open extended response: %v", err)
 	}
