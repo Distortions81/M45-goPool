@@ -34,3 +34,38 @@ type stratumV2SetTargetMessage struct {
 	// reference so the future encoder can derive the exact target/channel fields.
 	Job *Job
 }
+
+// On-wire message shapes (SV2 Mining Protocol submit path). These map directly
+// to the binary payload fields defined in the spec and are used by the SV2
+// frame/payload codec.
+type stratumV2WireSubmitSharesStandard struct {
+	ChannelID      uint32
+	SequenceNumber uint32
+	JobID          uint32
+	Nonce          uint32
+	NTime          uint32
+	Version        uint32
+}
+
+type stratumV2WireSubmitSharesExtended struct {
+	ChannelID      uint32
+	SequenceNumber uint32
+	JobID          uint32
+	Nonce          uint32
+	NTime          uint32
+	Version        uint32
+	Extranonce     []byte // B0_32
+}
+
+type stratumV2WireSubmitSharesSuccess struct {
+	ChannelID               uint32
+	LastSequenceNumber      uint32
+	NewSubmitsAcceptedCount uint32
+	NewSharesSum            uint64
+}
+
+type stratumV2WireSubmitSharesError struct {
+	ChannelID      uint32
+	SequenceNumber uint32
+	ErrorCode      string // STR0_255
+}
