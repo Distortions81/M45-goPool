@@ -142,3 +142,11 @@ type stratumV2WireSetTarget struct {
 	ChannelID     uint32
 	MaximumTarget [32]byte // U256
 }
+
+type stratumV2WireSetNewPrevHash struct {
+	ChannelID uint32
+	JobID     uint32
+	PrevHash  [32]byte // U256
+	MinNTime  uint32
+	NBits     uint32
+}

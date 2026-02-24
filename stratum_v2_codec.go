@@ -23,6 +23,7 @@ const (
 	stratumV2MsgTypeNewMiningJob                     = uint8(0x15)
 	stratumV2MsgTypeSetExtranoncePrefix              = uint8(0x19)
 	stratumV2MsgTypeSetTarget                        = uint8(0x21)
+	stratumV2MsgTypeSetNewPrevHash                   = uint8(0x20)
 	stratumV2MsgTypeSetupConnection                  = uint8(0x00)
 	stratumV2MsgTypeSetupConnectionSuccess           = uint8(0x01)
 	stratumV2MsgTypeSetupConnectionError             = uint8(0x02)
@@ -560,6 +561,33 @@ func decodeStratumV2SetTargetPayload(payload []byte) (stratumV2WireSetTarget, er
 	return out, nil
 }
 
+func encodeStratumV2SetNewPrevHashFrame(msg stratumV2WireSetNewPrevHash) ([]byte, error) {
+	payload := make([]byte, 48)
+	binary.LittleEndian.PutUint32(payload[0:4], msg.ChannelID)
+	binary.LittleEndian.PutUint32(payload[4:8], msg.JobID)
+	copy(payload[8:40], msg.PrevHash[:])
+	binary.LittleEndian.PutUint32(payload[40:44], msg.MinNTime)
+	binary.LittleEndian.PutUint32(payload[44:48], msg.NBits)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType | stratumV2ChannelMsgBit,
+		MsgType:       stratumV2MsgTypeSetNewPrevHash,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetNewPrevHashPayload(payload []byte) (stratumV2WireSetNewPrevHash, error) {
+	if len(payload) != 48 {
+		return stratumV2WireSetNewPrevHash{}, fmt.Errorf("setnewprevhash payload len=%d want 48", len(payload))
+	}
+	var out stratumV2WireSetNewPrevHash
+	out.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	out.JobID = binary.LittleEndian.Uint32(payload[4:8])
+	copy(out.PrevHash[:], payload[8:40])
+	out.MinNTime = binary.LittleEndian.Uint32(payload[40:44])
+	out.NBits = binary.LittleEndian.Uint32(payload[44:48])
+	return out, nil
+}
+
 func encodeStratumV2SubmitSharesStandardFrame(msg stratumV2WireSubmitSharesStandard) ([]byte, error) {
 	payload := make([]byte, 24)
 	binary.LittleEndian.PutUint32(payload[0:4], msg.ChannelID)
@@ -764,6 +792,11 @@ func decodeStratumV2MiningWireFrame(b []byte) (any, error) {
 			return nil, fmt.Errorf("settarget must set channel_msg bit")
 		}
 		return decodeStratumV2SetTargetPayload(frame.Payload)
+	case stratumV2MsgTypeSetNewPrevHash:
+		if !frame.isChannelMessage() {
+			return nil, fmt.Errorf("setnewprevhash must set channel_msg bit")
+		}
+		return decodeStratumV2SetNewPrevHashPayload(frame.Payload)
 	case stratumV2MsgTypeSetExtranoncePrefix:
 		if !frame.isChannelMessage() {
 			return nil, fmt.Errorf("setextranonceprefix must set channel_msg bit")

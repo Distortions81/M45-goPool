@@ -204,6 +204,31 @@ func TestStratumV2SetTargetWireCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStratumV2SetNewPrevHashWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetNewPrevHash{
+		ChannelID: 9,
+		JobID:     77,
+		PrevHash:  [32]byte{0x01, 0x02, 0x03},
+		MinNTime:  12345,
+		NBits:     0x1d00ffff,
+	}
+	enc, err := encodeStratumV2SetNewPrevHashFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetNewPrevHashFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetNewPrevHash)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
 func TestStratumV2SetExtranoncePrefixWireCodecRoundTrip(t *testing.T) {
 	in := stratumV2WireSetExtranoncePrefix{
 		ChannelID:        12,

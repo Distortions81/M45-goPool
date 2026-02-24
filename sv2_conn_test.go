@@ -148,6 +148,38 @@ func TestSV2ConnWriteStratumV2SetTarget_WritesFrameAndTracksChannelTarget(t *tes
 	}
 }
 
+func TestSV2ConnWriteStratumV2SetNewPrevHash_WritesFrameAndTracksState(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := &sv2Conn{mc: mc, writer: &out}
+	msg := stratumV2WireSetNewPrevHash{
+		ChannelID: 55,
+		JobID:     12,
+		PrevHash:  [32]byte{0xaa, 0xbb},
+		MinNTime:  100,
+		NBits:     0x1d00ffff,
+	}
+	if err := c.writeStratumV2SetNewPrevHash(msg); err != nil {
+		t.Fatalf("writeStratumV2SetNewPrevHash: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode setnewprevhash frame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetNewPrevHash)
+	if !ok {
+		t.Fatalf("decoded type=%T want stratumV2WireSetNewPrevHash", dec)
+	}
+	if got != msg {
+		t.Fatalf("frame mismatch: got=%#v want=%#v", got, msg)
+	}
+	tracked, ok := c.channelPrevHash[msg.ChannelID]
+	if !ok || tracked != msg {
+		t.Fatalf("channel prevhash tracking mismatch: ok=%v tracked=%#v want=%#v", ok, tracked, msg)
+	}
+}
+
 func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testing.T) {
 	mc, _ := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
@@ -413,6 +445,36 @@ func TestSV2ConnWriteStratumV2MiningUpdates_UpdateMapperAndWriteFrames(t *testin
 	}
 	if got, ok := c.submitMapper.jobs[stratumV2ChannelJobKey{ChannelID: 7, WireJobID: 1234}]; !ok || got != job.JobID {
 		t.Fatalf("job mapping not updated from framed traffic: got=%q ok=%v want=%q", got, ok, job.JobID)
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_IncomingSetNewPrevHash_TracksState(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var in bytes.Buffer
+	var out bytes.Buffer
+	msg := stratumV2WireSetNewPrevHash{
+		ChannelID: 7,
+		JobID:     99,
+		PrevHash:  [32]byte{1, 2, 3},
+		MinNTime:  123,
+		NBits:     0x1d00ffff,
+	}
+	frame, err := encodeStratumV2SetNewPrevHashFrame(msg)
+	if err != nil {
+		t.Fatalf("encode setnewprevhash: %v", err)
+	}
+	in.Write(frame)
+	c := &sv2Conn{mc: mc, reader: &in, writer: &out}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+	tracked, ok := c.channelPrevHash[msg.ChannelID]
+	if !ok || tracked != msg {
+		t.Fatalf("incoming setnewprevhash not tracked: ok=%v tracked=%#v want=%#v", ok, tracked, msg)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("did not expect outbound response for incoming setnewprevhash, got %d bytes", out.Len())
 	}
 }
 

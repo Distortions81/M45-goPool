@@ -11,15 +11,16 @@ import (
 // handler. It currently supports reading framed submit messages, mapping them
 // into the shared submit core, and writing submit success/error responses.
 type sv2Conn struct {
-	mc             *MinerConn
-	reader         io.Reader
-	writer         io.Writer
-	submitMapper   *stratumV2SubmitMapperState
-	channelTargets map[uint32][32]byte
-	nextChannelID  uint32
-	setupDone      bool
-	setupVersion   uint16
-	setupFlags     uint32
+	mc              *MinerConn
+	reader          io.Reader
+	writer          io.Writer
+	submitMapper    *stratumV2SubmitMapperState
+	channelTargets  map[uint32][32]byte
+	channelPrevHash map[uint32]stratumV2WireSetNewPrevHash
+	nextChannelID   uint32
+	setupDone       bool
+	setupVersion    uint16
+	setupFlags      uint32
 }
 
 func (c *sv2Conn) handleReadLoop() error {
@@ -52,6 +53,9 @@ func (c *sv2Conn) handleOneFrame() error {
 		return c.handleOpenExtendedMiningChannel(msg)
 	case stratumV2WireSetExtranoncePrefix:
 		c.applyStratumV2SetExtranoncePrefix(msg)
+		return nil
+	case stratumV2WireSetNewPrevHash:
+		c.applyStratumV2SetNewPrevHash(msg)
 		return nil
 	case stratumV2WireNewMiningJob:
 		if localJobID, ok := c.defaultLocalJobIDForWireNewMiningJob(msg); ok {
@@ -348,6 +352,28 @@ func (c *sv2Conn) writeStratumV2SetTarget(msg stratumV2WireSetTarget) error {
 		return err
 	}
 	c.applyStratumV2SetTarget(msg)
+	return nil
+}
+
+func (c *sv2Conn) applyStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) {
+	if c == nil {
+		return
+	}
+	if c.channelPrevHash == nil {
+		c.channelPrevHash = make(map[uint32]stratumV2WireSetNewPrevHash)
+	}
+	c.channelPrevHash[msg.ChannelID] = msg
+}
+
+func (c *sv2Conn) writeStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) error {
+	frame, err := encodeStratumV2SetNewPrevHashFrame(msg)
+	if err != nil {
+		return err
+	}
+	if _, err := c.writer.Write(frame); err != nil {
+		return err
+	}
+	c.applyStratumV2SetNewPrevHash(msg)
 	return nil
 }
 
