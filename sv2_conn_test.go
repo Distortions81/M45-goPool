@@ -382,6 +382,8 @@ func TestMinerConnServeSV2_RunsSetupAndCleansUp(t *testing.T) {
 func TestMinerConnServeSV2_OpenChannelGetsImmediateJobBundle(t *testing.T) {
 	mc, job := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
+	walletAddr, walletScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), walletAddr, walletScript)
 
 	client, server := net.Pipe()
 	t.Cleanup(func() { _ = client.Close() })
@@ -435,6 +437,9 @@ func TestMinerConnServeSV2_OpenChannelGetsImmediateJobBundle(t *testing.T) {
 	if openResp.RequestID != 77 || openResp.ChannelID == 0 {
 		t.Fatalf("unexpected open response: %#v", openResp)
 	}
+	if !mc.stratumV1.authorized {
+		t.Fatalf("expected sv2 open to mark miner authorized for shared submit path")
+	}
 
 	msg3 := readFrame()
 	setTarget, ok := msg3.(stratumV2WireSetTarget)
@@ -479,6 +484,8 @@ func TestMinerConnServeSV2_OpenChannelGetsImmediateJobBundle(t *testing.T) {
 func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testing.T) {
 	mc, _ := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
+	walletAddr, walletScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), walletAddr, walletScript)
 
 	var in bytes.Buffer
 	var out bytes.Buffer
@@ -540,6 +547,9 @@ func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testi
 	}
 	if ch.WorkerName != mc.currentWorker() {
 		t.Fatalf("mapper worker=%q want %q", ch.WorkerName, mc.currentWorker())
+	}
+	if !mc.stratumV1.authorized {
+		t.Fatalf("expected sv2 open to mark miner authorized")
 	}
 	wantEx2Len := mc.cfg.Extranonce2Size
 	if wantEx2Len <= 0 {

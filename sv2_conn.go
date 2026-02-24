@@ -153,6 +153,9 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 	if c.submitMapper == nil {
 		c.submitMapper = newStratumV2SubmitMapperState()
 	}
+	if err := c.prepareSV2ChannelWorker(msg.UserIdentity); err != nil {
+		return err
+	}
 	chID := c.allocateChannelID()
 	en2Size := c.mc.cfg.Extranonce2Size
 	if en2Size <= 0 {
@@ -191,6 +194,9 @@ func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedM
 	if c.submitMapper == nil {
 		c.submitMapper = newStratumV2SubmitMapperState()
 	}
+	if err := c.prepareSV2ChannelWorker(msg.UserIdentity); err != nil {
+		return err
+	}
 	chID := c.allocateChannelID()
 	c.submitMapper.registerChannel(chID, stratumV2SubmitChannelMapping{
 		WorkerName: msg.UserIdentity,
@@ -217,6 +223,32 @@ func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedM
 		return err
 	}
 	return c.writeCurrentJobBundleForChannel(chID)
+}
+
+// prepareSV2ChannelWorker mirrors the minimum v1 authorize side effects needed
+// by the shared submit parser/core, but without writing any v1 protocol frames.
+func (c *sv2Conn) prepareSV2ChannelWorker(userIdentity string) error {
+	if c == nil || c.mc == nil {
+		return fmt.Errorf("sv2 conn missing miner context")
+	}
+	worker := strings.TrimSpace(userIdentity)
+	if worker == "" {
+		return fmt.Errorf("sv2 open channel missing user identity")
+	}
+	if len(worker) > maxWorkerNameLen {
+		return fmt.Errorf("sv2 open channel worker name too long")
+	}
+	workerName := c.mc.updateWorker(worker)
+	if workerName != "" {
+		if _, _, ok := c.mc.ensureWorkerWallet(workerName); !ok {
+			return fmt.Errorf("sv2 worker wallet validation failed")
+		}
+		c.mc.assignConnectionSeq()
+		c.mc.registerWorker(workerName)
+	}
+	c.mc.stratumV1.authorized = true
+	c.mc.stratumV1.subscribed = true
+	return nil
 }
 
 func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStandard) error {
