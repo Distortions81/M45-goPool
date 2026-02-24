@@ -41,7 +41,7 @@ func TestSuggestedVardiff_FirstTwoAdjustmentsUseTwoSteps(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			mc.vardiffAdjustments.Store(tc.adjustCnt)
+			mc.vardiffState.vardiffAdjustments.Store(tc.adjustCnt)
 			got := mc.suggestedVardiff(now, snap)
 			if got != tc.want {
 				t.Fatalf("adjustCnt=%d got %.8g want %.8g", tc.adjustCnt, got, tc.want)
@@ -64,8 +64,8 @@ func TestSuggestedVardiff_FarFromTargetBypassesDebounce(t *testing.T) {
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 1024)
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(3)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(3)
 	mc.lastDiffChange.Store(now.Add(-2 * time.Minute).UnixNano())
 
 	// Very high hashrate relative to current diff; ratio is far above 8x.
@@ -98,7 +98,7 @@ func TestSuggestedVardiff_UsesSingleStepCapWhenCloserToTarget(t *testing.T) {
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
-	mc.vardiffAdjustments.Store(3)
+	mc.vardiffState.vardiffAdjustments.Store(3)
 
 	// Use a hashrate where step cap (not share-rate safety clamp) governs the
 	// move size so we can validate near-target cap behavior.
@@ -145,7 +145,7 @@ func TestSuggestedVardiff_UsesAdjustmentWindowAfterBootstrap(t *testing.T) {
 		RollingHashrate: hashPerShare,
 	}
 
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	mc.lastDiffChange.Store(now.Add(-60 * time.Second).UnixNano())
 	if got := mc.suggestedVardiff(now, snap); got != 1 {
 		t.Fatalf("got %.8g want %.8g while vardiff adjustment window has not elapsed", got, 1.0)
@@ -249,7 +249,7 @@ func TestSuggestedVardiff_UsesWindowDifficultyWhenRollingIsZero(t *testing.T) {
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 
 	snap := minerShareSnapshot{
 		Stats: MinerStats{
@@ -279,8 +279,8 @@ func TestSuggestedVardiff_UpwardCooldownBlocksBackToBackLargeUpshifts(t *testing
 			DampingFactor:      0.7,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(2)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(2)
 	atomicStoreFloat64(&mc.difficulty, 1024)
 	mc.lastDiffChange.Store(now.Add(-2 * time.Minute).UnixNano())
 
@@ -318,8 +318,8 @@ func TestSuggestedVardiff_PersistentHighWorkStartLatencyAddsDownwardBias(t *test
 			DampingFactor:      1,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(1) // bypass debounce for deterministic comparison
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(1) // bypass debounce for deterministic comparison
 	atomicStoreFloat64(&mc.difficulty, 1024)
 	mc.lastDiffChange.Store(now.Add(-2 * time.Minute).UnixNano())
 
@@ -362,8 +362,8 @@ func TestSuggestedVardiff_StaleRateSlowsRetargetCadence(t *testing.T) {
 			DampingFactor:      1,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(1)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(1)
 	atomicStoreFloat64(&mc.difficulty, 1)
 	mc.lastDiffChange.Store(now.Add(-80 * time.Second).UnixNano())
 
@@ -398,7 +398,7 @@ func TestSuggestedVardiff_UncertaintyCapsLargeMoveOnTinySample(t *testing.T) {
 			DampingFactor:      1,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	mc.lastDiffChange.Store(now.Add(-3 * time.Minute).UnixNano())
 	atomicStoreFloat64(&mc.difficulty, 8192)
 
@@ -431,8 +431,8 @@ func TestSuggestedVardiff_SteadyStateNearTargetNeedsManyConfirmations(t *testing
 			DampingFactor:      1,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(5) // enable strict steady-state debounce
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(5) // enable strict steady-state debounce
 	atomicStoreFloat64(&mc.difficulty, 1000)
 	mc.lastDiffChange.Store(now.Add(-3 * time.Minute).UnixNano())
 
@@ -573,8 +573,8 @@ func TestSuggestedVardiff_NoiseBandSuppressesTinySampleMoves(t *testing.T) {
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 1000)
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(3)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(3)
 	mc.lastDiffChange.Store(now.Add(-3 * time.Minute).UnixNano())
 
 	// Small sample window (2 accepted shares) with modest ratio drift that
@@ -609,8 +609,8 @@ func TestSuggestedVardiff_ShareRateSafetyClamp(t *testing.T) {
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(3)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(3)
 	mc.lastDiffChange.Store(now.Add(-3 * time.Minute).UnixNano())
 
 	rolling := 90e12
@@ -676,8 +676,8 @@ func TestSuggestedVardiff_LowHashrateDownshiftNeedsMinimumAcceptedShares(t *test
 		},
 	}
 	atomicStoreFloat64(&mc.difficulty, 0.01)
-	mc.initialEMAWindowDone.Store(true)
-	mc.vardiffAdjustments.Store(3)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.vardiffAdjustments.Store(3)
 	mc.lastDiffChange.Store(now.Add(-5 * time.Minute).UnixNano())
 
 	rolling := 200e3

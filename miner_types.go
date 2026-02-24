@@ -150,18 +150,7 @@ type MinerConn struct {
 	lastJob              *Job
 	lastJobPrevHash      string
 	lastJobHeight        int64
-	lastClean            bool
-	notifySeq            uint64 // Incremented each job notification to ensure unique coinbase
-	jobScriptTime        map[string]int64
-	jobNotifyCoinbase    map[string]notifiedCoinbaseParts
-	jobNTimeBounds       map[string]jobNTimeBounds
-	banUntil             time.Time
-	banReason            string
-	lastPenalty          time.Time
-	invalidSubs          int
-	validSubsForBan      int
-	lastProtoViolation   time.Time
-	protoViolations      int
+	ban                  minerConnBanState
 	lastShareHash        string
 	lastShareAccepted    bool
 	lastShareDifficulty  float64
@@ -170,30 +159,7 @@ type MinerConn struct {
 	walletMu             sync.Mutex
 	workerWallets        map[string]workerWalletState
 	cleanupOnce          sync.Once
-	// If true, VarDiff adjustments are disabled for this miner and the
-	// current difficulty is treated as fixed (typically from suggest_difficulty).
-	lockDifficulty bool
-	// vardiffAdjustments counts applied VarDiff difficulty changes for this
-	// connection so startup can use larger initial correction steps.
-	vardiffAdjustments atomic.Int32
-	// vardiffPendingDirection/vardiffPendingCount debounce retarget decisions
-	// after bootstrap so random share noise does not cause constant churn.
-	// direction: -1 down, +1 up, 0 unset.
-	vardiffPendingDirection atomic.Int32
-	vardiffPendingCount     atomic.Int32
-	// vardiffUpwardCooldownUntil blocks repeat upward retargets for a short
-	// cooldown after a large upward jump to avoid stacked overshoots.
-	vardiffUpwardCooldownUntil atomic.Int64
-	// vardiffWarmupHighLatencyStreak tracks persistent windows where work-start
-	// latency p95 is high; used for a small downward difficulty bias.
-	vardiffWarmupHighLatencyStreak atomic.Int32
-	// bootstrapDone tracks whether we've already performed the initial
-	// "bootstrap" vardiff move for this connection.
-	bootstrapDone bool
-	// restoredRecentDiff is set when we restore a worker's persisted
-	// difficulty after a short disconnect so we can skip bootstrap and
-	// suggested-difficulty overrides on reconnect.
-	restoredRecentDiff   bool
+	vardiffState         minerConnVarDiffState
 	minerType            string
 	minerClientName      string
 	minerClientVersion   string
@@ -206,22 +172,14 @@ type MinerConn struct {
 	// stratumMsgCount stores weighted half-message units (2 = full message).
 	stratumMsgWindowStart time.Time
 	stratumMsgCount       int
-	// invalidWarnedAt/invalidWarnedCount rate-limit client.show_message warnings
-	// when the miner is approaching an invalid-submission ban threshold.
-	invalidWarnedAt    time.Time
-	invalidWarnedCount int
-	// dupWarn* rate-limit client.show_message warnings for repeated duplicate shares.
-	dupWarnWindowStart time.Time
-	dupWarnCount       int
-	dupWarnedAt        time.Time
 	// lastHashrateUpdate tracks the last time we updated the per-connection
 	// hashrate EMA so we can apply a time-based decay between shares.
-	lastHashrateUpdate time.Time
+	// Kept in vardiffState.
 	// hashrateSampleCount counts how many shares have been recorded since the
 	// last EMA update so we can ensure the window spans enough work.
-	hashrateSampleCount int
+	// Kept in vardiffState.
 	// hashrateAccumulatedDiff accumulates credited difficulties between samples.
-	hashrateAccumulatedDiff float64
+	// Kept in vardiffState.
 	// submitRTTSamplesMs keeps a small rolling window of submit processing RTT
 	// estimates (server-side receive -> response write complete), in ms.
 	submitRTTSamplesMs [64]float64
@@ -243,29 +201,6 @@ type MinerConn struct {
 	pingRTTSamplesMs       [64]float64
 	pingRTTCount           int
 	pingRTTIndex           int
-	// jobDifficulty records the difficulty in effect when each job notify
-	// was sent to this miner so we can credit shares with the assigned
-	// target even if vardiff changes before the share arrives.
-	jobDifficulty map[string]float64
-	// rollingHashrateValue holds the current EMA-smoothed hashrate estimate
-	// for this connection, derived from accepted work over time.
-	rollingHashrateValue float64
-	// rollingHashrateControl is a faster EMA used by VarDiff control decisions.
-	rollingHashrateControl float64
-	// initialEMAWindowDone marks that the first (bootstrap) EMA window has
-	// completed; after this, configured tau is used.
-	initialEMAWindowDone atomic.Bool
-	// windowResetAnchor stores when the current sampling window was reset so
-	// the first post-reset share can anchor WindowStart midway between reset
-	// time and first-share time.
-	windowResetAnchor time.Time
-	// vardiffWindow* tracks a short-horizon retarget window used only for
-	// difficulty control; status/confidence windows are kept separate.
-	vardiffWindowStart       time.Time
-	vardiffWindowResetAnchor time.Time
-	vardiffWindowAccepted    int
-	vardiffWindowSubmissions int
-	vardiffWindowDifficulty  float64
 	// isTLSConnection tracks whether this miner connected over the TLS listener.
 	isTLSConnection bool
 	connectionSeq   uint64
@@ -297,6 +232,84 @@ type minerConnStratumV1State struct {
 	// during the initialization phase. Subsequent suggests will be ignored to prevent
 	// repeated keepalive messages from disrupting vardiff adjustments.
 	suggestDiffProcessed bool
+
+	notify minerConnStratumV1NotifyState
+}
+
+type minerConnStratumV1NotifyState struct {
+	lastClean bool
+	// Incremented each job notification to ensure unique coinbase.
+	notifySeq         uint64
+	jobScriptTime     map[string]int64
+	jobNotifyCoinbase map[string]notifiedCoinbaseParts
+	jobNTimeBounds    map[string]jobNTimeBounds
+	// jobDifficulty records the difficulty in effect when each job notify
+	// was sent to this miner so we can credit shares with the assigned
+	// target even if vardiff changes before the share arrives.
+	jobDifficulty map[string]float64
+}
+
+type minerConnBanState struct {
+	banUntil           time.Time
+	banReason          string
+	lastPenalty        time.Time
+	invalidSubs        int
+	validSubsForBan    int
+	lastProtoViolation time.Time
+	protoViolations    int
+
+	// invalidWarnedAt/invalidWarnedCount rate-limit client.show_message warnings
+	// when the miner is approaching an invalid-submission ban threshold.
+	invalidWarnedAt    time.Time
+	invalidWarnedCount int
+	// dupWarn* rate-limit client.show_message warnings for repeated duplicate shares.
+	dupWarnWindowStart time.Time
+	dupWarnCount       int
+	dupWarnedAt        time.Time
+}
+
+type minerConnVarDiffState struct {
+	// If true, VarDiff adjustments are disabled for this miner and the
+	// current difficulty is treated as fixed (typically from suggest_difficulty).
+	lockDifficulty bool
+	// vardiffAdjustments counts applied VarDiff difficulty changes for this
+	// connection so startup can use larger initial correction steps.
+	vardiffAdjustments atomic.Int32
+	// vardiffPendingDirection/vardiffPendingCount debounce retarget decisions
+	// after bootstrap so random share noise does not cause constant churn.
+	// direction: -1 down, +1 up, 0 unset.
+	vardiffPendingDirection atomic.Int32
+	vardiffPendingCount     atomic.Int32
+	// vardiffUpwardCooldownUntil blocks repeat upward retargets for a short
+	// cooldown after a large upward jump to avoid stacked overshoots.
+	vardiffUpwardCooldownUntil atomic.Int64
+	// vardiffWarmupHighLatencyStreak tracks persistent windows where work-start
+	// latency p95 is high; used for a small downward difficulty bias.
+	vardiffWarmupHighLatencyStreak atomic.Int32
+	// bootstrapDone tracks whether we've already performed the initial
+	// "bootstrap" vardiff move for this connection.
+	bootstrapDone bool
+	// restoredRecentDiff is set when we restore a worker's persisted
+	// difficulty after a short disconnect so we can skip bootstrap and
+	// suggested-difficulty overrides on reconnect.
+	restoredRecentDiff bool
+
+	// Hashrate EMA + control window state.
+	lastHashrateUpdate      time.Time
+	hashrateSampleCount     int
+	hashrateAccumulatedDiff float64
+	rollingHashrateValue    float64
+	rollingHashrateControl  float64
+	initialEMAWindowDone    atomic.Bool
+	windowResetAnchor       time.Time
+
+	// vardiffWindow* tracks a short-horizon retarget window used only for
+	// difficulty control; status/confidence windows are kept separate.
+	vardiffWindowStart       time.Time
+	vardiffWindowResetAnchor time.Time
+	vardiffWindowAccepted    int
+	vardiffWindowSubmissions int
+	vardiffWindowDifficulty  float64
 }
 
 type rpcCaller interface {

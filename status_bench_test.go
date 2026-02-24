@@ -205,10 +205,10 @@ func benchmarkStatusServerWithConns(connCount int) *StatusServer {
 			WindowSubmissions: 12,
 			LastShare:         now,
 		}
-		mc.rollingHashrateValue = float64(1e12 + float64(i%1000))
+		mc.vardiffState.rollingHashrateValue = float64(1e12 + float64(i%1000))
 		mc.connectionSeq = uint64(i + 1)
 
-		metrics.UpdateConnectionHashrate(uint64(i+1), mc.rollingHashrateValue)
+		metrics.UpdateConnectionHashrate(uint64(i+1), mc.vardiffState.rollingHashrateValue)
 		reg.Add(mc)
 	}
 

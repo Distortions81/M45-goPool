@@ -25,9 +25,11 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 		cfg: Config{PoolFeePercent: 0},
 		stratumV1: minerConnStratumV1State{
 			extranonce1: []byte{0xaa, 0xbb, 0xcc, 0xdd},
-		},
-		jobScriptTime: map[string]int64{
-			"job-1": 2000,
+			notify: minerConnStratumV1NotifyState{
+				jobScriptTime: map[string]int64{
+					"job-1": 2000,
+				},
+			},
 		},
 	}
 	mc.updateWorker(workerName)
@@ -47,7 +49,7 @@ func TestBuildCurrentJobCoinbaseDetail_UsesExactSinglePayoutPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildCoinbaseParts: %v", err)
 	}
-	mc.jobNotifyCoinbase = map[string]notifiedCoinbaseParts{
+	mc.stratumV1.notify.jobNotifyCoinbase = map[string]notifiedCoinbaseParts{
 		job.JobID: {coinb1: coinb1, coinb2: coinb2},
 	}
 

@@ -61,22 +61,26 @@ func benchmarkMinerConnForSubmit(metrics *PoolMetrics) *MinerConn {
 		PoolFeePercent: 0, // keep dual-payout path disabled in this benchmark
 	}
 	mc := &MinerConn{
-		id:             "bench-miner",
-		cfg:            cfg,
-		vardiff:        defaultVarDiff,
-		metrics:        metrics,
-		lockDifficulty: true,
-		connectedAt:    time.Now(),
+		id:          "bench-miner",
+		cfg:         cfg,
+		vardiff:     defaultVarDiff,
+		metrics:     metrics,
+		connectedAt: time.Now(),
+		vardiffState: minerConnVarDiffState{
+			lockDifficulty: true,
+		},
 		stratumV1: minerConnStratumV1State{
 			extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 			authorized:  true,
 			subscribed:  true,
+			notify: minerConnStratumV1NotifyState{
+				jobDifficulty: make(map[string]float64, 1),
+			},
 		},
 		stats: MinerStats{
 			Worker:       benchWorker,
 			WorkerSHA256: workerNameHash(benchWorker),
 		},
-		jobDifficulty: make(map[string]float64, 1),
 		maxRecentJobs: 1,
 		// Leave statsUpdates nil so recordShare executes synchronously; the
 		// CPU cost is still representative, without goroutine scheduling noise.
@@ -101,7 +105,7 @@ func BenchmarkProcessSubmissionTaskAcceptedShare(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		mc := benchmarkMinerConnForSubmit(metrics)
-		mc.jobDifficulty[job.JobID] = 1e-12
+		mc.stratumV1.notify.jobDifficulty[job.JobID] = 1e-12
 
 		task := submissionTask{
 			mc:               mc,
@@ -161,7 +165,7 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare(b *testing.B) {
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
-		mc.jobDifficulty[jobID] = 1e-12
+		mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
 		mc.jobMu.Unlock()
 
 		var i uint32
@@ -218,7 +222,7 @@ func BenchmarkHandleSubmitAndProcessAcceptedShare_DupCheckEnabled(b *testing.B) 
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
-		mc.jobDifficulty[jobID] = 1e-12
+		mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
 		mc.jobMu.Unlock()
 
 		var i uint32
@@ -274,7 +278,7 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckDisabled(b *testing.B) 
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
-		mc.jobDifficulty[jobID] = 1e-12
+		mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
 		mc.jobMu.Unlock()
 
 		var i uint32
@@ -313,7 +317,7 @@ func BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckEnabled(b *testing.B) {
 		mc.jobMu.Lock()
 		mc.activeJobs = map[string]*Job{jobID: job}
 		mc.lastJob = job
-		mc.jobDifficulty[jobID] = 1e-12
+		mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
 		mc.jobMu.Unlock()
 
 		var i uint32

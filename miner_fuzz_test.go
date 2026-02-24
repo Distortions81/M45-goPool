@@ -57,11 +57,11 @@ func FuzzNoteInvalidSubmitThresholds(f *testing.F) {
 			lastInvalids = invalids
 			if banned {
 				bannedCount++
-				if mc.banUntil.IsZero() {
+				if mc.ban.banUntil.IsZero() {
 					t.Fatalf("banned worker has zero banUntil")
 				}
-				if mc.banUntil.Before(now) {
-					t.Fatalf("banUntil %v is before now", mc.banUntil)
+				if mc.ban.banUntil.Before(now) {
+					t.Fatalf("banUntil %v is before now", mc.ban.banUntil)
 				}
 				break
 			}

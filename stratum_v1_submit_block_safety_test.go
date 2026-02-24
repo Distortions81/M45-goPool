@@ -52,8 +52,8 @@ func TestWinningBlockNotRejectedAsDuplicate(t *testing.T) {
 	job := benchmarkSubmitJobForTest(t)
 	job.Target = new(big.Int).Set(maxUint256)
 	jobID := job.JobID
-	mc.jobDifficulty[jobID] = 1e-12
-	mc.jobScriptTime = map[string]int64{jobID: job.ScriptTime}
+	mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
+	mc.stratumV1.notify.jobScriptTime = map[string]int64{jobID: job.ScriptTime}
 
 	ntimeHex := "6553f100" // 1700000000
 	task := submissionTask{
@@ -114,7 +114,7 @@ func TestWinningBlockUsesNotifiedScriptTime(t *testing.T) {
 
 	// Simulate that we notified this miner using a unique scriptTime.
 	notifiedScriptTime := job.ScriptTime + 1
-	mc.jobScriptTime = map[string]int64{jobID: notifiedScriptTime}
+	mc.stratumV1.notify.jobScriptTime = map[string]int64{jobID: notifiedScriptTime}
 
 	// Find a nonce such that the block condition is true for notifiedScriptTime,
 	// but false for the fallback job.ScriptTime. This ensures we submit the block
@@ -235,7 +235,7 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 	jobID := job.JobID
 
 	// Use a notified scriptTime to avoid coinbase mismatch issues.
-	mc.jobScriptTime = map[string]int64{jobID: job.ScriptTime + 1}
+	mc.stratumV1.notify.jobScriptTime = map[string]int64{jobID: job.ScriptTime + 1}
 
 	task := submissionTask{
 		mc:               mc,

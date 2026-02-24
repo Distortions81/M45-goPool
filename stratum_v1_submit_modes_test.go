@@ -27,8 +27,8 @@ func newSubmitReadyMinerConnForModesTest(t *testing.T) (*MinerConn, *Job) {
 	mc.activeJobs = map[string]*Job{jobID: job}
 	mc.lastJob = job
 	mc.jobMu.Unlock()
-	mc.jobDifficulty[jobID] = 1e-12
-	mc.jobScriptTime = map[string]int64{jobID: job.Template.CurTime}
+	mc.stratumV1.notify.jobDifficulty[jobID] = 1e-12
+	mc.stratumV1.notify.jobScriptTime = map[string]int64{jobID: job.Template.CurTime}
 
 	return mc, job
 }

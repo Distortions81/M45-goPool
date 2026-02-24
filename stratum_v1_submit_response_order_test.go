@@ -68,22 +68,22 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 			extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 			authorized:  true,
 			subscribed:  true,
+			notify: minerConnStratumV1NotifyState{
+				jobDifficulty: map[string]float64{job.JobID: 1},
+			},
 		},
 		stats: MinerStats{
 			Worker:       workerName,
 			WorkerSHA256: workerNameHash(workerName),
 		},
 		// Keep stats updates synchronous in this test.
-		statsUpdates: nil,
-		activeJobs:   make(map[string]*Job, 1),
-		jobDifficulty: map[string]float64{
-			job.JobID: 1,
-		},
+		statsUpdates:  nil,
+		activeJobs:    make(map[string]*Job, 1),
 		maxRecentJobs: 1,
 	}
 	atomicStoreFloat64(&mc.difficulty, 1)
 	mc.shareTarget.Store(targetFromDifficulty(1))
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	mc.lastDiffChange.Store(time.Now().Add(-2 * mc.vardiff.AdjustmentWindow).UnixNano())
 	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 
@@ -94,7 +94,7 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 	mc.stats.WindowAccepted = 10
 	mc.stats.WindowSubmissions = 10
 	mc.statsMu.Unlock()
-	mc.rollingHashrateValue = 1e10 // enough to trigger an upward move (and power-of-two quantization)
+	mc.vardiffState.rollingHashrateValue = 1e10 // enough to trigger an upward move (and power-of-two quantization)
 
 	task := submissionTask{
 		mc:               mc,
@@ -118,7 +118,7 @@ func TestMiningSubmitRespondsBeforeNotifyOnVardiffMove(t *testing.T) {
 		isBlock:   false,
 	}
 
-	mc.lockDifficulty = false
+	mc.vardiffState.lockDifficulty = false
 	mc.processSoloShare(task, ctx)
 
 	out := conn.String()

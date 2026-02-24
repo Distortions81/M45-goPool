@@ -139,9 +139,9 @@ func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason shareR
 
 	shouldWarn := false
 	mc.stateMu.Lock()
-	if effectiveInvalid > mc.invalidWarnedCount && (mc.invalidWarnedAt.IsZero() || now.Sub(mc.invalidWarnedAt) >= 30*time.Second) {
-		mc.invalidWarnedAt = now
-		mc.invalidWarnedCount = effectiveInvalid
+	if effectiveInvalid > mc.ban.invalidWarnedCount && (mc.ban.invalidWarnedAt.IsZero() || now.Sub(mc.ban.invalidWarnedAt) >= 30*time.Second) {
+		mc.ban.invalidWarnedAt = now
+		mc.ban.invalidWarnedCount = effectiveInvalid
 		shouldWarn = true
 	}
 	mc.stateMu.Unlock()
@@ -163,13 +163,13 @@ func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
 	)
 	shouldWarn := false
 	mc.stateMu.Lock()
-	if mc.dupWarnWindowStart.IsZero() || now.Sub(mc.dupWarnWindowStart) > dupWindow {
-		mc.dupWarnWindowStart = now
-		mc.dupWarnCount = 0
+	if mc.ban.dupWarnWindowStart.IsZero() || now.Sub(mc.ban.dupWarnWindowStart) > dupWindow {
+		mc.ban.dupWarnWindowStart = now
+		mc.ban.dupWarnCount = 0
 	}
-	mc.dupWarnCount++
-	if mc.dupWarnCount == dupThreshold && (mc.dupWarnedAt.IsZero() || now.Sub(mc.dupWarnedAt) > dupWindow) {
-		mc.dupWarnedAt = now
+	mc.ban.dupWarnCount++
+	if mc.ban.dupWarnCount == dupThreshold && (mc.ban.dupWarnedAt.IsZero() || now.Sub(mc.ban.dupWarnedAt) > dupWindow) {
+		mc.ban.dupWarnedAt = now
 		shouldWarn = true
 	}
 	mc.stateMu.Unlock()
@@ -185,7 +185,7 @@ func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason shareRejectReason) 
 	defer mc.stateMu.Unlock()
 	window := mc.banInvalidWindow()
 	mc.refreshBanCountersWindowLocked(now, window)
-	mc.lastPenalty = now
+	mc.ban.lastPenalty = now
 
 	// Only treat clearly bogus submissions as ban-eligible. Normal mining
 	// behavior like low-difficulty shares, stale jobs, or the occasional
@@ -199,7 +199,7 @@ func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason shareRejectReason) 
 		rejectInvalidVersion,
 		rejectInvalidVersionMask,
 		rejectInsufficientVersionBits:
-		mc.invalidSubs++
+		mc.ban.invalidSubs++
 	default:
 		// Track the last penalty time but don't increment the ban counter.
 		return false, mc.effectiveInvalidSubsLocked(mc.cfg.BanInvalidSubmissionsAfter)
@@ -216,9 +216,9 @@ func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason shareRejectReason) 
 		if banDuration <= 0 {
 			banDuration = defaultBanInvalidSubmissionsDuration
 		}
-		mc.banUntil = now.Add(banDuration)
-		if mc.banReason == "" {
-			mc.banReason = fmt.Sprintf("too many invalid submissions (%d in %s)", effectiveInvalid, window)
+		mc.ban.banUntil = now.Add(banDuration)
+		if mc.ban.banReason == "" {
+			mc.ban.banReason = fmt.Sprintf("too many invalid submissions (%d in %s)", effectiveInvalid, window)
 		}
 		return true, effectiveInvalid
 	}
@@ -230,9 +230,9 @@ func (mc *MinerConn) noteValidSubmit(now time.Time) {
 	defer mc.stateMu.Unlock()
 	window := mc.banInvalidWindow()
 	mc.refreshBanCountersWindowLocked(now, window)
-	mc.lastPenalty = now
-	if mc.validSubsForBan < 1000000 {
-		mc.validSubsForBan++
+	mc.ban.lastPenalty = now
+	if mc.ban.validSubsForBan < 1000000 {
+		mc.ban.validSubsForBan++
 	}
 }
 
@@ -248,9 +248,9 @@ func (mc *MinerConn) refreshBanCountersWindowLocked(now time.Time, window time.D
 	if window <= 0 {
 		return
 	}
-	if now.Sub(mc.lastPenalty) > window {
-		mc.invalidSubs = 0
-		mc.validSubsForBan = 0
+	if now.Sub(mc.ban.lastPenalty) > window {
+		mc.ban.invalidSubs = 0
+		mc.ban.validSubsForBan = 0
 	}
 }
 
@@ -261,11 +261,11 @@ func (mc *MinerConn) effectiveInvalidSubsLocked(threshold int) int {
 	if threshold <= 0 {
 		threshold = 1
 	}
-	effective := mc.invalidSubs
+	effective := mc.ban.invalidSubs
 	if effective <= 0 {
 		return 0
 	}
-	forgiveUnits := mc.validSubsForBan / banInvalidForgiveSharesPerUnit
+	forgiveUnits := mc.ban.validSubsForBan / banInvalidForgiveSharesPerUnit
 	maxForgive := max(int(float64(threshold)*banInvalidForgiveCapFraction), 1)
 	if forgiveUnits > maxForgive {
 		forgiveUnits = maxForgive
@@ -289,31 +289,31 @@ func (mc *MinerConn) noteProtocolViolation(now time.Time) (bool, int) {
 	if threshold <= 0 {
 		// When explicit protocol thresholds are not set, reuse the
 		// invalid-submission threshold for simplicity.
-		return false, mc.protoViolations
+		return false, mc.ban.protoViolations
 	}
 
 	window := mc.cfg.BanInvalidSubmissionsWindow
 	if window <= 0 {
 		window = time.Minute
 	}
-	if now.Sub(mc.lastProtoViolation) > window {
-		mc.protoViolations = 0
+	if now.Sub(mc.ban.lastProtoViolation) > window {
+		mc.ban.protoViolations = 0
 	}
-	mc.lastProtoViolation = now
-	mc.protoViolations++
+	mc.ban.lastProtoViolation = now
+	mc.ban.protoViolations++
 
-	if mc.protoViolations >= threshold {
+	if mc.ban.protoViolations >= threshold {
 		banDuration := mc.cfg.BanInvalidSubmissionsDuration
 		if banDuration <= 0 {
 			banDuration = 15 * time.Minute
 		}
-		mc.banUntil = now.Add(banDuration)
-		if mc.banReason == "" {
-			mc.banReason = fmt.Sprintf("too many protocol violations (%d in %s)", mc.protoViolations, window)
+		mc.ban.banUntil = now.Add(banDuration)
+		if mc.ban.banReason == "" {
+			mc.ban.banReason = fmt.Sprintf("too many protocol violations (%d in %s)", mc.ban.protoViolations, window)
 		}
-		return true, mc.protoViolations
+		return true, mc.ban.protoViolations
 	}
-	return false, mc.protoViolations
+	return false, mc.ban.protoViolations
 }
 
 func (mc *MinerConn) bannedStratumError() []any {
@@ -403,16 +403,16 @@ func (mc *MinerConn) resetShareWindow(now time.Time) {
 	mc.statsMu.Lock()
 	// Reset only the VarDiff retarget window. Status/confidence windows and
 	// hashrate EMAs continue accumulating across difficulty adjustments.
-	mc.vardiffWindowStart = time.Time{}
-	mc.vardiffWindowResetAnchor = now
-	mc.vardiffWindowAccepted = 0
-	mc.vardiffWindowSubmissions = 0
-	mc.vardiffWindowDifficulty = 0
+	mc.vardiffState.vardiffWindowStart = time.Time{}
+	mc.vardiffState.vardiffWindowResetAnchor = now
+	mc.vardiffState.vardiffWindowAccepted = 0
+	mc.vardiffState.vardiffWindowSubmissions = 0
+	mc.vardiffState.vardiffWindowDifficulty = 0
 	mc.statsMu.Unlock()
 }
 
 func (mc *MinerConn) hashrateEMATau() time.Duration {
-	if !mc.initialEMAWindowDone.Load() {
+	if !mc.vardiffState.initialEMAWindowDone.Load() {
 		return initialHashrateEMATau
 	}
 
@@ -427,7 +427,7 @@ func (mc *MinerConn) hashrateEMATau() time.Duration {
 }
 
 func (mc *MinerConn) hashrateControlTau() time.Duration {
-	if !mc.initialEMAWindowDone.Load() {
+	if !mc.vardiffState.initialEMAWindowDone.Load() {
 		return initialHashrateEMATau
 	}
 	slow := mc.hashrateEMATau()
@@ -439,12 +439,12 @@ func (mc *MinerConn) hashrateControlTau() time.Duration {
 }
 
 func (mc *MinerConn) decayedHashratesLocked(now time.Time) (control, display float64) {
-	control = mc.rollingHashrateControl
-	display = mc.rollingHashrateValue
-	if now.IsZero() || mc.lastHashrateUpdate.IsZero() || !now.After(mc.lastHashrateUpdate) {
+	control = mc.vardiffState.rollingHashrateControl
+	display = mc.vardiffState.rollingHashrateValue
+	if now.IsZero() || mc.vardiffState.lastHashrateUpdate.IsZero() || !now.After(mc.vardiffState.lastHashrateUpdate) {
 		return control, display
 	}
-	idleSeconds := now.Sub(mc.lastHashrateUpdate).Seconds()
+	idleSeconds := now.Sub(mc.vardiffState.lastHashrateUpdate).Seconds()
 	if idleSeconds <= 0 {
 		return control, display
 	}
@@ -482,7 +482,7 @@ func (mc *MinerConn) vardiffRetargetInterval(rollingHashrate, currentDiff, targe
 
 	// During bootstrap, enforce both the EMA warmup horizon and the vardiff
 	// adjustment window by waiting for whichever is longer.
-	if !mc.initialEMAWindowDone.Load() && interval < initialHashrateEMATau {
+	if !mc.vardiffState.initialEMAWindowDone.Load() && interval < initialHashrateEMATau {
 		interval = initialHashrateEMATau
 	}
 	if mc.vardiff.RetargetDelay > 0 && interval < mc.vardiff.RetargetDelay {
@@ -552,27 +552,27 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 	controlTauSeconds := mc.hashrateControlTau().Seconds()
 	displayTauSeconds := mc.hashrateEMATau().Seconds()
 
-	if mc.lastHashrateUpdate.IsZero() {
-		mc.lastHashrateUpdate = shareTime
-		mc.hashrateSampleCount = 1
-		mc.hashrateAccumulatedDiff = targetDiff
+	if mc.vardiffState.lastHashrateUpdate.IsZero() {
+		mc.vardiffState.lastHashrateUpdate = shareTime
+		mc.vardiffState.hashrateSampleCount = 1
+		mc.vardiffState.hashrateAccumulatedDiff = targetDiff
 		return
 	}
 
-	mc.hashrateSampleCount++
-	mc.hashrateAccumulatedDiff += targetDiff
-	elapsed := shareTime.Sub(mc.lastHashrateUpdate).Seconds()
+	mc.vardiffState.hashrateSampleCount++
+	mc.vardiffState.hashrateAccumulatedDiff += targetDiff
+	elapsed := shareTime.Sub(mc.vardiffState.lastHashrateUpdate).Seconds()
 	if elapsed <= 0 {
 		return
 	}
 
 	// Bootstrap: wait for the initial EMA window so startup doesn't jump on
 	// one or two early shares. After bootstrap, update incrementally.
-	if !mc.initialEMAWindowDone.Load() && elapsed < controlTauSeconds {
+	if !mc.vardiffState.initialEMAWindowDone.Load() && elapsed < controlTauSeconds {
 		return
 	}
 
-	sample := (mc.hashrateAccumulatedDiff * hashPerShare) / elapsed
+	sample := (mc.vardiffState.hashrateAccumulatedDiff * hashPerShare) / elapsed
 
 	// Apply an EMA with a configurable time constant so that hashrate responds
 	// quickly to changes but decays smoothly when shares slow down.
@@ -591,25 +591,25 @@ func (mc *MinerConn) updateHashrateLocked(targetDiff float64, shareTime time.Tim
 		alphaDisplay = 1
 	}
 
-	if mc.rollingHashrateControl <= 0 {
-		mc.rollingHashrateControl = sample
+	if mc.vardiffState.rollingHashrateControl <= 0 {
+		mc.vardiffState.rollingHashrateControl = sample
 	} else {
-		mc.rollingHashrateControl = mc.rollingHashrateControl + alphaControl*(sample-mc.rollingHashrateControl)
+		mc.vardiffState.rollingHashrateControl = mc.vardiffState.rollingHashrateControl + alphaControl*(sample-mc.vardiffState.rollingHashrateControl)
 	}
-	if mc.rollingHashrateValue <= 0 {
-		mc.rollingHashrateValue = sample
+	if mc.vardiffState.rollingHashrateValue <= 0 {
+		mc.vardiffState.rollingHashrateValue = sample
 	} else {
-		mc.rollingHashrateValue = mc.rollingHashrateValue + alphaDisplay*(sample-mc.rollingHashrateValue)
+		mc.vardiffState.rollingHashrateValue = mc.vardiffState.rollingHashrateValue + alphaDisplay*(sample-mc.vardiffState.rollingHashrateValue)
 	}
-	mc.initialEMAWindowDone.Store(true)
-	mc.lastHashrateUpdate = shareTime
-	mc.hashrateSampleCount = 0
-	mc.hashrateAccumulatedDiff = 0
+	mc.vardiffState.initialEMAWindowDone.Store(true)
+	mc.vardiffState.lastHashrateUpdate = shareTime
+	mc.vardiffState.hashrateSampleCount = 0
+	mc.vardiffState.hashrateAccumulatedDiff = 0
 
 	if mc.metrics != nil {
 		connSeq := atomic.LoadUint64(&mc.connectionSeq)
 		if connSeq != 0 {
-			mc.metrics.UpdateConnectionHashrate(connSeq, mc.rollingHashrateValue)
+			mc.metrics.UpdateConnectionHashrate(connSeq, mc.vardiffState.rollingHashrateValue)
 		}
 	}
 }
@@ -629,8 +629,8 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 	mc.lastJob = job
 	mc.lastJobPrevHash = job.Template.Previous
 	mc.lastJobHeight = job.Template.Height
-	mc.lastClean = clean
-	if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
+	mc.stratumV1.notify.lastClean = clean
+	if mc.cfg.ShareCheckNTimeWindow && mc.stratumV1.notify.jobNTimeBounds != nil {
 		minNTime := job.Template.CurTime
 		if job.Template.Mintime > 0 && job.Template.Mintime > minNTime {
 			minNTime = job.Template.Mintime
@@ -639,7 +639,7 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		if slack <= 0 {
 			slack = defaultShareNTimeMaxForwardSeconds
 		}
-		mc.jobNTimeBounds[job.JobID] = jobNTimeBounds{
+		mc.stratumV1.notify.jobNTimeBounds[job.JobID] = jobNTimeBounds{
 			min: minNTime,
 			max: minNTime + int64(slack),
 		}
@@ -652,14 +652,14 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
 		delete(mc.activeJobs, oldest)
-		if mc.jobScriptTime != nil {
-			delete(mc.jobScriptTime, oldest)
+		if mc.stratumV1.notify.jobScriptTime != nil {
+			delete(mc.stratumV1.notify.jobScriptTime, oldest)
 		}
-		if mc.jobNotifyCoinbase != nil {
-			delete(mc.jobNotifyCoinbase, oldest)
+		if mc.stratumV1.notify.jobNotifyCoinbase != nil {
+			delete(mc.stratumV1.notify.jobNotifyCoinbase, oldest)
 		}
-		if mc.jobNTimeBounds != nil {
-			delete(mc.jobNTimeBounds, oldest)
+		if mc.stratumV1.notify.jobNTimeBounds != nil {
+			delete(mc.stratumV1.notify.jobNTimeBounds, oldest)
 		}
 		if dupEnabled {
 			if cache := mc.shareCache[oldest]; cache != nil {
@@ -676,7 +676,7 @@ func (mc *MinerConn) trackJob(job *Job, clean bool) {
 			}
 		}
 		delete(mc.shareCache, oldest)
-		delete(mc.jobDifficulty, oldest)
+		delete(mc.stratumV1.notify.jobDifficulty, oldest)
 	}
 
 	if dupEnabled && mc.evictedShareCache != nil {
@@ -697,7 +697,7 @@ func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {
 		return fallback
 	}
 	mc.jobMu.Lock()
-	st, ok := mc.jobScriptTime[jobID]
+	st, ok := mc.stratumV1.notify.jobScriptTime[jobID]
 	mc.jobMu.Unlock()
 	if ok {
 		return st
@@ -712,11 +712,11 @@ func (mc *MinerConn) jobForIDWithLast(jobID string) (job *Job, lastJob *Job, las
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
 	job, ok = mc.activeJobs[jobID]
-	if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
-		ntimeBounds = mc.jobNTimeBounds[jobID]
+	if mc.cfg.ShareCheckNTimeWindow && mc.stratumV1.notify.jobNTimeBounds != nil {
+		ntimeBounds = mc.stratumV1.notify.jobNTimeBounds[jobID]
 	}
-	if mc.jobScriptTime != nil {
-		scriptTime = mc.jobScriptTime[jobID]
+	if mc.stratumV1.notify.jobScriptTime != nil {
+		scriptTime = mc.stratumV1.notify.jobScriptTime[jobID]
 	}
 	return job, mc.lastJob, mc.lastJobPrevHash, mc.lastJobHeight, ntimeBounds, scriptTime, ok
 }
@@ -726,10 +726,10 @@ func (mc *MinerConn) setJobDifficulty(jobID string, diff float64) {
 		return
 	}
 	mc.jobMu.Lock()
-	if mc.jobDifficulty == nil {
-		mc.jobDifficulty = make(map[string]float64)
+	if mc.stratumV1.notify.jobDifficulty == nil {
+		mc.stratumV1.notify.jobDifficulty = make(map[string]float64)
 	}
-	mc.jobDifficulty[jobID] = diff
+	mc.stratumV1.notify.jobDifficulty[jobID] = diff
 	mc.jobMu.Unlock()
 }
 
@@ -741,7 +741,7 @@ func (mc *MinerConn) assignedDifficulty(jobID string) float64 {
 		return curDiff
 	}
 	mc.jobMu.Lock()
-	diff, ok := mc.jobDifficulty[jobID]
+	diff, ok := mc.stratumV1.notify.jobDifficulty[jobID]
 	mc.jobMu.Unlock()
 	if ok && diff > 0 {
 		return diff
@@ -822,7 +822,7 @@ func (mc *MinerConn) isDuplicateShare(jobID string, extranonce2 []byte, ntime, n
 func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	varDiffEnabled := mc.cfg.VarDiffEnabled || mc.cfg.TargetSharesPerMin <= 0
 	// If this connection is locked to a static difficulty, skip VarDiff.
-	if !varDiffEnabled || mc.lockDifficulty {
+	if !varDiffEnabled || mc.vardiffState.lockDifficulty {
 		return false
 	}
 
@@ -860,7 +860,7 @@ func (mc *MinerConn) maybeAdjustDifficulty(now time.Time) bool {
 	}
 	mc.setDifficulty(newDiff)
 	mc.noteVardiffUpwardMove(now, currentDiff, newDiff)
-	mc.vardiffAdjustments.Add(1)
+	mc.vardiffState.vardiffAdjustments.Add(1)
 	mc.resetVardiffPending()
 	return true
 }
@@ -872,7 +872,7 @@ func (mc *MinerConn) noteVardiffUpwardMove(now time.Time, oldDiff, newDiff float
 	if newDiff/oldDiff < vardiffLargeUpJumpFactor {
 		return
 	}
-	mc.vardiffUpwardCooldownUntil.Store(now.Add(vardiffLargeUpCooldown).UnixNano())
+	mc.vardiffState.vardiffUpwardCooldownUntil.Store(now.Add(vardiffLargeUpCooldown).UnixNano())
 }
 
 // suggestedVardiff returns the difficulty VarDiff would select based on the
@@ -937,7 +937,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 
 	interval := mc.vardiffRetargetInterval(rollingHashrate, currentDiff, targetShares, snap.RecentStaleRate)
 	guardStart := lastChange
-	if !mc.initialEMAWindowDone.Load() && windowStart.After(guardStart) {
+	if !mc.vardiffState.initialEMAWindowDone.Load() && windowStart.After(guardStart) {
 		guardStart = windowStart
 	}
 	if !guardStart.IsZero() && now.Sub(guardStart) < interval {
@@ -1032,7 +1032,7 @@ func (mc *MinerConn) vardiffAdjustmentCap(baseStep, targetRatio float64) float64
 	if absRatio < 1 {
 		absRatio = 1 / absRatio
 	}
-	if mc.vardiffAdjustments.Load() < 2 {
+	if mc.vardiffState.vardiffAdjustments.Load() < 2 {
 		// Startup: allow more aggressive catch-up while we are clearly far off.
 		if absRatio >= math.Pow(baseStep, 4) {
 			return baseStep * baseStep * baseStep
@@ -1098,7 +1098,7 @@ func (mc *MinerConn) shouldDelayVardiffAdjustment(dir int32, targetRatio float64
 		return false
 	}
 	// Keep startup corrections fast.
-	if mc.vardiffAdjustments.Load() < 2 || !mc.initialEMAWindowDone.Load() {
+	if mc.vardiffState.vardiffAdjustments.Load() < 2 || !mc.vardiffState.initialEMAWindowDone.Load() {
 		return false
 	}
 	absRatio := targetRatio
@@ -1119,7 +1119,7 @@ func (mc *MinerConn) shouldDelayVardiffAdjustment(dir int32, targetRatio float64
 	}
 	// Once we've already converged through several adjustments, strongly
 	// suppress near-target retarget churn from Poisson randomness.
-	if mc.vardiffAdjustments.Load() >= 4 {
+	if mc.vardiffState.vardiffAdjustments.Load() >= 4 {
 		if absRatio < 1.35 {
 			required = 6
 		}
@@ -1127,13 +1127,13 @@ func (mc *MinerConn) shouldDelayVardiffAdjustment(dir int32, targetRatio float64
 			required = 8
 		}
 	}
-	prevDir := mc.vardiffPendingDirection.Load()
+	prevDir := mc.vardiffState.vardiffPendingDirection.Load()
 	if prevDir != dir {
-		mc.vardiffPendingDirection.Store(dir)
-		mc.vardiffPendingCount.Store(1)
+		mc.vardiffState.vardiffPendingDirection.Store(dir)
+		mc.vardiffState.vardiffPendingCount.Store(1)
 		return true
 	}
-	count := mc.vardiffPendingCount.Add(1)
+	count := mc.vardiffState.vardiffPendingCount.Add(1)
 	if count < required {
 		return true
 	}
@@ -1141,27 +1141,27 @@ func (mc *MinerConn) shouldDelayVardiffAdjustment(dir int32, targetRatio float64
 }
 
 func (mc *MinerConn) resetVardiffPending() {
-	mc.vardiffPendingDirection.Store(0)
-	mc.vardiffPendingCount.Store(0)
+	mc.vardiffState.vardiffPendingDirection.Store(0)
+	mc.vardiffState.vardiffPendingCount.Store(0)
 }
 
 func (mc *MinerConn) upwardVardiffCooldownActive(now time.Time) bool {
 	if now.IsZero() {
 		return false
 	}
-	until := time.Unix(0, mc.vardiffUpwardCooldownUntil.Load())
+	until := time.Unix(0, mc.vardiffState.vardiffUpwardCooldownUntil.Load())
 	return !until.IsZero() && now.Before(until)
 }
 
 func (mc *MinerConn) shouldApplyWarmupDownwardBias(warmupP95MS float64, samples int) bool {
 	if samples < vardiffHighWarmupSamplesMin || warmupP95MS <= 0 {
-		mc.vardiffWarmupHighLatencyStreak.Store(0)
+		mc.vardiffState.vardiffWarmupHighLatencyStreak.Store(0)
 		return false
 	}
 	if warmupP95MS >= vardiffHighWarmupP95MS {
-		return mc.vardiffWarmupHighLatencyStreak.Add(1) >= vardiffHighWarmupStreakNeed
+		return mc.vardiffState.vardiffWarmupHighLatencyStreak.Add(1) >= vardiffHighWarmupStreakNeed
 	}
-	mc.vardiffWarmupHighLatencyStreak.Store(0)
+	mc.vardiffState.vardiffWarmupHighLatencyStreak.Store(0)
 	return false
 }
 

@@ -64,7 +64,7 @@ func simulateEMAQuality(seed int64, tauSeconds float64, hashrate1, hashrate2 flo
 
 		mc.statsMu.Lock()
 		mc.updateHashrateLocked(targetDiff, now)
-		est := mc.rollingHashrateValue
+		est := mc.vardiffState.rollingHashrateValue
 		mc.statsMu.Unlock()
 		if est <= 0 {
 			continue

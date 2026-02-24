@@ -89,7 +89,7 @@ func runVirtualVardiff(cfg virtualVardiffConfig) virtualVardiffResult {
 			DampingFactor:      cfg.dampingFactor,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	atomicStoreFloat64(&mc.difficulty, cfg.initialDiff)
 
 	networkHashrate := cfg.hashrateHps
@@ -168,7 +168,7 @@ func runVirtualVardiff(cfg virtualVardiffConfig) virtualVardiffResult {
 		if math.Abs(newDiff-curDiff) > 1e-6 {
 			atomicStoreFloat64(&mc.difficulty, newDiff)
 			mc.lastDiffChange.Store(now.UnixNano())
-			mc.vardiffAdjustments.Add(1)
+			mc.vardiffState.vardiffAdjustments.Add(1)
 			lastDiffChange = now
 			currentPrepDelay = sampleUniformDuration(rng, cfg.prepDelayMin, cfg.prepDelayMax)
 		}
@@ -182,7 +182,7 @@ func runVirtualVardiff(cfg virtualVardiffConfig) virtualVardiffResult {
 		out.finalRate = out.windowRates[len(out.windowRates)-1]
 		out.finalDiff = out.windowDiffs[len(out.windowDiffs)-1]
 	}
-	out.adjustments = mc.vardiffAdjustments.Load()
+	out.adjustments = mc.vardiffState.vardiffAdjustments.Load()
 	return out
 }
 

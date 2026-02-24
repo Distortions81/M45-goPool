@@ -122,7 +122,7 @@ func (mc *MinerConn) prepareShareContextSoloWithHooks(task submissionTask, hooks
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
-				mc.sendClientShowMessage("Banned: " + mc.banReason)
+				mc.sendClientShowMessage("Banned: " + mc.ban.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				hooks.writeBanned(reqID)
 			} else {
@@ -281,7 +281,7 @@ func (mc *MinerConn) prepareShareContextStrictWithHooks(task submissionTask, hoo
 			logger.Error("submit header build error", "remote", mc.id, "error", err)
 			mc.recordShare(workerName, false, 0, 0, err.Error(), "", nil, now)
 			if banned, invalids := mc.noteInvalidSubmit(now, rejectInvalidCoinbase); banned {
-				mc.sendClientShowMessage("Banned: " + mc.banReason)
+				mc.sendClientShowMessage("Banned: " + mc.ban.banReason)
 				mc.logBan(rejectInvalidCoinbase.String(), workerName, invalids)
 				hooks.writeBanned(reqID)
 			} else {

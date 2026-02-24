@@ -85,7 +85,7 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	}
 	mc.setWorkerWallet(workerName, workerWallet, workerScript)
 	// Ensure handleBlockShare uses the scriptTime that matches what was notified.
-	mc.jobScriptTime = map[string]int64{job.JobID: job.ScriptTime}
+	mc.stratumV1.notify.jobScriptTime = map[string]int64{job.JobID: job.ScriptTime}
 	// Provide a no-op conn/writer so handleBlockShare can emit responses
 	// without panicking on a nil connection.
 	mc.conn = nopConn{}

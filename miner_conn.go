@@ -38,13 +38,13 @@ func (mc *MinerConn) cleanup() {
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
-		mc.vardiffWindowStart = time.Time{}
-		mc.vardiffWindowResetAnchor = time.Time{}
-		mc.vardiffWindowAccepted = 0
-		mc.vardiffWindowSubmissions = 0
-		mc.vardiffWindowDifficulty = 0
-		mc.lastHashrateUpdate = time.Time{}
-		mc.rollingHashrateValue = 0
+		mc.vardiffState.vardiffWindowStart = time.Time{}
+		mc.vardiffState.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffState.vardiffWindowAccepted = 0
+		mc.vardiffState.vardiffWindowSubmissions = 0
+		mc.vardiffState.vardiffWindowDifficulty = 0
+		mc.vardiffState.lastHashrateUpdate = time.Time{}
+		mc.vardiffState.rollingHashrateValue = 0
 		mc.statsMu.Unlock()
 		if mc.jobMgr != nil && mc.jobCh != nil {
 			mc.jobMgr.Unsubscribe(mc.jobCh)
@@ -133,14 +133,14 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 	}
 
 	mc := &MinerConn{
-		ctx:               ctx,
-		id:                c.RemoteAddr().String(),
-		conn:              c,
-		reader:            bufio.NewReaderSize(c, maxStratumMessageSize),
-		writeScratch:      make([]byte, 0, 256),
-		jobMgr:            jobMgr,
-		rpc:               rpc,
-		cfg:               cfg,
+		ctx:          ctx,
+		id:           c.RemoteAddr().String(),
+		conn:         c,
+		reader:       bufio.NewReaderSize(c, maxStratumMessageSize),
+		writeScratch: make([]byte, 0, 256),
+		jobMgr:       jobMgr,
+		rpc:          rpc,
+		cfg:          cfg,
 		stratumV1: minerConnStratumV1State{
 			extranonce1:    en1,
 			extranonce1Hex: hex.EncodeToString(en1),
@@ -149,6 +149,12 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 			poolMask:       mask,
 			minerMask:      0,
 			minVerBits:     minBits,
+			notify: minerConnStratumV1NotifyState{
+				jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
+				jobScriptTime:     make(map[string]int64, maxRecentJobs),
+				jobNotifyCoinbase: make(map[string]notifiedCoinbaseParts, maxRecentJobs),
+				jobNTimeBounds:    nil,
+			},
 		},
 		jobCh:             jobCh,
 		vardiff:           vdiff,
@@ -161,21 +167,17 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		jobOrder:          make([]string, 0, maxRecentJobs),
 		connectedAt:       now,
 		lastActivity:      now,
-		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count
-		jobScriptTime:     make(map[string]int64, maxRecentJobs),
-		jobNotifyCoinbase: make(map[string]notifiedCoinbaseParts, maxRecentJobs),
-		jobNTimeBounds:    nil,
 		shareCache:        shareCache,
 		evictedShareCache: evictedShareCache,
 		maxRecentJobs:     maxRecentJobs,
-		lastPenalty:       time.Now(),
-		bootstrapDone:     false,
+		ban:               minerConnBanState{lastPenalty: time.Now()},
+		vardiffState:      minerConnVarDiffState{bootstrapDone: false},
 		isTLSConnection:   isTLS,
 		statsUpdates:      make(chan statsUpdate, 1000), // Buffered for up to 1000 pending stats updates
 		workerWallets:     make(map[string]workerWalletState, 4),
 	}
 	if cfg.ShareCheckNTimeWindow {
-		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, maxRecentJobs)
+		mc.stratumV1.notify.jobNTimeBounds = make(map[string]jobNTimeBounds, maxRecentJobs)
 	}
 
 	// Initialize atomic fields
@@ -255,12 +257,12 @@ func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
 		mc.shareCache = make(map[string]*duplicateShareSet, capHint)
 		mc.evictedShareCache = make(map[string]*evictedCacheEntry, capHint)
 	}
-	if cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds == nil {
+	if cfg.ShareCheckNTimeWindow && mc.stratumV1.notify.jobNTimeBounds == nil {
 		capHint := mc.maxRecentJobs
 		if capHint <= 0 {
 			capHint = defaultRecentJobs
 		}
-		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, capHint)
+		mc.stratumV1.notify.jobNTimeBounds = make(map[string]jobNTimeBounds, capHint)
 	}
 
 	curDiff := atomicLoadFloat64(&mc.difficulty)
@@ -308,7 +310,7 @@ func (mc *MinerConn) handle() {
 			if errors.Is(err, bufio.ErrBufferFull) {
 				logger.Warn("closing miner for oversized message", "component", "miner", "kind", "protocol", "remote", mc.id, "limit_bytes", maxStratumMessageSize)
 				if banned, count := mc.noteProtocolViolation(now); banned {
-					mc.sendClientShowMessage("Banned: " + mc.banReason)
+					mc.sendClientShowMessage("Banned: " + mc.ban.banReason)
 					mc.logBan("oversized stratum message", mc.currentWorker(), count)
 				}
 				return
@@ -423,7 +425,7 @@ func (mc *MinerConn) handle() {
 			}
 			logger.Warn("json error from miner", "component", "miner", "kind", "protocol", "remote", mc.id, "error", err)
 			if banned, count := mc.noteProtocolViolation(now); banned {
-				mc.sendClientShowMessage("Banned: " + mc.banReason)
+				mc.sendClientShowMessage("Banned: " + mc.ban.banReason)
 				mc.logBan("invalid stratum json", mc.currentWorker(), count)
 			}
 			return
@@ -629,7 +631,7 @@ func (mc *MinerConn) sendInitialWork() {
 
 	// Respect suggested difficulty if already processed. Otherwise, fall back
 	// to a sane default/minimum so miners have a starting target.
-	if !mc.stratumV1.suggestDiffProcessed && !mc.restoredRecentDiff {
+	if !mc.stratumV1.suggestDiffProcessed && !mc.vardiffState.restoredRecentDiff {
 		diff := mc.cfg.DefaultDifficulty
 		if diff <= 0 {
 			// Default difficulty of 0 means "unset": treat it as the minimum

@@ -27,15 +27,15 @@ func (mc *MinerConn) statsWorker() {
 		}
 
 		mc.stats.WindowSubmissions++
-		mc.vardiffWindowSubmissions++
+		mc.vardiffState.vardiffWindowSubmissions++
 		if update.accepted {
 			mc.stats.Accepted++
 			mc.stats.WindowAccepted++
-			mc.vardiffWindowAccepted++
+			mc.vardiffState.vardiffWindowAccepted++
 			if update.creditedDiff >= 0 {
 				mc.stats.TotalDifficulty += update.creditedDiff
 				mc.stats.WindowDifficulty += update.creditedDiff
-				mc.vardiffWindowDifficulty += update.creditedDiff
+				mc.vardiffState.vardiffWindowDifficulty += update.creditedDiff
 				mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
 			}
 		} else {
@@ -114,13 +114,13 @@ func (mc *MinerConn) updateWorker(worker string) string {
 func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 	if mc.stats.WindowStart.IsZero() {
 		start := now
-		if !mc.windowResetAnchor.IsZero() && now.After(mc.windowResetAnchor) {
+		if !mc.vardiffState.windowResetAnchor.IsZero() && now.After(mc.vardiffState.windowResetAnchor) {
 			lagPct := mc.dynamicWindowStartLagPercentLocked(now)
-			elapsed := now.Sub(mc.windowResetAnchor)
-			start = mc.windowResetAnchor.Add(time.Duration((int64(elapsed) * int64(lagPct)) / 100))
+			elapsed := now.Sub(mc.vardiffState.windowResetAnchor)
+			start = mc.vardiffState.windowResetAnchor.Add(time.Duration((int64(elapsed) * int64(lagPct)) / 100))
 		}
 		mc.stats.WindowStart = start
-		mc.windowResetAnchor = time.Time{}
+		mc.vardiffState.windowResetAnchor = time.Time{}
 		mc.stats.WindowDifficulty = 0
 		return
 	}
@@ -128,7 +128,7 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 	// Only reset after a long true idle gap to avoid carrying stale epochs.
 	if !mc.stats.LastShare.IsZero() && now.Sub(mc.stats.LastShare) > statusWindowIdleReset {
 		mc.stats.WindowStart = now
-		mc.windowResetAnchor = time.Time{}
+		mc.vardiffState.windowResetAnchor = time.Time{}
 		mc.stats.WindowAccepted = 0
 		mc.stats.WindowSubmissions = 0
 		mc.stats.WindowDifficulty = 0
@@ -136,26 +136,26 @@ func (mc *MinerConn) ensureWindowLocked(now time.Time) {
 }
 
 func (mc *MinerConn) ensureVardiffWindowLocked(now time.Time) {
-	if mc.vardiffWindowStart.IsZero() {
+	if mc.vardiffState.vardiffWindowStart.IsZero() {
 		start := now
-		if !mc.vardiffWindowResetAnchor.IsZero() && now.After(mc.vardiffWindowResetAnchor) {
-			start = mc.vardiffWindowResetAnchor
+		if !mc.vardiffState.vardiffWindowResetAnchor.IsZero() && now.After(mc.vardiffState.vardiffWindowResetAnchor) {
+			start = mc.vardiffState.vardiffWindowResetAnchor
 		}
-		mc.vardiffWindowStart = start
-		mc.vardiffWindowResetAnchor = time.Time{}
-		mc.vardiffWindowDifficulty = 0
+		mc.vardiffState.vardiffWindowStart = start
+		mc.vardiffState.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffState.vardiffWindowDifficulty = 0
 		return
 	}
 	maxAge := mc.vardiff.AdjustmentWindow * 2
 	if maxAge <= 0 {
 		maxAge = defaultVarDiffAdjustmentWindow * 2
 	}
-	if now.Sub(mc.vardiffWindowStart) > maxAge {
-		mc.vardiffWindowStart = now
-		mc.vardiffWindowResetAnchor = time.Time{}
-		mc.vardiffWindowAccepted = 0
-		mc.vardiffWindowSubmissions = 0
-		mc.vardiffWindowDifficulty = 0
+	if now.Sub(mc.vardiffState.vardiffWindowStart) > maxAge {
+		mc.vardiffState.vardiffWindowStart = now
+		mc.vardiffState.vardiffWindowResetAnchor = time.Time{}
+		mc.vardiffState.vardiffWindowAccepted = 0
+		mc.vardiffState.vardiffWindowSubmissions = 0
+		mc.vardiffState.vardiffWindowDifficulty = 0
 	}
 }
 
@@ -164,10 +164,10 @@ func (mc *MinerConn) dynamicWindowStartLagPercentLocked(now time.Time) int {
 	if lagPct > 100 {
 		lagPct = 100
 	}
-	if mc.windowResetAnchor.IsZero() || !now.After(mc.windowResetAnchor) {
+	if mc.vardiffState.windowResetAnchor.IsZero() || !now.After(mc.vardiffState.windowResetAnchor) {
 		return lagPct
 	}
-	elapsedMS := now.Sub(mc.windowResetAnchor).Seconds() * 1000.0
+	elapsedMS := now.Sub(mc.vardiffState.windowResetAnchor).Seconds() * 1000.0
 	if elapsedMS <= 0 {
 		return lagPct
 	}
@@ -245,15 +245,15 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 		}
 	}
 	mc.stats.WindowSubmissions++
-	mc.vardiffWindowSubmissions++
+	mc.vardiffState.vardiffWindowSubmissions++
 	if update.accepted {
 		mc.stats.Accepted++
 		mc.stats.WindowAccepted++
-		mc.vardiffWindowAccepted++
+		mc.vardiffState.vardiffWindowAccepted++
 		if update.creditedDiff >= 0 {
 			mc.stats.TotalDifficulty += update.creditedDiff
 			mc.stats.WindowDifficulty += update.creditedDiff
-			mc.vardiffWindowDifficulty += update.creditedDiff
+			mc.vardiffState.vardiffWindowDifficulty += update.creditedDiff
 			mc.updateHashrateLocked(update.creditedDiff, update.timestamp)
 		}
 	} else {
@@ -347,10 +347,10 @@ func (mc *MinerConn) snapshotShareInfo() minerShareSnapshot {
 	}
 	return minerShareSnapshot{
 		Stats:                     mc.stats,
-		RetargetWindowStart:       mc.vardiffWindowStart,
-		RetargetWindowAccepted:    mc.vardiffWindowAccepted,
-		RetargetWindowSubmissions: mc.vardiffWindowSubmissions,
-		RetargetWindowDifficulty:  mc.vardiffWindowDifficulty,
+		RetargetWindowStart:       mc.vardiffState.vardiffWindowStart,
+		RetargetWindowAccepted:    mc.vardiffState.vardiffWindowAccepted,
+		RetargetWindowSubmissions: mc.vardiffState.vardiffWindowSubmissions,
+		RetargetWindowDifficulty:  mc.vardiffState.vardiffWindowDifficulty,
 		RollingHashrate:           controlHashrate,
 		RollingHashrateDisplay:    displayHashrate,
 		SubmitRTTP50MS:            p50,

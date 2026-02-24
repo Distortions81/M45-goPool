@@ -401,8 +401,8 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		}
 		mc.sendClientShowMessage("Banned: " + reason)
 		mc.stateMu.Lock()
-		mc.banUntil = bannedView.BannedUntil
-		mc.banReason = reason
+		mc.ban.banUntil = bannedView.BannedUntil
+		mc.ban.banReason = reason
 		mc.stateMu.Unlock()
 		logger.Warn("authorize rejected: worker banned",
 			"component", "miner", "kind", "ban",
@@ -818,13 +818,13 @@ func (mc *MinerConn) applySuggestedDifficulty(diff float64) {
 	// If we just restored a recent difficulty for this worker on a short
 	// reconnect, ignore suggested-difficulty overrides and keep the
 	// existing difficulty so we don't fight the remembered setting.
-	if mc.restoredRecentDiff {
+	if mc.vardiffState.restoredRecentDiff {
 		return
 	}
 
 	if mc.cfg.LockSuggestedDifficulty {
 		// Lock this miner to the requested difficulty (within min/max).
-		mc.lockDifficulty = true
+		mc.vardiffState.lockDifficulty = true
 	}
 	mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 	mc.maybeSendInitialWork()
@@ -1262,13 +1262,13 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	// Each notification produces a different coinbase, ensuring miners can't
 	// produce duplicate shares even if they restart their nonce search.
 	mc.jobMu.Lock()
-	mc.notifySeq++
-	seq := mc.notifySeq
-	if mc.jobScriptTime == nil {
-		mc.jobScriptTime = make(map[string]int64, mc.maxRecentJobs)
+	mc.stratumV1.notify.notifySeq++
+	seq := mc.stratumV1.notify.notifySeq
+	if mc.stratumV1.notify.jobScriptTime == nil {
+		mc.stratumV1.notify.jobScriptTime = make(map[string]int64, mc.maxRecentJobs)
 	}
 	uniqueScriptTime := job.ScriptTime + int64(seq)
-	mc.jobScriptTime[job.JobID] = uniqueScriptTime
+	mc.stratumV1.notify.jobScriptTime[job.JobID] = uniqueScriptTime
 	mc.jobMu.Unlock()
 
 	worker := mc.currentWorker()
@@ -1351,10 +1351,10 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		return
 	}
 	mc.jobMu.Lock()
-	if mc.jobNotifyCoinbase == nil {
-		mc.jobNotifyCoinbase = make(map[string]notifiedCoinbaseParts, mc.maxRecentJobs)
+	if mc.stratumV1.notify.jobNotifyCoinbase == nil {
+		mc.stratumV1.notify.jobNotifyCoinbase = make(map[string]notifiedCoinbaseParts, mc.maxRecentJobs)
 	}
-	mc.jobNotifyCoinbase[job.JobID] = notifiedCoinbaseParts{coinb1: coinb1, coinb2: coinb2}
+	mc.stratumV1.notify.jobNotifyCoinbase[job.JobID] = notifiedCoinbaseParts{coinb1: coinb1, coinb2: coinb2}
 	mc.jobMu.Unlock()
 
 	prevhashLE := hexToLEHex(job.PrevHash)

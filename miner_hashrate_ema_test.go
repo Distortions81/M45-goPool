@@ -17,11 +17,11 @@ func TestUpdateHashrateLocked_DoesNotUpdateBeforeTau(t *testing.T) {
 	for i := range 10 {
 		mc.updateHashrateLocked(1, base.Add(time.Duration(i)*time.Second))
 	}
-	if mc.rollingHashrateValue != 0 {
-		t.Fatalf("rollingHashrateValue=%v, want 0 before tau elapses", mc.rollingHashrateValue)
+	if mc.vardiffState.rollingHashrateValue != 0 {
+		t.Fatalf("rollingHashrateValue=%v, want 0 before tau elapses", mc.vardiffState.rollingHashrateValue)
 	}
-	if mc.hashrateSampleCount != 10 {
-		t.Fatalf("hashrateSampleCount=%d, want 10", mc.hashrateSampleCount)
+	if mc.vardiffState.hashrateSampleCount != 10 {
+		t.Fatalf("hashrateSampleCount=%d, want 10", mc.vardiffState.hashrateSampleCount)
 	}
 	mc.statsMu.Unlock()
 }
@@ -36,23 +36,23 @@ func TestUpdateHashrateLocked_UsesBootstrapWindowThenUpdatesIncrementally(t *tes
 
 	mc.statsMu.Lock()
 	mc.updateHashrateLocked(1, base)
-	if mc.rollingHashrateValue != 0 {
-		t.Fatalf("rollingHashrateValue=%v, want 0 after first share", mc.rollingHashrateValue)
+	if mc.vardiffState.rollingHashrateValue != 0 {
+		t.Fatalf("rollingHashrateValue=%v, want 0 after first share", mc.vardiffState.rollingHashrateValue)
 	}
 
 	mc.updateHashrateLocked(1, base.Add(initialHashrateEMATau+time.Second))
-	if mc.rollingHashrateValue <= 0 {
-		t.Fatalf("rollingHashrateValue=%v, want > 0 once bootstrap tau elapsed", mc.rollingHashrateValue)
+	if mc.vardiffState.rollingHashrateValue <= 0 {
+		t.Fatalf("rollingHashrateValue=%v, want > 0 once bootstrap tau elapsed", mc.vardiffState.rollingHashrateValue)
 	}
-	first := mc.rollingHashrateValue
-	if mc.hashrateSampleCount != 0 {
-		t.Fatalf("hashrateSampleCount=%d, want 0 after bootstrap tau update", mc.hashrateSampleCount)
+	first := mc.vardiffState.rollingHashrateValue
+	if mc.vardiffState.hashrateSampleCount != 0 {
+		t.Fatalf("hashrateSampleCount=%d, want 0 after bootstrap tau update", mc.vardiffState.hashrateSampleCount)
 	}
 
 	// After the first EMA window, updates should apply incrementally each sample.
 	mc.updateHashrateLocked(1, base.Add(90*time.Second)) // only 59s since last update
-	if mc.rollingHashrateValue == first {
-		t.Fatalf("rollingHashrateValue=%v, want change on incremental post-bootstrap update", mc.rollingHashrateValue)
+	if mc.vardiffState.rollingHashrateValue == first {
+		t.Fatalf("rollingHashrateValue=%v, want change on incremental post-bootstrap update", mc.vardiffState.rollingHashrateValue)
 	}
 	mc.statsMu.Unlock()
 }
@@ -60,24 +60,24 @@ func TestUpdateHashrateLocked_UsesBootstrapWindowThenUpdatesIncrementally(t *tes
 func TestResetShareWindow_PreservesRollingHashrateState(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	mc := &MinerConn{}
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	mc.stats.WindowStart = now.Add(-time.Minute)
 	mc.stats.WindowAccepted = 12
 	mc.stats.WindowSubmissions = 15
 	mc.stats.WindowDifficulty = 42
-	mc.vardiffWindowStart = now.Add(-time.Minute)
-	mc.vardiffWindowAccepted = 12
-	mc.vardiffWindowSubmissions = 15
-	mc.vardiffWindowDifficulty = 42
-	mc.lastHashrateUpdate = now.Add(-10 * time.Second)
-	mc.rollingHashrateValue = 12345
-	mc.rollingHashrateControl = 23456
-	mc.hashrateSampleCount = 7
-	mc.hashrateAccumulatedDiff = 9.5
+	mc.vardiffState.vardiffWindowStart = now.Add(-time.Minute)
+	mc.vardiffState.vardiffWindowAccepted = 12
+	mc.vardiffState.vardiffWindowSubmissions = 15
+	mc.vardiffState.vardiffWindowDifficulty = 42
+	mc.vardiffState.lastHashrateUpdate = now.Add(-10 * time.Second)
+	mc.vardiffState.rollingHashrateValue = 12345
+	mc.vardiffState.rollingHashrateControl = 23456
+	mc.vardiffState.hashrateSampleCount = 7
+	mc.vardiffState.hashrateAccumulatedDiff = 9.5
 
 	mc.resetShareWindow(now)
 
-	if !mc.initialEMAWindowDone.Load() {
+	if !mc.vardiffState.initialEMAWindowDone.Load() {
 		t.Fatalf("initialEMAWindowDone=false, want true preserved after resetShareWindow")
 	}
 	if mc.stats.WindowStart.IsZero() {
@@ -87,18 +87,18 @@ func TestResetShareWindow_PreservesRollingHashrateState(t *testing.T) {
 		t.Fatalf("status window counters changed: accepted=%d submissions=%d difficulty=%v",
 			mc.stats.WindowAccepted, mc.stats.WindowSubmissions, mc.stats.WindowDifficulty)
 	}
-	if !mc.vardiffWindowStart.IsZero() {
-		t.Fatalf("vardiffWindowStart=%v want zero time so first share starts the vardiff window", mc.vardiffWindowStart)
+	if !mc.vardiffState.vardiffWindowStart.IsZero() {
+		t.Fatalf("vardiffWindowStart=%v want zero time so first share starts the vardiff window", mc.vardiffState.vardiffWindowStart)
 	}
-	if mc.vardiffWindowAccepted != 0 || mc.vardiffWindowSubmissions != 0 || mc.vardiffWindowDifficulty != 0 {
+	if mc.vardiffState.vardiffWindowAccepted != 0 || mc.vardiffState.vardiffWindowSubmissions != 0 || mc.vardiffState.vardiffWindowDifficulty != 0 {
 		t.Fatalf("vardiff window counters not cleared: accepted=%d submissions=%d difficulty=%v",
-			mc.vardiffWindowAccepted, mc.vardiffWindowSubmissions, mc.vardiffWindowDifficulty)
+			mc.vardiffState.vardiffWindowAccepted, mc.vardiffState.vardiffWindowSubmissions, mc.vardiffState.vardiffWindowDifficulty)
 	}
-	if mc.lastHashrateUpdate.IsZero() || mc.hashrateSampleCount == 0 || mc.hashrateAccumulatedDiff == 0 {
+	if mc.vardiffState.lastHashrateUpdate.IsZero() || mc.vardiffState.hashrateSampleCount == 0 || mc.vardiffState.hashrateAccumulatedDiff == 0 {
 		t.Fatalf("hashrate accumulator state should be preserved")
 	}
-	if mc.rollingHashrateValue != 12345 || mc.rollingHashrateControl != 23456 {
-		t.Fatalf("rolling hashrates should be preserved across reset: display=%v control=%v", mc.rollingHashrateValue, mc.rollingHashrateControl)
+	if mc.vardiffState.rollingHashrateValue != 12345 || mc.vardiffState.rollingHashrateControl != 23456 {
+		t.Fatalf("rolling hashrates should be preserved across reset: display=%v control=%v", mc.vardiffState.rollingHashrateValue, mc.vardiffState.rollingHashrateControl)
 	}
 }
 
@@ -114,13 +114,13 @@ func TestUpdateHashrateLocked_ControlEMARespondsFasterThanDisplay(t *testing.T) 
 	// First update initializes hashrate after bootstrap.
 	mc.updateHashrateLocked(1, base)
 	mc.updateHashrateLocked(1, base.Add(initialHashrateEMATau+time.Second))
-	baseControl := mc.rollingHashrateControl
-	baseDisplay := mc.rollingHashrateValue
+	baseControl := mc.vardiffState.rollingHashrateControl
+	baseDisplay := mc.vardiffState.rollingHashrateValue
 
 	// Introduce a sharp hashrate rise; fast/control EMA should move farther.
 	mc.updateHashrateLocked(4, base.Add(initialHashrateEMATau+61*time.Second))
-	deltaControl := mc.rollingHashrateControl - baseControl
-	deltaDisplay := mc.rollingHashrateValue - baseDisplay
+	deltaControl := mc.vardiffState.rollingHashrateControl - baseControl
+	deltaDisplay := mc.vardiffState.rollingHashrateValue - baseDisplay
 	mc.statsMu.Unlock()
 
 	if deltaControl <= deltaDisplay {
@@ -135,11 +135,11 @@ func TestDecayedHashratesLocked_DecaysDuringIdle(t *testing.T) {
 			HashrateEMATauSeconds: 300,
 		},
 	}
-	mc.initialEMAWindowDone.Store(true)
+	mc.vardiffState.initialEMAWindowDone.Store(true)
 	mc.statsMu.Lock()
-	mc.lastHashrateUpdate = now.Add(-5 * time.Minute)
-	mc.rollingHashrateControl = 1.0e12
-	mc.rollingHashrateValue = 1.0e12
+	mc.vardiffState.lastHashrateUpdate = now.Add(-5 * time.Minute)
+	mc.vardiffState.rollingHashrateControl = 1.0e12
+	mc.vardiffState.rollingHashrateValue = 1.0e12
 	control, display := mc.decayedHashratesLocked(now)
 	mc.statsMu.Unlock()
 
@@ -164,7 +164,7 @@ func TestResetShareWindow_AnchorsVardiffWindowAtResetTime(t *testing.T) {
 
 	mc.statsMu.Lock()
 	mc.ensureVardiffWindowLocked(firstShare)
-	got := mc.vardiffWindowStart
+	got := mc.vardiffState.vardiffWindowStart
 	mc.statsMu.Unlock()
 
 	want := now

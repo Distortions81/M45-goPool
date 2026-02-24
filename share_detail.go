@@ -42,7 +42,7 @@ func (mc *MinerConn) buildCurrentJobCoinbaseDetail(job *Job) *ShareDetail {
 	extranonce2Size := max(job.Extranonce2Size, 0)
 	en2 := make([]byte, extranonce2Size)
 	mc.jobMu.Lock()
-	parts, ok := mc.jobNotifyCoinbase[job.JobID]
+	parts, ok := mc.stratumV1.notify.jobNotifyCoinbase[job.JobID]
 	mc.jobMu.Unlock()
 	if !ok || parts.coinb1 == "" || parts.coinb2 == "" {
 		return nil
