@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"io"
 	"testing"
 )
 
@@ -30,12 +31,54 @@ func TestNewSV2FrameTransportAuto_NoiseReturnsNotImplemented(t *testing.T) {
 	buf := []byte{0x01, 0x00, 0x7f, 0x08, 0x00, 0x00, 0x00}
 	r := bufio.NewReader(bytes.NewReader(buf))
 	var out bytes.Buffer
-	_, det, err := newSV2FrameTransportAuto(r, &out)
-	if !errors.Is(err, errSV2NoiseHandshakeNotImplemented) {
-		t.Fatalf("err=%v want errSV2NoiseHandshakeNotImplemented", err)
+	tr, det, err := newSV2FrameTransportAuto(r, &out)
+	if err != nil {
+		t.Fatalf("unexpected auto transport error: %v", err)
 	}
 	if det.mode != "noise" {
 		t.Fatalf("mode=%q want noise", det.mode)
 	}
+	if tr == nil || tr.Mode() != "noise" {
+		t.Fatalf("expected noise transport, got %#v", tr)
+	}
 }
 
+func TestSV2NoiseFrameTransport_ModeAndHandshakeState(t *testing.T) {
+	var in bytes.Buffer
+	var out bytes.Buffer
+	tr := newSV2NoiseFrameTransport(&in, &out)
+	if tr == nil {
+		t.Fatalf("expected transport")
+	}
+	if got := tr.Mode(); got != "noise" {
+		t.Fatalf("Mode()=%q want noise", got)
+	}
+	if tr.handshake == nil {
+		t.Fatalf("expected handshake state")
+	}
+	if got := tr.handshake.State(); got != sv2NoiseHandshakeInit {
+		t.Fatalf("initial handshake state=%q want %q", got, sv2NoiseHandshakeInit)
+	}
+	if _, err := tr.ReadFrame(); !errors.Is(err, io.EOF) {
+		t.Fatalf("ReadFrame err=%v want EOF", err)
+	}
+	if got := tr.handshake.State(); got != sv2NoiseHandshakeUnsupported {
+		t.Fatalf("post-read handshake state=%q want %q", got, sv2NoiseHandshakeUnsupported)
+	}
+}
+
+func TestSV2NoiseConstants(t *testing.T) {
+	if sv2NoiseAct1Len != 64 {
+		t.Fatalf("sv2NoiseAct1Len=%d want 64", sv2NoiseAct1Len)
+	}
+	if sv2NoiseAct2Len != 234 {
+		t.Fatalf("sv2NoiseAct2Len=%d want 234", sv2NoiseAct2Len)
+	}
+	if sv2NoiseEncryptedHeaderLen != 22 {
+		t.Fatalf("sv2NoiseEncryptedHeaderLen=%d want 22", sv2NoiseEncryptedHeaderLen)
+	}
+	hs := sv2NoiseNewHandshakeHash()
+	if hs.ck != sv2NoiseNXProtocolHashSHA256 {
+		t.Fatalf("protocol ck hash mismatch")
+	}
+}

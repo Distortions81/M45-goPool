@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type sv2Conn struct {
 	reader          io.Reader
 	writer          io.Writer
 	transport       sv2FrameTransport
+	writeMu         sync.Mutex
 	submitMapper    *stratumV2SubmitMapperState
 	channelTargets  map[uint32][32]byte
 	channelPrevHash map[uint32]stratumV2WireSetNewPrevHash
@@ -107,6 +109,8 @@ func (c *sv2Conn) writeFrame(frame []byte) error {
 	if c.transport == nil {
 		c.transport = &sv2PlainFrameTransport{r: c.reader, w: c.writer}
 	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	return c.transport.WriteFrame(frame)
 }
 
@@ -220,7 +224,7 @@ func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStanda
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesStandard(msg)
-	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, writeFrame: c.writeFrame, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
 		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
 		return responder.err
@@ -243,7 +247,7 @@ func (c *sv2Conn) handleSubmitSharesExtended(msg stratumV2WireSubmitSharesExtend
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
 	norm, err := c.submitMapper.mapWireSubmitSharesExtended(msg)
-	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
+	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, writeFrame: c.writeFrame, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
 		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
 		return responder.err
@@ -404,7 +408,11 @@ func (c *sv2Conn) applyStratumV2SetTarget(msg stratumV2WireSetTarget) {
 }
 
 func (c *sv2Conn) writeStratumV2SetTarget(msg stratumV2WireSetTarget) error {
-	if err := writeStratumV2SetTargetToWriter(c.writer, msg); err != nil {
+	frame, err := encodeStratumV2SetTargetFrame(msg)
+	if err != nil {
+		return err
+	}
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	c.applyStratumV2SetTarget(msg)
@@ -562,9 +570,24 @@ func writeStratumV2SetTargetToWriter(w io.Writer, msg stratumV2WireSetTarget) er
 type stratumV2SubmitWireResponder struct {
 	mc             *MinerConn
 	w              io.Writer
+	writeFrame     func([]byte) error
 	channelID      uint32
 	sequenceNumber uint32
 	err            error
+}
+
+func (r *stratumV2SubmitWireResponder) writeEncodedFrame(frame []byte) error {
+	if r == nil {
+		return io.ErrClosedPipe
+	}
+	if r.writeFrame != nil {
+		return r.writeFrame(frame)
+	}
+	if r.w == nil {
+		return io.ErrClosedPipe
+	}
+	_, err := r.w.Write(frame)
+	return err
 }
 
 func (r *stratumV2SubmitWireResponder) writeSubmitOK(reqID any) {
@@ -586,7 +609,7 @@ func (r *stratumV2SubmitWireResponder) writeSubmitOK(reqID any) {
 		r.err = err
 		return
 	}
-	_, r.err = r.w.Write(frame)
+	r.err = r.writeEncodedFrame(frame)
 }
 
 func (r *stratumV2SubmitWireResponder) writeSubmitError(reqID any, errCode int, msg string, banned bool) {
@@ -606,7 +629,7 @@ func (r *stratumV2SubmitWireResponder) writeSubmitError(reqID any, errCode int, 
 		r.err = err
 		return
 	}
-	_, r.err = r.w.Write(frame)
+	r.err = r.writeEncodedFrame(frame)
 }
 
 func (r *stratumV2SubmitWireResponder) writeSubmitSV2ErrorCode(reqID any, code string) {
@@ -626,7 +649,7 @@ func (r *stratumV2SubmitWireResponder) writeSubmitSV2ErrorCode(reqID any, code s
 		r.err = err
 		return
 	}
-	_, r.err = r.w.Write(frame)
+	r.err = r.writeEncodedFrame(frame)
 }
 
 func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
@@ -637,11 +660,15 @@ func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
 	if r.mc != nil {
 		target = uint256BEFromBigInt(r.mc.shareTargetOrDefault())
 	}
-	err := writeStratumV2SetTargetToWriter(r.w, stratumV2WireSetTarget{
+	frame, err := encodeStratumV2SetTargetFrame(stratumV2WireSetTarget{
 		ChannelID:     r.channelID,
 		MaximumTarget: target,
 	})
 	if err != nil {
+		r.err = err
+		return
+	}
+	if err := r.writeEncodedFrame(frame); err != nil {
 		r.err = err
 		return
 	}
