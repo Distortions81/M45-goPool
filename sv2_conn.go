@@ -11,14 +11,15 @@ import (
 // handler. It currently supports reading framed submit messages, mapping them
 // into the shared submit core, and writing submit success/error responses.
 type sv2Conn struct {
-	mc            *MinerConn
-	reader        io.Reader
-	writer        io.Writer
-	submitMapper  *stratumV2SubmitMapperState
-	nextChannelID uint32
-	setupDone     bool
-	setupVersion  uint16
-	setupFlags    uint32
+	mc             *MinerConn
+	reader         io.Reader
+	writer         io.Writer
+	submitMapper   *stratumV2SubmitMapperState
+	channelTargets map[uint32][32]byte
+	nextChannelID  uint32
+	setupDone      bool
+	setupVersion   uint16
+	setupFlags     uint32
 }
 
 func (c *sv2Conn) handleReadLoop() error {
@@ -332,6 +333,33 @@ func (c *sv2Conn) writeStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, loca
 	return nil
 }
 
+func (c *sv2Conn) applyStratumV2SetTarget(msg stratumV2WireSetTarget) {
+	if c == nil {
+		return
+	}
+	if c.channelTargets == nil {
+		c.channelTargets = make(map[uint32][32]byte)
+	}
+	c.channelTargets[msg.ChannelID] = msg.MaximumTarget
+}
+
+func (c *sv2Conn) writeStratumV2SetTarget(msg stratumV2WireSetTarget) error {
+	if err := writeStratumV2SetTargetToWriter(c.writer, msg); err != nil {
+		return err
+	}
+	c.applyStratumV2SetTarget(msg)
+	return nil
+}
+
+func writeStratumV2SetTargetToWriter(w io.Writer, msg stratumV2WireSetTarget) error {
+	frame, err := encodeStratumV2SetTargetFrame(msg)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(frame)
+	return err
+}
+
 type stratumV2SubmitWireResponder struct {
 	mc             *MinerConn
 	w              io.Writer
@@ -390,7 +418,7 @@ func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
 	if r.mc != nil {
 		target = uint256BEFromBigInt(r.mc.shareTargetOrDefault())
 	}
-	frame, err := encodeStratumV2SetTargetFrame(stratumV2WireSetTarget{
+	err := writeStratumV2SetTargetToWriter(r.w, stratumV2WireSetTarget{
 		ChannelID:     r.channelID,
 		MaximumTarget: target,
 	})
@@ -398,7 +426,6 @@ func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
 		r.err = err
 		return
 	}
-	_, r.err = r.w.Write(frame)
 }
 
 func mapStratumErrorToSv2SubmitErrorCode(errCode int, msg string, banned bool) string {

@@ -116,6 +116,38 @@ func TestSV2SubmitWireResponder_SendSetTarget_WritesFrame(t *testing.T) {
 	}
 }
 
+func TestSV2ConnWriteStratumV2SetTarget_WritesFrameAndTracksChannelTarget(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	var out bytes.Buffer
+	c := &sv2Conn{
+		mc:     mc,
+		writer: &out,
+	}
+	msg := stratumV2WireSetTarget{
+		ChannelID:     88,
+		MaximumTarget: [32]byte{0xaa, 0xbb, 0xcc},
+	}
+	if err := c.writeStratumV2SetTarget(msg); err != nil {
+		t.Fatalf("writeStratumV2SetTarget: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode settarget frame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetTarget)
+	if !ok {
+		t.Fatalf("decoded type=%T want stratumV2WireSetTarget", dec)
+	}
+	if got != msg {
+		t.Fatalf("frame mismatch: got=%#v want=%#v", got, msg)
+	}
+	tracked, ok := c.channelTargets[msg.ChannelID]
+	if !ok || tracked != msg.MaximumTarget {
+		t.Fatalf("channel target tracking mismatch: ok=%v tracked=%x want=%x", ok, tracked, msg.MaximumTarget)
+	}
+}
+
 func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testing.T) {
 	mc, _ := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
