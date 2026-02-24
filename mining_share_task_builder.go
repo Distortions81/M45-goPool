@@ -49,3 +49,24 @@ func (mc *MinerConn) newMiningShareSubmissionTask(in miningShareTaskInput) submi
 		receivedAt:       in.receivedAt,
 	}
 }
+
+func miningShareTaskInputFromSubmissionTask(task submissionTask) miningShareTaskInput {
+	return miningShareTaskInput{
+		reqID:            task.reqID,
+		job:              task.job,
+		jobID:            task.jobID,
+		workerName:       task.workerName,
+		extranonce2:      task.extranonce2,
+		extranonce2Len:   task.extranonce2Len,
+		extranonce2Bytes: task.extranonce2Bytes,
+		extranonce2Large: task.extranonce2Large,
+		ntime:            task.ntime,
+		ntimeVal:         task.ntimeVal,
+		nonce:            task.nonce,
+		nonceVal:         task.nonceVal,
+		useVersion:       task.useVersion,
+		scriptTime:       task.scriptTime,
+		policyReject:     task.policyReject,
+		receivedAt:       task.receivedAt,
+	}
+}
