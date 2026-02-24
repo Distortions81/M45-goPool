@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"net"
 	"testing"
+	"time"
 )
 
 func testSV2SetupConnectionFrame(t *testing.T) []byte {
@@ -363,6 +364,103 @@ func TestMinerConnServeSV2_RunsSetupAndCleansUp(t *testing.T) {
 	_ = client.Close() // terminate read loop
 	<-done
 
+	if mc.sv2 != nil {
+		t.Fatalf("expected serveSV2 cleanup to detach sv2 conn")
+	}
+}
+
+func TestMinerConnServeSV2_OpenChannelGetsImmediateJobBundle(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	client, server := net.Pipe()
+	t.Cleanup(func() { _ = client.Close() })
+	mc.conn = server
+	mc.reader = bufio.NewReader(server)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mc.serveSV2()
+	}()
+
+	openFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
+		RequestID:    77,
+		UserIdentity: mc.currentWorker(),
+	})
+	if err != nil {
+		t.Fatalf("encode open standard: %v", err)
+	}
+	readFrame := func() any {
+		t.Helper()
+		_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+		frame, err := readOneStratumV2FrameFromReader(client)
+		if err != nil {
+			t.Fatalf("read frame: %v", err)
+		}
+		msg, err := decodeStratumV2MiningWireFrame(frame)
+		if err != nil {
+			t.Fatalf("decode frame: %v", err)
+		}
+		return msg
+	}
+
+	if _, err := client.Write(testSV2SetupConnectionFrame(t)); err != nil {
+		t.Fatalf("client write setup: %v", err)
+	}
+	if msg := readFrame(); any(msg) == nil {
+		t.Fatalf("expected setup success frame")
+	} else if setup, ok := msg.(stratumV2WireSetupConnectionSuccess); !ok || setup.UsedVersion != 2 {
+		t.Fatalf("frame1 type=%T want setup success v2", msg)
+	}
+
+	if _, err := client.Write(openFrame); err != nil {
+		t.Fatalf("client write open: %v", err)
+	}
+	msg2 := readFrame()
+	openResp, ok := msg2.(stratumV2WireOpenStandardMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("frame2 type=%T want open standard success", msg2)
+	}
+	if openResp.RequestID != 77 || openResp.ChannelID == 0 {
+		t.Fatalf("unexpected open response: %#v", openResp)
+	}
+
+	msg3 := readFrame()
+	setTarget, ok := msg3.(stratumV2WireSetTarget)
+	if !ok {
+		t.Fatalf("frame3 type=%T want set target", msg3)
+	}
+	if setTarget.ChannelID != openResp.ChannelID {
+		t.Fatalf("settarget channel=%d want %d", setTarget.ChannelID, openResp.ChannelID)
+	}
+
+	msg4 := readFrame()
+	newJob, ok := msg4.(stratumV2WireNewMiningJob)
+	if !ok {
+		t.Fatalf("frame4 type=%T want new mining job", msg4)
+	}
+	if newJob.ChannelID != openResp.ChannelID {
+		t.Fatalf("newjob channel=%d want %d", newJob.ChannelID, openResp.ChannelID)
+	}
+
+	msg5 := readFrame()
+	prevhash, ok := msg5.(stratumV2WireSetNewPrevHash)
+	if !ok {
+		t.Fatalf("frame5 type=%T want set new prevhash", msg5)
+	}
+	if prevhash.ChannelID != openResp.ChannelID {
+		t.Fatalf("prevhash channel=%d want %d", prevhash.ChannelID, openResp.ChannelID)
+	}
+	if prevhash.JobID != newJob.JobID {
+		t.Fatalf("prevhash job_id=%d want %d", prevhash.JobID, newJob.JobID)
+	}
+	if prevhash.MinNTime != uint32(job.Template.CurTime) {
+		t.Fatalf("prevhash min_ntime=%d want %d", prevhash.MinNTime, uint32(job.Template.CurTime))
+	}
+
+	_ = client.Close()
+	<-done
 	if mc.sv2 != nil {
 		t.Fatalf("expected serveSV2 cleanup to detach sv2 conn")
 	}
@@ -916,5 +1014,35 @@ func TestSV2ConnReadLoopSkeleton_MappedOldJobOnNonActivePrevhash_ReturnsStaleSha
 	}
 	if e.ErrorCode != "stale-share" {
 		t.Fatalf("error_code=%q want stale-share", e.ErrorCode)
+	}
+}
+
+func TestMapStratumErrorToSv2SubmitErrorCode(t *testing.T) {
+	tests := []struct {
+		name   string
+		code   int
+		msg    string
+		banned bool
+		want   string
+	}{
+		{name: "banned", code: stratumErrCodeUnauthorized, msg: "banned", banned: true, want: "unauthorized"},
+		{name: "unauthorized code", code: stratumErrCodeUnauthorized, msg: "unauthorized", want: "unauthorized"},
+		{name: "low diff", code: stratumErrCodeLowDiffShare, msg: "low difficulty share", want: "difficulty-too-low"},
+		{name: "job not found", code: stratumErrCodeJobNotFound, msg: "job not found", want: "invalid-job-id"},
+		{name: "stale job", code: stratumErrCodeJobNotFound, msg: "stale job", want: "stale-share"},
+		{name: "duplicate", code: stratumErrCodeDuplicateShare, msg: "duplicate share", want: "duplicate-share"},
+		{name: "invalid ntime", code: stratumErrCodeInvalidRequest, msg: "invalid ntime", want: "invalid-timestamp"},
+		{name: "invalid extranonce", code: stratumErrCodeInvalidRequest, msg: "invalid extranonce2", want: "invalid-extranonce"},
+		{name: "invalid version", code: stratumErrCodeInvalidRequest, msg: "invalid version mask", want: "invalid-version"},
+		{name: "invalid nonce", code: stratumErrCodeInvalidRequest, msg: "invalid nonce", want: "invalid-solution"},
+		{name: "invalid merkle", code: stratumErrCodeInvalidRequest, msg: "invalid merkle", want: "invalid-solution"},
+		{name: "fallback duplicate by msg", code: 999, msg: "duplicate share", want: "duplicate-share"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mapStratumErrorToSv2SubmitErrorCode(tc.code, tc.msg, tc.banned); got != tc.want {
+				t.Fatalf("mapStratumErrorToSv2SubmitErrorCode(%d,%q,banned=%v)=%q want %q", tc.code, tc.msg, tc.banned, got, tc.want)
+			}
+		})
 	}
 }
