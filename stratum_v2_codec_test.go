@@ -27,6 +27,74 @@ func TestStratumV2FrameHeaderRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStratumV2SetupConnectionWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetupConnection{
+		Protocol:        0,
+		MinVersion:      2,
+		MaxVersion:      2,
+		Flags:           0x5,
+		EndpointHost:    "127.0.0.1",
+		EndpointPort:    3333,
+		Vendor:          "goPool",
+		HardwareVersion: "test-rig",
+		Firmware:        "dev",
+		DeviceID:        "device-1",
+	}
+	enc, err := encodeStratumV2SetupConnectionFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetupConnectionFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetupConnection)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
+func TestStratumV2SetupConnectionSuccessWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetupConnectionSuccess{UsedVersion: 2, Flags: 3}
+	enc, err := encodeStratumV2SetupConnectionSuccessFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetupConnectionSuccessFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetupConnectionSuccess)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
+func TestStratumV2SetupConnectionErrorWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetupConnectionError{Flags: 4, ErrorCode: "unsupported-protocol"}
+	enc, err := encodeStratumV2SetupConnectionErrorFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetupConnectionErrorFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetupConnectionError)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
 func TestStratumV2FrameDecodeRejectsLengthMismatch(t *testing.T) {
 	b := []byte{
 		0x00, 0x80, // extension_type LE (channel bit set)

@@ -16,6 +16,9 @@ type sv2Conn struct {
 	writer        io.Writer
 	submitMapper  *stratumV2SubmitMapperState
 	nextChannelID uint32
+	setupDone     bool
+	setupVersion  uint16
+	setupFlags    uint32
 }
 
 func (c *sv2Conn) handleReadLoop() error {
@@ -40,6 +43,8 @@ func (c *sv2Conn) handleOneFrame() error {
 	}
 
 	switch msg := wireMsg.(type) {
+	case stratumV2WireSetupConnection:
+		return c.handleSetupConnection(msg)
 	case stratumV2WireOpenStandardMiningChannel:
 		return c.handleOpenStandardMiningChannel(msg)
 	case stratumV2WireOpenExtendedMiningChannel:
@@ -59,6 +64,32 @@ func (c *sv2Conn) handleOneFrame() error {
 		// skeleton; ignore if received.
 		return nil
 	}
+}
+
+func (c *sv2Conn) handleSetupConnection(msg stratumV2WireSetupConnection) error {
+	const (
+		sv2ProtocolMining = uint8(0)
+		sv2VersionCurrent = uint16(2)
+	)
+	if msg.Protocol != sv2ProtocolMining {
+		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
+			Flags:     0,
+			ErrorCode: "unsupported-protocol",
+		})
+	}
+	if msg.MinVersion > sv2VersionCurrent || msg.MaxVersion < sv2VersionCurrent {
+		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
+			Flags:     0,
+			ErrorCode: "protocol-version-mismatch",
+		})
+	}
+	c.setupDone = true
+	c.setupVersion = sv2VersionCurrent
+	c.setupFlags = msg.Flags
+	return c.writeSetupConnectionSuccess(stratumV2WireSetupConnectionSuccess{
+		UsedVersion: sv2VersionCurrent,
+		Flags:       0,
+	})
 }
 
 func (c *sv2Conn) observeStratumV2MiningFrame(frameBytes []byte) error {
@@ -82,6 +113,12 @@ func (c *sv2Conn) applyStratumV2MiningWireMessage(msg any) {
 }
 
 func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardMiningChannel) error {
+	if !c.setupDone {
+		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
+			Flags:     0,
+			ErrorCode: "setup-connection-required",
+		})
+	}
 	if c.mc == nil {
 		return fmt.Errorf("sv2 conn missing miner context")
 	}
@@ -112,6 +149,12 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 }
 
 func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedMiningChannel) error {
+	if !c.setupDone {
+		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
+			Flags:     0,
+			ErrorCode: "setup-connection-required",
+		})
+	}
 	if c.mc == nil {
 		return fmt.Errorf("sv2 conn missing miner context")
 	}
@@ -219,6 +262,24 @@ func (c *sv2Conn) currentSV2TargetBytes() [32]byte {
 		return [32]byte{}
 	}
 	return uint256BEFromBigInt(c.mc.shareTargetOrDefault())
+}
+
+func (c *sv2Conn) writeSetupConnectionSuccess(msg stratumV2WireSetupConnectionSuccess) error {
+	frame, err := encodeStratumV2SetupConnectionSuccessFrame(msg)
+	if err != nil {
+		return err
+	}
+	_, err = c.writer.Write(frame)
+	return err
+}
+
+func (c *sv2Conn) writeSetupConnectionError(msg stratumV2WireSetupConnectionError) error {
+	frame, err := encodeStratumV2SetupConnectionErrorFrame(msg)
+	if err != nil {
+		return err
+	}
+	_, err = c.writer.Write(frame)
+	return err
 }
 
 func (c *sv2Conn) defaultLocalJobIDForWireNewMiningJob(msg stratumV2WireNewMiningJob) (string, bool) {

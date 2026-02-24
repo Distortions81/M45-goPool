@@ -35,6 +35,29 @@ type stratumV2SetTargetMessage struct {
 	Job *Job
 }
 
+type stratumV2WireSetupConnection struct {
+	Protocol        uint8
+	MinVersion      uint16
+	MaxVersion      uint16
+	Flags           uint32
+	EndpointHost    string // STR0_255
+	EndpointPort    uint16
+	Vendor          string // STR0_255
+	HardwareVersion string // STR0_255
+	Firmware        string // STR0_255
+	DeviceID        string // STR0_255
+}
+
+type stratumV2WireSetupConnectionSuccess struct {
+	UsedVersion uint16
+	Flags       uint32
+}
+
+type stratumV2WireSetupConnectionError struct {
+	Flags     uint32
+	ErrorCode string // STR0_255
+}
+
 // On-wire message shapes (SV2 Mining Protocol submit path). These map directly
 // to the binary payload fields defined in the spec and are used by the SV2
 // frame/payload codec.

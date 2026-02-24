@@ -5,6 +5,85 @@ import (
 	"testing"
 )
 
+func testSV2SetupConnectionFrame(t *testing.T) []byte {
+	t.Helper()
+	frame, err := encodeStratumV2SetupConnectionFrame(stratumV2WireSetupConnection{
+		Protocol:        0,
+		MinVersion:      2,
+		MaxVersion:      2,
+		EndpointHost:    "127.0.0.1",
+		EndpointPort:    3333,
+		Vendor:          "goPool",
+		HardwareVersion: "test",
+		Firmware:        "test",
+		DeviceID:        "dev1",
+	})
+	if err != nil {
+		t.Fatalf("encode setupconnection: %v", err)
+	}
+	return frame
+}
+
+func TestSV2ConnReadLoopSkeleton_SetupConnection_Succeeds(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	in.Write(testSV2SetupConnectionFrame(t))
+
+	c := &sv2Conn{mc: mc, reader: &in, writer: &out}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode setup success: %v", err)
+	}
+	resp, ok := msg.(stratumV2WireSetupConnectionSuccess)
+	if !ok {
+		t.Fatalf("response type=%T want stratumV2WireSetupConnectionSuccess", msg)
+	}
+	if resp.UsedVersion != 2 {
+		t.Fatalf("used_version=%d want 2", resp.UsedVersion)
+	}
+	if !c.setupDone || c.setupVersion != 2 {
+		t.Fatalf("expected setup state to be recorded")
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_OpenBeforeSetup_WritesSetupError(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	reqFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
+		RequestID:    1,
+		UserIdentity: mc.currentWorker(),
+	})
+	if err != nil {
+		t.Fatalf("encode open standard: %v", err)
+	}
+	in.Write(reqFrame)
+
+	c := &sv2Conn{mc: mc, reader: &in, writer: &out, submitMapper: newStratumV2SubmitMapperState()}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode setup error: %v", err)
+	}
+	resp, ok := msg.(stratumV2WireSetupConnectionError)
+	if !ok {
+		t.Fatalf("response type=%T want stratumV2WireSetupConnectionError", msg)
+	}
+	if resp.ErrorCode == "" {
+		t.Fatalf("expected non-empty setup error code")
+	}
+}
+
 func TestSV2SubmitWireResponder_SendSetTarget_WritesFrame(t *testing.T) {
 	mc, _ := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
@@ -43,6 +122,7 @@ func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testi
 
 	var in bytes.Buffer
 	var out bytes.Buffer
+	in.Write(testSV2SetupConnectionFrame(t))
 	reqFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
 		RequestID:    9,
 		UserIdentity: mc.currentWorker(),
@@ -62,13 +142,30 @@ func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testi
 		t.Fatalf("handleReadLoop: %v", err)
 	}
 
-	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	allOut := out.Bytes()
+	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(allOut[3:6]))
+	msg, err := decodeStratumV2MiningWireFrame(allOut[:firstLen])
 	if err != nil {
 		t.Fatalf("decode open response frame: %v", err)
 	}
 	resp, ok := msg.(stratumV2WireOpenStandardMiningChannelSuccess)
 	if !ok {
-		t.Fatalf("response type=%T want stratumV2WireOpenStandardMiningChannelSuccess", msg)
+		// first frame is setup.success; decode next frame
+		first, ok := msg.(stratumV2WireSetupConnectionSuccess)
+		if !ok {
+			t.Fatalf("response type=%T want setup/open success", msg)
+		}
+		if first.UsedVersion != 2 {
+			t.Fatalf("setup used_version=%d want 2", first.UsedVersion)
+		}
+		msg, err = decodeStratumV2MiningWireFrame(allOut[firstLen:])
+		if err != nil {
+			t.Fatalf("decode open response frame after setup: %v", err)
+		}
+		resp, ok = msg.(stratumV2WireOpenStandardMiningChannelSuccess)
+		if !ok {
+			t.Fatalf("second response type=%T want stratumV2WireOpenStandardMiningChannelSuccess", msg)
+		}
 	}
 	if resp.RequestID != 9 {
 		t.Fatalf("resp.RequestID=%d want 9", resp.RequestID)
@@ -186,11 +283,15 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode open standard: %v", err)
 	}
+	in.Write(testSV2SetupConnectionFrame(t))
 	in.Write(openFrame)
 	if err := c.handleReadLoop(); err != nil {
 		t.Fatalf("handleReadLoop open: %v", err)
 	}
-	openMsg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	// read loop processed setup + open; decode second response frame (open success).
+	all := out.Bytes()
+	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(all[3:6]))
+	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen:])
 	if err != nil {
 		t.Fatalf("decode open response: %v", err)
 	}

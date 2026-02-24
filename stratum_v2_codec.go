@@ -23,6 +23,9 @@ const (
 	stratumV2MsgTypeNewMiningJob                     = uint8(0x15)
 	stratumV2MsgTypeSetExtranoncePrefix              = uint8(0x19)
 	stratumV2MsgTypeSetTarget                        = uint8(0x21)
+	stratumV2MsgTypeSetupConnection                  = uint8(0x00)
+	stratumV2MsgTypeSetupConnectionSuccess           = uint8(0x01)
+	stratumV2MsgTypeSetupConnectionError             = uint8(0x02)
 )
 
 type stratumV2Frame struct {
@@ -177,6 +180,136 @@ func encodeStratumV2OpenStandardMiningChannelFrame(msg stratumV2WireOpenStandard
 		MsgType:       stratumV2MsgTypeOpenStandardMiningChannel,
 		Payload:       payload,
 	})
+}
+
+func encodeStratumV2SetupConnectionFrame(msg stratumV2WireSetupConnection) ([]byte, error) {
+	payload := make([]byte, 0, 1+2+2+4+1+len(msg.EndpointHost)+2+1+len(msg.Vendor)+1+len(msg.HardwareVersion)+1+len(msg.Firmware)+1+len(msg.DeviceID))
+	payload = append(payload, msg.Protocol)
+	var tmp2 [2]byte
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint16(tmp2[:], msg.MinVersion)
+	payload = append(payload, tmp2[:]...)
+	binary.LittleEndian.PutUint16(tmp2[:], msg.MaxVersion)
+	payload = append(payload, tmp2[:]...)
+	binary.LittleEndian.PutUint32(tmp4[:], msg.Flags)
+	payload = append(payload, tmp4[:]...)
+	var err error
+	payload, err = putStr0_255(payload, msg.EndpointHost)
+	if err != nil {
+		return nil, err
+	}
+	binary.LittleEndian.PutUint16(tmp2[:], msg.EndpointPort)
+	payload = append(payload, tmp2[:]...)
+	for _, s := range []string{msg.Vendor, msg.HardwareVersion, msg.Firmware, msg.DeviceID} {
+		payload, err = putStr0_255(payload, s)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeSetupConnection,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetupConnectionPayload(payload []byte) (stratumV2WireSetupConnection, error) {
+	if len(payload) < 1+2+2+4+1+2+1+1+1+1 {
+		return stratumV2WireSetupConnection{}, fmt.Errorf("setupconnection payload too short: %d", len(payload))
+	}
+	out := stratumV2WireSetupConnection{
+		Protocol:   payload[0],
+		MinVersion: binary.LittleEndian.Uint16(payload[1:3]),
+		MaxVersion: binary.LittleEndian.Uint16(payload[3:5]),
+		Flags:      binary.LittleEndian.Uint32(payload[5:9]),
+	}
+	var err error
+	off := 9
+	out.EndpointHost, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireSetupConnection{}, err
+	}
+	if off+2 > len(payload) {
+		return stratumV2WireSetupConnection{}, fmt.Errorf("setupconnection missing endpoint_port")
+	}
+	out.EndpointPort = binary.LittleEndian.Uint16(payload[off : off+2])
+	off += 2
+	out.Vendor, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireSetupConnection{}, err
+	}
+	out.HardwareVersion, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireSetupConnection{}, err
+	}
+	out.Firmware, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireSetupConnection{}, err
+	}
+	out.DeviceID, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireSetupConnection{}, err
+	}
+	if off != len(payload) {
+		return stratumV2WireSetupConnection{}, fmt.Errorf("setupconnection payload len=%d invalid tail", len(payload))
+	}
+	return out, nil
+}
+
+func encodeStratumV2SetupConnectionSuccessFrame(msg stratumV2WireSetupConnectionSuccess) ([]byte, error) {
+	payload := make([]byte, 6)
+	binary.LittleEndian.PutUint16(payload[0:2], msg.UsedVersion)
+	binary.LittleEndian.PutUint32(payload[2:6], msg.Flags)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeSetupConnectionSuccess,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetupConnectionSuccessPayload(payload []byte) (stratumV2WireSetupConnectionSuccess, error) {
+	if len(payload) != 6 {
+		return stratumV2WireSetupConnectionSuccess{}, fmt.Errorf("setupconnection.success payload len=%d want 6", len(payload))
+	}
+	return stratumV2WireSetupConnectionSuccess{
+		UsedVersion: binary.LittleEndian.Uint16(payload[0:2]),
+		Flags:       binary.LittleEndian.Uint32(payload[2:6]),
+	}, nil
+}
+
+func encodeStratumV2SetupConnectionErrorFrame(msg stratumV2WireSetupConnectionError) ([]byte, error) {
+	payload := make([]byte, 0, 4+1+len(msg.ErrorCode))
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.Flags)
+	payload = append(payload, tmp4[:]...)
+	var err error
+	payload, err = putStr0_255(payload, msg.ErrorCode)
+	if err != nil {
+		return nil, err
+	}
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeSetupConnectionError,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetupConnectionErrorPayload(payload []byte) (stratumV2WireSetupConnectionError, error) {
+	if len(payload) < 5 {
+		return stratumV2WireSetupConnectionError{}, fmt.Errorf("setupconnection.error payload too short: %d", len(payload))
+	}
+	out := stratumV2WireSetupConnectionError{
+		Flags: binary.LittleEndian.Uint32(payload[0:4]),
+	}
+	var err error
+	out.ErrorCode, _, err = readStr0_255(payload, 4)
+	if err != nil {
+		return stratumV2WireSetupConnectionError{}, err
+	}
+	if len(payload) != 5+len(out.ErrorCode) {
+		return stratumV2WireSetupConnectionError{}, fmt.Errorf("setupconnection.error payload len=%d invalid tail", len(payload))
+	}
+	return out, nil
 }
 
 func encodeStratumV2NewMiningJobFrame(msg stratumV2WireNewMiningJob) ([]byte, error) {
@@ -591,6 +724,21 @@ func decodeStratumV2MiningWireFrame(b []byte) (any, error) {
 		return nil, fmt.Errorf("unsupported sv2 extension_type: %#04x", frame.baseExtensionType())
 	}
 	switch frame.MsgType {
+	case stratumV2MsgTypeSetupConnection:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("setupconnection must not set channel_msg bit")
+		}
+		return decodeStratumV2SetupConnectionPayload(frame.Payload)
+	case stratumV2MsgTypeSetupConnectionSuccess:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("setupconnection.success must not set channel_msg bit")
+		}
+		return decodeStratumV2SetupConnectionSuccessPayload(frame.Payload)
+	case stratumV2MsgTypeSetupConnectionError:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("setupconnection.error must not set channel_msg bit")
+		}
+		return decodeStratumV2SetupConnectionErrorPayload(frame.Payload)
 	case stratumV2MsgTypeOpenStandardMiningChannel:
 		if frame.isChannelMessage() {
 			return nil, fmt.Errorf("openstandardminingchannel must not set channel_msg bit")
