@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/hex"
-	"fmt"
 	"time"
 )
 
@@ -36,22 +35,28 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
+	hooks := (&task).hooksOrDefault(mc)
+
 	if !mc.useStrictSubmitPath() {
-		ctx, ok := mc.prepareShareContextSolo(task)
+		ctx, ok := mc.prepareShareContextSoloWithHooks(task, hooks)
 		if !ok {
 			return
 		}
-		mc.processSoloShare(task, ctx)
+		mc.processSoloShareWithHooks(task, ctx, hooks)
 		return
 	}
-	ctx, ok := mc.prepareShareContextStrict(task)
+	ctx, ok := mc.prepareShareContextStrictWithHooks(task, hooks)
 	if !ok {
 		return
 	}
-	mc.processRegularShare(task, ctx)
+	mc.processRegularShareWithHooks(task, ctx, hooks)
 }
 
 func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) {
+	mc.processRegularShareWithHooks(task, ctx, (&task).hooksOrDefault(mc))
+}
+
+func (mc *MinerConn) processRegularShareWithHooks(task submissionTask, ctx shareContext, hooks miningShareSubmitHooks) {
 	job := task.job
 	workerName := task.workerName
 	jobID := task.jobID
@@ -71,7 +76,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 	}
 
 	if !ctx.isBlock && policyReject.reason != rejectUnknown {
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
+		hooks.rejectWithBan(reqID, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
 		return
 	}
 
@@ -102,7 +107,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 			"nonce", nonceLog,
 			"version", verLog,
 		)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectDuplicateShare, stratumErrCodeDuplicateShare, "duplicate share", now)
+		hooks.rejectWithBan(reqID, workerName, rejectDuplicateShare, stratumErrCodeDuplicateShare, "duplicate share", now)
 		return
 	}
 
@@ -146,13 +151,9 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 		if banned, invalids := mc.noteInvalidSubmit(now, rejectLowDiff); banned {
 			mc.logBan(rejectLowDiff.String(), workerName, invalids)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
+			hooks.writeBanned(reqID)
 		} else {
-			mc.writeResponse(StratumResponse{
-				ID:     reqID,
-				Result: false,
-				Error:  []any{stratumErrCodeLowDiffShare, fmt.Sprintf("low difficulty share (%.6g expected %.6g)", ctx.shareDiff, assignedDiff), nil},
-			})
+			hooks.writeLowDiff(reqID, ctx.shareDiff, assignedDiff)
 		}
 		return
 	}
@@ -165,7 +166,7 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShareWithHooks(hooks, reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
@@ -178,10 +179,10 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	// Respond first; any vardiff adjustment and follow-up notify can happen after
 	// the submit is acknowledged to minimize perceived submit latency.
-	mc.writeTrueResponse(reqID)
+	hooks.writeTrue(reqID)
 
 	if mc.maybeAdjustDifficulty(now) {
-		mc.sendNotifyFor(job, true)
+		hooks.sendDifficultyNotify(job)
 	}
 
 	if logger.Enabled(logLevelInfo) {
@@ -209,6 +210,10 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 }
 
 func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
+	mc.processSoloShareWithHooks(task, ctx, (&task).hooksOrDefault(mc))
+}
+
+func (mc *MinerConn) processSoloShareWithHooks(task submissionTask, ctx shareContext, hooks miningShareSubmitHooks) {
 	job := task.job
 	workerName := task.workerName
 	reqID := task.reqID
@@ -223,7 +228,7 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShareWithHooks(hooks, reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
 		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 		return
@@ -236,10 +241,10 @@ func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
 	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 
 	// Respond first; vardiff adjustments and notifies can follow.
-	mc.writeTrueResponse(reqID)
+	hooks.writeTrue(reqID)
 
 	if mc.maybeAdjustDifficulty(now) {
-		mc.sendNotifyFor(job, true)
+		hooks.sendDifficultyNotify(job)
 	}
 
 	if logger.Enabled(logLevelInfo) {

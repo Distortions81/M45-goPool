@@ -32,6 +32,7 @@ func ensureSubmissionWorkerPool() {
 
 type submissionTask struct {
 	mc               *MinerConn
+	submitHooks      miningShareSubmitHooks
 	reqID            any
 	job              *Job
 	jobID            string
@@ -66,6 +67,13 @@ func (t *submissionTask) extranonce2Decoded() []byte {
 		n = len(t.extranonce2Bytes)
 	}
 	return t.extranonce2Bytes[:n]
+}
+
+func (t *submissionTask) hooksOrDefault(mc *MinerConn) miningShareSubmitHooks {
+	if t != nil && t.submitHooks != nil {
+		return t.submitHooks
+	}
+	return newStratumV1MiningShareSubmitHooks(mc)
 }
 
 type submitPolicyReject struct {

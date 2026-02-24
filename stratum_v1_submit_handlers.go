@@ -2,6 +2,11 @@ package main
 
 import "time"
 
+func (mc *MinerConn) attachStratumV1SubmitHooks(task submissionTask) submissionTask {
+	task.submitHooks = newStratumV1MiningShareSubmitHooks(mc)
+	return task
+}
+
 func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	// Expect params like:
 	// [worker_name, job_id, extranonce2, ntime, nonce]
@@ -11,6 +16,7 @@ func (mc *MinerConn) handleSubmit(req *StratumRequest) {
 	if !ok {
 		return
 	}
+	task = mc.attachStratumV1SubmitHooks(task)
 	if mc.cfg.SubmitProcessInline {
 		mc.processSubmissionTask(task)
 		return
@@ -25,6 +31,7 @@ func (mc *MinerConn) handleSubmitStringParams(id any, params []string) {
 	if !ok {
 		return
 	}
+	task = mc.attachStratumV1SubmitHooks(task)
 	if mc.cfg.SubmitProcessInline {
 		mc.processSubmissionTask(task)
 		return
@@ -39,6 +46,7 @@ func (mc *MinerConn) handleSubmitFastBytes(id any, worker, jobID, extranonce2, n
 	if !ok {
 		return
 	}
+	task = mc.attachStratumV1SubmitHooks(task)
 	if mc.cfg.SubmitProcessInline {
 		mc.processSubmissionTask(task)
 		return

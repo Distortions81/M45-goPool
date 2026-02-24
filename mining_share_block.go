@@ -14,6 +14,10 @@ import (
 // available), submits it via RPC, logs the reward split and found-block
 // record, and sends the final Stratum response.
 func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
+	mc.handleBlockShareWithHooks(newStratumV1MiningShareSubmitHooks(mc), reqID, job, workerName, en2, ntime, nonce, useVersion, hashHex, shareDiff, now)
+}
+
+func (mc *MinerConn) handleBlockShareWithHooks(hooks miningShareSubmitHooks, reqID any, job *Job, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, hashHex string, shareDiff float64, now time.Time) {
 	var (
 		blockHex  string
 		submitRes any
@@ -101,7 +105,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 				mc.metrics.RecordErrorEvent("submitblock", err.Error(), now)
 			}
 			logger.Error("submitblock build error", "remote", mc.id, "error", err)
-			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
+			hooks.writeInvalidRequest(reqID, err.Error())
 			return
 		}
 	}
@@ -122,7 +126,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 		// that the block was accepted; it only preserves the data needed for
 		// a later submitblock attempt.
 		mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
+		hooks.writeInvalidRequest(reqID, err.Error())
 		return
 	}
 	if mc.metrics != nil {
@@ -174,7 +178,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, workerName string, en
 			"worker_difficulty", stats.TotalDifficulty,
 		)
 	}
-	mc.writeTrueResponse(reqID)
+	hooks.writeTrue(reqID)
 }
 
 // logFoundBlock appends a JSON line describing a found block to a log file in
