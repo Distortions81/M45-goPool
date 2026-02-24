@@ -32,11 +32,11 @@ Stratum notes:
 
 ## Codebase size
 
-- **Go source:** 50,017 lines spread across the `.go` files (core logic, services, status handlers, etc.).
-- **HTML/template:** 8,323 lines (status/admin UI templates, static fragments, helpers).
-- **CSS:** 2,126 lines for the dashboard/admin skin and helpers.
+- **Go source (excluding tests):** 34,401 lines across 142 non-test `.go` files.
+- **Go tests:** 16,245 lines across 102 `*_test.go` files.
+- **Go source (total):** 50,646 lines across 244 `.go` files.
 
-Counts above were collected on February 23, 2026.
+Counts above were collected on February 24, 2026.
 
 ## Configuration overview
 
