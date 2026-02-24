@@ -32,3 +32,4 @@ The SV2 implementation is still in-progress. The current codebase includes:
 - mining job/update framing (`SetTarget`, `SetExtranoncePrefix`, `NewMiningJob`, `SetNewPrevHash`)
 - share submit decode/encode and bridge into the shared mining share core
 
+For a detailed implementation matrix (implemented / partial / missing) and current compatibility warnings, see `documentation/stratum-v2-status.md`.

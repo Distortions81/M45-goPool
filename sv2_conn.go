@@ -310,7 +310,78 @@ func (c *sv2Conn) currentSV2TargetBytes() [32]byte {
 	if c == nil || c.mc == nil {
 		return [32]byte{}
 	}
-	return uint256BEFromBigInt(c.mc.shareTargetOrDefault())
+	return uint256LEFromBigInt(c.mc.shareTargetOrDefault())
+}
+
+func reverseU256Bytes(in [32]byte) [32]byte {
+	var out [32]byte
+	for i := 0; i < 32; i++ {
+		out[i] = in[31-i]
+	}
+	return out
+}
+
+func (c *sv2Conn) standardSV2MerkleRootU256LE(channelID uint32, job *Job) ([32]byte, error) {
+	if c == nil || c.mc == nil || job == nil {
+		return [32]byte{}, fmt.Errorf("missing sv2 conn miner or job")
+	}
+	if c.submitMapper == nil {
+		return [32]byte{}, fmt.Errorf("missing submit mapper")
+	}
+	ch, ok := c.submitMapper.channels[channelID]
+	if !ok {
+		return [32]byte{}, fmt.Errorf("missing channel mapping for channel=%d", channelID)
+	}
+	worker := ch.WorkerName
+	if worker == "" {
+		worker = c.mc.currentWorker()
+	}
+	payoutScript := c.mc.singlePayoutScript(job, worker)
+	if len(payoutScript) == 0 {
+		// Fallback keeps SV2 job encoding available in test fixtures or early
+		// sessions where worker-specific wallet resolution is not yet populated.
+		payoutScript = job.PayoutScript
+	}
+	if len(payoutScript) == 0 {
+		return [32]byte{}, fmt.Errorf("missing payout script for worker=%q", worker)
+	}
+	en2 := ch.StandardExtranonce2
+	if len(en2) == 0 {
+		en2 = make([]byte, c.mc.cfg.Extranonce2Size)
+		if len(en2) == 0 {
+			en2 = make([]byte, 4)
+		}
+	}
+	scriptTime := c.mc.scriptTimeForJob(job.JobID, job.ScriptTime)
+	_, cbTxid, err := serializeCoinbaseTxPredecoded(
+		job.Template.Height,
+		c.mc.stratumV1.extranonce1,
+		en2,
+		job.TemplateExtraNonce2Size,
+		payoutScript,
+		job.CoinbaseValue,
+		job.witnessCommitScript,
+		job.coinbaseFlagsBytes,
+		job.CoinbaseMsg,
+		scriptTime,
+	)
+	if err != nil || len(cbTxid) != 32 {
+		if err == nil {
+			err = fmt.Errorf("invalid coinbase txid len=%d", len(cbTxid))
+		}
+		return [32]byte{}, fmt.Errorf("compute sv2 standard merkle root coinbase: %w", err)
+	}
+	var merkleRootBE [32]byte
+	var merkleOK bool
+	if job.merkleBranchesBytes != nil {
+		merkleRootBE, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+	} else {
+		merkleRootBE, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+	}
+	if !merkleOK {
+		return [32]byte{}, fmt.Errorf("compute sv2 standard merkle root failed")
+	}
+	return reverseU256Bytes(merkleRootBE), nil
 }
 
 func (c *sv2Conn) writeSetupConnectionSuccess(msg stratumV2WireSetupConnectionSuccess) error {
@@ -459,6 +530,10 @@ func (c *sv2Conn) writeStratumV2JobBundleForLocalJob(channelID uint32, wireJobID
 			return fmt.Errorf("decode prevhash: %w", err)
 		}
 	}
+	merkleRootLE, err := c.standardSV2MerkleRootU256LE(channelID, job)
+	if err != nil {
+		return err
+	}
 	if err := c.writeStratumV2SetTarget(stratumV2WireSetTarget{
 		ChannelID:     channelID,
 		MaximumTarget: c.currentSV2TargetBytes(),
@@ -466,17 +541,17 @@ func (c *sv2Conn) writeStratumV2JobBundleForLocalJob(channelID uint32, wireJobID
 		return err
 	}
 	if err := c.writeStratumV2NewMiningJob(stratumV2WireNewMiningJob{
-		ChannelID: channelID,
-		JobID:     wireJobID,
-		Version:   uint32(job.Template.Version),
-		// TODO: derive per-channel merkle root for standards/jobs from job data.
+		ChannelID:  channelID,
+		JobID:      wireJobID,
+		Version:    uint32(job.Template.Version),
+		MerkleRoot: merkleRootLE,
 	}, job.JobID); err != nil {
 		return err
 	}
 	return c.writeStratumV2SetNewPrevHash(stratumV2WireSetNewPrevHash{
 		ChannelID: channelID,
 		JobID:     wireJobID,
-		PrevHash:  prevHash,
+		PrevHash:  reverseU256Bytes(prevHash),
 		MinNTime:  uint32(job.Template.CurTime),
 		NBits:     nbits,
 	})
@@ -658,7 +733,7 @@ func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
 	}
 	var target [32]byte
 	if r.mc != nil {
-		target = uint256BEFromBigInt(r.mc.shareTargetOrDefault())
+		target = uint256LEFromBigInt(r.mc.shareTargetOrDefault())
 	}
 	frame, err := encodeStratumV2SetTargetFrame(stratumV2WireSetTarget{
 		ChannelID:     r.channelID,

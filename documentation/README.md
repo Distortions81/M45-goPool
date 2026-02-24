@@ -4,5 +4,6 @@
 - `json-apis.md` - JSON API reference for `/api/*`.
 - `stratum-v1.md` - Stratum v1 method compatibility notes.
 - `stratum-v2.md` - Stratum v2 listener setup and current implementation scope.
+- `stratum-v2-status.md` - Detailed Stratum v2 implementation status, known gaps, and compatibility warnings.
 - `TESTING.md` - Test suite usage and contribution testing guidance.
 - `systemd.service` - Example systemd unit file.

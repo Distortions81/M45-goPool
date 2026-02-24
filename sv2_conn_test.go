@@ -113,7 +113,7 @@ func TestSV2SubmitWireResponder_SendSetTarget_WritesFrame(t *testing.T) {
 	if got.ChannelID != 44 {
 		t.Fatalf("settarget.ChannelID=%d want 44", got.ChannelID)
 	}
-	wantTarget := uint256BEFromBigInt(mc.shareTargetOrDefault())
+	wantTarget := uint256LEFromBigInt(mc.shareTargetOrDefault())
 	if got.MaximumTarget != wantTarget {
 		t.Fatalf("settarget target mismatch")
 	}
@@ -221,6 +221,14 @@ func TestSV2ConnWriteStratumV2JobBundleForLocalJob_WritesFramesAndSyncsState(t *
 	}
 	if got, ok := msg2.(stratumV2WireNewMiningJob); !ok || got.ChannelID != 21 || got.JobID != 700 {
 		t.Fatalf("frame2 type/value unexpected: %#v", msg2)
+	} else {
+		wantMerkleRoot, err := c.standardSV2MerkleRootU256LE(21, job)
+		if err != nil {
+			t.Fatalf("standardSV2MerkleRootU256LE: %v", err)
+		}
+		if got.MerkleRoot != wantMerkleRoot {
+			t.Fatalf("frame2 merkle root mismatch: got=%x want=%x", got.MerkleRoot, wantMerkleRoot)
+		}
 	}
 	// Frame 3: SetNewPrevHash
 	msg3, err := decodeStratumV2MiningWireFrame(b[n1+n2:])
@@ -229,6 +237,8 @@ func TestSV2ConnWriteStratumV2JobBundleForLocalJob_WritesFramesAndSyncsState(t *
 	}
 	if got, ok := msg3.(stratumV2WireSetNewPrevHash); !ok || got.ChannelID != 21 || got.JobID != 700 {
 		t.Fatalf("frame3 type/value unexpected: %#v", msg3)
+	} else if got.PrevHash != reverseU256Bytes(job.prevHashBytes) {
+		t.Fatalf("frame3 prev_hash mismatch: got=%x want=%x", got.PrevHash, reverseU256Bytes(job.prevHashBytes))
 	}
 
 	if got, ok := c.submitMapper.jobs[stratumV2ChannelJobKey{ChannelID: 21, WireJobID: 700}]; !ok || got != job.JobID {

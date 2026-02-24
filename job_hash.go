@@ -74,6 +74,15 @@ func uint256BEFromBigInt(n *big.Int) [32]byte {
 	return out
 }
 
+func uint256LEFromBigInt(n *big.Int) [32]byte {
+	var out [32]byte
+	be := uint256BEFromBigInt(n)
+	for i := 0; i < 32; i++ {
+		out[i] = be[31-i]
+	}
+	return out
+}
+
 // difficultyFromHash converts the block hash to a difficulty value relative to diff=1.
 // The hash parameter should be big-endian bytes from SHA256.
 //
