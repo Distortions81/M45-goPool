@@ -550,6 +550,16 @@ func (mc *MinerConn) serveSV2() {
 		return
 	}
 	c := newSV2ConnForMiner(mc, mc.reader, mc.conn)
+	if tr, det, err := newSV2FrameTransportAuto(mc.reader, mc.conn); err != nil {
+		if errors.Is(err, errSV2NoiseHandshakeNotImplemented) {
+			logger.Warn("sv2 noise handshake not supported", "component", "miner", "kind", "protocol", "remote", mc.id, "detection", det.cause)
+			return
+		}
+		logger.Warn("sv2 transport setup error", "component", "miner", "kind", "protocol", "remote", mc.id, "error", err)
+		return
+	} else {
+		c.transport = tr
+	}
 	if err := c.handleReadLoop(); err != nil && err != io.EOF && !errors.Is(err, net.ErrClosed) {
 		logger.Warn("sv2 read loop error", "component", "miner", "kind", "protocol", "remote", mc.id, "error", err)
 	}

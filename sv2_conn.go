@@ -15,6 +15,7 @@ type sv2Conn struct {
 	mc              *MinerConn
 	reader          io.Reader
 	writer          io.Writer
+	transport       sv2FrameTransport
 	submitMapper    *stratumV2SubmitMapperState
 	channelTargets  map[uint32][32]byte
 	channelPrevHash map[uint32]stratumV2WireSetNewPrevHash
@@ -30,6 +31,7 @@ func newSV2ConnForMiner(mc *MinerConn, reader io.Reader, writer io.Writer) *sv2C
 		mc:           mc,
 		reader:       reader,
 		writer:       writer,
+		transport:    &sv2PlainFrameTransport{r: reader, w: writer},
 		submitMapper: newStratumV2SubmitMapperState(),
 	}
 	if mc != nil {
@@ -50,7 +52,7 @@ func (c *sv2Conn) handleReadLoop() error {
 }
 
 func (c *sv2Conn) handleOneFrame() error {
-	frameBytes, err := readOneStratumV2FrameFromReader(c.reader)
+	frameBytes, err := c.readFrame()
 	if err != nil {
 		return err
 	}
@@ -86,6 +88,26 @@ func (c *sv2Conn) handleOneFrame() error {
 		// skeleton; ignore if received.
 		return nil
 	}
+}
+
+func (c *sv2Conn) readFrame() ([]byte, error) {
+	if c == nil {
+		return nil, io.EOF
+	}
+	if c.transport == nil {
+		c.transport = &sv2PlainFrameTransport{r: c.reader, w: c.writer}
+	}
+	return c.transport.ReadFrame()
+}
+
+func (c *sv2Conn) writeFrame(frame []byte) error {
+	if c == nil {
+		return io.ErrClosedPipe
+	}
+	if c.transport == nil {
+		c.transport = &sv2PlainFrameTransport{r: c.reader, w: c.writer}
+	}
+	return c.transport.WriteFrame(frame)
 }
 
 func (c *sv2Conn) handleSetupConnection(msg stratumV2WireSetupConnection) error {
@@ -146,7 +168,7 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 	if err != nil {
 		return err
 	}
-	if _, err := c.writer.Write(frame); err != nil {
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	return c.writeCurrentJobBundleForChannel(chID)
@@ -187,7 +209,7 @@ func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedM
 	if err != nil {
 		return err
 	}
-	if _, err := c.writer.Write(frame); err != nil {
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	return c.writeCurrentJobBundleForChannel(chID)
@@ -292,8 +314,7 @@ func (c *sv2Conn) writeSetupConnectionSuccess(msg stratumV2WireSetupConnectionSu
 	if err != nil {
 		return err
 	}
-	_, err = c.writer.Write(frame)
-	return err
+	return c.writeFrame(frame)
 }
 
 func (c *sv2Conn) writeSetupConnectionError(msg stratumV2WireSetupConnectionError) error {
@@ -301,8 +322,7 @@ func (c *sv2Conn) writeSetupConnectionError(msg stratumV2WireSetupConnectionErro
 	if err != nil {
 		return err
 	}
-	_, err = c.writer.Write(frame)
-	return err
+	return c.writeFrame(frame)
 }
 
 func (c *sv2Conn) defaultLocalJobIDForWireNewMiningJob(msg stratumV2WireNewMiningJob) (string, bool) {
@@ -354,7 +374,7 @@ func (c *sv2Conn) writeStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranon
 	if err != nil {
 		return err
 	}
-	if _, err := c.writer.Write(frame); err != nil {
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	c.applyStratumV2SetExtranoncePrefix(msg)
@@ -366,7 +386,7 @@ func (c *sv2Conn) writeStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, loca
 	if err != nil {
 		return err
 	}
-	if _, err := c.writer.Write(frame); err != nil {
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	c.applyStratumV2NewMiningJob(msg, localJobID)
@@ -406,7 +426,7 @@ func (c *sv2Conn) writeStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) 
 	if err != nil {
 		return err
 	}
-	if _, err := c.writer.Write(frame); err != nil {
+	if err := c.writeFrame(frame); err != nil {
 		return err
 	}
 	c.applyStratumV2SetNewPrevHash(msg)
@@ -628,25 +648,59 @@ func (r *stratumV2SubmitWireResponder) sendSetTarget(job *Job) {
 }
 
 func mapStratumErrorToSv2SubmitErrorCode(errCode int, msg string, banned bool) string {
+	msgLower := strings.ToLower(strings.TrimSpace(msg))
 	if banned {
-		return "invalid-channel-id"
+		return "unauthorized"
 	}
 	switch errCode {
+	case stratumErrCodeUnauthorized:
+		return "unauthorized"
 	case stratumErrCodeLowDiffShare:
 		return "difficulty-too-low"
 	case stratumErrCodeJobNotFound:
-		if strings.Contains(strings.ToLower(msg), "stale") {
+		if strings.Contains(msgLower, "stale") {
 			return "stale-share"
 		}
 		return "invalid-job-id"
 	case stratumErrCodeDuplicateShare:
-		return "stale-share"
+		return "duplicate-share"
 	case stratumErrCodeInvalidRequest:
-		if strings.Contains(strings.ToLower(msg), "job") {
+		switch {
+		case strings.Contains(msgLower, "job"):
 			return "invalid-job-id"
+		case strings.Contains(msgLower, "ntime"), strings.Contains(msgLower, "time"):
+			return "invalid-timestamp"
+		case strings.Contains(msgLower, "extranonce"):
+			return "invalid-extranonce"
+		case strings.Contains(msgLower, "version"):
+			return "invalid-version"
+		case strings.Contains(msgLower, "nonce"),
+			strings.Contains(msgLower, "coinbase"),
+			strings.Contains(msgLower, "merkle"):
+			return "invalid-solution"
+		case strings.Contains(msgLower, "unauthorized"), strings.Contains(msgLower, "banned"):
+			return "unauthorized"
 		}
 		return "invalid-job-id"
 	default:
+		if strings.Contains(msgLower, "duplicate") {
+			return "duplicate-share"
+		}
+		if strings.Contains(msgLower, "low diff") || strings.Contains(msgLower, "difficulty") {
+			return "difficulty-too-low"
+		}
+		if strings.Contains(msgLower, "stale") {
+			return "stale-share"
+		}
+		if strings.Contains(msgLower, "ntime") || strings.Contains(msgLower, "time") {
+			return "invalid-timestamp"
+		}
+		if strings.Contains(msgLower, "extranonce") {
+			return "invalid-extranonce"
+		}
+		if strings.Contains(msgLower, "version") {
+			return "invalid-version"
+		}
 		return "invalid-job-id"
 	}
 }
