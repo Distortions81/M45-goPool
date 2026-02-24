@@ -413,7 +413,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 		}
 	}
 
-	policyReject := submitPolicyReject{reason: rejectUnknown}
+	policyReject := sharePolicyReject{reason: rejectUnknown}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2HexBytes(extranonce2B, validateFields, job.Extranonce2Size)
 	if err != nil {
@@ -543,7 +543,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 
 	// Solo-mode: we only validate inputs enough to reconstruct the header and
 	// compute PoW/difficulty. We intentionally skip pool policy checks.
-	policyReject := submitPolicyReject{reason: rejectUnknown}
+	policyReject := sharePolicyReject{reason: rejectUnknown}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
 	if err != nil {
@@ -678,10 +678,10 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		}
 	}
 
-	policyReject := submitPolicyReject{reason: rejectUnknown}
+	policyReject := sharePolicyReject{reason: rejectUnknown}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
-		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
+		policyReject = sharePolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
 	}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2HexBytes(extranonce2B, validateFields, job.Extranonce2Size)
@@ -707,7 +707,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	if mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
 		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
 		if policyReject.reason == rejectUnknown {
-			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
+			policyReject = sharePolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
 		}
 	}
 
@@ -751,14 +751,14 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		if !mc.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
+				policyReject = sharePolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
 			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
+				policyReject = sharePolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
@@ -768,7 +768,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 				if !mc.cfg.ShareAllowDegradedVersionBits {
 					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
-						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
+						policyReject = sharePolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
 				} else {
 					logger.Warn("submit: miner operating in degraded version rolling mode (allowed by BIP310)",
@@ -867,10 +867,10 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
-	policyReject := submitPolicyReject{reason: rejectUnknown}
+	policyReject := sharePolicyReject{reason: rejectUnknown}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
-		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
+		policyReject = sharePolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
 	}
 
 	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
@@ -902,7 +902,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		// a real block, submit it even if ntime violates the pool's tighter window.
 		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
 		if policyReject.reason == rejectUnknown {
-			policyReject = submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
+			policyReject = sharePolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"}
 		}
 	}
 
@@ -942,14 +942,14 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		if !mc.versionRoll {
 			logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
+				policyReject = sharePolicyReject{reason: rejectInvalidVersion, errCode: stratumErrCodeInvalidRequest, errMsg: "version rolling not enabled"}
 			}
 		}
 
 		if versionDiff&^mc.versionMask != 0 {
 			logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
 			if policyReject.reason == rejectUnknown {
-				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
+				policyReject = sharePolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 			}
 		}
 
@@ -959,7 +959,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 				if !mc.cfg.ShareAllowDegradedVersionBits {
 					logger.Warn("submit insufficient version rolling bits (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "required_bits", mc.minVerBits)
 					if policyReject.reason == rejectUnknown {
-						policyReject = submitPolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
+						policyReject = sharePolicyReject{reason: rejectInsufficientVersionBits, errCode: stratumErrCodeInvalidRequest, errMsg: "insufficient version bits"}
 					}
 				} else {
 					// Log but don't reject (BIP310 permissive approach: allow degraded mode)

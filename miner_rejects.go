@@ -54,13 +54,13 @@ func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
 	return false, ""
 }
 
-// submitRejectReason classifies categories of invalid submissions. It is used
+// shareRejectReason classifies categories of invalid submissions. It is used
 // for ban decisions while allowing human-readable reason strings to remain
 // stable and centralized.
-type submitRejectReason int
+type shareRejectReason int
 
 const (
-	rejectUnknown submitRejectReason = iota
+	rejectUnknown shareRejectReason = iota
 	rejectInvalidExtranonce2
 	rejectInvalidNTime
 	rejectInvalidNonce
@@ -74,7 +74,7 @@ const (
 	rejectLowDiff
 )
 
-func (r submitRejectReason) String() string {
+func (r shareRejectReason) String() string {
 	switch r {
 	case rejectInvalidExtranonce2:
 		return "invalid extranonce2"
@@ -103,7 +103,7 @@ func (r submitRejectReason) String() string {
 	}
 }
 
-func isBanEligibleInvalidReason(reason submitRejectReason) bool {
+func isBanEligibleInvalidReason(reason shareRejectReason) bool {
 	switch reason {
 	case rejectInvalidExtranonce2,
 		rejectInvalidNTime,
@@ -119,7 +119,7 @@ func isBanEligibleInvalidReason(reason submitRejectReason) bool {
 	}
 }
 
-func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason submitRejectReason, effectiveInvalid int) {
+func (mc *MinerConn) maybeWarnApproachingInvalidBan(now time.Time, reason shareRejectReason, effectiveInvalid int) {
 	if mc == nil || !mc.authorized {
 		return
 	}
@@ -180,7 +180,7 @@ func (mc *MinerConn) maybeWarnDuplicateShares(now time.Time) {
 	// Non-fatal warning only; avoid client.show_message unless disconnecting.
 }
 
-func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason submitRejectReason) (bool, int) {
+func (mc *MinerConn) noteInvalidSubmit(now time.Time, reason shareRejectReason) (bool, int) {
 	mc.stateMu.Lock()
 	defer mc.stateMu.Unlock()
 	window := mc.banInvalidWindow()
@@ -336,7 +336,7 @@ func (mc *MinerConn) bannedStratumError() []any {
 // counters, and either bans the worker or returns a typed Stratum error
 // depending on recent behavior. It centralizes the common pattern used for
 // clearly invalid submissions (bad extranonce, ntime, nonce, etc.).
-func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, reason submitRejectReason, errCode int, errMsg string, now time.Time) {
+func (mc *MinerConn) rejectShareWithBan(req *StratumRequest, workerName string, reason shareRejectReason, errCode int, errMsg string, now time.Time) {
 	reasonText := reason.String()
 	mc.recordShare(workerName, false, 0, 0, reasonText, "", nil, now)
 	banned, invalids := mc.noteInvalidSubmit(now, reason)

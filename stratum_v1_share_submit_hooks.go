@@ -13,7 +13,7 @@ func newStratumV1MiningShareSubmitHooks(mc *MinerConn) miningShareSubmitHooks {
 	return stratumV1MiningShareSubmitHooks{mc: mc}
 }
 
-func (h stratumV1MiningShareSubmitHooks) rejectWithBan(reqID any, workerName string, reason submitRejectReason, errCode int, errMsg string, now time.Time) {
+func (h stratumV1MiningShareSubmitHooks) rejectWithBan(reqID any, workerName string, reason shareRejectReason, errCode int, errMsg string, now time.Time) {
 	h.mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, reason, errCode, errMsg, now)
 }
 

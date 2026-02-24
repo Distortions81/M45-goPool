@@ -48,7 +48,7 @@ type submissionTask struct {
 	versionHex       string
 	useVersion       uint32
 	scriptTime       int64
-	policyReject     submitPolicyReject
+	policyReject     sharePolicyReject
 	receivedAt       time.Time
 }
 
@@ -76,8 +76,8 @@ func (t *submissionTask) hooksOrDefault(mc *MinerConn) miningShareSubmitHooks {
 	return newStratumV1MiningShareSubmitHooks(mc)
 }
 
-type submitPolicyReject struct {
-	reason  submitRejectReason
+type sharePolicyReject struct {
+	reason  shareRejectReason
 	errCode int
 	errMsg  string
 }

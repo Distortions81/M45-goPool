@@ -19,7 +19,7 @@ type miningShareTaskInput struct {
 	nonceVal         uint32
 	useVersion       uint32
 	scriptTime       int64
-	policyReject     submitPolicyReject
+	policyReject     sharePolicyReject
 	receivedAt       time.Time
 }
 

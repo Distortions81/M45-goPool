@@ -254,7 +254,7 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 		scriptTime:       job.ScriptTime + 1,
 		// Simulate a policy rejection (e.g. strict ntime/version rules) that
 		// should not prevent submitting a real block.
-		policyReject: submitPolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"},
+		policyReject: sharePolicyReject{reason: rejectInvalidNTime, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid ntime"},
 		receivedAt:   time.Unix(1700000000, 0),
 	}
 
