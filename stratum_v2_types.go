@@ -69,3 +69,44 @@ type stratumV2WireSubmitSharesError struct {
 	SequenceNumber uint32
 	ErrorCode      string // STR0_255
 }
+
+type stratumV2WireOpenStandardMiningChannel struct {
+	RequestID       uint32
+	UserIdentity    string // STR0_255
+	NominalHashRate float32
+	MaxTarget       [32]byte // U256 (opaque bytes in this incremental codec)
+}
+
+type stratumV2WireOpenExtendedMiningChannel struct {
+	stratumV2WireOpenStandardMiningChannel
+	MinExtranonceSize uint16
+}
+
+type stratumV2WireOpenStandardMiningChannelSuccess struct {
+	RequestID        uint32
+	ChannelID        uint32
+	Target           [32]byte // U256 (opaque bytes in this incremental codec)
+	ExtranoncePrefix []byte   // B0_32
+	GroupChannelID   uint32
+}
+
+type stratumV2WireOpenExtendedMiningChannelSuccess struct {
+	RequestID        uint32
+	ChannelID        uint32
+	Target           [32]byte // U256 (opaque bytes in this incremental codec)
+	ExtranonceSize   uint16
+	ExtranoncePrefix []byte // B0_32
+	GroupChannelID   uint32
+}
+
+// Minimal outbound job/update message shapes used to keep the submit mapper in
+// sync as sv2_conn grows beyond the submit-only skeleton.
+type stratumV2WireSetExtranoncePrefix struct {
+	ChannelID        uint32
+	ExtranoncePrefix []byte // B0_32
+}
+
+type stratumV2WireNewMiningJob struct {
+	ChannelID uint32
+	JobID     uint32
+}

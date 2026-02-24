@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 const (
@@ -11,10 +12,14 @@ const (
 	stratumV2ChannelMsgBit      = uint16(0x8000)
 	stratumV2MaxFramePayloadLen = 0xFFFFFF
 
-	stratumV2MsgTypeSubmitSharesStandard = uint8(0x1a)
-	stratumV2MsgTypeSubmitSharesExtended = uint8(0x1b)
-	stratumV2MsgTypeSubmitSharesSuccess  = uint8(0x1c)
-	stratumV2MsgTypeSubmitSharesError    = uint8(0x1d)
+	stratumV2MsgTypeSubmitSharesStandard             = uint8(0x1a)
+	stratumV2MsgTypeSubmitSharesExtended             = uint8(0x1b)
+	stratumV2MsgTypeSubmitSharesSuccess              = uint8(0x1c)
+	stratumV2MsgTypeSubmitSharesError                = uint8(0x1d)
+	stratumV2MsgTypeOpenStandardMiningChannel        = uint8(0x10)
+	stratumV2MsgTypeOpenStandardMiningChannelSuccess = uint8(0x11)
+	stratumV2MsgTypeOpenExtendedMiningChannel        = uint8(0x13)
+	stratumV2MsgTypeOpenExtendedMiningChannelSuccess = uint8(0x14)
 )
 
 type stratumV2Frame struct {
@@ -74,6 +79,223 @@ func readUint24LE(src []byte) uint32 {
 		return 0
 	}
 	return uint32(src[0]) | uint32(src[1])<<8 | uint32(src[2])<<16
+}
+
+func putStr0_255(dst []byte, s string) ([]byte, error) {
+	if len(s) > 255 {
+		return dst, fmt.Errorf("STR0_255 too long: %d", len(s))
+	}
+	dst = append(dst, byte(len(s)))
+	dst = append(dst, s...)
+	return dst, nil
+}
+
+func readStr0_255(payload []byte, off int) (string, int, error) {
+	if off >= len(payload) {
+		return "", off, fmt.Errorf("STR0_255 missing length")
+	}
+	n := int(payload[off])
+	off++
+	if off+n > len(payload) {
+		return "", off, fmt.Errorf("STR0_255 length %d exceeds payload", n)
+	}
+	return string(payload[off : off+n]), off + n, nil
+}
+
+func putB0_32(dst []byte, b []byte) ([]byte, error) {
+	if len(b) > 32 {
+		return dst, fmt.Errorf("B0_32 too long: %d", len(b))
+	}
+	dst = append(dst, byte(len(b)))
+	dst = append(dst, b...)
+	return dst, nil
+}
+
+func readB0_32(payload []byte, off int) ([]byte, int, error) {
+	if off >= len(payload) {
+		return nil, off, fmt.Errorf("B0_32 missing length")
+	}
+	n := int(payload[off])
+	off++
+	if n > 32 {
+		return nil, off, fmt.Errorf("B0_32 length out of range: %d", n)
+	}
+	if off+n > len(payload) {
+		return nil, off, fmt.Errorf("B0_32 length %d exceeds payload", n)
+	}
+	out := append([]byte(nil), payload[off:off+n]...)
+	return out, off + n, nil
+}
+
+func encodeStratumV2OpenStandardMiningChannelFrame(msg stratumV2WireOpenStandardMiningChannel) ([]byte, error) {
+	payload := make([]byte, 0, 4+1+len(msg.UserIdentity)+4+32)
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.RequestID)
+	payload = append(payload, tmp4[:]...)
+	var err error
+	payload, err = putStr0_255(payload, msg.UserIdentity)
+	if err != nil {
+		return nil, err
+	}
+	binary.LittleEndian.PutUint32(tmp4[:], math.Float32bits(msg.NominalHashRate))
+	payload = append(payload, tmp4[:]...)
+	payload = append(payload, msg.MaxTarget[:]...)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeOpenStandardMiningChannel,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2OpenStandardMiningChannelPayload(payload []byte) (stratumV2WireOpenStandardMiningChannel, error) {
+	if len(payload) < 41 {
+		return stratumV2WireOpenStandardMiningChannel{}, fmt.Errorf("openstandardminingchannel payload too short: %d", len(payload))
+	}
+	out := stratumV2WireOpenStandardMiningChannel{
+		RequestID: binary.LittleEndian.Uint32(payload[0:4]),
+	}
+	var err error
+	off := 4
+	out.UserIdentity, off, err = readStr0_255(payload, off)
+	if err != nil {
+		return stratumV2WireOpenStandardMiningChannel{}, err
+	}
+	if off+4+32 != len(payload) {
+		return stratumV2WireOpenStandardMiningChannel{}, fmt.Errorf("openstandardminingchannel payload len=%d invalid tail", len(payload))
+	}
+	out.NominalHashRate = math.Float32frombits(binary.LittleEndian.Uint32(payload[off : off+4]))
+	off += 4
+	copy(out.MaxTarget[:], payload[off:off+32])
+	return out, nil
+}
+
+func encodeStratumV2OpenExtendedMiningChannelFrame(msg stratumV2WireOpenExtendedMiningChannel) ([]byte, error) {
+	payload := make([]byte, 0, 4+1+len(msg.UserIdentity)+4+32+2)
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.RequestID)
+	payload = append(payload, tmp4[:]...)
+	var err error
+	payload, err = putStr0_255(payload, msg.UserIdentity)
+	if err != nil {
+		return nil, err
+	}
+	binary.LittleEndian.PutUint32(tmp4[:], math.Float32bits(msg.NominalHashRate))
+	payload = append(payload, tmp4[:]...)
+	payload = append(payload, msg.MaxTarget[:]...)
+	var tmp2 [2]byte
+	binary.LittleEndian.PutUint16(tmp2[:], msg.MinExtranonceSize)
+	payload = append(payload, tmp2[:]...)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeOpenExtendedMiningChannel,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2OpenExtendedMiningChannelPayload(payload []byte) (stratumV2WireOpenExtendedMiningChannel, error) {
+	if len(payload) < 43 {
+		return stratumV2WireOpenExtendedMiningChannel{}, fmt.Errorf("openextendedminingchannel payload too short: %d", len(payload))
+	}
+	base, err := decodeStratumV2OpenStandardMiningChannelPayload(payload[:len(payload)-2])
+	if err != nil {
+		return stratumV2WireOpenExtendedMiningChannel{}, err
+	}
+	return stratumV2WireOpenExtendedMiningChannel{
+		stratumV2WireOpenStandardMiningChannel: base,
+		MinExtranonceSize:                      binary.LittleEndian.Uint16(payload[len(payload)-2:]),
+	}, nil
+}
+
+func encodeStratumV2OpenStandardMiningChannelSuccessFrame(msg stratumV2WireOpenStandardMiningChannelSuccess) ([]byte, error) {
+	payload := make([]byte, 0, 4+4+32+1+len(msg.ExtranoncePrefix)+4)
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.RequestID)
+	payload = append(payload, tmp4[:]...)
+	binary.LittleEndian.PutUint32(tmp4[:], msg.ChannelID)
+	payload = append(payload, tmp4[:]...)
+	payload = append(payload, msg.Target[:]...)
+	var err error
+	payload, err = putB0_32(payload, msg.ExtranoncePrefix)
+	if err != nil {
+		return nil, err
+	}
+	binary.LittleEndian.PutUint32(tmp4[:], msg.GroupChannelID)
+	payload = append(payload, tmp4[:]...)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeOpenStandardMiningChannelSuccess,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2OpenStandardMiningChannelSuccessPayload(payload []byte) (stratumV2WireOpenStandardMiningChannelSuccess, error) {
+	if len(payload) < 45 {
+		return stratumV2WireOpenStandardMiningChannelSuccess{}, fmt.Errorf("openstandardminingchannel.success payload too short: %d", len(payload))
+	}
+	out := stratumV2WireOpenStandardMiningChannelSuccess{
+		RequestID: binary.LittleEndian.Uint32(payload[0:4]),
+		ChannelID: binary.LittleEndian.Uint32(payload[4:8]),
+	}
+	copy(out.Target[:], payload[8:40])
+	var err error
+	off := 40
+	out.ExtranoncePrefix, off, err = readB0_32(payload, off)
+	if err != nil {
+		return stratumV2WireOpenStandardMiningChannelSuccess{}, err
+	}
+	if off+4 != len(payload) {
+		return stratumV2WireOpenStandardMiningChannelSuccess{}, fmt.Errorf("openstandardminingchannel.success payload len=%d invalid tail", len(payload))
+	}
+	out.GroupChannelID = binary.LittleEndian.Uint32(payload[off : off+4])
+	return out, nil
+}
+
+func encodeStratumV2OpenExtendedMiningChannelSuccessFrame(msg stratumV2WireOpenExtendedMiningChannelSuccess) ([]byte, error) {
+	payload := make([]byte, 0, 4+4+32+2+1+len(msg.ExtranoncePrefix)+4)
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.RequestID)
+	payload = append(payload, tmp4[:]...)
+	binary.LittleEndian.PutUint32(tmp4[:], msg.ChannelID)
+	payload = append(payload, tmp4[:]...)
+	payload = append(payload, msg.Target[:]...)
+	var tmp2 [2]byte
+	binary.LittleEndian.PutUint16(tmp2[:], msg.ExtranonceSize)
+	payload = append(payload, tmp2[:]...)
+	var err error
+	payload, err = putB0_32(payload, msg.ExtranoncePrefix)
+	if err != nil {
+		return nil, err
+	}
+	binary.LittleEndian.PutUint32(tmp4[:], msg.GroupChannelID)
+	payload = append(payload, tmp4[:]...)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeOpenExtendedMiningChannelSuccess,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2OpenExtendedMiningChannelSuccessPayload(payload []byte) (stratumV2WireOpenExtendedMiningChannelSuccess, error) {
+	if len(payload) < 47 {
+		return stratumV2WireOpenExtendedMiningChannelSuccess{}, fmt.Errorf("openextendedminingchannel.success payload too short: %d", len(payload))
+	}
+	out := stratumV2WireOpenExtendedMiningChannelSuccess{
+		RequestID: binary.LittleEndian.Uint32(payload[0:4]),
+		ChannelID: binary.LittleEndian.Uint32(payload[4:8]),
+	}
+	copy(out.Target[:], payload[8:40])
+	out.ExtranonceSize = binary.LittleEndian.Uint16(payload[40:42])
+	var err error
+	off := 42
+	out.ExtranoncePrefix, off, err = readB0_32(payload, off)
+	if err != nil {
+		return stratumV2WireOpenExtendedMiningChannelSuccess{}, err
+	}
+	if off+4 != len(payload) {
+		return stratumV2WireOpenExtendedMiningChannelSuccess{}, fmt.Errorf("openextendedminingchannel.success payload len=%d invalid tail", len(payload))
+	}
+	out.GroupChannelID = binary.LittleEndian.Uint32(payload[off : off+4])
+	return out, nil
 }
 
 func encodeStratumV2SubmitSharesStandardFrame(msg stratumV2WireSubmitSharesStandard) ([]byte, error) {
@@ -228,5 +450,41 @@ func decodeStratumV2SubmitWireFrame(b []byte) (any, error) {
 		return decodeStratumV2SubmitSharesErrorPayload(frame.Payload)
 	default:
 		return nil, fmt.Errorf("unsupported sv2 submit msg_type: %#02x", frame.MsgType)
+	}
+}
+
+func decodeStratumV2MiningWireFrame(b []byte) (any, error) {
+	frame, err := decodeStratumV2Frame(b)
+	if err != nil {
+		return nil, err
+	}
+	if frame.baseExtensionType() != stratumV2CoreExtensionType {
+		return nil, fmt.Errorf("unsupported sv2 extension_type: %#04x", frame.baseExtensionType())
+	}
+	switch frame.MsgType {
+	case stratumV2MsgTypeOpenStandardMiningChannel:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("openstandardminingchannel must not set channel_msg bit")
+		}
+		return decodeStratumV2OpenStandardMiningChannelPayload(frame.Payload)
+	case stratumV2MsgTypeOpenStandardMiningChannelSuccess:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("openstandardminingchannel.success must not set channel_msg bit")
+		}
+		return decodeStratumV2OpenStandardMiningChannelSuccessPayload(frame.Payload)
+	case stratumV2MsgTypeOpenExtendedMiningChannel:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("openextendedminingchannel must not set channel_msg bit")
+		}
+		return decodeStratumV2OpenExtendedMiningChannelPayload(frame.Payload)
+	case stratumV2MsgTypeOpenExtendedMiningChannelSuccess:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("openextendedminingchannel.success must not set channel_msg bit")
+		}
+		return decodeStratumV2OpenExtendedMiningChannelSuccessPayload(frame.Payload)
+	case stratumV2MsgTypeSubmitSharesStandard, stratumV2MsgTypeSubmitSharesExtended, stratumV2MsgTypeSubmitSharesSuccess, stratumV2MsgTypeSubmitSharesError:
+		return decodeStratumV2SubmitWireFrame(b)
+	default:
+		return nil, fmt.Errorf("unsupported sv2 mining msg_type: %#02x", frame.MsgType)
 	}
 }

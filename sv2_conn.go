@@ -11,10 +11,11 @@ import (
 // handler. It currently supports reading framed submit messages, mapping them
 // into the shared submit core, and writing submit success/error responses.
 type sv2Conn struct {
-	mc           *MinerConn
-	reader       io.Reader
-	writer       io.Writer
-	submitMapper *stratumV2SubmitMapperState
+	mc            *MinerConn
+	reader        io.Reader
+	writer        io.Writer
+	submitMapper  *stratumV2SubmitMapperState
+	nextChannelID uint32
 }
 
 func (c *sv2Conn) handleReadLoop() error {
@@ -33,20 +34,88 @@ func (c *sv2Conn) handleOneFrame() error {
 	if err != nil {
 		return err
 	}
-	wireMsg, err := decodeStratumV2SubmitWireFrame(frameBytes)
+	wireMsg, err := decodeStratumV2MiningWireFrame(frameBytes)
 	if err != nil {
 		return err
 	}
 
 	switch msg := wireMsg.(type) {
+	case stratumV2WireOpenStandardMiningChannel:
+		return c.handleOpenStandardMiningChannel(msg)
+	case stratumV2WireOpenExtendedMiningChannel:
+		return c.handleOpenExtendedMiningChannel(msg)
 	case stratumV2WireSubmitSharesStandard:
 		return c.handleSubmitSharesStandard(msg)
 	case stratumV2WireSubmitSharesExtended:
 		return c.handleSubmitSharesExtended(msg)
 	default:
-		// Success/Error are outbound in this skeleton; ignore if received.
+		// Success/Error and other server-originated messages are outbound in this
+		// skeleton; ignore if received.
 		return nil
 	}
+}
+
+func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardMiningChannel) error {
+	if c.mc == nil {
+		return fmt.Errorf("sv2 conn missing miner context")
+	}
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
+	chID := c.allocateChannelID()
+	en2Size := c.mc.cfg.Extranonce2Size
+	if en2Size <= 0 {
+		en2Size = 4
+	}
+	c.submitMapper.registerChannel(chID, stratumV2SubmitChannelMapping{
+		WorkerName:          msg.UserIdentity,
+		StandardExtranonce2: make([]byte, en2Size),
+	})
+	resp := stratumV2WireOpenStandardMiningChannelSuccess{
+		RequestID:      msg.RequestID,
+		ChannelID:      chID,
+		Target:         c.currentSV2TargetBytes(),
+		GroupChannelID: chID,
+	}
+	frame, err := encodeStratumV2OpenStandardMiningChannelSuccessFrame(resp)
+	if err != nil {
+		return err
+	}
+	_, err = c.writer.Write(frame)
+	return err
+}
+
+func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedMiningChannel) error {
+	if c.mc == nil {
+		return fmt.Errorf("sv2 conn missing miner context")
+	}
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
+	chID := c.allocateChannelID()
+	c.submitMapper.registerChannel(chID, stratumV2SubmitChannelMapping{
+		WorkerName: msg.UserIdentity,
+	})
+	en2Size := uint16(c.mc.cfg.Extranonce2Size)
+	if en2Size == 0 {
+		en2Size = 4
+	}
+	if msg.MinExtranonceSize > 0 && msg.MinExtranonceSize > en2Size {
+		en2Size = msg.MinExtranonceSize
+	}
+	resp := stratumV2WireOpenExtendedMiningChannelSuccess{
+		RequestID:      msg.RequestID,
+		ChannelID:      chID,
+		Target:         c.currentSV2TargetBytes(),
+		ExtranonceSize: en2Size,
+		GroupChannelID: chID,
+	}
+	frame, err := encodeStratumV2OpenExtendedMiningChannelSuccessFrame(resp)
+	if err != nil {
+		return err
+	}
+	_, err = c.writer.Write(frame)
+	return err
 }
 
 func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStandard) error {
@@ -108,6 +177,47 @@ func readOneStratumV2FrameFromReader(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *sv2Conn) allocateChannelID() uint32 {
+	if c.nextChannelID == 0 {
+		c.nextChannelID = 1
+	}
+	id := c.nextChannelID
+	c.nextChannelID++
+	return id
+}
+
+func (c *sv2Conn) currentSV2TargetBytes() [32]byte {
+	if c == nil || c.mc == nil {
+		return [32]byte{}
+	}
+	return uint256BEFromBigInt(c.mc.shareTargetOrDefault())
+}
+
+func (c *sv2Conn) noteSentStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranoncePrefix) {
+	if c == nil {
+		return
+	}
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
+	ch, ok := c.submitMapper.channels[msg.ChannelID]
+	if !ok {
+		return
+	}
+	ch.ExtranoncePrefix = append([]byte(nil), msg.ExtranoncePrefix...)
+	c.submitMapper.registerChannel(msg.ChannelID, ch)
+}
+
+func (c *sv2Conn) noteSentStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, localJobID string) {
+	if c == nil || localJobID == "" {
+		return
+	}
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
+	c.submitMapper.registerJob(msg.ChannelID, msg.JobID, localJobID)
 }
 
 type stratumV2SubmitWireResponder struct {

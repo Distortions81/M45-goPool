@@ -65,6 +65,55 @@ func TestStratumV2SubmitSharesStandardWireCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStratumV2OpenStandardMiningChannelWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireOpenStandardMiningChannel{
+		RequestID:       42,
+		UserIdentity:    "user.worker",
+		NominalHashRate: 123.5,
+		MaxTarget:       [32]byte{0xaa, 0xbb, 0xcc},
+	}
+	enc, err := encodeStratumV2OpenStandardMiningChannelFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2OpenStandardMiningChannelFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireOpenStandardMiningChannel)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got.RequestID != in.RequestID || got.UserIdentity != in.UserIdentity || got.NominalHashRate != in.NominalHashRate || got.MaxTarget != in.MaxTarget {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
+func TestStratumV2OpenStandardMiningChannelSuccessWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireOpenStandardMiningChannelSuccess{
+		RequestID:        3,
+		ChannelID:        7,
+		Target:           [32]byte{1, 2, 3},
+		ExtranoncePrefix: []byte{0xaa, 0xbb},
+		GroupChannelID:   9,
+	}
+	enc, err := encodeStratumV2OpenStandardMiningChannelSuccessFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2OpenStandardMiningChannelSuccessFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireOpenStandardMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got.RequestID != in.RequestID || got.ChannelID != in.ChannelID || got.Target != in.Target || got.GroupChannelID != in.GroupChannelID || !bytes.Equal(got.ExtranoncePrefix, in.ExtranoncePrefix) {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
 func TestStratumV2SubmitSharesExtendedWireCodecRoundTrip(t *testing.T) {
 	in := stratumV2WireSubmitSharesExtended{
 		ChannelID:      100,

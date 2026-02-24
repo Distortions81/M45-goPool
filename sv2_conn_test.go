@@ -5,6 +5,61 @@ import (
 	"testing"
 )
 
+func TestSV2ConnReadLoopSkeleton_OpensStandardChannelAndRegistersMapper(t *testing.T) {
+	mc, _ := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	reqFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
+		RequestID:    9,
+		UserIdentity: mc.currentWorker(),
+	})
+	if err != nil {
+		t.Fatalf("encode open standard: %v", err)
+	}
+	in.Write(reqFrame)
+
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       &in,
+		writer:       &out,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop: %v", err)
+	}
+
+	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode open response frame: %v", err)
+	}
+	resp, ok := msg.(stratumV2WireOpenStandardMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("response type=%T want stratumV2WireOpenStandardMiningChannelSuccess", msg)
+	}
+	if resp.RequestID != 9 {
+		t.Fatalf("resp.RequestID=%d want 9", resp.RequestID)
+	}
+	if resp.ChannelID == 0 {
+		t.Fatalf("expected non-zero channel id")
+	}
+	ch, ok := c.submitMapper.channels[resp.ChannelID]
+	if !ok {
+		t.Fatalf("expected mapper channel registration for channel %d", resp.ChannelID)
+	}
+	if ch.WorkerName != mc.currentWorker() {
+		t.Fatalf("mapper worker=%q want %q", ch.WorkerName, mc.currentWorker())
+	}
+	wantEx2Len := mc.cfg.Extranonce2Size
+	if wantEx2Len <= 0 {
+		wantEx2Len = 4
+	}
+	if len(ch.StandardExtranonce2) != wantEx2Len {
+		t.Fatalf("standard extranonce2 len=%d want %d", len(ch.StandardExtranonce2), wantEx2Len)
+	}
+}
+
 func TestSV2ConnReadLoopSkeleton_ProcessesStandardSubmit(t *testing.T) {
 	mc, job := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{} // defensive: avoid nil conn writes if some path falls back
@@ -71,6 +126,74 @@ func TestSV2ConnReadLoopSkeleton_ProcessesStandardSubmit(t *testing.T) {
 	}
 	if succ.NewSubmitsAcceptedCount != 1 {
 		t.Fatalf("success.NewSubmitsAcceptedCount=%d want 1", succ.NewSubmitsAcceptedCount)
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	walletAddr, walletScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), walletAddr, walletScript)
+	mc.stratumV1.notify.jobDifficulty[job.JobID] = 1e-30
+	atomicStoreFloat64(&mc.difficulty, 1e-30)
+	mc.shareTarget.Store(targetFromDifficulty(1e-30))
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	c := &sv2Conn{
+		mc:           mc,
+		reader:       &in,
+		writer:       &out,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+
+	openFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
+		RequestID:    100,
+		UserIdentity: mc.currentWorker(),
+	})
+	if err != nil {
+		t.Fatalf("encode open standard: %v", err)
+	}
+	in.Write(openFrame)
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop open: %v", err)
+	}
+	openMsg, err := decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode open response: %v", err)
+	}
+	openResp, ok := openMsg.(stratumV2WireOpenStandardMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("open response type=%T want success", openMsg)
+	}
+	out.Reset()
+
+	c.noteSentStratumV2NewMiningJob(stratumV2WireNewMiningJob{
+		ChannelID: openResp.ChannelID,
+		JobID:     7,
+	}, job.JobID)
+
+	submitFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
+		ChannelID:      openResp.ChannelID,
+		SequenceNumber: 55,
+		JobID:          7,
+		Nonce:          1,
+		NTime:          uint32(job.Template.CurTime),
+		Version:        uint32(job.Template.Version),
+	})
+	if err != nil {
+		t.Fatalf("encode submit: %v", err)
+	}
+	in.Write(submitFrame)
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop submit: %v", err)
+	}
+	respMsg, err := decodeStratumV2SubmitWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+	if _, ok := respMsg.(stratumV2WireSubmitSharesSuccess); !ok {
+		t.Fatalf("submit response type=%T want stratumV2WireSubmitSharesSuccess", respMsg)
 	}
 }
 
