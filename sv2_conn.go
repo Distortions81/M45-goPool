@@ -50,10 +50,12 @@ func (c *sv2Conn) handleOneFrame() error {
 	case stratumV2WireOpenExtendedMiningChannel:
 		return c.handleOpenExtendedMiningChannel(msg)
 	case stratumV2WireSetExtranoncePrefix:
-		c.applyStratumV2MiningWireMessage(msg)
+		c.applyStratumV2SetExtranoncePrefix(msg)
 		return nil
 	case stratumV2WireNewMiningJob:
-		c.applyStratumV2MiningWireMessage(msg)
+		if localJobID, ok := c.defaultLocalJobIDForWireNewMiningJob(msg); ok {
+			c.applyStratumV2NewMiningJob(msg, localJobID)
+		}
 		return nil
 	case stratumV2WireSubmitSharesStandard:
 		return c.handleSubmitSharesStandard(msg)
@@ -90,26 +92,6 @@ func (c *sv2Conn) handleSetupConnection(msg stratumV2WireSetupConnection) error 
 		UsedVersion: sv2VersionCurrent,
 		Flags:       0,
 	})
-}
-
-func (c *sv2Conn) observeStratumV2MiningFrame(frameBytes []byte) error {
-	msg, err := decodeStratumV2MiningWireFrame(frameBytes)
-	if err != nil {
-		return err
-	}
-	c.applyStratumV2MiningWireMessage(msg)
-	return nil
-}
-
-func (c *sv2Conn) applyStratumV2MiningWireMessage(msg any) {
-	switch m := msg.(type) {
-	case stratumV2WireSetExtranoncePrefix:
-		c.noteSentStratumV2SetExtranoncePrefix(m)
-	case stratumV2WireNewMiningJob:
-		if localJobID, ok := c.defaultLocalJobIDForWireNewMiningJob(m); ok {
-			c.noteSentStratumV2NewMiningJob(m, localJobID)
-		}
-	}
 }
 
 func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardMiningChannel) error {
@@ -301,7 +283,7 @@ func (c *sv2Conn) defaultLocalJobIDForWireNewMiningJob(msg stratumV2WireNewMinin
 	return "", false
 }
 
-func (c *sv2Conn) noteSentStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranoncePrefix) {
+func (c *sv2Conn) applyStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranoncePrefix) {
 	if c == nil {
 		return
 	}
@@ -316,7 +298,7 @@ func (c *sv2Conn) noteSentStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtra
 	c.submitMapper.registerChannel(msg.ChannelID, ch)
 }
 
-func (c *sv2Conn) noteSentStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, localJobID string) {
+func (c *sv2Conn) applyStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, localJobID string) {
 	if c == nil || localJobID == "" {
 		return
 	}
@@ -324,6 +306,30 @@ func (c *sv2Conn) noteSentStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, l
 		c.submitMapper = newStratumV2SubmitMapperState()
 	}
 	c.submitMapper.registerJob(msg.ChannelID, msg.JobID, localJobID)
+}
+
+func (c *sv2Conn) writeStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranoncePrefix) error {
+	frame, err := encodeStratumV2SetExtranoncePrefixFrame(msg)
+	if err != nil {
+		return err
+	}
+	if _, err := c.writer.Write(frame); err != nil {
+		return err
+	}
+	c.applyStratumV2SetExtranoncePrefix(msg)
+	return nil
+}
+
+func (c *sv2Conn) writeStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, localJobID string) error {
+	frame, err := encodeStratumV2NewMiningJobFrame(msg)
+	if err != nil {
+		return err
+	}
+	if _, err := c.writer.Write(frame); err != nil {
+		return err
+	}
+	c.applyStratumV2NewMiningJob(msg, localJobID)
+	return nil
 }
 
 type stratumV2SubmitWireResponder struct {

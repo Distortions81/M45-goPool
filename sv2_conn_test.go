@@ -301,17 +301,14 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 	out.Reset()
 
-	jobFrame, err := encodeStratumV2NewMiningJobFrame(stratumV2WireNewMiningJob{
+	if err := c.writeStratumV2NewMiningJob(stratumV2WireNewMiningJob{
 		ChannelID: openResp.ChannelID,
 		JobID:     7,
 		Version:   uint32(job.Template.Version),
-	})
-	if err != nil {
-		t.Fatalf("encode new mining job: %v", err)
+	}, job.JobID); err != nil {
+		t.Fatalf("write new mining job: %v", err)
 	}
-	if err := c.observeStratumV2MiningFrame(jobFrame); err != nil {
-		t.Fatalf("observe new mining job frame: %v", err)
-	}
+	out.Reset() // keep submit response decode simple in this test
 
 	submitFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
 		ChannelID:      openResp.ChannelID,
@@ -337,40 +334,50 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 }
 
-func TestSV2ConnObserveStratumV2MiningFrame_UpdatesMapperForExtranoncePrefixAndJob(t *testing.T) {
+func TestSV2ConnWriteStratumV2MiningUpdates_UpdateMapperAndWriteFrames(t *testing.T) {
 	mc, job := newSubmitReadyMinerConnForModesTest(t)
 	mc.conn = nopConn{}
+	var out bytes.Buffer
 	c := &sv2Conn{
 		mc:           mc,
+		writer:       &out,
 		submitMapper: newStratumV2SubmitMapperState(),
 	}
 	c.submitMapper.registerChannel(7, stratumV2SubmitChannelMapping{WorkerName: mc.currentWorker()})
-
-	prefixFrame, err := encodeStratumV2SetExtranoncePrefixFrame(stratumV2WireSetExtranoncePrefix{
+	prefixMsg := stratumV2WireSetExtranoncePrefix{
 		ChannelID:        7,
 		ExtranoncePrefix: []byte{0x11, 0x22},
-	})
+	}
+	if err := c.writeStratumV2SetExtranoncePrefix(prefixMsg); err != nil {
+		t.Fatalf("write set extranonce prefix: %v", err)
+	}
+	msg, err := decodeStratumV2MiningWireFrame(out.Bytes())
 	if err != nil {
-		t.Fatalf("encode set extranonce prefix: %v", err)
+		t.Fatalf("decode set extranonce prefix frame: %v", err)
 	}
-	if err := c.observeStratumV2MiningFrame(prefixFrame); err != nil {
-		t.Fatalf("observe prefix frame: %v", err)
+	if got, ok := msg.(stratumV2WireSetExtranoncePrefix); !ok || got.ChannelID != prefixMsg.ChannelID || len(got.ExtranoncePrefix) != len(prefixMsg.ExtranoncePrefix) {
+		t.Fatalf("unexpected prefix frame decode: %#v", msg)
 	}
+	out.Reset()
 	ch := c.submitMapper.channels[7]
 	if got := ch.ExtranoncePrefix; len(got) != 2 || got[0] != 0x11 || got[1] != 0x22 {
 		t.Fatalf("unexpected extranonce prefix: %x", got)
 	}
 
-	jobFrame, err := encodeStratumV2NewMiningJobFrame(stratumV2WireNewMiningJob{
+	jobMsg := stratumV2WireNewMiningJob{
 		ChannelID: 7,
 		JobID:     1234,
 		Version:   uint32(job.Template.Version),
-	})
-	if err != nil {
-		t.Fatalf("encode new mining job: %v", err)
 	}
-	if err := c.observeStratumV2MiningFrame(jobFrame); err != nil {
-		t.Fatalf("observe new mining job frame: %v", err)
+	if err := c.writeStratumV2NewMiningJob(jobMsg, job.JobID); err != nil {
+		t.Fatalf("write new mining job: %v", err)
+	}
+	msg, err = decodeStratumV2MiningWireFrame(out.Bytes())
+	if err != nil {
+		t.Fatalf("decode new mining job frame: %v", err)
+	}
+	if got, ok := msg.(stratumV2WireNewMiningJob); !ok || got.ChannelID != jobMsg.ChannelID || got.JobID != jobMsg.JobID {
+		t.Fatalf("unexpected new mining job frame decode: %#v", msg)
 	}
 	if got, ok := c.submitMapper.jobs[stratumV2ChannelJobKey{ChannelID: 7, WireJobID: 1234}]; !ok || got != job.JobID {
 		t.Fatalf("job mapping not updated from framed traffic: got=%q ok=%v want=%q", got, ok, job.JobID)
