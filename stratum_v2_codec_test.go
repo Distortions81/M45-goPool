@@ -136,6 +136,54 @@ func TestStratumV2SetTargetWireCodecRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStratumV2SetExtranoncePrefixWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireSetExtranoncePrefix{
+		ChannelID:        12,
+		ExtranoncePrefix: []byte{0xaa, 0xbb, 0xcc},
+	}
+	enc, err := encodeStratumV2SetExtranoncePrefixFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2SetExtranoncePrefixFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireSetExtranoncePrefix)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got.ChannelID != in.ChannelID || !bytes.Equal(got.ExtranoncePrefix, in.ExtranoncePrefix) {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
+func TestStratumV2NewMiningJobWireCodecRoundTrip(t *testing.T) {
+	in := stratumV2WireNewMiningJob{
+		ChannelID:   5,
+		JobID:       99,
+		HasMinNTime: true,
+		MinNTime:    123,
+		Version:     2,
+		MerkleRoot:  [32]byte{1, 2, 3},
+	}
+	enc, err := encodeStratumV2NewMiningJobFrame(in)
+	if err != nil {
+		t.Fatalf("encodeStratumV2NewMiningJobFrame: %v", err)
+	}
+	dec, err := decodeStratumV2MiningWireFrame(enc)
+	if err != nil {
+		t.Fatalf("decodeStratumV2MiningWireFrame: %v", err)
+	}
+	got, ok := dec.(stratumV2WireNewMiningJob)
+	if !ok {
+		t.Fatalf("decoded type=%T", dec)
+	}
+	if got != in {
+		t.Fatalf("roundtrip mismatch: got=%#v want=%#v", got, in)
+	}
+}
+
 func TestStratumV2SubmitSharesExtendedWireCodecRoundTrip(t *testing.T) {
 	in := stratumV2WireSubmitSharesExtended{
 		ChannelID:      100,

@@ -107,8 +107,12 @@ type stratumV2WireSetExtranoncePrefix struct {
 }
 
 type stratumV2WireNewMiningJob struct {
-	ChannelID uint32
-	JobID     uint32
+	ChannelID   uint32
+	JobID       uint32
+	HasMinNTime bool
+	MinNTime    uint32
+	Version     uint32
+	MerkleRoot  [32]byte // U256
 }
 
 type stratumV2WireSetTarget struct {

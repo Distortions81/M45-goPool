@@ -44,6 +44,12 @@ func (c *sv2Conn) handleOneFrame() error {
 		return c.handleOpenStandardMiningChannel(msg)
 	case stratumV2WireOpenExtendedMiningChannel:
 		return c.handleOpenExtendedMiningChannel(msg)
+	case stratumV2WireSetExtranoncePrefix:
+		c.applyStratumV2MiningWireMessage(msg)
+		return nil
+	case stratumV2WireNewMiningJob:
+		c.applyStratumV2MiningWireMessage(msg)
+		return nil
 	case stratumV2WireSubmitSharesStandard:
 		return c.handleSubmitSharesStandard(msg)
 	case stratumV2WireSubmitSharesExtended:
@@ -52,6 +58,26 @@ func (c *sv2Conn) handleOneFrame() error {
 		// Success/Error and other server-originated messages are outbound in this
 		// skeleton; ignore if received.
 		return nil
+	}
+}
+
+func (c *sv2Conn) observeStratumV2MiningFrame(frameBytes []byte) error {
+	msg, err := decodeStratumV2MiningWireFrame(frameBytes)
+	if err != nil {
+		return err
+	}
+	c.applyStratumV2MiningWireMessage(msg)
+	return nil
+}
+
+func (c *sv2Conn) applyStratumV2MiningWireMessage(msg any) {
+	switch m := msg.(type) {
+	case stratumV2WireSetExtranoncePrefix:
+		c.noteSentStratumV2SetExtranoncePrefix(m)
+	case stratumV2WireNewMiningJob:
+		if localJobID, ok := c.defaultLocalJobIDForWireNewMiningJob(m); ok {
+			c.noteSentStratumV2NewMiningJob(m, localJobID)
+		}
 	}
 }
 
@@ -193,6 +219,25 @@ func (c *sv2Conn) currentSV2TargetBytes() [32]byte {
 		return [32]byte{}
 	}
 	return uint256BEFromBigInt(c.mc.shareTargetOrDefault())
+}
+
+func (c *sv2Conn) defaultLocalJobIDForWireNewMiningJob(msg stratumV2WireNewMiningJob) (string, bool) {
+	if c == nil || c.mc == nil {
+		return "", false
+	}
+	c.mc.jobMu.Lock()
+	defer c.mc.jobMu.Unlock()
+	if c.mc.lastJob != nil && c.mc.lastJob.JobID != "" {
+		return c.mc.lastJob.JobID, true
+	}
+	if len(c.mc.activeJobs) == 1 {
+		for _, job := range c.mc.activeJobs {
+			if job != nil && job.JobID != "" {
+				return job.JobID, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (c *sv2Conn) noteSentStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranoncePrefix) {

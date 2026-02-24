@@ -20,6 +20,8 @@ const (
 	stratumV2MsgTypeOpenStandardMiningChannelSuccess = uint8(0x11)
 	stratumV2MsgTypeOpenExtendedMiningChannel        = uint8(0x13)
 	stratumV2MsgTypeOpenExtendedMiningChannelSuccess = uint8(0x14)
+	stratumV2MsgTypeNewMiningJob                     = uint8(0x15)
+	stratumV2MsgTypeSetExtranoncePrefix              = uint8(0x19)
 	stratumV2MsgTypeSetTarget                        = uint8(0x21)
 )
 
@@ -128,6 +130,35 @@ func readB0_32(payload []byte, off int) ([]byte, int, error) {
 	return out, off + n, nil
 }
 
+func encodeOptionU32(dst []byte, has bool, v uint32) []byte {
+	if !has {
+		return append(dst, 0)
+	}
+	var tmp [4]byte
+	dst = append(dst, 1)
+	binary.LittleEndian.PutUint32(tmp[:], v)
+	return append(dst, tmp[:]...)
+}
+
+func decodeOptionU32(payload []byte, off int) (has bool, v uint32, next int, err error) {
+	if off >= len(payload) {
+		return false, 0, off, fmt.Errorf("OPTION[u32] missing tag")
+	}
+	tag := payload[off]
+	off++
+	switch tag {
+	case 0:
+		return false, 0, off, nil
+	case 1:
+		if off+4 > len(payload) {
+			return false, 0, off, fmt.Errorf("OPTION[u32] missing value")
+		}
+		return true, binary.LittleEndian.Uint32(payload[off : off+4]), off + 4, nil
+	default:
+		return false, 0, off, fmt.Errorf("OPTION[u32] invalid tag: %d", tag)
+	}
+}
+
 func encodeStratumV2OpenStandardMiningChannelFrame(msg stratumV2WireOpenStandardMiningChannel) ([]byte, error) {
 	payload := make([]byte, 0, 4+1+len(msg.UserIdentity)+4+32)
 	var tmp4 [4]byte
@@ -146,6 +177,82 @@ func encodeStratumV2OpenStandardMiningChannelFrame(msg stratumV2WireOpenStandard
 		MsgType:       stratumV2MsgTypeOpenStandardMiningChannel,
 		Payload:       payload,
 	})
+}
+
+func encodeStratumV2NewMiningJobFrame(msg stratumV2WireNewMiningJob) ([]byte, error) {
+	payload := make([]byte, 0, 4+4+1+4+4+32)
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.ChannelID)
+	payload = append(payload, tmp4[:]...)
+	binary.LittleEndian.PutUint32(tmp4[:], msg.JobID)
+	payload = append(payload, tmp4[:]...)
+	payload = encodeOptionU32(payload, msg.HasMinNTime, msg.MinNTime)
+	binary.LittleEndian.PutUint32(tmp4[:], msg.Version)
+	payload = append(payload, tmp4[:]...)
+	payload = append(payload, msg.MerkleRoot[:]...)
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType,
+		MsgType:       stratumV2MsgTypeNewMiningJob,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2NewMiningJobPayload(payload []byte) (stratumV2WireNewMiningJob, error) {
+	if len(payload) < 45 {
+		return stratumV2WireNewMiningJob{}, fmt.Errorf("newminingjob payload too short: %d", len(payload))
+	}
+	out := stratumV2WireNewMiningJob{
+		ChannelID: binary.LittleEndian.Uint32(payload[0:4]),
+		JobID:     binary.LittleEndian.Uint32(payload[4:8]),
+	}
+	var err error
+	off := 8
+	out.HasMinNTime, out.MinNTime, off, err = decodeOptionU32(payload, off)
+	if err != nil {
+		return stratumV2WireNewMiningJob{}, err
+	}
+	if off+4+32 != len(payload) {
+		return stratumV2WireNewMiningJob{}, fmt.Errorf("newminingjob payload len=%d invalid tail", len(payload))
+	}
+	out.Version = binary.LittleEndian.Uint32(payload[off : off+4])
+	off += 4
+	copy(out.MerkleRoot[:], payload[off:off+32])
+	return out, nil
+}
+
+func encodeStratumV2SetExtranoncePrefixFrame(msg stratumV2WireSetExtranoncePrefix) ([]byte, error) {
+	payload := make([]byte, 0, 4+1+len(msg.ExtranoncePrefix))
+	var tmp4 [4]byte
+	binary.LittleEndian.PutUint32(tmp4[:], msg.ChannelID)
+	payload = append(payload, tmp4[:]...)
+	var err error
+	payload, err = putB0_32(payload, msg.ExtranoncePrefix)
+	if err != nil {
+		return nil, err
+	}
+	return encodeStratumV2Frame(stratumV2Frame{
+		ExtensionType: stratumV2CoreExtensionType | stratumV2ChannelMsgBit,
+		MsgType:       stratumV2MsgTypeSetExtranoncePrefix,
+		Payload:       payload,
+	})
+}
+
+func decodeStratumV2SetExtranoncePrefixPayload(payload []byte) (stratumV2WireSetExtranoncePrefix, error) {
+	if len(payload) < 5 {
+		return stratumV2WireSetExtranoncePrefix{}, fmt.Errorf("setextranonceprefix payload too short: %d", len(payload))
+	}
+	out := stratumV2WireSetExtranoncePrefix{
+		ChannelID: binary.LittleEndian.Uint32(payload[0:4]),
+	}
+	var err error
+	out.ExtranoncePrefix, _, err = readB0_32(payload, 4)
+	if err != nil {
+		return stratumV2WireSetExtranoncePrefix{}, err
+	}
+	if len(payload) != 5+len(out.ExtranoncePrefix) {
+		return stratumV2WireSetExtranoncePrefix{}, fmt.Errorf("setextranonceprefix payload len=%d invalid tail", len(payload))
+	}
+	return out, nil
 }
 
 func decodeStratumV2OpenStandardMiningChannelPayload(payload []byte) (stratumV2WireOpenStandardMiningChannel, error) {
@@ -509,6 +616,16 @@ func decodeStratumV2MiningWireFrame(b []byte) (any, error) {
 			return nil, fmt.Errorf("settarget must set channel_msg bit")
 		}
 		return decodeStratumV2SetTargetPayload(frame.Payload)
+	case stratumV2MsgTypeSetExtranoncePrefix:
+		if !frame.isChannelMessage() {
+			return nil, fmt.Errorf("setextranonceprefix must set channel_msg bit")
+		}
+		return decodeStratumV2SetExtranoncePrefixPayload(frame.Payload)
+	case stratumV2MsgTypeNewMiningJob:
+		if frame.isChannelMessage() {
+			return nil, fmt.Errorf("newminingjob must not set channel_msg bit")
+		}
+		return decodeStratumV2NewMiningJobPayload(frame.Payload)
 	case stratumV2MsgTypeSubmitSharesStandard, stratumV2MsgTypeSubmitSharesExtended, stratumV2MsgTypeSubmitSharesSuccess, stratumV2MsgTypeSubmitSharesError:
 		return decodeStratumV2SubmitWireFrame(b)
 	default:

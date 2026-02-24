@@ -200,10 +200,17 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 	out.Reset()
 
-	c.noteSentStratumV2NewMiningJob(stratumV2WireNewMiningJob{
+	jobFrame, err := encodeStratumV2NewMiningJobFrame(stratumV2WireNewMiningJob{
 		ChannelID: openResp.ChannelID,
 		JobID:     7,
-	}, job.JobID)
+		Version:   uint32(job.Template.Version),
+	})
+	if err != nil {
+		t.Fatalf("encode new mining job: %v", err)
+	}
+	if err := c.observeStratumV2MiningFrame(jobFrame); err != nil {
+		t.Fatalf("observe new mining job frame: %v", err)
+	}
 
 	submitFrame, err := encodeStratumV2SubmitSharesStandardFrame(stratumV2WireSubmitSharesStandard{
 		ChannelID:      openResp.ChannelID,
@@ -226,6 +233,46 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 	if _, ok := respMsg.(stratumV2WireSubmitSharesSuccess); !ok {
 		t.Fatalf("submit response type=%T want stratumV2WireSubmitSharesSuccess", respMsg)
+	}
+}
+
+func TestSV2ConnObserveStratumV2MiningFrame_UpdatesMapperForExtranoncePrefixAndJob(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	c := &sv2Conn{
+		mc:           mc,
+		submitMapper: newStratumV2SubmitMapperState(),
+	}
+	c.submitMapper.registerChannel(7, stratumV2SubmitChannelMapping{WorkerName: mc.currentWorker()})
+
+	prefixFrame, err := encodeStratumV2SetExtranoncePrefixFrame(stratumV2WireSetExtranoncePrefix{
+		ChannelID:        7,
+		ExtranoncePrefix: []byte{0x11, 0x22},
+	})
+	if err != nil {
+		t.Fatalf("encode set extranonce prefix: %v", err)
+	}
+	if err := c.observeStratumV2MiningFrame(prefixFrame); err != nil {
+		t.Fatalf("observe prefix frame: %v", err)
+	}
+	ch := c.submitMapper.channels[7]
+	if got := ch.ExtranoncePrefix; len(got) != 2 || got[0] != 0x11 || got[1] != 0x22 {
+		t.Fatalf("unexpected extranonce prefix: %x", got)
+	}
+
+	jobFrame, err := encodeStratumV2NewMiningJobFrame(stratumV2WireNewMiningJob{
+		ChannelID: 7,
+		JobID:     1234,
+		Version:   uint32(job.Template.Version),
+	})
+	if err != nil {
+		t.Fatalf("encode new mining job: %v", err)
+	}
+	if err := c.observeStratumV2MiningFrame(jobFrame); err != nil {
+		t.Fatalf("observe new mining job frame: %v", err)
+	}
+	if got, ok := c.submitMapper.jobs[stratumV2ChannelJobKey{ChannelID: 7, WireJobID: 1234}]; !ok || got != job.JobID {
+		t.Fatalf("job mapping not updated from framed traffic: got=%q ok=%v want=%q", got, ok, job.JobID)
 	}
 }
 
