@@ -20,6 +20,108 @@ type stratumV2NormalizedSubmitShare struct {
 	SubmittedVersion uint32
 }
 
+type stratumV2ChannelJobKey struct {
+	ChannelID uint32
+	WireJobID uint32
+}
+
+// stratumV2SubmitMapperState resolves SV2 wire identifiers into the normalized
+// submit shape currently consumed by the shared submit bridge.
+type stratumV2SubmitMapperState struct {
+	channels map[uint32]stratumV2SubmitChannelMapping
+	jobs     map[stratumV2ChannelJobKey]string
+}
+
+type stratumV2SubmitChannelMapping struct {
+	WorkerName string
+	// For standard channels (header-only submits), the current bridge requires
+	// a synthetic/full extranonce2 to reuse v1-style submit reconstruction.
+	StandardExtranonce2 []byte
+	// For extended channels, SV2 submit carries extranonce bytes which can be
+	// prefixed by a negotiated implicit prefix (SetExtranoncePrefix).
+	ExtranoncePrefix []byte
+}
+
+func newStratumV2SubmitMapperState() *stratumV2SubmitMapperState {
+	return &stratumV2SubmitMapperState{
+		channels: make(map[uint32]stratumV2SubmitChannelMapping),
+		jobs:     make(map[stratumV2ChannelJobKey]string),
+	}
+}
+
+func (m *stratumV2SubmitMapperState) registerChannel(channelID uint32, cfg stratumV2SubmitChannelMapping) {
+	if m == nil {
+		return
+	}
+	if m.channels == nil {
+		m.channels = make(map[uint32]stratumV2SubmitChannelMapping)
+	}
+	m.channels[channelID] = cfg
+}
+
+func (m *stratumV2SubmitMapperState) registerJob(channelID uint32, wireJobID uint32, localJobID string) {
+	if m == nil {
+		return
+	}
+	if m.jobs == nil {
+		m.jobs = make(map[stratumV2ChannelJobKey]string)
+	}
+	m.jobs[stratumV2ChannelJobKey{ChannelID: channelID, WireJobID: wireJobID}] = localJobID
+}
+
+func (m *stratumV2SubmitMapperState) mapWireSubmitSharesStandard(msg stratumV2WireSubmitSharesStandard) (stratumV2NormalizedSubmitShare, error) {
+	if m == nil {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing mapper state")
+	}
+	ch, ok := m.channels[msg.ChannelID]
+	if !ok {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("unknown channel id: %d", msg.ChannelID)
+	}
+	localJobID, ok := m.jobs[stratumV2ChannelJobKey{ChannelID: msg.ChannelID, WireJobID: msg.JobID}]
+	if !ok || localJobID == "" {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("unknown job mapping for channel=%d job=%d", msg.ChannelID, msg.JobID)
+	}
+	if len(ch.StandardExtranonce2) == 0 {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing standard-channel extranonce2 mapping for channel=%d", msg.ChannelID)
+	}
+	return stratumV2NormalizedSubmitShare{
+		RequestID:        msg.SequenceNumber, // temporary bridge key until SV2 response path uses channel+sequence directly
+		WorkerName:       ch.WorkerName,
+		JobID:            localJobID,
+		Extranonce2Hex:   hex.EncodeToString(ch.StandardExtranonce2),
+		NTimeHex:         uint32ToHex8Lower(msg.NTime),
+		NonceHex:         uint32ToHex8Lower(msg.Nonce),
+		SubmittedVersion: msg.Version,
+	}, nil
+}
+
+func (m *stratumV2SubmitMapperState) mapWireSubmitSharesExtended(msg stratumV2WireSubmitSharesExtended) (stratumV2NormalizedSubmitShare, error) {
+	if m == nil {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing mapper state")
+	}
+	ch, ok := m.channels[msg.ChannelID]
+	if !ok {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("unknown channel id: %d", msg.ChannelID)
+	}
+	localJobID, ok := m.jobs[stratumV2ChannelJobKey{ChannelID: msg.ChannelID, WireJobID: msg.JobID}]
+	if !ok || localJobID == "" {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("unknown job mapping for channel=%d job=%d", msg.ChannelID, msg.JobID)
+	}
+	en2 := append(append([]byte(nil), ch.ExtranoncePrefix...), msg.Extranonce...)
+	if len(en2) == 0 {
+		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing extranonce bytes for extended submit on channel=%d", msg.ChannelID)
+	}
+	return stratumV2NormalizedSubmitShare{
+		RequestID:        msg.SequenceNumber, // temporary bridge key until SV2 response path uses channel+sequence directly
+		WorkerName:       ch.WorkerName,
+		JobID:            localJobID,
+		Extranonce2Hex:   hex.EncodeToString(en2),
+		NTimeHex:         uint32ToHex8Lower(msg.NTime),
+		NonceHex:         uint32ToHex8Lower(msg.Nonce),
+		SubmittedVersion: msg.Version,
+	}, nil
+}
+
 func decodeStratumV2SubmitSharesMessage(msg stratumV2SubmitSharesMessage) (stratumV2NormalizedSubmitShare, error) {
 	if msg.JobID == "" {
 		return stratumV2NormalizedSubmitShare{}, fmt.Errorf("missing job id")
