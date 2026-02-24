@@ -459,16 +459,13 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 	extranonce2 := ""
 	ntime := ""
 	nonce := ""
-	versionHex := ""
 	if debugLogging || verboseRuntimeLogging {
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
-		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
-	task := submissionTask{
-		mc:               mc,
+	task := mc.newMiningShareSubmissionTask(miningShareTaskInput{
 		reqID:            reqID,
 		job:              job,
 		jobID:            jobID,
@@ -481,12 +478,11 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params subm
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
 		nonceVal:         nonceVal,
-		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		policyReject:     policyReject,
 		receivedAt:       now,
-	}
+	})
 	return task, true
 }
 
@@ -593,13 +589,7 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		}
 	}
 
-	versionHex := ""
-	if debugLogging || verboseRuntimeLogging {
-		versionHex = uint32ToHex8Lower(useVersion)
-	}
-
-	task := submissionTask{
-		mc:               mc,
+	task := mc.newMiningShareSubmissionTask(miningShareTaskInput{
 		reqID:            reqID,
 		job:              job,
 		jobID:            jobID,
@@ -612,12 +602,11 @@ func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitPar
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
 		nonceVal:         nonceVal,
-		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		policyReject:     policyReject,
 		receivedAt:       now,
-	}
+	})
 	return task, true
 }
 
@@ -750,12 +739,10 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	extranonce2 := ""
 	ntime := ""
 	nonce := ""
-	versionHex := ""
 	if debugLogging || verboseRuntimeLogging {
 		extranonce2 = string(extranonce2B)
 		ntime = string(ntimeB)
 		nonce = string(nonceB)
-		versionHex = uint32ToHex8Lower(useVersion)
 	}
 
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
@@ -793,8 +780,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		}
 	}
 
-	task := submissionTask{
-		mc:               mc,
+	task := mc.newMiningShareSubmissionTask(miningShareTaskInput{
 		reqID:            reqID,
 		job:              job,
 		jobID:            jobID,
@@ -807,12 +793,11 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
 		nonceVal:         nonceVal,
-		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		policyReject:     policyReject,
 		receivedAt:       now,
-	}
+	})
 	return task, true
 }
 
@@ -951,10 +936,6 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		}
 	}
 
-	versionHex := ""
-	if debugLogging || verboseRuntimeLogging {
-		versionHex = uint32ToHex8Lower(useVersion)
-	}
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
 		maskedDiff := versionDiff & mc.versionMask
 
@@ -991,8 +972,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		}
 	}
 
-	task := submissionTask{
-		mc:               mc,
+	task := mc.newMiningShareSubmissionTask(miningShareTaskInput{
 		reqID:            reqID,
 		job:              job,
 		jobID:            jobID,
@@ -1005,11 +985,10 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitP
 		ntimeVal:         ntimeVal,
 		nonce:            nonce,
 		nonceVal:         nonceVal,
-		versionHex:       versionHex,
 		useVersion:       useVersion,
 		scriptTime:       notifiedScriptTime,
 		policyReject:     policyReject,
 		receivedAt:       now,
-	}
+	})
 	return task, true
 }
