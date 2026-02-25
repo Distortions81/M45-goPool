@@ -658,12 +658,8 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 
 	var in bytes.Buffer
 	var out bytes.Buffer
-	c := &sv2Conn{
-		mc:           mc,
-		reader:       &in,
-		writer:       &out,
-		submitMapper: newStratumV2SubmitMapperState(),
-	}
+	c := newSV2ConnForMiner(mc, &in, &out)
+	c.submitMapper = newStratumV2SubmitMapperState()
 
 	openFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
 		RequestID:    100,
@@ -716,6 +712,107 @@ func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
 	}
 	if _, ok := respMsg.(stratumV2WireSubmitSharesSuccess); !ok {
 		t.Fatalf("submit response type=%T want stratumV2WireSubmitSharesSuccess", respMsg)
+	}
+}
+
+func TestSV2ConnReadLoopSkeleton_OpenBeforeJobLaterReceivesBroadcast(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.conn = nopConn{}
+	walletAddr, walletScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), walletAddr, walletScript)
+
+	jm := NewJobManager(nil, Config{}, nil, nil, nil)
+	jobCh := jm.Subscribe()
+	t.Cleanup(func() { jm.Unsubscribe(jobCh) })
+	mc.jobMgr = jm
+	mc.jobCh = jobCh
+
+	// Simulate a reboot/startup window where the connection opens before the
+	// pool has a current job template available.
+	mc.jobMu.Lock()
+	mc.lastJob = nil
+	mc.activeJobs = map[string]*Job{}
+	mc.jobMu.Unlock()
+
+	var in bytes.Buffer
+	var out bytes.Buffer
+	c := newSV2ConnForMiner(mc, &in, &out)
+	c.submitMapper = newStratumV2SubmitMapperState()
+
+	openFrame, err := encodeStratumV2OpenStandardMiningChannelFrame(stratumV2WireOpenStandardMiningChannel{
+		RequestID:    110,
+		UserIdentity: mc.currentWorker(),
+	})
+	if err != nil {
+		t.Fatalf("encode open standard: %v", err)
+	}
+	in.Write(testSV2SetupConnectionFrame(t))
+	in.Write(openFrame)
+	if err := c.handleReadLoop(); err != nil {
+		t.Fatalf("handleReadLoop open: %v", err)
+	}
+	all := out.Bytes()
+	if len(all) == 0 {
+		t.Fatalf("expected setup/open responses")
+	}
+	firstLen := stratumV2FrameHeaderLen + int(readUint24LE(all[3:6]))
+	secondLen := stratumV2FrameHeaderLen + int(readUint24LE(all[firstLen+3:firstLen+6]))
+	openMsg, err := decodeStratumV2MiningWireFrame(all[firstLen : firstLen+secondLen])
+	if err != nil {
+		t.Fatalf("decode open response: %v", err)
+	}
+	openResp, ok := openMsg.(stratumV2WireOpenStandardMiningChannelSuccess)
+	if !ok {
+		t.Fatalf("open response type=%T want success", openMsg)
+	}
+	if !mc.listenerOn {
+		t.Fatalf("expected SV2 open to start job listener")
+	}
+	if mc.sv2 != c {
+		t.Fatalf("expected mc.sv2 to remain attached")
+	}
+	if ids := c.snapshotSV2ChannelIDs(); len(ids) != 1 || ids[0] != openResp.ChannelID {
+		t.Fatalf("expected one registered SV2 channel %d, got %v", openResp.ChannelID, ids)
+	}
+
+	// No current job was available at open time, so no prevhash should be
+	// tracked yet for this channel.
+	c.stateMu.RLock()
+	_, hadPrevhashAtOpen := c.channelPrevHash[openResp.ChannelID]
+	c.stateMu.RUnlock()
+	if hadPrevhashAtOpen {
+		t.Fatalf("did not expect prevhash state before first job broadcast")
+	}
+	out.Reset()
+
+	// Publish a job after the channel is already open. The SV2 connection should
+	// receive a job bundle via listenJobs -> sendWorkForProtocol.
+	jm.mu.Lock()
+	jm.curJob = job
+	jm.mu.Unlock()
+	jm.broadcastJobSync(job)
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	var ph stratumV2WireSetNewPrevHash
+	var havePrevhash bool
+	for time.Now().Before(deadline) {
+		c.stateMu.RLock()
+		ph, havePrevhash = c.channelPrevHash[openResp.ChannelID]
+		c.stateMu.RUnlock()
+		if havePrevhash && ph.JobID != 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !havePrevhash || ph.JobID == 0 {
+		pendingInJobCh := false
+		select {
+		case <-jobCh:
+			pendingInJobCh = true
+		default:
+		}
+		t.Fatalf("expected active prevhash/job after later broadcast, got=%#v ok=%v listener_on=%v attached=%v pending_jobch=%v channels=%v",
+			ph, havePrevhash, mc.listenerOn, mc.sv2 == c, pendingInJobCh, c.snapshotSV2ChannelIDs())
 	}
 }
 
