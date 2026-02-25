@@ -349,8 +349,19 @@ func (m *PoolMetrics) shouldIgnoreStartupRejectLocked(reason string) bool {
 	return false
 }
 
+func shouldIgnoreShareErrorDiagnostics(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "unauthorized", "unauthorized worker":
+		return true
+	}
+	return false
+}
+
 func (m *PoolMetrics) RecordSubmitError(reason string) {
 	if m == nil {
+		return
+	}
+	if shouldIgnoreShareErrorDiagnostics(reason) {
 		return
 	}
 	// We still normalize the label so that in-memory statistics remain
