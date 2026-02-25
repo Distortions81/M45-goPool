@@ -247,7 +247,7 @@ func (mc *MinerConn) processSoloShareWithHooks(task submissionTask, ctx shareCon
 		hooks.sendDifficultyNotify(job)
 	}
 
-	if logger.Enabled(logLevelInfo) {
+	if (debugLogging || verboseRuntimeLogging) && logger.Enabled(logLevelInfo) {
 		stats, accRate, subRate := mc.snapshotStatsWithRates(now)
 		miner := stats.Worker
 		if miner == "" {
