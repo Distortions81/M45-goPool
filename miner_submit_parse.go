@@ -66,10 +66,6 @@ func decodeExtranonce2HexBytes(extranonce2 []byte, validateFields bool, expected
 	return small, uint16(size), large, nil
 }
 
-func (mc *MinerConn) useStrictSubmitPath() bool {
-	return true
-}
-
 // parseSubmitParams validates and extracts the core fields from a mining.submit
 // request, recording and responding to any parameter errors. It returns params
 // and ok=false when a response has already been sent.
@@ -334,10 +330,7 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 		submittedVersion: submittedVersion,
 	}
 
-	if !mc.useStrictSubmitPath() {
-		return mc.prepareSubmissionTaskSoloParsedBytes(reqID, params, extranonce2B, ntimeB, nonceB, now)
-	}
-	return mc.prepareSubmissionTaskStrictParsedBytes(reqID, params, extranonce2B, ntimeB, nonceB, now)
+	return mc.prepareSubmissionTaskFromParsedBytes(reqID, params, extranonce2B, ntimeB, nonceB, now)
 }
 
 // prepareSubmissionTask validates a mining.submit request and, if valid, returns
@@ -348,285 +341,14 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 // still exercising the core share-processing path without extra goroutine
 // scheduling noise.
 func (mc *MinerConn) prepareSubmissionTask(req *StratumRequest, now time.Time) (submissionTask, bool) {
-	if !mc.useStrictSubmitPath() {
-		return mc.prepareSubmissionTaskSolo(req, now)
-	}
-	return mc.prepareSubmissionTaskStrict(req, now)
-}
-
-func (mc *MinerConn) prepareSubmissionTaskSolo(req *StratumRequest, now time.Time) (submissionTask, bool) {
 	params, ok := mc.parseSubmitParams(req, now)
 	if !ok {
 		return submissionTask{}, false
 	}
-	return mc.prepareSubmissionTaskSoloParsed(req.ID, params, now)
+	return mc.prepareSubmissionTaskFromParsed(req.ID, params, now)
 }
 
-func (mc *MinerConn) prepareSubmissionTaskSoloParsedBytes(reqID any, params submitParams, extranonce2B, ntimeB, nonceB []byte, now time.Time) (submissionTask, bool) {
-	worker := params.worker
-	jobID := params.jobID
-	submittedVersion := params.submittedVersion
-	validateFields := mc.cfg.ShareCheckParamFormat
-
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
-		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("unauthorized")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
-		return submissionTask{}, false
-	}
-
-	workerName := mc.currentWorker()
-	if workerName == "" {
-		workerName = worker
-	}
-	if mc.isBanned(now) {
-		until, reason, _ := mc.banDetails()
-		logger.Warn("submit rejected: banned", "miner", mc.minerName(workerName), "ban_until", until, "reason", reason)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("banned")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
-		return submissionTask{}, false
-	}
-
-	job, curLast, _, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
-	if !ok || job == nil {
-		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
-			return submissionTask{}, false
-		}
-		if curLast == nil {
-			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
-			return submissionTask{}, false
-		}
-		job = curLast
-		if notifiedScriptTime == 0 {
-			notifiedScriptTime = mc.scriptTimeForJob(job.JobID, job.ScriptTime)
-		}
-	}
-
-	policyReject := submitPolicyReject{reason: rejectUnknown}
-
-	en2Small, en2Len, en2Large, err := decodeExtranonce2HexBytes(extranonce2B, validateFields, job.Extranonce2Size)
-	if err != nil {
-		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
-		return submissionTask{}, false
-	}
-
-	if validateFields && len(ntimeB) != 8 {
-		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntimeB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
-		return submissionTask{}, false
-	}
-	ntimeVal, err := parseUint32BEHexBytes(ntimeB)
-	if err != nil {
-		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
-		return submissionTask{}, false
-	}
-
-	if validateFields && len(nonceB) != 8 {
-		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonceB))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
-		return submissionTask{}, false
-	}
-	nonceVal, err := parseUint32BEHexBytes(nonceB)
-	if err != nil {
-		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
-		return submissionTask{}, false
-	}
-
-	baseVersion := uint32(job.Template.Version)
-	useVersion := baseVersion
-	if submittedVersion != 0 {
-		if submittedVersion&^mc.versionMask == 0 {
-			useVersion = baseVersion ^ submittedVersion
-		} else {
-			useVersion = submittedVersion
-		}
-	}
-
-	extranonce2 := ""
-	ntime := ""
-	nonce := ""
-	versionHex := ""
-	if debugLogging || verboseRuntimeLogging {
-		extranonce2 = string(extranonce2B)
-		ntime = string(ntimeB)
-		nonce = string(nonceB)
-		versionHex = uint32ToHex8Lower(useVersion)
-	}
-
-	task := submissionTask{
-		mc:               mc,
-		reqID:            reqID,
-		job:              job,
-		jobID:            jobID,
-		workerName:       workerName,
-		extranonce2:      extranonce2,
-		extranonce2Len:   en2Len,
-		extranonce2Bytes: en2Small,
-		extranonce2Large: en2Large,
-		ntime:            ntime,
-		ntimeVal:         ntimeVal,
-		nonce:            nonce,
-		nonceVal:         nonceVal,
-		versionHex:       versionHex,
-		useVersion:       useVersion,
-		scriptTime:       notifiedScriptTime,
-		policyReject:     policyReject,
-		receivedAt:       now,
-	}
-	return task, true
-}
-
-func (mc *MinerConn) prepareSubmissionTaskSoloParsed(reqID any, params submitParams, now time.Time) (submissionTask, bool) {
-	worker := params.worker
-	jobID := params.jobID
-	extranonce2 := params.extranonce2
-	ntime := params.ntime
-	nonce := params.nonce
-	submittedVersion := params.submittedVersion
-	validateFields := mc.cfg.ShareCheckParamFormat
-
-	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
-		logger.Debug("submit rejected: unauthorized", "remote", mc.id)
-		mc.recordShare(worker, false, 0, 0, "unauthorized", "", nil, now)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("unauthorized")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
-		return submissionTask{}, false
-	}
-
-	// Solo mode: trust the authorized worker identity for this connection and
-	// avoid per-submit worker-mismatch checks. If the connection worker is not
-	// known (shouldn't happen after authorize), fall back to the submit param.
-	workerName := mc.currentWorker()
-	if workerName == "" {
-		workerName = worker
-	}
-	if mc.isBanned(now) {
-		until, reason, _ := mc.banDetails()
-		logger.Warn("submit rejected: banned", "miner", mc.minerName(workerName), "ban_until", until, "reason", reason)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("banned")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
-		return submissionTask{}, false
-	}
-
-	job, curLast, _, _, _, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
-	if !ok || job == nil {
-		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
-			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
-			// Use "job not found" for missing/expired jobs.
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
-			return submissionTask{}, false
-		}
-		if curLast == nil {
-			logger.Debug("submit rejected: no fallback job available", "remote", mc.id, "job", jobID)
-			mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectStaleJob, stratumErrCodeJobNotFound, "job not found", now)
-			return submissionTask{}, false
-		}
-		job = curLast
-		if notifiedScriptTime == 0 {
-			notifiedScriptTime = mc.scriptTimeForJob(job.JobID, job.ScriptTime)
-		}
-	}
-
-	// Solo-mode: we only validate inputs enough to reconstruct the header and
-	// compute PoW/difficulty. We intentionally skip pool policy checks.
-	policyReject := submitPolicyReject{reason: rejectUnknown}
-
-	en2Small, en2Len, en2Large, err := decodeExtranonce2Hex(extranonce2, validateFields, job.Extranonce2Size)
-	if err != nil {
-		logger.Debug("submit bad extranonce2", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidExtranonce2, stratumErrCodeInvalidRequest, "invalid extranonce2", now)
-		return submissionTask{}, false
-	}
-
-	if validateFields && len(ntime) != 8 {
-		logger.Debug("submit invalid ntime length", "remote", mc.id, "len", len(ntime))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
-		return submissionTask{}, false
-	}
-	ntimeVal, err := parseUint32BEHex(ntime)
-	if err != nil {
-		logger.Debug("submit bad ntime", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNTime, stratumErrCodeInvalidRequest, "invalid ntime", now)
-		return submissionTask{}, false
-	}
-
-	if validateFields && len(nonce) != 8 {
-		logger.Debug("submit invalid nonce length", "remote", mc.id, "len", len(nonce))
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
-		return submissionTask{}, false
-	}
-	nonceVal, err := parseUint32BEHex(nonce)
-	if err != nil {
-		logger.Debug("submit bad nonce", "remote", mc.id, "error", err)
-		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, rejectInvalidNonce, stratumErrCodeInvalidRequest, "invalid nonce", now)
-		return submissionTask{}, false
-	}
-
-	// Version parsing is needed to build the correct header. We interpret
-	// submitted versions using the negotiated mask when possible, but do not
-	// enforce BIP320 policy in solo mode.
-	baseVersion := uint32(job.Template.Version)
-	useVersion := baseVersion
-	if submittedVersion != 0 {
-		if submittedVersion&^mc.versionMask == 0 {
-			useVersion = baseVersion ^ submittedVersion
-		} else {
-			useVersion = submittedVersion
-		}
-	}
-
-	versionHex := ""
-	if debugLogging || verboseRuntimeLogging {
-		versionHex = uint32ToHex8Lower(useVersion)
-	}
-
-	task := submissionTask{
-		mc:               mc,
-		reqID:            reqID,
-		job:              job,
-		jobID:            jobID,
-		workerName:       workerName,
-		extranonce2:      extranonce2,
-		extranonce2Len:   en2Len,
-		extranonce2Bytes: en2Small,
-		extranonce2Large: en2Large,
-		ntime:            ntime,
-		ntimeVal:         ntimeVal,
-		nonce:            nonce,
-		nonceVal:         nonceVal,
-		versionHex:       versionHex,
-		useVersion:       useVersion,
-		scriptTime:       notifiedScriptTime,
-		policyReject:     policyReject,
-		receivedAt:       now,
-	}
-	return task, true
-}
-
-func (mc *MinerConn) prepareSubmissionTaskStrict(req *StratumRequest, now time.Time) (submissionTask, bool) {
-	params, ok := mc.parseSubmitParams(req, now)
-	if !ok {
-		return submissionTask{}, false
-	}
-	return mc.prepareSubmissionTaskStrictParsed(req.ID, params, now)
-}
-
-func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params submitParams, extranonce2B, ntimeB, nonceB []byte, now time.Time) (submissionTask, bool) {
+func (mc *MinerConn) prepareSubmissionTaskFromParsedBytes(reqID any, params submitParams, extranonce2B, ntimeB, nonceB []byte, now time.Time) (submissionTask, bool) {
 	worker := params.worker
 	jobID := params.jobID
 	submittedVersion := params.submittedVersion
@@ -813,7 +535,7 @@ func (mc *MinerConn) prepareSubmissionTaskStrictParsedBytes(reqID any, params su
 	return task, true
 }
 
-func (mc *MinerConn) prepareSubmissionTaskStrictParsed(reqID any, params submitParams, now time.Time) (submissionTask, bool) {
+func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitParams, now time.Time) (submissionTask, bool) {
 	worker := params.worker
 	jobID := params.jobID
 	extranonce2 := params.extranonce2

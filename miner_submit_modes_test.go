@@ -61,7 +61,7 @@ func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) 
 			t.Fatalf("expected submit to reject mismatched worker")
 		}
 		if out := conn.String(); out == "" {
-			t.Fatalf("expected strict rejection response to be written")
+			t.Fatalf("expected rejection response to be written")
 		}
 	})
 
@@ -169,8 +169,8 @@ func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 			shareDiff: 1,
 			isBlock:   false,
 		}
-		mc.processRegularShare(task, ctx)
-		mc.processRegularShare(task, ctx)
+		mc.processShare(task, ctx)
+		mc.processShare(task, ctx)
 
 		out := conn.String()
 		if !strings.Contains(out, "duplicate share") {
@@ -206,8 +206,8 @@ func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 			shareDiff: 1,
 			isBlock:   false,
 		}
-		mc.processRegularShare(task, ctx)
-		mc.processRegularShare(task, ctx)
+		mc.processShare(task, ctx)
+		mc.processShare(task, ctx)
 
 		out := conn.String()
 		if strings.Contains(out, "duplicate share") {
