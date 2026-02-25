@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/pelletier/go-toml"
 	"os"
 	"path/filepath"
+
+	"github.com/pelletier/go-toml"
 )
 
 func ensureExampleFiles(dataDir string) {
@@ -174,7 +175,6 @@ func policyConfigDocComments() []byte {
 # - share_require_worker_match: Require submit worker matches authorized worker.
 # - submit_process_inline: Process mining.submit inline on connection goroutine.
 # - share_check_duplicate: Enable duplicate share checks.
-# - share_require_job_id: Require non-empty job_id.
 #
 # Hashrate policy ([hashrate])
 # - share_ntime_max_forward_seconds: max allowed forward nTime skew.

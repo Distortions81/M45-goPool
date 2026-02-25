@@ -157,7 +157,6 @@ type Config struct {
 	HashrateRecentCumulativeEnabled  bool    // allow short-horizon cumulative (vardiff window) to influence display
 	ShareNTimeMaxForwardSeconds      int     // max seconds ntime can roll forward
 	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
-	ShareRequireJobID                bool    // reject empty job_id in mining.submit (default false)
 
 	ShareJobFreshnessMode            int  // 0=off, 1=job_id, 2=job_id+prevhash
 	ShareCheckNTimeWindow            bool // reject ntime outside configured window
@@ -273,7 +272,6 @@ type EffectiveConfig struct {
 	HashrateEMATauSeconds             float64  `json:"hashrate_ema_tau_seconds,omitempty"`
 	ShareNTimeMaxForwardSeconds       int      `json:"share_ntime_max_forward_seconds,omitempty"`
 	ShareCheckDuplicate               bool     `json:"share_check_duplicate,omitempty"`
-	ShareRequireJobID                 bool     `json:"share_require_job_id,omitempty"`
 	LogDebug                          bool     `json:"log_debug,omitempty"`
 	LogNetDebug                       bool     `json:"log_net_debug,omitempty"`
 	CleanExpiredBansOnStartup         bool     `json:"clean_expired_bans_on_startup,omitempty"`

@@ -222,7 +222,6 @@ type policyMiningConfig struct {
 	ShareRequireWorkerMatch          *bool `toml:"share_require_worker_match"`
 	SubmitProcessInline              *bool `toml:"submit_process_inline"`
 	ShareCheckDuplicate              *bool `toml:"share_check_duplicate"`
-	ShareRequireJobID                *bool `toml:"share_require_job_id"`
 }
 
 type policyHashrateConfig struct {

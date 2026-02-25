@@ -287,40 +287,20 @@ func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {
 	})
 }
 
-func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
-	t.Run("disabled allows empty job id to reach stale-job rejection", func(t *testing.T) {
-		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.ShareRequireJobID = false
+func TestPrepareSubmissionTask_EmptyJobIDAlwaysRejected(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
 
-		conn := &recordConn{}
-		mc.conn = conn
+	conn := &recordConn{}
+	mc.conn = conn
 
-		req := testSubmitRequestForJob(job, mc.currentWorker())
-		req.Params[1] = ""
-		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
-			t.Fatalf("expected empty job id submit to be rejected")
-		}
-		if out := conn.String(); !strings.Contains(out, "job not found") {
-			t.Fatalf("expected stale-job rejection when share_require_job_id is disabled, got: %q", out)
-		}
-	})
-
-	t.Run("enabled rejects empty job id during parse validation", func(t *testing.T) {
-		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		mc.cfg.ShareRequireJobID = true
-
-		conn := &recordConn{}
-		mc.conn = conn
-
-		req := testSubmitRequestForJob(job, mc.currentWorker())
-		req.Params[1] = ""
-		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
-			t.Fatalf("expected empty job id submit to be rejected")
-		}
-		if out := conn.String(); !strings.Contains(out, "job id required") {
-			t.Fatalf("expected parse-time empty-job-id rejection when share_require_job_id is enabled, got: %q", out)
-		}
-	})
+	req := testSubmitRequestForJob(job, mc.currentWorker())
+	req.Params[1] = ""
+	if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+		t.Fatalf("expected empty job id submit to be rejected")
+	}
+	if out := conn.String(); !strings.Contains(out, "job id required") {
+		t.Fatalf("expected parse-time empty-job-id rejection, got: %q", out)
+	}
 }
 
 func TestHandleSubmit_UnknownJobFreshnessOff_ClassifiedAsStaleNotLowDiff(t *testing.T) {

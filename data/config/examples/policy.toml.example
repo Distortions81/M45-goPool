@@ -12,7 +12,6 @@
 # - share_require_worker_match: Require submit worker matches authorized worker.
 # - submit_process_inline: Process mining.submit inline on connection goroutine.
 # - share_check_duplicate: Enable duplicate share checks.
-# - share_require_job_id: Require non-empty job_id.
 #
 # Hashrate policy ([hashrate])
 # - share_ntime_max_forward_seconds: max allowed forward nTime skew.
@@ -48,7 +47,6 @@
   share_check_version_rolling = true
   share_job_freshness_mode = 2
   share_require_authorized_connection = true
-  share_require_job_id = true
   share_require_worker_match = false
   submit_process_inline = false
 
