@@ -47,6 +47,74 @@ func testSubmitRequestForJob(job *Job, worker string) *StratumRequest {
 	}
 }
 
+func cloneSubmitReq(req *StratumRequest) *StratumRequest {
+	params := make([]any, len(req.Params))
+	copy(params, req.Params)
+	return &StratumRequest{
+		ID:     req.ID,
+		Method: req.Method,
+		Params: params,
+	}
+}
+
+type prepareOutcome struct {
+	task submissionTask
+	ok   bool
+	out  string
+}
+
+func runPrepareSubmissionBothPaths(
+	t *testing.T,
+	configure func(mc *MinerConn, job *Job),
+	mutateReq func(req *StratumRequest),
+) (prepareOutcome, prepareOutcome) {
+	t.Helper()
+
+	runStandard := func() prepareOutcome {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		if configure != nil {
+			configure(mc, job)
+		}
+		conn := &recordConn{}
+		mc.conn = conn
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		if mutateReq != nil {
+			mutateReq(req)
+		}
+		task, ok := mc.prepareSubmissionTask(req, time.Unix(1700000000, 0))
+		return prepareOutcome{task: task, ok: ok, out: conn.String()}
+	}
+
+	runFast := func() prepareOutcome {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		if configure != nil {
+			configure(mc, job)
+		}
+		conn := &recordConn{}
+		mc.conn = conn
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		if mutateReq != nil {
+			mutateReq(req)
+		}
+
+		worker := []byte(req.Params[0].(string))
+		jobID := []byte(req.Params[1].(string))
+		en2 := []byte(req.Params[2].(string))
+		ntime := []byte(req.Params[3].(string))
+		nonce := []byte(req.Params[4].(string))
+		var version []byte
+		haveVersion := len(req.Params) == 6
+		if haveVersion {
+			version = []byte(req.Params[5].(string))
+		}
+
+		task, ok := mc.prepareSubmissionTaskFastBytes(req.ID, worker, jobID, en2, ntime, nonce, version, haveVersion, time.Unix(1700000000, 0))
+		return prepareOutcome{task: task, ok: ok, out: conn.String()}
+	}
+
+	return runStandard(), runFast()
+}
+
 func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) {
 	t.Run("authorization check rejects mismatched worker", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
@@ -253,4 +321,654 @@ func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
 			t.Fatalf("expected parse-time empty-job-id rejection when share_require_job_id is enabled, got: %q", out)
 		}
 	})
+}
+func TestHandleSubmit_UnknownJobFreshnessOff_ClassifiedAsStaleNotLowDiff(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessOff
+	mc.cfg.ShareCheckDuplicate = false
+
+	conn := &recordConn{}
+	mc.conn = conn
+
+	req := testSubmitRequestForJob(job, mc.currentWorker())
+	req.Params[1] = "expired-job-id"
+
+	task, ok := mc.prepareSubmissionTask(req, time.Now())
+	if !ok {
+		t.Fatalf("expected unknown job to fall back when freshness mode is off")
+	}
+	ctx := shareContext{
+		hashHex:   strings.Repeat("f", 64),
+		shareDiff: 1e-12,
+		isBlock:   false,
+	}
+	mc.processRegularShare(task, ctx)
+
+	out := conn.String()
+	if !strings.Contains(out, "job not found") {
+		t.Fatalf("expected stale classification for unknown job when freshness is off, got: %q", out)
+	}
+	if strings.Contains(out, "low difficulty share") {
+		t.Fatalf("expected stale classification instead of lowdiff, got: %q", out)
+	}
+}
+
+func TestPrepareSubmissionTask_FieldValidation_MalformedNTimeNonceVersion(t *testing.T) {
+	t.Run("invalid ntime length rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[3] = "1234"
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected short ntime to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "invalid ntime") {
+			t.Fatalf("expected invalid ntime rejection, got: %q", out)
+		}
+	})
+
+	t.Run("invalid ntime hex rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[3] = "zzzzzzzz"
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected non-hex ntime to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "invalid ntime") {
+			t.Fatalf("expected invalid ntime rejection, got: %q", out)
+		}
+	})
+
+	t.Run("invalid nonce length rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[4] = "123"
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected short nonce to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "invalid nonce") {
+			t.Fatalf("expected invalid nonce rejection, got: %q", out)
+		}
+	})
+
+	t.Run("invalid nonce hex rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params[4] = "g0000001"
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected non-hex nonce to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "invalid nonce") {
+			t.Fatalf("expected invalid nonce rejection, got: %q", out)
+		}
+	})
+
+	t.Run("empty version rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params = append(req.Params, "")
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected empty version to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "version required") {
+			t.Fatalf("expected version-required rejection, got: %q", out)
+		}
+	})
+
+	t.Run("version too long rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params = append(req.Params, "000000001")
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected long version to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "version too long") {
+			t.Fatalf("expected version-too-long rejection, got: %q", out)
+		}
+	})
+
+	t.Run("invalid version hex rejects", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		conn := &recordConn{}
+		mc.conn = conn
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params = append(req.Params, "zzzzzzzz")
+		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
+			t.Fatalf("expected non-hex version to be rejected")
+		}
+		if out := conn.String(); !strings.Contains(out, "invalid version") {
+			t.Fatalf("expected invalid-version rejection, got: %q", out)
+		}
+	})
+}
+
+func TestPrepareSubmissionTask_NTimeWindowBoundariesAndPolicyPrecedence(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.cfg.ShareCheckNTimeWindow = true
+	mc.stratumV1.notify.jobNTimeBounds = map[string]jobNTimeBounds{
+		job.JobID: {min: 1700000000, max: 1700000600},
+	}
+
+	baseReq := testSubmitRequestForJob(job, mc.currentWorker())
+
+	t.Run("ntime at min boundary accepted", func(t *testing.T) {
+		req := cloneSubmitReq(baseReq)
+		req.Params[3] = "6553f100" // 1700000000
+
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected min-boundary ntime to be accepted")
+		}
+		if task.policyReject.reason != rejectUnknown {
+			t.Fatalf("unexpected policy reject at min boundary: %+v", task.policyReject)
+		}
+	})
+
+	t.Run("ntime at max boundary accepted", func(t *testing.T) {
+		req := cloneSubmitReq(baseReq)
+		req.Params[3] = "6553f358" // 1700000600
+
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected max-boundary ntime to be accepted")
+		}
+		if task.policyReject.reason != rejectUnknown {
+			t.Fatalf("unexpected policy reject at max boundary: %+v", task.policyReject)
+		}
+	})
+
+	t.Run("ntime below min becomes policy reject", func(t *testing.T) {
+		req := cloneSubmitReq(baseReq)
+		req.Params[3] = "6553f0ff" // 1699999999
+
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected out-of-window ntime to remain processable (policy-only)")
+		}
+		if task.policyReject.reason != rejectInvalidNTime {
+			t.Fatalf("got policy=%v want %v", task.policyReject.reason, rejectInvalidNTime)
+		}
+	})
+
+	t.Run("ntime above max becomes policy reject", func(t *testing.T) {
+		req := cloneSubmitReq(baseReq)
+		req.Params[3] = "6553f359" // 1700000601
+
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected out-of-window ntime to remain processable (policy-only)")
+		}
+		if task.policyReject.reason != rejectInvalidNTime {
+			t.Fatalf("got policy=%v want %v", task.policyReject.reason, rejectInvalidNTime)
+		}
+	})
+
+	t.Run("ntime policy reject wins over later version policy reject", func(t *testing.T) {
+		req := cloneSubmitReq(baseReq)
+		req.Params[3] = "6553f359" // above max -> invalid ntime policy
+		req.Params = append(req.Params, "00000010")
+
+		mc.cfg.ShareCheckVersionRolling = true
+		mc.stratumV1.versionRoll = true
+		mc.stratumV1.versionMask = 0x0000000f
+		mc.stratumV1.minVerBits = 0
+
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected policy-only failures to return a task")
+		}
+		if task.policyReject.reason != rejectInvalidNTime {
+			t.Fatalf("got policy=%v want ntime precedence", task.policyReject.reason)
+		}
+	})
+}
+
+func TestPrepareSubmissionTask_VersionRollingPolicyBoundaries(t *testing.T) {
+	newVersionReq := func(ver string) (*MinerConn, *StratumRequest) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		mc.cfg.ShareCheckVersionRolling = true
+		mc.stratumV1.versionMask = 0x0000000f
+		mc.stratumV1.versionRoll = true
+		mc.stratumV1.minVerBits = 2
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		req.Params = append(req.Params, ver)
+		return mc, req
+	}
+
+	t.Run("delta inside mask with enough bits accepted", func(t *testing.T) {
+		mc, req := newVersionReq("00000003")
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected valid version delta to be accepted")
+		}
+		if task.policyReject.reason != rejectUnknown {
+			t.Fatalf("unexpected policy reject: %+v", task.policyReject)
+		}
+	})
+
+	t.Run("delta inside mask with insufficient bits rejected by policy", func(t *testing.T) {
+		mc, req := newVersionReq("00000001")
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected insufficient bits to be policy-only reject")
+		}
+		if task.policyReject.reason != rejectInsufficientVersionBits {
+			t.Fatalf("got policy=%v want %v", task.policyReject.reason, rejectInsufficientVersionBits)
+		}
+	})
+
+	t.Run("degraded mode allows insufficient bits", func(t *testing.T) {
+		mc, req := newVersionReq("00000001")
+		mc.cfg.ShareAllowDegradedVersionBits = true
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected degraded mode to allow submit task")
+		}
+		if task.policyReject.reason != rejectUnknown {
+			t.Fatalf("unexpected policy reject in degraded mode: %+v", task.policyReject)
+		}
+	})
+
+	t.Run("version outside mask rejected by policy", func(t *testing.T) {
+		mc, req := newVersionReq("00000010")
+		mc.stratumV1.minVerBits = 0
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected out-of-mask version to be policy-only reject")
+		}
+		if task.policyReject.reason != rejectInvalidVersionMask {
+			t.Fatalf("got policy=%v want %v", task.policyReject.reason, rejectInvalidVersionMask)
+		}
+	})
+
+	t.Run("version rolling disabled policy rejects non-zero delta", func(t *testing.T) {
+		mc, req := newVersionReq("00000003")
+		mc.stratumV1.versionRoll = false
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected disabled version rolling to return policy-only reject")
+		}
+		if task.policyReject.reason != rejectInvalidVersion {
+			t.Fatalf("got policy=%v want %v", task.policyReject.reason, rejectInvalidVersion)
+		}
+	})
+}
+
+func TestPrepareSubmissionTaskFastBytes_Parity_FieldValidationAndBoundaries(t *testing.T) {
+	type parityCase struct {
+		name             string
+		configure        func(mc *MinerConn, job *Job)
+		mutateReq        func(req *StratumRequest)
+		wantOK           bool
+		wantErrContains  string
+		wantPolicyReason shareRejectReason
+		wantNTime        uint32
+		wantNonce        uint32
+		wantUseVersion   uint32
+	}
+
+	cases := []parityCase{
+		{
+			name: "invalid ntime length rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "1234"
+			},
+			wantOK:          false,
+			wantErrContains: "invalid ntime",
+		},
+		{
+			name: "invalid ntime hex rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "zzzzzzzz"
+			},
+			wantOK:          false,
+			wantErrContains: "invalid ntime",
+		},
+		{
+			name: "invalid nonce length rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params[4] = "123"
+			},
+			wantOK:          false,
+			wantErrContains: "invalid nonce",
+		},
+		{
+			name: "invalid nonce hex rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params[4] = "g0000001"
+			},
+			wantOK:          false,
+			wantErrContains: "invalid nonce",
+		},
+		{
+			name: "empty version rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "")
+			},
+			wantOK:          false,
+			wantErrContains: "version required",
+		},
+		{
+			name: "version too long rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "000000001")
+			},
+			wantOK:          false,
+			wantErrContains: "version too long",
+		},
+		{
+			name: "invalid version hex rejects",
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "zzzzzzzz")
+			},
+			wantOK:          false,
+			wantErrContains: "invalid version",
+		},
+		{
+			name: "ntime at min boundary accepted",
+			configure: func(mc *MinerConn, job *Job) {
+				mc.cfg.ShareCheckNTimeWindow = true
+				mc.stratumV1.notify.jobNTimeBounds = map[string]jobNTimeBounds{job.JobID: {min: 1700000000, max: 1700000600}}
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "6553f100"
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectUnknown,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   1,
+		},
+		{
+			name: "ntime at max boundary accepted",
+			configure: func(mc *MinerConn, job *Job) {
+				mc.cfg.ShareCheckNTimeWindow = true
+				mc.stratumV1.notify.jobNTimeBounds = map[string]jobNTimeBounds{job.JobID: {min: 1700000000, max: 1700000600}}
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "6553f358"
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectUnknown,
+			wantNTime:        1700000600,
+			wantNonce:        1,
+			wantUseVersion:   1,
+		},
+		{
+			name: "ntime above max policy reject",
+			configure: func(mc *MinerConn, job *Job) {
+				mc.cfg.ShareCheckNTimeWindow = true
+				mc.stratumV1.notify.jobNTimeBounds = map[string]jobNTimeBounds{job.JobID: {min: 1700000000, max: 1700000600}}
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "6553f359"
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectInvalidNTime,
+			wantNTime:        1700000601,
+			wantNonce:        1,
+			wantUseVersion:   1,
+		},
+		{
+			name: "ntime policy precedence over version policy",
+			configure: func(mc *MinerConn, job *Job) {
+				mc.cfg.ShareCheckNTimeWindow = true
+				mc.stratumV1.notify.jobNTimeBounds = map[string]jobNTimeBounds{job.JobID: {min: 1700000000, max: 1700000600}}
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.stratumV1.versionRoll = true
+				mc.stratumV1.versionMask = 0x0000000f
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[3] = "6553f359"
+				req.Params = append(req.Params, "00000010")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectInvalidNTime,
+			wantNTime:        1700000601,
+			wantNonce:        1,
+			wantUseVersion:   0x10,
+		},
+		{
+			name: "version delta in mask with enough bits accepted",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.stratumV1.versionMask = 0x0000000f
+				mc.stratumV1.versionRoll = true
+				mc.stratumV1.minVerBits = 2
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "00000003")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectUnknown,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   2, // base version 1 XOR delta 3
+		},
+		{
+			name: "version insufficient bits policy reject",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.stratumV1.versionMask = 0x0000000f
+				mc.stratumV1.versionRoll = true
+				mc.stratumV1.minVerBits = 2
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "00000001")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectInsufficientVersionBits,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   0,
+		},
+		{
+			name: "version degraded mode allows insufficient bits",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.cfg.ShareAllowDegradedVersionBits = true
+				mc.stratumV1.versionMask = 0x0000000f
+				mc.stratumV1.versionRoll = true
+				mc.stratumV1.minVerBits = 2
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "00000001")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectUnknown,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   0,
+		},
+		{
+			name: "version outside mask policy reject",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.stratumV1.versionMask = 0x0000000f
+				mc.stratumV1.versionRoll = true
+				mc.stratumV1.minVerBits = 0
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "00000010")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectInvalidVersionMask,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   0x10,
+		},
+		{
+			name: "version rolling disabled policy reject",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareCheckVersionRolling = true
+				mc.stratumV1.versionMask = 0x0000000f
+				mc.stratumV1.versionRoll = false
+				mc.stratumV1.minVerBits = 0
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params = append(req.Params, "00000003")
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectInvalidVersion,
+			wantNTime:        1700000000,
+			wantNonce:        1,
+			wantUseVersion:   2,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			std, fast := runPrepareSubmissionBothPaths(t, tc.configure, tc.mutateReq)
+
+			if std.ok != fast.ok {
+				t.Fatalf("path parity mismatch ok: standard=%v fast=%v", std.ok, fast.ok)
+			}
+			if std.ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v", std.ok, tc.wantOK)
+			}
+
+			if !tc.wantOK {
+				if !strings.Contains(std.out, tc.wantErrContains) {
+					t.Fatalf("standard path expected error %q, got: %q", tc.wantErrContains, std.out)
+				}
+				if !strings.Contains(fast.out, tc.wantErrContains) {
+					t.Fatalf("fast path expected error %q, got: %q", tc.wantErrContains, fast.out)
+				}
+				return
+			}
+
+			if std.task.policyReject.reason != fast.task.policyReject.reason {
+				t.Fatalf("policy parity mismatch: standard=%v fast=%v", std.task.policyReject.reason, fast.task.policyReject.reason)
+			}
+			if std.task.policyReject.reason != tc.wantPolicyReason {
+				t.Fatalf("policy=%v want %v", std.task.policyReject.reason, tc.wantPolicyReason)
+			}
+			if std.task.ntimeVal != fast.task.ntimeVal || std.task.ntimeVal != tc.wantNTime {
+				t.Fatalf("ntime parity/value mismatch: standard=%d fast=%d want=%d", std.task.ntimeVal, fast.task.ntimeVal, tc.wantNTime)
+			}
+			if std.task.nonceVal != fast.task.nonceVal || std.task.nonceVal != tc.wantNonce {
+				t.Fatalf("nonce parity/value mismatch: standard=%d fast=%d want=%d", std.task.nonceVal, fast.task.nonceVal, tc.wantNonce)
+			}
+			if std.task.useVersion != fast.task.useVersion {
+				t.Fatalf("useVersion parity mismatch: standard=%d fast=%d", std.task.useVersion, fast.task.useVersion)
+			}
+			if std.task.useVersion != tc.wantUseVersion {
+				t.Fatalf("useVersion=%d want=%d", std.task.useVersion, tc.wantUseVersion)
+			}
+		})
+	}
+}
+
+func TestPrepareSubmissionTaskFastBytes_Parity_StaleAndFallbackFreshnessModes(t *testing.T) {
+	type parityCase struct {
+		name             string
+		configure        func(mc *MinerConn, job *Job)
+		mutateReq        func(req *StratumRequest)
+		wantOK           bool
+		wantErrContains  string
+		wantPolicyReason shareRejectReason
+	}
+
+	cases := []parityCase{
+		{
+			name: "unknown job in strict job-id mode rejects immediately",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobID
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[1] = "missing-job"
+			},
+			wantOK:          false,
+			wantErrContains: "job not found",
+		},
+		{
+			name: "unknown job with freshness off uses fallback and marks stale policy",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareJobFreshnessMode = shareJobFreshnessOff
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[1] = "missing-job"
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectUnknown,
+		},
+		{
+			name: "unknown job with freshness off but no fallback rejects",
+			configure: func(mc *MinerConn, _ *Job) {
+				mc.cfg.ShareJobFreshnessMode = shareJobFreshnessOff
+				mc.jobMu.Lock()
+				mc.lastJob = nil
+				mc.jobMu.Unlock()
+			},
+			mutateReq: func(req *StratumRequest) {
+				req.Params[1] = "missing-job"
+			},
+			wantOK:          false,
+			wantErrContains: "job not found",
+		},
+		{
+			name: "job-id-prev mode marks prevhash mismatch as stale policy",
+			configure: func(mc *MinerConn, job *Job) {
+				mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobIDPrev
+				mc.jobMu.Lock()
+				mc.lastJob = job
+				mc.lastJobPrevHash = strings.Repeat("f", 64)
+				mc.lastJobHeight = job.Template.Height + 99
+				mc.jobMu.Unlock()
+			},
+			wantOK:           true,
+			wantPolicyReason: rejectStaleJob,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			std, fast := runPrepareSubmissionBothPaths(t, tc.configure, tc.mutateReq)
+
+			if std.ok != fast.ok {
+				t.Fatalf("path parity mismatch ok: standard=%v fast=%v", std.ok, fast.ok)
+			}
+			if std.ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v", std.ok, tc.wantOK)
+			}
+
+			if !tc.wantOK {
+				if !strings.Contains(std.out, tc.wantErrContains) {
+					t.Fatalf("standard path expected error %q, got: %q", tc.wantErrContains, std.out)
+				}
+				if !strings.Contains(fast.out, tc.wantErrContains) {
+					t.Fatalf("fast path expected error %q, got: %q", tc.wantErrContains, fast.out)
+				}
+				return
+			}
+
+			if std.task.policyReject.reason != fast.task.policyReject.reason {
+				t.Fatalf("policy parity mismatch: standard=%v fast=%v", std.task.policyReject.reason, fast.task.policyReject.reason)
+			}
+			if std.task.policyReject.reason != tc.wantPolicyReason {
+				t.Fatalf("policy=%v want %v", std.task.policyReject.reason, tc.wantPolicyReason)
+			}
+			if std.task.job == nil || fast.task.job == nil {
+				t.Fatalf("expected both paths to return a populated task job")
+			}
+		})
+	}
 }
