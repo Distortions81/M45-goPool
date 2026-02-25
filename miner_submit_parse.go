@@ -391,6 +391,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsedBytes(reqID any, params subm
 	}
 
 	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	usedFallbackJob := false
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -403,12 +404,18 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsedBytes(reqID any, params subm
 			return submissionTask{}, false
 		}
 		job = curLast
+		usedFallbackJob = true
 		if notifiedScriptTime == 0 {
 			notifiedScriptTime = mc.scriptTimeForJob(job.JobID, job.ScriptTime)
 		}
 	}
 
 	policyReject := submitPolicyReject{reason: rejectUnknown}
+	if usedFallbackJob {
+		// Even when job-id freshness checks are disabled, classify non-block
+		// shares for unknown/expired job IDs as stale rather than lowdiff.
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
+	}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
@@ -581,6 +588,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	}
 
 	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	usedFallbackJob := false
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
 			logger.Debug("submit rejected: stale job", "remote", mc.id, "job", jobID)
@@ -594,6 +602,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 			return submissionTask{}, false
 		}
 		job = curLast
+		usedFallbackJob = true
 		if notifiedScriptTime == 0 {
 			notifiedScriptTime = mc.scriptTimeForJob(job.JobID, job.ScriptTime)
 		}
@@ -602,6 +611,11 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
 	policyReject := submitPolicyReject{reason: rejectUnknown}
+	if usedFallbackJob {
+		// Even when job-id freshness checks are disabled, classify non-block
+		// shares for unknown/expired job IDs as stale rather than lowdiff.
+		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
+	}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}

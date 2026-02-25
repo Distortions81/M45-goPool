@@ -43,14 +43,14 @@
 
 [mining]
   share_check_duplicate = true
-  share_check_ntime_window = false
+  share_check_ntime_window = true
   share_check_param_format = true
-  share_check_version_rolling = false
+  share_check_version_rolling = true
   share_job_freshness_mode = 1
   share_require_authorized_connection = true
   share_require_job_id = true
   share_require_worker_match = false
-  submit_process_inline = true
+  submit_process_inline = false
 
 [stratum]
   ckpool_emulate = true

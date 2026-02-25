@@ -254,3 +254,34 @@ func TestPrepareSubmissionTask_ShareRequireJobIDToggle(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleSubmit_UnknownJobFreshnessOff_ClassifiedAsStaleNotLowDiff(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessOff
+	mc.cfg.ShareCheckDuplicate = false
+
+	conn := &recordConn{}
+	mc.conn = conn
+
+	req := testSubmitRequestForJob(job, mc.currentWorker())
+	req.Params[1] = "expired-job-id"
+
+	task, ok := mc.prepareSubmissionTask(req, time.Now())
+	if !ok {
+		t.Fatalf("expected unknown job to fall back when freshness mode is off")
+	}
+	ctx := shareContext{
+		hashHex:   strings.Repeat("f", 64),
+		shareDiff: 1e-12,
+		isBlock:   false,
+	}
+	mc.processShare(task, ctx)
+
+	out := conn.String()
+	if !strings.Contains(out, "job not found") {
+		t.Fatalf("expected stale classification for unknown job when freshness is off, got: %q", out)
+	}
+	if strings.Contains(out, "low difficulty share") {
+		t.Fatalf("expected stale classification instead of lowdiff, got: %q", out)
+	}
+}
