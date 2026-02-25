@@ -623,6 +623,30 @@ func (c *sv2Conn) writeStratumV2JobBundleForAllChannels(job *Job) error {
 	return nil
 }
 
+func (c *sv2Conn) writeStratumV2SetTargetForAllChannels() error {
+	if c == nil {
+		return fmt.Errorf("missing sv2 conn")
+	}
+	if c.submitMapper == nil || len(c.submitMapper.channels) == 0 {
+		return nil
+	}
+	channelIDs := make([]uint32, 0, len(c.submitMapper.channels))
+	for id := range c.submitMapper.channels {
+		channelIDs = append(channelIDs, id)
+	}
+	sort.Slice(channelIDs, func(i, j int) bool { return channelIDs[i] < channelIDs[j] })
+	target := c.currentSV2TargetBytes()
+	for _, channelID := range channelIDs {
+		if err := c.writeStratumV2SetTarget(stratumV2WireSetTarget{
+			ChannelID:     channelID,
+			MaximumTarget: target,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *sv2Conn) writeCurrentJobBundleForChannel(channelID uint32) error {
 	if c == nil || c.mc == nil {
 		return nil

@@ -1397,6 +1397,14 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 		)
 	}
 
+	// SV2 clients must receive SetTarget frames, not Stratum V1 JSON messages.
+	if mc.sv2 != nil {
+		if err := mc.sv2.writeStratumV2SetTargetForAllChannels(); err != nil {
+			logger.Error("sv2 set target write error", "component", "miner", "kind", "notify", "remote", mc.id, "error", err)
+		}
+		return
+	}
+
 	// Don't send pool->miner notifications until the miner has subscribed.
 	if !mc.stratumV1.subscribed {
 		return
@@ -1441,6 +1449,9 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 }
 
 func (mc *MinerConn) sendVersionMask() {
+	if mc.sv2 != nil {
+		return
+	}
 	if !mc.stratumV1.subscribed {
 		return
 	}
@@ -1511,6 +1522,9 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 }
 
 func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
+	if mc.sv2 != nil {
+		return
+	}
 	if !mc.stratumV1.subscribed {
 		return
 	}
