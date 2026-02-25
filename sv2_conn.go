@@ -827,8 +827,10 @@ func (r *stratumV2SubmitWireResponder) writeSubmitOK(reqID any) {
 		ChannelID:               r.channelID,
 		LastSequenceNumber:      seq,
 		NewSubmitsAcceptedCount: 1,
-		// TODO: plumb share difficulty sum from shared core outcome.
-		NewSharesSum: 0,
+		// Until the shared submit core plumbs exact share-difficulty credits into
+		// the SV2 responder, report at least one accepted share unit so miners
+		// don't display a stuck zero accepted-share counter.
+		NewSharesSum: 1,
 	})
 	if err != nil {
 		r.err = err

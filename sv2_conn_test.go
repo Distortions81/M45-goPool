@@ -642,6 +642,9 @@ func TestSV2ConnReadLoopSkeleton_ProcessesStandardSubmit(t *testing.T) {
 	if succ.NewSubmitsAcceptedCount != 1 {
 		t.Fatalf("success.NewSubmitsAcceptedCount=%d want 1", succ.NewSubmitsAcceptedCount)
 	}
+	if succ.NewSharesSum != 1 {
+		t.Fatalf("success.NewSharesSum=%d want 1", succ.NewSharesSum)
+	}
 }
 
 func TestSV2ConnReadLoopSkeleton_OpenThenRegisterJobThenSubmit(t *testing.T) {
