@@ -296,7 +296,6 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		ShareRequireWorkerMatch:              cfg.ShareRequireWorkerMatch,
 		SubmitProcessInline:                  cfg.SubmitProcessInline,
 		ShareCheckDuplicate:                  cfg.ShareCheckDuplicate,
-		ShareRequireJobID:                    cfg.ShareRequireJobID,
 		PeerCleanupEnabled:                   cfg.PeerCleanupEnabled,
 		PeerCleanupMaxPingMs:                 cfg.PeerCleanupMaxPingMs,
 		PeerCleanupMinPeers:                  cfg.PeerCleanupMinPeers,
@@ -809,8 +808,7 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	next.ShareCheckParamFormat = getBool("share_check_param_format")
 	next.ShareRequireWorkerMatch = getBool("share_require_worker_match")
 	next.SubmitProcessInline = getBool("submit_process_inline")
-	next.ShareCheckDuplicate = getBool("share_check_duplicate")
-	next.ShareRequireJobID = getBool("share_require_job_id")
+		next.ShareCheckDuplicate = getBool("share_check_duplicate")
 	next.ShareAllowDegradedVersionBits = getBool("share_allow_degraded_version_bits")
 	next.VarDiffEnabled = getBool("vardiff_enabled")
 

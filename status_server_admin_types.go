@@ -152,7 +152,6 @@ type AdminSettingsData struct {
 	ShareRequireWorkerMatch          bool
 	SubmitProcessInline              bool
 	ShareCheckDuplicate              bool
-	ShareRequireJobID                bool
 
 	// Peer cleanup
 	PeerCleanupEnabled   bool

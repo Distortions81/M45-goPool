@@ -582,15 +582,12 @@ func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
 	if fc.Mining.SubmitProcessInline != nil {
 		cfg.SubmitProcessInline = *fc.Mining.SubmitProcessInline
 	}
-	if fc.Mining.ShareCheckDuplicate != nil {
-		cfg.ShareCheckDuplicate = *fc.Mining.ShareCheckDuplicate
-	}
-	if fc.Mining.ShareRequireJobID != nil {
-		cfg.ShareRequireJobID = *fc.Mining.ShareRequireJobID
-	}
-	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
-		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
-	}
+		if fc.Mining.ShareCheckDuplicate != nil {
+			cfg.ShareCheckDuplicate = *fc.Mining.ShareCheckDuplicate
+		}
+		if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
+			cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
+		}
 	t := fileOverrideConfig{
 		Version:  fc.Version,
 		Bans:     fc.Bans,

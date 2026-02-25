@@ -110,7 +110,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	if validateFields {
 		jobID = trimSpaceFast(jobID)
 	}
-	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
+	if len(jobID) == 0 {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: req.ID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return out, false
@@ -211,7 +211,7 @@ func (mc *MinerConn) parseSubmitParamsStrings(id any, params []string, now time.
 	if validateFields {
 		jobID = trimSpaceFast(jobID)
 	}
-	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
+	if len(jobID) == 0 {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: id, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return out, false
@@ -287,7 +287,7 @@ func (mc *MinerConn) prepareSubmissionTaskFastBytes(reqID any, workerB, jobIDB, 
 	if validateFields {
 		jobID = trimSpaceFast(jobID)
 	}
-	if validateFields && len(jobID) == 0 && mc.cfg.ShareRequireJobID {
+	if len(jobID) == 0 {
 		mc.recordShare(worker, false, 0, 0, "empty job id", "", nil, now)
 		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, "job id required")})
 		return submissionTask{}, false

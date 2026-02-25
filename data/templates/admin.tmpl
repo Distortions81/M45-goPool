@@ -299,12 +299,9 @@
 					<div>
 						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_check_duplicate" value="1" {{if .Settings.ShareCheckDuplicate}}checked{{end}}><span>share_check_duplicate</span></label><div class="label-note">Rejects duplicate submits on the same connection (same job/extranonce2/ntime/nonce/version tuple) using a recent-share cache. Adds small memory/CPU overhead per connection. Applies on live apply.</div></div>
 					</div>
-					<div>
-						<div class="label"><label class="label" style="font-weight:500;margin:0;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="share_require_job_id" value="1" {{if .Settings.ShareRequireJobID}}checked{{end}}><span>share_require_job_id</span></label><div class="label-note">Rejects mining.submit requests with an empty job_id during basic field validation. When disabled, empty job_id falls through to normal stale-job handling. Applies on live apply.</div></div>
-					</div>
-					<div>
-						<div class="label">extranonce2_size<div class="label-note">Per-share extranonce2 byte length for submitted shares. Applies to new connections; existing miners keep their assigned extranonce format.</div></div>
-						<input name="extranonce2_size" type="number" min="1" max="8" class="textfield" value="{{.Settings.Extranonce2Size}}">
+						<div>
+							<div class="label">extranonce2_size<div class="label-note">Per-share extranonce2 byte length for submitted shares. Applies to new connections; existing miners keep their assigned extranonce format.</div></div>
+							<input name="extranonce2_size" type="number" min="1" max="8" class="textfield" value="{{.Settings.Extranonce2Size}}">
 					</div>
 					<div>
 						<div class="label">template_extranonce2_size<div class="label-note">Template extranonce2 byte length used in generated jobs. Applies to newly generated jobs after live apply.</div></div>

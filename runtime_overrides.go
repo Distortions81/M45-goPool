@@ -180,7 +180,6 @@ func applySafeModeProfile(cfg *Config) {
 	cfg.ShareRequireAuthorizedConnection = true
 	cfg.ShareCheckParamFormat = true
 	cfg.ShareCheckDuplicate = true
-	cfg.ShareRequireJobID = true
 	cfg.SubmitProcessInline = false
 
 	// Prefer widest miner compatibility over stricter policy checks.

@@ -232,8 +232,6 @@ Because the admin login is intentionally simple, bind this UI to trusted network
   - `share_check_param_format` defaults to `true`.
   - `share_check_ntime_window` and `share_check_version_rolling` default to `false`.
 - `share_check_duplicate` defaults to `true` and enables duplicate-share detection (same job/extranonce2/ntime/nonce/version on one connection).
-- `share_require_job_id` defaults to `true` and hard-rejects empty `job_id` (`invalid params` path).
-- `[mining].reject_no_job_id` defaults to `false`; enable it when you want goPool to short-circuit `mining.submit` requests that arrive with an empty `job_id` instead of letting them fall through to stale-job handling (requires restart).
 - `share_require_worker_match` defaults to `false`; enable it if you want strict submit/authorize worker-name matching.
 - `submit_process_inline` defaults to `true` and usually provides materially better submit latency. Set it in `policy.toml` `[mining]` and disable mainly for very large pools (for example, tens of thousands of concurrent miners) where queue isolation is preferred.
 - `vardiff_enabled` defaults to `true`; set it to `false` to keep connection difficulty static unless explicitly changed.

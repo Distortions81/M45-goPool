@@ -142,3 +142,58 @@ func TestCoinbaseParts_ReconstructsExactTx_Btcd(t *testing.T) {
 	}
 	assertCoinbaseEncodesAndDecodesWithBtcd(t, rawFromParts, txidDirect)
 }
+
+func TestCoinbaseParts_Lengths_SparkMinerCompatibility(t *testing.T) {
+	height := int64(900000)
+	ex1 := []byte{0x01, 0x02, 0x03, 0x04}
+	extranonce2Size := 4
+	templateExtraNonce2Size := 4
+	witnessCommitment := "6a24aa21a9ed" + "0000000000000000000000000000000000000000000000000000000000000000"
+	coinbaseFlags := "deadbeef"
+	coinbaseMsg := "m45tiny-goPool"
+	scriptTime := int64(0x699ef208)
+
+	// Realistic P2WPKH output scripts (22 bytes each).
+	poolScript := mustDecodeHex(t, "0014e083a5a0a55cd19df9a19481fe362dbdc39fb43f")
+	workerScript := mustDecodeHex(t, "0014ea30ffab0c33f0fd99511da4175f3eb7f3f24e45")
+	donationScript := mustDecodeHex(t, "0014331a0a25095d90d338e93dab611d8f8c3584fa57")
+
+	t.Run("single", func(t *testing.T) {
+		coinb1, coinb2, err := buildCoinbaseParts(height, ex1, extranonce2Size, templateExtraNonce2Size, workerScript, 50*1e8, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
+		if err != nil {
+			t.Fatalf("buildCoinbaseParts: %v", err)
+		}
+		t.Logf("single coinb1_hex=%d coinb2_hex=%d coinb2_bytes=%d", len(coinb1), len(coinb2), len(coinb2)/2)
+		if len(coinb2)%2 != 0 {
+			t.Fatalf("coinb2 hex length must be even, got %d", len(coinb2))
+		}
+	})
+
+	t.Run("dual", func(t *testing.T) {
+		coinb1, coinb2, err := buildDualPayoutCoinbaseParts(height, ex1, extranonce2Size, templateExtraNonce2Size, poolScript, workerScript, 50*1e8, 2.0, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
+		if err != nil {
+			t.Fatalf("buildDualPayoutCoinbaseParts: %v", err)
+		}
+		t.Logf("dual coinb1_hex=%d coinb2_hex=%d coinb2_bytes=%d", len(coinb1), len(coinb2), len(coinb2)/2)
+		if len(coinb2)%2 != 0 {
+			t.Fatalf("coinb2 hex length must be even, got %d", len(coinb2))
+		}
+		if len(coinb2) <= 255 {
+			t.Fatalf("expected dual-payout coinb2 to exceed SparkMiner coinBase2 buffer (255 hex chars), got %d", len(coinb2))
+		}
+	})
+
+	t.Run("triple", func(t *testing.T) {
+		coinb1, coinb2, err := buildTriplePayoutCoinbaseParts(height, ex1, extranonce2Size, templateExtraNonce2Size, poolScript, donationScript, workerScript, 50*1e8, 2.0, 12.5, witnessCommitment, coinbaseFlags, coinbaseMsg, scriptTime)
+		if err != nil {
+			t.Fatalf("buildTriplePayoutCoinbaseParts: %v", err)
+		}
+		t.Logf("triple coinb1_hex=%d coinb2_hex=%d coinb2_bytes=%d", len(coinb1), len(coinb2), len(coinb2)/2)
+		if len(coinb2)%2 != 0 {
+			t.Fatalf("coinb2 hex length must be even, got %d", len(coinb2))
+		}
+		if len(coinb2) <= 255 {
+			t.Fatalf("expected triple-payout coinb2 to exceed SparkMiner coinBase2 buffer (255 hex chars), got %d", len(coinb2))
+		}
+	})
+}
