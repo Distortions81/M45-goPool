@@ -67,10 +67,9 @@ func decodeExtranonce2HexBytes(extranonce2 []byte, validateFields bool, expected
 }
 
 func (mc *MinerConn) useStrictSubmitPath() bool {
-	return mc.cfg.ShareRequireWorkerMatch ||
-		shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) ||
-		mc.cfg.ShareCheckNTimeWindow ||
-		mc.cfg.ShareCheckVersionRolling
+	// Always use the strict submit path so individual validation features are
+	// controlled by their own config flags rather than a composite path switch.
+	return true
 }
 
 // parseSubmitParams validates and extracts the core fields from a mining.submit
