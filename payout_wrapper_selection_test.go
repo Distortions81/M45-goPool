@@ -43,7 +43,7 @@ func testWrapperJob(poolScript []byte, total int64) *Job {
 	}
 }
 
-func TestPrepareShareContextStrict_SelectsSingleDualTripleWrappers(t *testing.T) {
+func TestPrepareShareContext_SelectsSingleDualTripleWrappers(t *testing.T) {
 	prevDebug := debugLogging
 	debugLogging = true
 	defer func() { debugLogging = prevDebug }()
@@ -139,9 +139,9 @@ func TestPrepareShareContextStrict_SelectsSingleDualTripleWrappers(t *testing.T)
 			}
 
 			task := testSubmitTask(job, tt.workerName)
-			ctx, ok := mc.prepareShareContextStrict(task)
+			ctx, ok := mc.prepareShareContext(task)
 			if !ok {
-				t.Fatalf("prepareShareContextStrict returned not ok")
+				t.Fatalf("prepareShareContext returned not ok")
 			}
 			if len(ctx.cbTx) == 0 {
 				t.Fatalf("expected cbTx in debug context")

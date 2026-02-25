@@ -52,8 +52,5 @@ func (mc *MinerConn) prepareSubmissionTaskStringParams(id any, params []string, 
 	if !ok {
 		return submissionTask{}, false
 	}
-	if !mc.useStrictSubmitPath() {
-		return mc.prepareSubmissionTaskSoloParsed(id, parsed, now)
-	}
-	return mc.prepareSubmissionTaskStrictParsed(id, parsed, now)
+	return mc.prepareSubmissionTaskFromParsed(id, parsed, now)
 }

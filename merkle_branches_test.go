@@ -41,7 +41,7 @@ func TestMerkleRootDecodedBranchesMatchesStringBranches(t *testing.T) {
 	}
 }
 
-func TestPrepareShareContextStrictMerkleBytesEquivalent(t *testing.T) {
+func TestPrepareShareContextMerkleBytesEquivalent(t *testing.T) {
 	metrics := NewPoolMetrics()
 	mc := benchmarkMinerConnForSubmit(metrics)
 	mc.cfg.ShareCheckDuplicate = false
@@ -84,19 +84,18 @@ func TestPrepareShareContextStrictMerkleBytesEquivalent(t *testing.T) {
 	}
 
 	task.job = &jobStr
-	ctxStr, ok := mc.prepareShareContextStrict(task)
+	ctxStr, ok := mc.prepareShareContext(task)
 	if !ok {
-		t.Fatalf("prepareShareContextStrict (string branches) rejected share")
+		t.Fatalf("prepareShareContext (string branches) rejected share")
 	}
 
 	task.job = &jobBytes
-	ctxBytes, ok := mc.prepareShareContextStrict(task)
+	ctxBytes, ok := mc.prepareShareContext(task)
 	if !ok {
-		t.Fatalf("prepareShareContextStrict (decoded branches) rejected share")
+		t.Fatalf("prepareShareContext (decoded branches) rejected share")
 	}
 
 	if ctxStr.hashHex != ctxBytes.hashHex || ctxStr.isBlock != ctxBytes.isBlock {
 		t.Fatalf("share context differs: string=%+v bytes=%+v", ctxStr, ctxBytes)
 	}
 }
-

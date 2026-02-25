@@ -36,22 +36,14 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 		)
 	}
 
-	if !mc.useStrictSubmitPath() {
-		ctx, ok := mc.prepareShareContextSolo(task)
-		if !ok {
-			return
-		}
-		mc.processSoloShare(task, ctx)
-		return
-	}
-	ctx, ok := mc.prepareShareContextStrict(task)
+	ctx, ok := mc.prepareShareContext(task)
 	if !ok {
 		return
 	}
-	mc.processRegularShare(task, ctx)
+	mc.processShare(task, ctx)
 }
 
-func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) {
+func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 	job := task.job
 	workerName := task.workerName
 	jobID := task.jobID
@@ -178,64 +170,6 @@ func (mc *MinerConn) processRegularShare(task submissionTask, ctx shareContext) 
 
 	// Respond first; any vardiff adjustment and follow-up notify can happen after
 	// the submit is acknowledged to minimize perceived submit latency.
-	mc.writeTrueResponse(reqID)
-
-	if mc.maybeAdjustDifficulty(now) {
-		mc.sendNotifyFor(job, true)
-	}
-
-	if logger.Enabled(logLevelInfo) {
-		stats, accRate, subRate := mc.snapshotStatsWithRates(now)
-		miner := stats.Worker
-		if miner == "" {
-			miner = workerName
-			if miner == "" {
-				miner = mc.id
-			}
-		}
-		logger.Info("share accepted",
-			"component", "miner",
-			"kind", "share",
-			"miner", miner,
-			"difficulty", ctx.shareDiff,
-			"hash", ctx.hashHex,
-			"accepted_total", stats.Accepted,
-			"rejected_total", stats.Rejected,
-			"worker_difficulty", stats.TotalDifficulty,
-			"accept_rate_per_min", accRate,
-			"submit_rate_per_min", subRate,
-		)
-	}
-}
-
-func (mc *MinerConn) processSoloShare(task submissionTask, ctx shareContext) {
-	job := task.job
-	workerName := task.workerName
-	reqID := task.reqID
-	now := task.receivedAt
-
-	assignedDiff := mc.assignedDifficulty(task.jobID)
-	currentDiff := mc.currentDifficulty()
-	creditedDiff := assignedDiff
-	if creditedDiff <= 0 {
-		creditedDiff = currentDiff
-	}
-
-	if ctx.isBlock {
-		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
-		mc.trackBestShare(workerName, ctx.hashHex, ctx.shareDiff, now)
-		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
-		return
-	}
-
-	mc.noteValidSubmit(now)
-	shareHash := ctx.hashHex
-	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, nil, now)
-	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
-	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
-
-	// Respond first; vardiff adjustments and notifies can follow.
 	mc.writeTrueResponse(reqID)
 
 	if mc.maybeAdjustDifficulty(now) {
