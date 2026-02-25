@@ -321,8 +321,8 @@ func TestMinerConnAttachDetachSV2Conn_Lifecycle(t *testing.T) {
 	if mc.sv2 != nil {
 		t.Fatalf("expected mc.sv2 to be nil after detach")
 	}
-	if c.mc != nil {
-		t.Fatalf("expected sv2Conn.mc to be nil after detach")
+	if c.mc != mc {
+		t.Fatalf("expected sv2Conn.mc backref to remain stable after detach")
 	}
 }
 
@@ -337,8 +337,8 @@ func TestMinerConnCleanup_DetachesSV2Conn(t *testing.T) {
 	if mc.sv2 != nil {
 		t.Fatalf("expected cleanup to clear mc.sv2")
 	}
-	if c.mc != nil {
-		t.Fatalf("expected cleanup to clear sv2Conn backref")
+	if c.mc != mc {
+		t.Fatalf("expected cleanup to preserve sv2Conn backref")
 	}
 }
 

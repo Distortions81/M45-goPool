@@ -71,9 +71,6 @@ func (mc *MinerConn) attachSV2Conn(c *sv2Conn) {
 	mc.stateMu.Lock()
 	mc.sv2 = c
 	mc.stateMu.Unlock()
-	if c != nil && c.mc != mc {
-		c.mc = mc
-	}
 }
 
 func (mc *MinerConn) detachSV2Conn() {
@@ -84,9 +81,94 @@ func (mc *MinerConn) detachSV2Conn() {
 	c := mc.sv2
 	mc.sv2 = nil
 	mc.stateMu.Unlock()
-	if c != nil && c.mc == mc {
-		c.mc = nil
+	_ = c
+}
+
+type minerProtocolStateSnapshot struct {
+	sv2                *sv2Conn
+	subscribed         bool
+	authorized         bool
+	listenerOn         bool
+	suggestDiffHandled bool
+}
+
+func (mc *MinerConn) protocolStateSnapshot() minerProtocolStateSnapshot {
+	if mc == nil {
+		return minerProtocolStateSnapshot{}
 	}
+	mc.stateMu.Lock()
+	defer mc.stateMu.Unlock()
+	return minerProtocolStateSnapshot{
+		sv2:                mc.sv2,
+		subscribed:         mc.stratumV1.subscribed,
+		authorized:         mc.stratumV1.authorized,
+		listenerOn:         mc.listenerOn,
+		suggestDiffHandled: mc.stratumV1.suggestDiffProcessed,
+	}
+}
+
+func (mc *MinerConn) setSubscribed(v bool) {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	mc.stratumV1.subscribed = v
+	mc.stateMu.Unlock()
+}
+
+func (mc *MinerConn) setAuthorized(v bool) {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	mc.stratumV1.authorized = v
+	mc.stateMu.Unlock()
+}
+
+func (mc *MinerConn) setAuthorizedSubscribed(v bool) {
+	if mc == nil {
+		return
+	}
+	mc.stateMu.Lock()
+	mc.stratumV1.authorized = v
+	mc.stratumV1.subscribed = v
+	mc.stateMu.Unlock()
+}
+
+// startJobListenerIfNeeded performs a best-effort single start of the per-conn
+// job listener across v1/SV2 init paths.
+func (mc *MinerConn) startJobListenerIfNeeded() bool {
+	if mc == nil {
+		return false
+	}
+	mc.stateMu.Lock()
+	if mc.listenerOn {
+		mc.stateMu.Unlock()
+		return false
+	}
+	mc.stateMu.Unlock()
+	if mc.jobCh != nil {
+		for {
+			select {
+			case <-mc.jobCh:
+			default:
+				goto drained
+			}
+		}
+	}
+drained:
+	mc.stateMu.Lock()
+	if mc.listenerOn {
+		mc.stateMu.Unlock()
+		return false
+	}
+	mc.listenerOn = true
+	hasJobCh := mc.jobCh != nil
+	mc.stateMu.Unlock()
+	if hasJobCh {
+		go mc.listenJobs()
+	}
+	return true
 }
 
 func (mc *MinerConn) assignConnectionSeq() {
@@ -670,7 +752,8 @@ func (mc *MinerConn) maybeSendInitialWorkDue(now time.Time) {
 }
 
 func (mc *MinerConn) sendInitialWork() {
-	if mc.sv2 == nil && (!mc.stratumV1.subscribed || !mc.stratumV1.authorized || !mc.listenerOn) {
+	ps := mc.protocolStateSnapshot()
+	if ps.sv2 == nil && (!ps.subscribed || !ps.authorized || !ps.listenerOn) {
 		return
 	}
 
@@ -684,7 +767,7 @@ func (mc *MinerConn) sendInitialWork() {
 
 	// Respect suggested difficulty if already processed. Otherwise, fall back
 	// to a sane default/minimum so miners have a starting target.
-	if !mc.stratumV1.suggestDiffProcessed && !mc.vardiffState.restoredRecentDiff {
+	if !ps.suggestDiffHandled && !mc.vardiffState.restoredRecentDiff {
 		diff := mc.cfg.DefaultDifficulty
 		if diff <= 0 {
 			// Default difficulty of 0 means "unset": treat it as the minimum
@@ -745,8 +828,8 @@ func (mc *MinerConn) sendWorkForProtocol(job *Job, forceClean bool) {
 	if mc == nil || job == nil {
 		return
 	}
-	if mc.sv2 != nil {
-		if err := mc.sv2.writeStratumV2JobBundleForAllChannels(job); err != nil {
+	if sv2 := mc.protocolStateSnapshot().sv2; sv2 != nil {
+		if err := sv2.writeStratumV2JobBundleForAllChannels(job); err != nil {
 			logger.Error("sv2 job update write error", "component", "miner", "kind", "notify", "remote", mc.id, "error", err)
 		}
 		return

@@ -54,7 +54,7 @@ func (mc *MinerConn) sendClientShowMessage(message string) {
 	if mc == nil || mc.conn == nil {
 		return
 	}
-	if mc.sv2 != nil {
+	if mc.protocolStateSnapshot().sv2 != nil {
 		return
 	}
 	message = strings.TrimSpace(message)

@@ -259,29 +259,13 @@ func (c *sv2Conn) prepareSV2ChannelWorker(userIdentity string) error {
 		c.mc.assignConnectionSeq()
 		c.mc.registerWorker(workerName)
 	}
-	if !c.mc.listenerOn {
-		// Mirror the v1 authorize/subscribe behavior: start the per-connection
-		// job listener once the miner has identified itself. Without this, an
-		// SV2 miner that opens a channel before the first job is available (for
-		// example right after pool restart) can remain connected but never
-		// receive a later job update.
-		if c.mc.jobCh != nil {
-			for {
-				select {
-				case <-c.mc.jobCh:
-				default:
-					goto drained
-				}
-			}
-		}
-	drained:
-		c.mc.listenerOn = true
-		if c.mc.jobCh != nil {
-			go c.mc.listenJobs()
-		}
-	}
-	c.mc.stratumV1.authorized = true
-	c.mc.stratumV1.subscribed = true
+	// Mirror the v1 authorize/subscribe behavior: mark the shared submit path
+	// ready and start the per-connection job listener once the miner identifies
+	// itself. Without this, an SV2 miner that opens a channel before the first
+	// job is available (for example right after pool restart) can remain
+	// connected but never receive a later job update.
+	c.mc.setAuthorizedSubscribed(true)
+	c.mc.startJobListenerIfNeeded()
 	return nil
 }
 

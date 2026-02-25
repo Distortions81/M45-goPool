@@ -146,7 +146,7 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 		mc.stateMu.Unlock()
 	}
 
-	mc.stratumV1.subscribed = true
+	mc.setSubscribed(true)
 
 	ex1 := mc.stratumV1.extranonce1Hex
 	en2Size := mc.cfg.Extranonce2Size
@@ -158,23 +158,8 @@ func (mc *MinerConn) handleSubscribeRawID(idRaw []byte, clientID string, haveCli
 
 	// Support authorize-before-subscribe: if the miner already authorized,
 	// start the listener and schedule initial work now that subscribe is done.
-	if mc.stratumV1.authorized {
-		if !mc.listenerOn {
-			if mc.jobCh != nil {
-				for {
-					select {
-					case <-mc.jobCh:
-					default:
-						goto drained
-					}
-				}
-			}
-		drained:
-			mc.listenerOn = true
-			if mc.jobCh != nil {
-				go mc.listenJobs()
-			}
-		}
+	if mc.protocolStateSnapshot().authorized {
+		mc.startJobListenerIfNeeded()
 		if mc.jobMgr != nil {
 			mc.scheduleInitialWork()
 		}
@@ -500,34 +485,20 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
-	mc.stratumV1.authorized = true
+	mc.setAuthorized(true)
 
 	mc.writeTrueResponse(id)
 
 	// If the miner hasn't subscribed yet, accept authorization but don't start
 	// the job listener or send any pool->miner notifications until subscribe.
 	// Some miners (CKPool-oriented stacks) send authorize/auth before subscribe.
-	if !mc.stratumV1.subscribed {
+	if !mc.protocolStateSnapshot().subscribed {
 		return
 	}
 
-	if !mc.listenerOn {
-		// Drain any buffered notifications that may have accumulated between
-		// subscribe and authorize; we'll send the current job explicitly below.
-		for {
-			select {
-			case <-mc.jobCh:
-			default:
-				goto drained
-			}
-		}
-	drained:
-
-		mc.listenerOn = true
-		// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
-		// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
-		go mc.listenJobs()
-	}
+	// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
+	// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
+	mc.startJobListenerIfNeeded()
 
 	if hasSuggestedDiff {
 		mc.applySuggestedDifficulty(suggestedDiff)
