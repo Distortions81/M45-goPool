@@ -18,6 +18,7 @@ type sv2Conn struct {
 	writer          io.Writer
 	transport       sv2FrameTransport
 	writeMu         sync.Mutex
+	stateMu         sync.RWMutex
 	submitMapper    *stratumV2SubmitMapperState
 	channelTargets  map[uint32][32]byte
 	channelPrevHash map[uint32]stratumV2WireSetNewPrevHash
@@ -131,9 +132,11 @@ func (c *sv2Conn) handleSetupConnection(msg stratumV2WireSetupConnection) error 
 			ErrorCode: "protocol-version-mismatch",
 		})
 	}
+	c.stateMu.Lock()
 	c.setupDone = true
 	c.setupVersion = sv2VersionCurrent
 	c.setupFlags = msg.Flags
+	c.stateMu.Unlock()
 	return c.writeSetupConnectionSuccess(stratumV2WireSetupConnectionSuccess{
 		UsedVersion: sv2VersionCurrent,
 		Flags:       0,
@@ -141,7 +144,10 @@ func (c *sv2Conn) handleSetupConnection(msg stratumV2WireSetupConnection) error 
 }
 
 func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardMiningChannel) error {
-	if !c.setupDone {
+	c.stateMu.RLock()
+	setupDone := c.setupDone
+	c.stateMu.RUnlock()
+	if !setupDone {
 		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
 			Flags:     0,
 			ErrorCode: "setup-connection-required",
@@ -149,9 +155,6 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 	}
 	if c.mc == nil {
 		return fmt.Errorf("sv2 conn missing miner context")
-	}
-	if c.submitMapper == nil {
-		c.submitMapper = newStratumV2SubmitMapperState()
 	}
 	if err := c.prepareSV2ChannelWorker(msg.UserIdentity); err != nil {
 		return err
@@ -161,10 +164,15 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 	if en2Size <= 0 {
 		en2Size = 4
 	}
+	c.stateMu.Lock()
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
 	c.submitMapper.registerChannel(chID, stratumV2SubmitChannelMapping{
 		WorkerName:          msg.UserIdentity,
 		StandardExtranonce2: make([]byte, en2Size),
 	})
+	c.stateMu.Unlock()
 	resp := stratumV2WireOpenStandardMiningChannelSuccess{
 		RequestID:      msg.RequestID,
 		ChannelID:      chID,
@@ -182,7 +190,10 @@ func (c *sv2Conn) handleOpenStandardMiningChannel(msg stratumV2WireOpenStandardM
 }
 
 func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedMiningChannel) error {
-	if !c.setupDone {
+	c.stateMu.RLock()
+	setupDone := c.setupDone
+	c.stateMu.RUnlock()
+	if !setupDone {
 		return c.writeSetupConnectionError(stratumV2WireSetupConnectionError{
 			Flags:     0,
 			ErrorCode: "setup-connection-required",
@@ -191,16 +202,18 @@ func (c *sv2Conn) handleOpenExtendedMiningChannel(msg stratumV2WireOpenExtendedM
 	if c.mc == nil {
 		return fmt.Errorf("sv2 conn missing miner context")
 	}
-	if c.submitMapper == nil {
-		c.submitMapper = newStratumV2SubmitMapperState()
-	}
 	if err := c.prepareSV2ChannelWorker(msg.UserIdentity); err != nil {
 		return err
 	}
 	chID := c.allocateChannelID()
+	c.stateMu.Lock()
+	if c.submitMapper == nil {
+		c.submitMapper = newStratumV2SubmitMapperState()
+	}
 	c.submitMapper.registerChannel(chID, stratumV2SubmitChannelMapping{
 		WorkerName: msg.UserIdentity,
 	})
+	c.stateMu.Unlock()
 	en2Size := uint16(c.mc.cfg.Extranonce2Size)
 	if en2Size == 0 {
 		en2Size = 4
@@ -252,10 +265,22 @@ func (c *sv2Conn) prepareSV2ChannelWorker(userIdentity string) error {
 }
 
 func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStandard) error {
-	if c.mc == nil || c.submitMapper == nil {
+	if c.mc == nil {
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
-	norm, err := c.submitMapper.mapWireSubmitSharesStandard(msg)
+	c.stateMu.RLock()
+	mapper := c.submitMapper
+	var (
+		norm stratumV2NormalizedSubmitShare
+		err  error
+	)
+	if mapper != nil {
+		norm, err = mapper.mapWireSubmitSharesStandard(msg)
+	}
+	c.stateMu.RUnlock()
+	if mapper == nil {
+		return fmt.Errorf("sv2 submit skeleton not initialized")
+	}
 	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, writeFrame: c.writeFrame, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
 		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
@@ -275,10 +300,22 @@ func (c *sv2Conn) handleSubmitSharesStandard(msg stratumV2WireSubmitSharesStanda
 }
 
 func (c *sv2Conn) handleSubmitSharesExtended(msg stratumV2WireSubmitSharesExtended) error {
-	if c.mc == nil || c.submitMapper == nil {
+	if c.mc == nil {
 		return fmt.Errorf("sv2 submit skeleton not initialized")
 	}
-	norm, err := c.submitMapper.mapWireSubmitSharesExtended(msg)
+	c.stateMu.RLock()
+	mapper := c.submitMapper
+	var (
+		norm stratumV2NormalizedSubmitShare
+		err  error
+	)
+	if mapper != nil {
+		norm, err = mapper.mapWireSubmitSharesExtended(msg)
+	}
+	c.stateMu.RUnlock()
+	if mapper == nil {
+		return fmt.Errorf("sv2 submit skeleton not initialized")
+	}
 	responder := &stratumV2SubmitWireResponder{mc: c.mc, w: c.writer, writeFrame: c.writeFrame, channelID: msg.ChannelID, sequenceNumber: msg.SequenceNumber}
 	if !c.isActiveSV2SubmitJob(msg.ChannelID, msg.JobID) {
 		responder.writeSubmitSV2ErrorCode(msg.SequenceNumber, "stale-share")
@@ -321,6 +358,8 @@ func readOneStratumV2FrameFromReader(r io.Reader) ([]byte, error) {
 }
 
 func (c *sv2Conn) allocateChannelID() uint32 {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.nextChannelID == 0 {
 		c.nextChannelID = 1
 	}
@@ -330,6 +369,8 @@ func (c *sv2Conn) allocateChannelID() uint32 {
 }
 
 func (c *sv2Conn) allocateWireJobID() uint32 {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.nextWireJobID == 0 {
 		c.nextWireJobID = 1
 	}
@@ -357,11 +398,24 @@ func (c *sv2Conn) standardSV2MerkleRootU256LE(channelID uint32, job *Job) ([32]b
 	if c == nil || c.mc == nil || job == nil {
 		return [32]byte{}, fmt.Errorf("missing sv2 conn miner or job")
 	}
-	if c.submitMapper == nil {
+	c.stateMu.RLock()
+	mapper := c.submitMapper
+	var ch stratumV2SubmitChannelMapping
+	exists := false
+	if mapper != nil {
+		ch, exists = mapper.channels[channelID]
+		if len(ch.StandardExtranonce2) > 0 {
+			ch.StandardExtranonce2 = append([]byte(nil), ch.StandardExtranonce2...)
+		}
+		if len(ch.ExtranoncePrefix) > 0 {
+			ch.ExtranoncePrefix = append([]byte(nil), ch.ExtranoncePrefix...)
+		}
+	}
+	c.stateMu.RUnlock()
+	if mapper == nil {
 		return [32]byte{}, fmt.Errorf("missing submit mapper")
 	}
-	ch, ok := c.submitMapper.channels[channelID]
-	if !ok {
+	if !exists {
 		return [32]byte{}, fmt.Errorf("missing channel mapping for channel=%d", channelID)
 	}
 	worker := ch.WorkerName
@@ -455,6 +509,8 @@ func (c *sv2Conn) applyStratumV2SetExtranoncePrefix(msg stratumV2WireSetExtranon
 	if c == nil {
 		return
 	}
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.submitMapper == nil {
 		c.submitMapper = newStratumV2SubmitMapperState()
 	}
@@ -470,6 +526,8 @@ func (c *sv2Conn) applyStratumV2NewMiningJob(msg stratumV2WireNewMiningJob, loca
 	if c == nil || localJobID == "" {
 		return
 	}
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.submitMapper == nil {
 		c.submitMapper = newStratumV2SubmitMapperState()
 	}
@@ -504,6 +562,8 @@ func (c *sv2Conn) applyStratumV2SetTarget(msg stratumV2WireSetTarget) {
 	if c == nil {
 		return
 	}
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.channelTargets == nil {
 		c.channelTargets = make(map[uint32][32]byte)
 	}
@@ -526,6 +586,8 @@ func (c *sv2Conn) applyStratumV2SetNewPrevHash(msg stratumV2WireSetNewPrevHash) 
 	if c == nil {
 		return
 	}
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	if c.channelPrevHash == nil {
 		c.channelPrevHash = make(map[uint32]stratumV2WireSetNewPrevHash)
 	}
@@ -607,12 +669,9 @@ func (c *sv2Conn) writeStratumV2JobBundleForAllChannels(job *Job) error {
 	if c == nil || job == nil {
 		return fmt.Errorf("missing sv2 conn or job")
 	}
-	if c.submitMapper == nil || len(c.submitMapper.channels) == 0 {
+	channelIDs := c.snapshotSV2ChannelIDs()
+	if len(channelIDs) == 0 {
 		return nil
-	}
-	channelIDs := make([]uint32, 0, len(c.submitMapper.channels))
-	for id := range c.submitMapper.channels {
-		channelIDs = append(channelIDs, id)
 	}
 	sort.Slice(channelIDs, func(i, j int) bool { return channelIDs[i] < channelIDs[j] })
 	for _, channelID := range channelIDs {
@@ -627,12 +686,9 @@ func (c *sv2Conn) writeStratumV2SetTargetForAllChannels() error {
 	if c == nil {
 		return fmt.Errorf("missing sv2 conn")
 	}
-	if c.submitMapper == nil || len(c.submitMapper.channels) == 0 {
+	channelIDs := c.snapshotSV2ChannelIDs()
+	if len(channelIDs) == 0 {
 		return nil
-	}
-	channelIDs := make([]uint32, 0, len(c.submitMapper.channels))
-	for id := range c.submitMapper.channels {
-		channelIDs = append(channelIDs, id)
 	}
 	sort.Slice(channelIDs, func(i, j int) bool { return channelIDs[i] < channelIDs[j] })
 	target := c.currentSV2TargetBytes()
@@ -681,7 +737,10 @@ func (c *sv2Conn) classifySV2SubmitMappingError(channelID uint32, wireJobID uint
 		return "invalid-channel-id"
 	}
 	if strings.Contains(msg, "unknown job mapping") {
-		if active, ok := c.channelPrevHash[channelID]; ok && active.JobID != 0 && active.JobID != wireJobID {
+		c.stateMu.RLock()
+		active, ok := c.channelPrevHash[channelID]
+		c.stateMu.RUnlock()
+		if ok && active.JobID != 0 && active.JobID != wireJobID {
 			return "stale-share"
 		}
 		return "invalid-job-id"
@@ -693,7 +752,12 @@ func (c *sv2Conn) classifySV2SubmitMappingError(channelID uint32, wireJobID uint
 }
 
 func (c *sv2Conn) isActiveSV2SubmitJob(channelID uint32, wireJobID uint32) bool {
-	if c == nil || c.channelPrevHash == nil {
+	if c == nil {
+		return true
+	}
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	if c.channelPrevHash == nil {
 		return true
 	}
 	active, ok := c.channelPrevHash[channelID]
@@ -701,6 +765,22 @@ func (c *sv2Conn) isActiveSV2SubmitJob(channelID uint32, wireJobID uint32) bool 
 		return true
 	}
 	return active.JobID == wireJobID
+}
+
+func (c *sv2Conn) snapshotSV2ChannelIDs() []uint32 {
+	if c == nil {
+		return nil
+	}
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	if c.submitMapper == nil || len(c.submitMapper.channels) == 0 {
+		return nil
+	}
+	out := make([]uint32, 0, len(c.submitMapper.channels))
+	for id := range c.submitMapper.channels {
+		out = append(out, id)
+	}
+	return out
 }
 
 func writeStratumV2SetTargetToWriter(w io.Writer, msg stratumV2WireSetTarget) error {

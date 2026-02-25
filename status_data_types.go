@@ -85,6 +85,7 @@ type StatusData struct {
 	PageCached                      bool                  `json:"page_cached"`
 	ActiveMiners                    int                   `json:"active_miners"`
 	ActiveTLSMiners                 int                   `json:"active_tls_miners"`
+	ActiveSV2Miners                 int                   `json:"active_sv2_miners"`
 	SharesPerSecond                 float64               `json:"shares_per_second"`
 	SharesPerMinute                 float64               `json:"shares_per_minute,omitempty"`
 	Accepted                        uint64                `json:"accepted"`
@@ -180,6 +181,7 @@ type OverviewPageData struct {
 	APIVersion      string           `json:"api_version"`
 	ActiveMiners    int              `json:"active_miners"`
 	ActiveTLSMiners int              `json:"active_tls_miners"`
+	ActiveSV2Miners int              `json:"active_sv2_miners"`
 	SharesPerMinute float64          `json:"shares_per_minute,omitempty"`
 	PoolHashrate    float64          `json:"pool_hashrate,omitempty"`
 	PoolTag         string           `json:"pool_tag,omitempty"`

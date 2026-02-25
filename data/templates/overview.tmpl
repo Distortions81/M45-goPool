@@ -660,13 +660,14 @@
 				if (!label || !valueEl) return;
 				const labelText = label.textContent.trim();
 				switch (labelText) {
-					case 'Open connections':
-						{
-							const total = newData.active_miners ?? 0;
-							const tls = newData.active_tls_miners ?? 0;
-							valueEl.innerHTML = `${total} <span class="text-sm" style="color:#666;">(${tls} TLS)</span>`;
-						}
-						break;
+						case 'Open connections':
+							{
+								const total = newData.active_miners ?? 0;
+								const tls = newData.active_tls_miners ?? 0;
+								const sv2 = newData.active_sv2_miners ?? 0;
+								valueEl.innerHTML = `${total} <span class="text-sm" style="color:#666;">(${tls} TLS, ${sv2} SV2)</span>`;
+							}
+							break;
 					case 'Shares per minute':
 						{
 							const rate = newData.shares_per_minute ?? 0;

@@ -125,6 +125,7 @@ func (s *StatusServer) handleOverviewPageJSON(w http.ResponseWriter, r *http.Req
 			APIVersion:      apiVersion,
 			ActiveMiners:    view.ActiveMiners,
 			ActiveTLSMiners: view.ActiveTLSMiners,
+			ActiveSV2Miners: view.ActiveSV2Miners,
 			SharesPerMinute: view.SharesPerMinute,
 			PoolHashrate:    view.PoolHashrate,
 			PoolTag:         poolTag,

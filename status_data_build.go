@@ -430,10 +430,20 @@ func (s *StatusServer) buildStatusData() StatusData {
 		activeMiners = s.jobMgr.ActiveMiners()
 	}
 	activeTLSMiners := 0
+	activeSV2Miners := 0
 	if s.registry != nil {
 		for _, mc := range s.registry.Snapshot() {
-			if mc != nil && mc.isTLSConnection {
+			if mc == nil {
+				continue
+			}
+			if mc.isTLSConnection {
 				activeTLSMiners++
+			}
+			mc.stateMu.Lock()
+			hasSV2 := mc.sv2 != nil
+			mc.stateMu.Unlock()
+			if hasSV2 {
+				activeSV2Miners++
 			}
 		}
 	}
@@ -575,6 +585,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 		BuildTime:                      bt,
 		ActiveMiners:                   activeMiners,
 		ActiveTLSMiners:                activeTLSMiners,
+		ActiveSV2Miners:                activeSV2Miners,
 		SharesPerSecond:                sharesPerSecond,
 		SharesPerMinute:                sharesPerMinute,
 		Accepted:                       accepted,
