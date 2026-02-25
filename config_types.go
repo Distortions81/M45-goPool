@@ -169,7 +169,7 @@ type Config struct {
 	ShareRequireWorkerMatch          bool // enforce submit worker name must match authorized worker
 	SubmitProcessInline              bool // process submits on connection goroutine (bypass worker pool)
 	LogDebug                         bool // enable debug logs and detailed runtime traces
-	LogNetDebug                      bool // enable raw network debug logging (when supported)
+	LogNetDebug                      bool // enable raw network debug logging
 
 	// Maintenance behavior.
 	CleanExpiredBansOnStartup bool // rewrite/drop expired bans on startup

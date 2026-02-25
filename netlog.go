@@ -1,5 +1,3 @@
-//go:build debug
-
 package main
 
 import (
@@ -15,6 +13,10 @@ var (
 	netLogWriter  io.Writer
 	netLogEnabled atomic.Bool
 )
+
+// Network debug logging is always compiled in, but runtime-gated behind the
+// `net-debug` toggle so normal operation keeps the hot path to a fast atomic
+// check and returns immediately when disabled.
 
 func setNetLogWriter(w io.Writer) {
 	netLogMu.Lock()

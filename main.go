@@ -122,7 +122,7 @@ func main() {
 	allowPublicRPCFlag := flag.Bool("allow-public-rpc", false, "allow unauthenticated RPC endpoint (testing only)")
 	allowRPCCredsFlag := flag.Bool("allow-rpc-creds", false, "allow rpc creds from secrets.toml")
 	debugFlag := flag.Bool("debug", false, "enable debug logging and detailed runtime traces")
-	netDebugFlag := flag.Bool("net-debug", false, "enable raw network debug logging at startup (when supported)")
+	netDebugFlag := flag.Bool("net-debug", false, "enable raw network debug logging at startup")
 	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
 	minerProfileJSONFlag := flag.String("miner-profile-json", "", "optional path to write aggregated miner profile JSON for offline tuning")
 	flag.Parse()
