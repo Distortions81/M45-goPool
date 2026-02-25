@@ -176,7 +176,7 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		mc.sendNotifyFor(job, true)
 	}
 
-	if logger.Enabled(logLevelInfo) {
+	if (debugLogging || verboseRuntimeLogging) && logger.Enabled(logLevelInfo) {
 		stats, accRate, subRate := mc.snapshotStatsWithRates(now)
 		miner := stats.Worker
 		if miner == "" {
