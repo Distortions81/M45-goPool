@@ -12,6 +12,6 @@ gopool-test
 *.out
 bitcoin-node/
 .VSCodeCounter/
-documentation/stratum-v2-reference
 documentation/reference-miners
+documentation/sv2-spec
 documentation/sv2-apps
