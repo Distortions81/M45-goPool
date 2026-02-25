@@ -1,6 +1,8 @@
-# Stratum V2 (WIP Checklist)
+# Stratum V2 (Experimental)
 
-goPool includes an in-progress Stratum V2 mining listener on a separate TCP port.
+goPool includes an experimental Stratum V2 mining listener on a dedicated TCP port.
+
+This is usable for early interoperability testing and share-submit validation, but it is not full SV2 mining-protocol coverage yet.
 
 ## Enable
 
@@ -17,50 +19,74 @@ Or override at runtime:
 ./goPool -stratum-v2 :3334
 ```
 
-## Current Testing Guidance
+## Transport Behavior
 
-- Use a separate SV2 port (no same-port autodetect yet).
-- Prefer **standard channel** mode for now.
-- Treat pool logs/status as source of truth while miner UI counters are unstable during reconnects.
+- SV2 runs on a **separate port** (`stratum_v2_listen` / `-stratum-v2`).
+- goPool does **not** multiplex SV1 and SV2 on the same listener.
+- On the SV2 port, goPool auto-detects:
+  - plaintext SV2 framing (first message looks like `SetupConnection`)
+  - SV2 + Noise (`Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256`)
+- Noise support is responder-side and still experimental (see limitations below).
 
-## Done
+## Current Support (Implemented)
 
-- [x] Separate-port SV2 listener (`stratum_v2_listen`, `-stratum-v2`)
-- [x] `SetupConnection` negotiation (basic)
-- [x] `OpenStandardMiningChannel` handling
-- [x] `OpenExtendedMiningChannel` handling (open only; see TODO)
-- [x] SV2 frame codec (core mining submit/open/job-update subset)
-- [x] Noise transport support (initial `Noise_NX` responder implementation)
-- [x] Share submit bridge into shared mining share core
-- [x] `SubmitShares{Standard,Extended}` decode + `SubmitShares.{Success,Error}` responses
-- [x] `SetTarget`, `SetNewPrevHash`, `SetExtranoncePrefix`, `NewMiningJob` framing
-- [x] Initial job push on channel open
-- [x] Status webpage shows SV2 endpoint when configured
+- `SetupConnection` basic validation + `SetupConnection.Success/Error`
+  - Mining protocol (`protocol=0`) only
+  - Version negotiation currently targets SV2 version `2`
+- Channel open:
+  - `OpenStandardMiningChannel` + `.Success`
+  - `OpenExtendedMiningChannel` + `.Success` (open succeeds, but extended job flow is incomplete)
+- Mining updates / framing support:
+  - `SetTarget`
+  - `SetNewPrevHash`
+  - `SetExtranoncePrefix` (codec/state support)
+  - `NewMiningJob` (standard-path job announcements used by current bridge)
+- Share submit path:
+  - `SubmitSharesStandard`
+  - `SubmitSharesExtended`
+  - `SubmitShares.Success`
+  - `SubmitShares.Error`
+- Initial job bundle is pushed immediately after channel open when a current pool job is available.
+- Status UI / status JSON expose SV2 listener configuration and active SV2 miner counts.
 
-## In Progress / Debugging
+## Practical Testing Guidance (Recommended)
 
-- [ ] SV2 + Noise interoperability stability (frequent reconnects / connection resets)
-- [ ] Miner UI counters not matching pool accepted-share logs in some sessions
-- [ ] SV2 field byte-order validation with real miners (U256/header-field interoperability)
+- Use a dedicated SV2 port (for example `:3334`).
+- Prefer **standard channel mode** for real miner testing right now.
+- If the miner supports both plaintext and Noise, test plaintext first to isolate protocol issues from transport issues.
+- Treat goPool logs and goPool status pages/APIs as source of truth when miner UI counters look inconsistent during reconnects.
+- Re-test after difficulty changes and new block/job events to verify `SetTarget` and `SetNewPrevHash` handling on your miner.
 
-## TODO (High Priority)
+## Known Limitations
 
-- [ ] Implement `NewExtendedMiningJob` (server -> client)
-- [ ] Emit correct extended jobs on extended channels (currently unsafe/incomplete)
-- [ ] Add `OpenMiningChannel.Error` responses and reject unsupported modes cleanly
-- [ ] Finish `SetupConnection.flags` capability negotiation/gating
-- [ ] Add end-to-end SV2+Noise integration tests (channel open -> job -> submit)
+- `NewExtendedMiningJob` is not implemented yet.
+- Extended channels can open, but work delivery for extended-channel mining is incomplete/unsafe.
+- `SetupConnection.flags` capability negotiation is not fully enforced yet (basic handshake only).
+- `OpenMiningChannel.Error` handling/rejection paths are not complete for all unsupported cases.
+- Noise certificate authority verification is not implemented yet (current path is effectively TOFU-style responder behavior).
+- Interoperability with real miners is still being validated; expect reconnects / edge-case framing mismatches.
 
-## TODO (Next)
+## Message Coverage (At a Glance)
 
-- [ ] Channel close/reset messages and state cleanup
-- [ ] `UpdateChannel` / `SetGroupChannel`
-- [ ] Better SV2-specific error mapping/diagnostics in logs
-- [ ] Authority-based Noise certificate verification (non-TOFU)
-- [ ] Same-port protocol autodetect (optional)
+Supported now (decode/encode path present and used by the current server flow):
 
-## Known Limitation (Important)
+- `SetupConnection`, `SetupConnection.Success`, `SetupConnection.Error`
+- `OpenStandardMiningChannel`, `OpenStandardMiningChannel.Success`
+- `OpenExtendedMiningChannel`, `OpenExtendedMiningChannel.Success`
+- `SetTarget`, `SetNewPrevHash`, `NewMiningJob`
+- `SubmitSharesStandard`, `SubmitSharesExtended`
+- `SubmitShares.Success`, `SubmitShares.Error`
 
-- Extended channel is not complete yet because `NewExtendedMiningJob` is not implemented.
-- An extended-channel miner may connect/open successfully but receive incompatible work messages.
-- If testing today, use **standard channel mode**.
+Partially implemented / not production-ready:
+
+- Extended-channel work flow (`NewExtendedMiningJob` missing)
+- Capability negotiation flags
+- Full channel lifecycle management (`UpdateChannel`, reset/close, group-channel management)
+
+## Near-Term Priorities
+
+- Implement `NewExtendedMiningJob` and complete extended-channel work emission.
+- Add stronger `Open*MiningChannel` error responses and unsupported-mode rejection behavior.
+- Expand end-to-end SV2+Noise integration tests (open -> job -> submit).
+- Improve SV2-specific logging/diagnostics for interoperability debugging.
+- Replace TOFU-style Noise cert handling with authority-based verification.

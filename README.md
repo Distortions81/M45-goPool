@@ -72,8 +72,11 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
 - **`documentation/README.md`** - Documentation index.
 - **`documentation/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
 - **`documentation/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
+- **`documentation/stratum-v1.md`** – Stratum v1 compatibility and behavior notes.
+- **`documentation/stratum-v2.md`** – Stratum v2 setup notes, current support status, and active implementation checklist.
+- **`documentation/reference-miners/README.md`** – Pinned upstream miner snapshots used as protocol references during SV2 development.
 - **`documentation/TESTING.md`** – Test suite instructions and how to add or run existing tests.
-- **`documentation/stratum-v2.md`** – Stratum v2 setup notes and current support status.
+- **`documentation/systemd.service`** – Example `systemd` unit file for service deployment.
 - **`LICENSE`** – Legal terms for using goPool.
 
 Need help? Open an issue on GitHub or refer to the documentation in `documentation/` before asking for assistance.
