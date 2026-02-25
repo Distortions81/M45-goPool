@@ -12,3 +12,5 @@ gopool-test
 *.out
 bitcoin-node/
 .VSCodeCounter/
+documentation/reference-miners/
+documentation/sv2-apps
