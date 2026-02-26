@@ -138,6 +138,7 @@
 		}
 		.saved-workers-online-row-detail td {
 			padding-top: 0 !important;
+			border-bottom: 0;
 		}
 		.saved-workers-online-row:hover td {
 			background: transparent !important;
@@ -147,12 +148,23 @@
 			gap: 8px;
 			padding: 10px 8px;
 		}
+		.saved-workers-online-row-main:not(:first-child) .saved-workers-online-block.top {
+			margin-top: 12px;
+			padding-top: 14px;
+			border-top: 2px solid rgba(124, 151, 214, 0.22);
+		}
 		.saved-workers-online-block.top {
 			padding-bottom: 6px;
 		}
 		.saved-workers-online-block.bottom {
-			padding-top: 6px;
-			border-top: 1px dashed rgba(255,255,255,0.08);
+			padding-top: 8px;
+			padding-bottom: 6px;
+			border-top: 0;
+		}
+		.saved-workers-online-row-detail:not(:last-child) .saved-workers-online-block.bottom {
+			padding-bottom: 14px;
+			border-bottom: 0;
+			box-shadow: none;
 		}
 		.saved-workers-online-line {
 			display: flex;

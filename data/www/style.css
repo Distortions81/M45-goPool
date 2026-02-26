@@ -975,6 +975,13 @@ header {
 	z-index: 12;
 }
 
+.header-dropdown-divider {
+	height: 1px;
+	margin: 2px 4px;
+	background: linear-gradient(90deg, transparent, var(--card-border), transparent);
+	opacity: 0.8;
+}
+
 .header-dropdown-link {
 	display: block;
 	padding: 10px 12px;
