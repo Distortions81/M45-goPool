@@ -72,9 +72,9 @@
 								<td>{{formatDiff .Difficulty}}</td>
 								<td>
 									{{if gt .EstimatedPingP50MS 0.0}}
-										{{formatLatencyMS .EstimatedPingP50MS}}
+										{{formatLatencyMS (divf .EstimatedPingP50MS 2.0)}}
 									{{else if gt .EstimatedPingP95MS 0.0}}
-										{{formatLatencyMS .EstimatedPingP95MS}}
+										{{formatLatencyMS (divf .EstimatedPingP95MS 2.0)}}
 									{{else}}
 										—
 									{{end}}

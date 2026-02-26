@@ -695,6 +695,12 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			return marker + " " + base
 		},
+		"divf": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
 		"formatLatencyMS": formatLatencyMS,
 		"formatWorkStartLatencyMS": func(minMS, p50MS, lastMS float64) string {
 			if minMS > 0 {
