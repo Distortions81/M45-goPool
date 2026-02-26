@@ -235,15 +235,6 @@
 		ctx.textAlign = 'center';
 		ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
 
-		// Draw data points
-			ctx.fillStyle = '#4a9eff';
-			hashrateData.forEach((hashrate, index) => {
-				const x = xForPoint(index);
-				const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
-				ctx.beginPath();
-				ctx.arc(x, y, 2, 0, Math.PI * 2);
-			ctx.fill();
-		});
 	}
 
 	function formatHashrateShort(h) {
