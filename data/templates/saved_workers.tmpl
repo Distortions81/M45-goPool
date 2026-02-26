@@ -247,6 +247,11 @@
 		.saved-workers-online-actions form {
 			margin: 0;
 		}
+		[data-theme="light"] .saved-workers-top-badge {
+			background: rgba(191, 116, 7, 0.14);
+			color: #8a5200;
+			border-color: rgba(138, 82, 0, 0.45);
+		}
 		.saved-workers-online-block.bottom .saved-workers-online-actions {
 			justify-content: flex-start;
 			flex: 0 1 240px;
@@ -296,8 +301,8 @@
 				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
 					<h2 style="margin-top:0;">Your workers</h2>
 					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-						<span class="badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
-						<span class="badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
+						<span class="badge saved-workers-top-badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
+						<span class="badge saved-workers-top-badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
 					</div>
 				</div>
 				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
@@ -563,17 +568,6 @@
 					<h2 style="margin-top:0;">Options</h2>
 				</div>
 				<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
-					<button id="privacyToggleNames" class="btn btn-secondary" type="button" aria-label="Toggle privacy" style="gap:8px;">
-						<span id="privacyToggleIcon" aria-hidden="true">
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path>
-								<circle cx="12" cy="12" r="3"></circle>
-								<line x1="4" y1="20" x2="20" y2="4"></line>
-							</svg>
-						</span>
-						<span id="privacyToggleText">Privacy</span>
-					</button>
-
 					{{if .DiscordNotificationsEnabled}}
 						<button
 							id="notifyAllToggle"
@@ -1121,6 +1115,16 @@
 			return `${min.toFixed(1)}m`;
 		}
 
+		function savedWorkersGraphLabelColor() {
+			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+			return isLight ? '#4b5568' : '#b3bbd4';
+		}
+
+		function savedWorkersGraphGoldColor() {
+			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+			return isLight ? '#8f6a00' : '#f3d36b';
+		}
+
 		function formatLatencyPair(p50, p95) {
 			const a = Number(p50 || 0);
 			const b = Number(p95 || 0);
@@ -1458,7 +1462,7 @@
 
 			const allRows = hashrateRows.concat(bestRows);
 			if (allRows.length === 0) {
-				ctx.fillStyle = '#b3bbd4';
+				ctx.fillStyle = savedWorkersGraphLabelColor();
 				ctx.font = '13px monospace';
 				ctx.textAlign = 'center';
 				ctx.fillText('Waiting for saved worker history...', width / 2, height / 2);
@@ -1513,7 +1517,7 @@
 				ctx.stroke();
 			}
 
-			ctx.fillStyle = '#b3bbd4';
+			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.font = '10px monospace';
 			ctx.textAlign = 'right';
 			for (let i = 0; i <= 4; i++) {
@@ -1552,7 +1556,7 @@
 			}
 
 			if (bestRows.length > 0) {
-				ctx.strokeStyle = '#f3d36b';
+				ctx.strokeStyle = savedWorkersGraphGoldColor();
 				ctx.lineWidth = 2;
 				const bRects = buildQuantizedBucketRects(
 					bestRows.map((row) => xFor(row.at)),
@@ -1581,7 +1585,7 @@
 			ctx.lineTo(width - paddingRight, height - paddingBottom);
 			ctx.stroke();
 
-			ctx.fillStyle = '#b3bbd4';
+			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.textAlign = 'center';
 			ctx.font = '10px monospace';
 			ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
@@ -1611,7 +1615,7 @@
 				.sort((a, b) => a.at - b.at);
 			const allRows = hashrateRows.concat(bestRows);
 			if (allRows.length === 0) {
-				ctx.fillStyle = '#b3bbd4';
+				ctx.fillStyle = savedWorkersGraphLabelColor();
 				ctx.font = '13px monospace';
 				ctx.textAlign = 'center';
 				ctx.fillText('No data yet', width / 2, height / 2);
@@ -1658,7 +1662,7 @@
 				ctx.stroke();
 			}
 
-			ctx.fillStyle = '#b3bbd4';
+			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.font = '10px monospace';
 			ctx.textAlign = 'right';
 			for (let i = 0; i <= 4; i++) {
@@ -1700,7 +1704,7 @@
 				width - paddingRight,
 				Math.max(4, fallbackBarW),
 			);
-			ctx.strokeStyle = '#f3d36b';
+			ctx.strokeStyle = savedWorkersGraphGoldColor();
 			ctx.lineWidth = 2;
 			for (let i = 0; i < bestRows.length; i++) {
 				const row = bestRows[i];
@@ -1719,7 +1723,7 @@
 			ctx.moveTo(paddingLeft, height - paddingBottom);
 			ctx.lineTo(width - paddingRight, height - paddingBottom);
 			ctx.stroke();
-			ctx.fillStyle = '#b3bbd4';
+			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.textAlign = 'center';
 			ctx.font = '10px monospace';
 			ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
@@ -2671,13 +2675,6 @@
 			}
 		}
 
-		function updatePrivacyToggle() {
-			const btn = document.getElementById('privacyToggleNames');
-			const text = document.getElementById('privacyToggleText');
-			if (!btn || !text) return;
-			text.textContent = hideWorkerNames ? 'Privacy: On' : 'Privacy: Off';
-		}
-
 		async function refreshSavedWorkers() {
 			try {
 				const res = await fetchWithAuthRefresh('/api/saved-workers', { credentials: 'same-origin' });
@@ -2794,21 +2791,12 @@
 		attachWalletLookupAddHandlers();
 		refreshInlineWorkerSparklines(document);
 		updateWalletLookupAddAllState();
-		updatePrivacyToggle();
 
 		// Best-effort: keep the login cookie fresh while this page is open.
 		if (clerkEnabled) {
 			setInterval(() => { refreshClerkSession(); }, 60 * 1000);
 		}
 
-		const privacyToggle = document.getElementById('privacyToggleNames');
-		if (privacyToggle) {
-			privacyToggle.addEventListener('click', function() {
-				hideWorkerNames = !hideWorkerNames;
-				updatePrivacyToggle();
-				applyWorkerNameCensoring(document);
-			});
-		}
 		if (workerGraphsClose && !workerGraphsClose.__workerGraphsCloseAttached) {
 			workerGraphsClose.__workerGraphsCloseAttached = true;
 			workerGraphsClose.addEventListener('click', () => {
