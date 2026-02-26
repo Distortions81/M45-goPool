@@ -155,18 +155,20 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		detail = mc.buildShareDetailFromCoinbase(job, ctx.cbTx)
 	}
 
-	if ctx.isBlock {
-		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
-		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
-		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
-		return
-	}
+		if ctx.isBlock {
+			mc.noteValidSubmit(now)
+			mc.handleBlockShare(reqID, job, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, ctx.hashHex, ctx.shareDiff, now)
+			mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+			mc.maybeUpdateSavedWorkerMinuteBestDiff(ctx.shareDiff, now)
+			mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
+			return
+		}
 
-	mc.noteValidSubmit(now)
-	mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
-	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
-	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
+		mc.noteValidSubmit(now)
+		mc.recordShare(workerName, true, creditedDiff, ctx.shareDiff, "", shareHash, detail, now)
+		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
+		mc.maybeUpdateSavedWorkerMinuteBestDiff(ctx.shareDiff, now)
+		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
 
 	// Respond first; any vardiff adjustment and follow-up notify can happen after
 	// the submit is acknowledged to minimize perceived submit latency.

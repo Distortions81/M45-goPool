@@ -1029,6 +1029,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		priceSvc:            NewPriceService(),
 		jsonCache:           make(map[string]cachedJSONResponse),
 		poolHashrateHistory: make([]poolHashrateHistorySample, 0, int(poolHashrateHistoryWindow/poolHashrateTTL)+1),
+		savedWorkerPeriods:  make(map[string][]savedWorkerPeriodSample),
 		configPath:          configPath,
 		adminConfigPath:     adminConfigPath,
 		adminSessions:       make(map[string]time.Time),

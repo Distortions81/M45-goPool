@@ -310,6 +310,88 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 	}
 }
 
+func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+
+	hash, errMsg := parseSHA256HexStrict(r.URL.Query().Get("hash"))
+	if errMsg != "" || hash == "" {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+
+	list, err := s.workerLists.List(user.UserID)
+	if err != nil {
+		logger.Warn("saved worker history list failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
+		return
+	}
+	authorized := false
+	displayName := ""
+	for _, saved := range list {
+		if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
+			authorized = true
+			displayName = saved.Name
+			break
+		}
+	}
+	if !authorized {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	now := time.Now().UTC()
+	samples := s.savedWorkerPeriodHistory(hash, now)
+	type point struct {
+		At         string  `json:"at"`
+		Hashrate   float64 `json:"hashrate"`
+		BestShare  float64 `json:"best_share"`
+	}
+	resp := struct {
+		Hash      string  `json:"hash"`
+		Name      string  `json:"name,omitempty"`
+		UpdatedAt string  `json:"updated_at"`
+		History   []point `json:"history"`
+	}{
+		Hash:      hash,
+		Name:      displayName,
+		UpdatedAt: now.Format(time.RFC3339),
+		History:   make([]point, 0, len(samples)),
+	}
+	for _, sample := range samples {
+		if sample.At.IsZero() {
+			continue
+		}
+		resp.History = append(resp.History, point{
+			At:        sample.At.UTC().Format(time.RFC3339),
+			Hashrate:  decodeHashrateSI16(sample.HashrateQ),
+			BestShare: decodeBestShareSI16(sample.BestDifficultyQ),
+		})
+	}
+
+	setShortJSONCacheHeaders(w, true)
+	out, err := sonic.Marshal(resp)
+	if err != nil {
+		logger.Error("saved worker history json marshal", "error", err, "user_id", user.UserID, "hash", hash)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(out); err != nil {
+		logger.Debug("saved worker history json write", "error", err, "user_id", user.UserID, "hash", hash)
+	}
+}
+
 func (s *StatusServer) handleSavedWorkersOneTimeCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -582,6 +664,8 @@ func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) 
 	if s.workerLists != nil {
 		if err := s.workerLists.Add(user.UserID, worker); err != nil {
 			logger.Warn("save worker name", "error", err, "user_id", user.UserID)
+		} else {
+			s.refreshLiveSavedWorkerTrackingByHash(workerNameHash(worker))
 		}
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
@@ -609,6 +693,8 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 	if s.workerLists != nil {
 		if err := s.workerLists.Remove(user.UserID, hash); err != nil {
 			logger.Warn("remove worker by hash", "error", err, "user_id", user.UserID, "hash", hash)
+		} else {
+			s.refreshLiveSavedWorkerTrackingByHash(hash)
 		}
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)

@@ -17,6 +17,9 @@ type workerListStore struct {
 	bestDiffCh      chan bestDiffUpdate
 	bestDiffStop    chan struct{}
 	bestDiffWg      sync.WaitGroup
+
+	minuteBestMu   sync.Mutex
+	minuteBestByID map[string]uint16
 }
 
 type discordLink struct {

@@ -76,6 +76,49 @@
 		.hashrate-solid {
 			opacity: 1;
 		}
+		.worker-graphs-dialog {
+			max-width: 980px;
+			width: calc(100vw - 24px);
+			border: 1px solid #2a2f3a;
+			border-radius: 12px;
+			padding: 0;
+			background: #0f1218;
+			color: var(--text, #e8ecf7);
+			box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+		}
+		.worker-graphs-dialog::backdrop { background: rgba(0,0,0,0.55); }
+		.worker-graphs-header {
+			display:flex;
+			align-items:center;
+			justify-content:space-between;
+			gap:12px;
+			padding:14px;
+			border-bottom:1px solid #242a36;
+		}
+		.worker-graphs-body { padding: 14px; display:grid; gap:12px; }
+		.worker-graphs-panel {
+			border: 1px solid #242a36;
+			border-radius: 10px;
+			padding: 10px;
+			background: #0b0d12;
+		}
+		.worker-graphs-panel .label {
+			margin-bottom: 8px;
+			color: var(--text-muted);
+			font-size: 0.9rem;
+		}
+		.worker-graphs-canvas {
+			width: 100%;
+			height: 180px;
+			display: block;
+		}
+		.worker-graph-btn {
+			display:inline-flex;
+			align-items:center;
+			justify-content:center;
+			min-width:36px;
+			padding: 6px 8px;
+		}
 	</style>
 </head>
 <body>
@@ -166,6 +209,12 @@
 						<td>{{humanDuration .ConnectedDuration}}</td>
 						<td style="text-align:right;">
 										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+											<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<path d="M3 3v18h18"></path>
+													<path d="M7 14l4-4 3 3 5-6"></path>
+												</svg>
+											</button>
 											{{if $.DiscordNotificationsEnabled}}
 												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
 													{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
@@ -437,6 +486,28 @@
 	</dialog>
 	{{end}}
 	{{if .ClerkUser}}
+	<dialog id="workerGraphsDialog" class="worker-graphs-dialog" aria-label="Saved worker history graphs">
+		<div class="worker-graphs-header">
+			<div style="display:flex; flex-direction:column; gap:2px; min-width:0;">
+				<div style="font-weight:700;" id="workerGraphsTitle">Worker history</div>
+				<div class="text-sm mono sensitive-worker" id="workerGraphsSubtitle" data-worker-name="" data-worker-hash="" style="color:var(--text-muted);"></div>
+			</div>
+			<button id="workerGraphsClose" class="btn btn-secondary" type="button" aria-label="Close">Close</button>
+		</div>
+		<div class="worker-graphs-body">
+			<div id="workerGraphsStatus" class="text-sm" style="color:var(--text-muted);">Select a worker to load graphs.</div>
+			<div class="worker-graphs-panel">
+				<div class="label">Hashrate (60s buckets)</div>
+				<canvas id="workerGraphsHashrateCanvas" class="worker-graphs-canvas"></canvas>
+			</div>
+			<div class="worker-graphs-panel">
+				<div class="label">Best share (minute max)</div>
+				<canvas id="workerGraphsBestShareCanvas" class="worker-graphs-canvas"></canvas>
+			</div>
+		</div>
+	</dialog>
+	{{end}}
+	{{if .ClerkUser}}
 	{{template "hashrate_graph_script" .}}
 	<script src="/sha256.js"></script>
 	<script>
@@ -681,6 +752,13 @@
 		const onlineWorkersCard = document.getElementById('onlineWorkersCard');
 		const sortFieldSelect = document.getElementById('savedWorkersSortField');
 		const sortOrderBtn = document.getElementById('savedWorkersSortOrder');
+		const workerGraphsDialog = document.getElementById('workerGraphsDialog');
+		const workerGraphsClose = document.getElementById('workerGraphsClose');
+		const workerGraphsTitle = document.getElementById('workerGraphsTitle');
+		const workerGraphsSubtitle = document.getElementById('workerGraphsSubtitle');
+		const workerGraphsStatus = document.getElementById('workerGraphsStatus');
+		const workerGraphsHashrateCanvas = document.getElementById('workerGraphsHashrateCanvas');
+		const workerGraphsBestShareCanvas = document.getElementById('workerGraphsBestShareCanvas');
 		let lastOnlineWorkers = [];
 		let currentSortField = 'connection_seq';
 		let sortDescending = true;
@@ -1063,6 +1141,169 @@
 			});
 		}
 
+		function setWorkerGraphsStatus(text, danger) {
+			if (!workerGraphsStatus) return;
+			workerGraphsStatus.textContent = String(text || '');
+			workerGraphsStatus.style.color = danger ? '#f88d8d' : 'var(--text-muted)';
+		}
+
+		function resizeGraphCanvas(canvas) {
+			if (!canvas) return null;
+			const dpr = window.devicePixelRatio || 1;
+			const rect = canvas.getBoundingClientRect();
+			const width = Math.max(10, Math.floor(rect.width || canvas.clientWidth || 10));
+			const height = Math.max(10, Math.floor(rect.height || canvas.clientHeight || 10));
+			canvas.width = Math.floor(width * dpr);
+			canvas.height = Math.floor(height * dpr);
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return null;
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.scale(dpr, dpr);
+			return { ctx, width, height };
+		}
+
+		function drawWorkerSeriesGraph(canvas, points, valueKey, color, valueFormatter) {
+			const resized = resizeGraphCanvas(canvas);
+			if (!resized) return;
+			const { ctx, width, height } = resized;
+			ctx.clearRect(0, 0, width, height);
+			const paddingLeft = 72;
+			const paddingRight = 14;
+			const paddingTop = 14;
+			const paddingBottom = 24;
+			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
+			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
+
+			const rows = (Array.isArray(points) ? points : [])
+				.map((p) => ({
+					at: Date.parse(p?.at),
+					value: Number(p?.[valueKey] || 0),
+				}))
+				.filter((p) => Number.isFinite(p.at) && Number.isFinite(p.value) && p.value >= 0)
+				.sort((a, b) => a.at - b.at);
+
+			if (rows.length === 0) {
+				ctx.fillStyle = '#b3bbd4';
+				ctx.font = '13px monospace';
+				ctx.textAlign = 'center';
+				ctx.fillText('No data yet', width / 2, height / 2);
+				return;
+			}
+
+			const minX = rows[0].at;
+			const maxX = rows[rows.length - 1].at;
+			const spanX = Math.max(1, maxX - minX);
+			let maxY = 0;
+			for (const r of rows) {
+				if (r.value > maxY) maxY = r.value;
+			}
+			if (!(maxY > 0)) maxY = 1;
+			maxY *= 1.15;
+
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				ctx.beginPath();
+				ctx.moveTo(paddingLeft, y);
+				ctx.lineTo(width - paddingRight, y);
+				ctx.stroke();
+			}
+
+			ctx.fillStyle = '#b3bbd4';
+			ctx.font = '10px monospace';
+			ctx.textAlign = 'right';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				const v = maxY - (maxY * i / 4);
+				ctx.fillText(valueFormatter(v), paddingLeft - 6, y + 3);
+			}
+
+			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+			const yFor = (v) => paddingTop + graphHeight * (1 - (v / maxY));
+
+			ctx.strokeStyle = color;
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			rows.forEach((r, idx) => {
+				const x = xFor(r.at);
+				const y = yFor(r.value);
+				if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+			});
+			ctx.stroke();
+
+			ctx.fillStyle = color;
+			rows.forEach((r) => {
+				ctx.beginPath();
+				ctx.arc(xFor(r.at), yFor(r.value), 2, 0, Math.PI * 2);
+				ctx.fill();
+			});
+
+			ctx.strokeStyle = '#ffffff';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(paddingLeft, height - paddingBottom);
+			ctx.lineTo(width - paddingRight, height - paddingBottom);
+			ctx.stroke();
+			ctx.fillStyle = '#b3bbd4';
+			ctx.textAlign = 'center';
+			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+		}
+
+		async function openWorkerGraphs(hash, name) {
+			hash = String(hash || '').trim().toLowerCase();
+			if (!hash) return;
+			if (workerGraphsTitle) workerGraphsTitle.textContent = 'Worker history';
+			if (workerGraphsSubtitle) {
+				workerGraphsSubtitle.setAttribute('data-worker-name', String(name || ''));
+				workerGraphsSubtitle.setAttribute('data-worker-hash', hash);
+				applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
+			}
+			setWorkerGraphsStatus('Loading history...', false);
+			drawWorkerSeriesGraph(workerGraphsHashrateCanvas, [], 'hashrate', '#4a9eff', formatHashrate);
+			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], 'best_share', '#f3d36b', formatDifficulty);
+			try {
+				if (workerGraphsDialog) {
+					if (typeof workerGraphsDialog.showModal === 'function') workerGraphsDialog.showModal();
+					else workerGraphsDialog.setAttribute('open', '');
+				}
+			} catch (_) {
+				if (workerGraphsDialog) workerGraphsDialog.setAttribute('open', '');
+			}
+			try {
+				const res = await fetchWithAuthRefresh(`/api/saved-workers/history?hash=${encodeURIComponent(hash)}`, { credentials: 'same-origin' });
+				if (!res.ok) throw new Error(`http ${res.status}`);
+				const data = await res.json();
+				const history = Array.isArray(data?.history) ? data.history : [];
+				const labelName = String(data?.name || name || '').trim();
+				if (workerGraphsSubtitle) {
+					workerGraphsSubtitle.setAttribute('data-worker-name', labelName);
+					workerGraphsSubtitle.setAttribute('data-worker-hash', hash);
+					applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
+				}
+				drawWorkerSeriesGraph(workerGraphsHashrateCanvas, history, 'hashrate', '#4a9eff', formatHashrate);
+				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, history, 'best_share', '#f3d36b', formatDifficulty);
+				setWorkerGraphsStatus(history.length > 0 ? `Showing ${history.length} minute bucket${history.length === 1 ? '' : 's'}.` : 'No history recorded yet for this saved worker.', false);
+			} catch (err) {
+				console.error('worker history fetch failed', err);
+				setWorkerGraphsStatus('Failed to load history.', true);
+			}
+		}
+
+		function attachWorkerGraphButtons(root) {
+			const scope = root || document;
+			const buttons = scope.querySelectorAll('.worker-history-open');
+			buttons.forEach((btn) => {
+				if (btn.__workerGraphsAttached) return;
+				btn.__workerGraphsAttached = true;
+				btn.addEventListener('click', async () => {
+					const hash = btn.getAttribute('data-worker-hash') || '';
+					const name = btn.getAttribute('data-worker-name') || '';
+					await openWorkerGraphs(hash, name);
+				});
+			});
+		}
+
 		function renderOnlineWorkers(workers) {
 			lastOnlineWorkers = Array.isArray(workers) ? workers.slice() : [];
 			if (!onlineWorkersBody) return;
@@ -1114,6 +1355,12 @@
 					<td>${formatDuration(w.connection_duration_seconds)}</td>
 					<td style="text-align:right;">
 						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+							<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<path d="M3 3v18h18"></path>
+									<path d="M7 14l4-4 3 3 5-6"></path>
+								</svg>
+							</button>
 							${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
 								<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="${escapeAttr(w.name || '')}">
 									<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
@@ -1140,6 +1387,7 @@
 			attachRemoveConfirms(onlineWorkersBody);
 			attachReconnectConfirms(onlineWorkersBody);
 			attachNotifyToggles(onlineWorkersBody);
+			attachWorkerGraphButtons(onlineWorkersBody);
 		}
 
 		async function copyTextToClipboard(text) {
@@ -1494,6 +1742,7 @@
 		applyWorkerNameCensoring(document);
 		applyLastOnlineLabels(document);
 		attachNotifyToggles(document);
+		attachWorkerGraphButtons(document);
 		attachNotifyAllButtons();
 		attachDiscordDialogHandlers();
 		attachWalletLookupAddHandlers();
@@ -1511,6 +1760,28 @@
 				hideWorkerNames = !hideWorkerNames;
 				updatePrivacyToggle();
 				applyWorkerNameCensoring(document);
+			});
+		}
+		if (workerGraphsClose && !workerGraphsClose.__workerGraphsCloseAttached) {
+			workerGraphsClose.__workerGraphsCloseAttached = true;
+			workerGraphsClose.addEventListener('click', () => {
+				try {
+					workerGraphsDialog?.close();
+				} catch (_) {
+					workerGraphsDialog?.removeAttribute('open');
+				}
+			});
+		}
+		if (workerGraphsDialog && !workerGraphsDialog.__workerGraphsDialogAttached) {
+			workerGraphsDialog.__workerGraphsDialogAttached = true;
+			workerGraphsDialog.addEventListener('click', (e) => {
+				if (e.target === workerGraphsDialog) {
+					try {
+						workerGraphsDialog.close();
+					} catch (_) {
+						workerGraphsDialog.removeAttribute('open');
+					}
+				}
 			});
 		}
 
