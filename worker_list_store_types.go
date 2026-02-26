@@ -17,6 +17,9 @@ type workerListStore struct {
 	bestDiffCh      chan bestDiffUpdate
 	bestDiffStop    chan struct{}
 	bestDiffWg      sync.WaitGroup
+
+	minuteBestMu   sync.Mutex
+	minuteBestByID map[string]*savedWorkerMinuteBestRing
 }
 
 type discordLink struct {
@@ -37,4 +40,10 @@ type ClerkUserRecord struct {
 type bestDiffUpdate struct {
 	hash string
 	diff float64
+}
+
+type savedWorkerMinuteBestRing struct {
+	minutes    [savedWorkerPeriodSlots]uint32
+	bestQ      [savedWorkerPeriodSlots]uint16
+	lastMinute uint32
 }

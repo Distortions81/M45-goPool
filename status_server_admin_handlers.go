@@ -102,6 +102,29 @@ func (s *StatusServer) handleAdminOperatorPage(w http.ResponseWriter, r *http.Re
 	s.renderAdminPageTemplate(w, r, data, "admin_operator")
 }
 
+func (s *StatusServer) handleAdminConfigPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Redirect(w, r, "/admin/config", http.StatusSeeOther)
+		return
+	}
+	data, _, _ := s.buildAdminPageData(r, r.URL.Query().Get("notice"))
+	if !data.AdminEnabled {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	if !data.LoggedIn {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+	data.AdminSection = "config"
+	if configJSON, err := s.buildAdminLoadedConfigOverridesJSON(); err != nil {
+		data.AdminLoadedConfigError = err.Error()
+	} else {
+		data.AdminLoadedConfigJSON = configJSON
+	}
+	s.renderAdminPageTemplate(w, r, data, "admin_config")
+}
+
 func (s *StatusServer) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)

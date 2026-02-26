@@ -96,11 +96,11 @@ func buildPolicyFileConfig(cfg Config) policyFileConfig {
 			ShareCheckNTimeWindow:            new(cfg.ShareCheckNTimeWindow),
 			ShareCheckVersionRolling:         new(cfg.ShareCheckVersionRolling),
 			ShareRequireAuthorizedConnection: new(cfg.ShareRequireAuthorizedConnection),
-				ShareCheckParamFormat:            new(cfg.ShareCheckParamFormat),
-				ShareRequireWorkerMatch:          new(cfg.ShareRequireWorkerMatch),
-				SubmitProcessInline:              new(cfg.SubmitProcessInline),
-				ShareCheckDuplicate:              new(cfg.ShareCheckDuplicate),
-			},
+			ShareCheckParamFormat:            new(cfg.ShareCheckParamFormat),
+			ShareRequireWorkerMatch:          new(cfg.ShareRequireWorkerMatch),
+			SubmitProcessInline:              new(cfg.SubmitProcessInline),
+			ShareCheckDuplicate:              new(cfg.ShareCheckDuplicate),
+		},
 		Hashrate: policyHashrateConfig{
 			ShareNTimeMaxForwardSeconds: new(cfg.ShareNTimeMaxForwardSeconds),
 		},
@@ -158,9 +158,10 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			DifficultyStepGranularity: new(cfg.DifficultyStepGranularity),
 		},
 		Hashrate: tuningHashrateConfig{
-			HashrateEMATauSeconds:           new(cfg.HashrateEMATauSeconds),
-			HashrateCumulativeEnabled:       new(cfg.HashrateCumulativeEnabled),
-			HashrateRecentCumulativeEnabled: new(cfg.HashrateRecentCumulativeEnabled),
+			HashrateEMATauSeconds:              new(cfg.HashrateEMATauSeconds),
+			HashrateCumulativeEnabled:          new(cfg.HashrateCumulativeEnabled),
+			HashrateRecentCumulativeEnabled:    new(cfg.HashrateRecentCumulativeEnabled),
+			SavedWorkerHistoryFlushIntervalSec: new(int(cfg.SavedWorkerHistoryFlushInterval / time.Second)),
 		},
 		Stratum: tuningStratumConfig{
 			FastDecodeEnabled:   new(cfg.StratumFastDecodeEnabled),
@@ -180,6 +181,10 @@ func (cfg Config) Effective() EffectiveConfig {
 	backblazeInterval := ""
 	if cfg.BackblazeBackupIntervalSeconds > 0 {
 		backblazeInterval = (time.Duration(cfg.BackblazeBackupIntervalSeconds) * time.Second).String()
+	}
+	savedWorkerHistoryFlushInterval := ""
+	if cfg.SavedWorkerHistoryFlushInterval > 0 {
+		savedWorkerHistoryFlushInterval = cfg.SavedWorkerHistoryFlushInterval.String()
 	}
 
 	return EffectiveConfig{
@@ -228,6 +233,7 @@ func (cfg Config) Effective() EffectiveConfig {
 		BackblazeBucket:                   cfg.BackblazeBucket,
 		BackblazePrefix:                   cfg.BackblazePrefix,
 		BackblazeBackupInterval:           backblazeInterval,
+		SavedWorkerHistoryFlushInterval:   savedWorkerHistoryFlushInterval,
 		BackblazeKeepLocalCopy:            cfg.BackblazeKeepLocalCopy,
 		BackblazeForceEveryInterval:       cfg.BackblazeForceEveryInterval,
 		BackupSnapshotPath:                cfg.BackupSnapshotPath,
@@ -262,10 +268,10 @@ func (cfg Config) Effective() EffectiveConfig {
 		ShareCheckParamFormat:            cfg.ShareCheckParamFormat,
 		ShareRequireWorkerMatch:          cfg.ShareRequireWorkerMatch,
 		SubmitProcessInline:              cfg.SubmitProcessInline,
-			HashrateEMATauSeconds:            cfg.HashrateEMATauSeconds,
-			ShareNTimeMaxForwardSeconds:      cfg.ShareNTimeMaxForwardSeconds,
-			ShareCheckDuplicate:              cfg.ShareCheckDuplicate,
-			LogDebug:                         cfg.LogDebug,
+		HashrateEMATauSeconds:            cfg.HashrateEMATauSeconds,
+		ShareNTimeMaxForwardSeconds:      cfg.ShareNTimeMaxForwardSeconds,
+		ShareCheckDuplicate:              cfg.ShareCheckDuplicate,
+		LogDebug:                         cfg.LogDebug,
 		LogNetDebug:                      cfg.LogNetDebug,
 		CleanExpiredBansOnStartup:        cfg.CleanExpiredBansOnStartup,
 		BanInvalidSubmissionsAfter:       cfg.BanInvalidSubmissionsAfter,
