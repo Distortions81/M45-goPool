@@ -104,7 +104,7 @@
 						</div>
 						<div class="connect-step-body">
 							<div class="connect-value mono">x</div>
-							<p class="text-sm connect-hint">Most miners use <span class="mono">x</span> by default, but any password will work.</p>
+							<p class="text-sm connect-hint">Tip: you can set a starting share difficulty with <span class="mono">d=&lt;difficulty&gt;</span> (example: <span class="mono">d=16384</span>).</p>
 						</div>
 					</div>
 					{{end}}
@@ -150,7 +150,6 @@
 					<thead>
 						<tr>
 							<th title="Worker name"><span class="th-full">Worker</span><span class="th-short">.worker</span></th>
-							<th title="Connection number">Conn</th>
 							<th title="Rolling hashrate">Hashrate</th>
 							<th title="Current difficulty">Difficulty</th>
 							<th title="Accepted shares per minute">Shares/min</th>
@@ -159,7 +158,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<td colspan="6" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
+							<td colspan="5" class="text-sm" id="status-workers-placeholder">Loading worker stats…</td>
 						</tr>
 					</tbody>
 				</table>
@@ -486,7 +485,7 @@
 			const tbody = document.querySelector('#status-workers-table tbody');
 			if (!tbody) return;
 				if (!workers || workers.length === 0) {
-					tbody.innerHTML = '<tr><td colspan="6" class="text-sm">No worker stats yet.</td></tr>';
+					tbody.innerHTML = '<tr><td colspan="5" class="text-sm">No worker stats yet.</td></tr>';
 					return;
 				}
 				const nowMillis = Date.now();
@@ -499,13 +498,10 @@
 					const hashrate = effectiveWorkerHashrate(worker, nowMillis);
 					const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(worker.hashrate_accuracy) : '';
 					const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, worker.hashrate_accuracy) : '—';
-					let connectionId = worker.connection_id ?? '—';
-					if (connectionId === '') connectionId = '0';
 					return `
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
-							<td class="mono">${connectionId}</td>
-								<td class="${hashrateClass}">${hashrateText}</td>
+							<td class="${hashrateClass}">${hashrateText}</td>
 							<td>${formatDiff(worker.difficulty)}</td>
 							<td>${shareRate}</td>
 							<td>${worker.accepted || 0}</td>
