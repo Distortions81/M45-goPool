@@ -110,7 +110,6 @@ func (s *StatusServer) buildStatusData() StatusData {
 	}
 	var allWorkers []WorkerView
 	allWorkers = s.snapshotWorkerViews(snapshotTime)
-	s.recordSavedOnlineWorkerPeriods(allWorkers, snapshotTime)
 	workers = make([]WorkerView, 0, len(allWorkers))
 	bannedWorkers = make([]WorkerView, 0, len(allWorkers))
 	seen := make(map[string]struct{}, len(allWorkers))

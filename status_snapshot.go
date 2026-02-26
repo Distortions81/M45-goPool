@@ -1037,6 +1037,7 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 	}
 	server.UpdateConfig(cfg)
 	server.scheduleNodeInfoRefresh()
+	go server.runSavedWorkerPeriodSampler(ctx)
 	return server
 }
 
