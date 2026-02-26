@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // workerWalletDataRef returns a validated worker wallet entry without copying
 // the stored script. The returned script must be treated as read-only.
@@ -184,20 +187,8 @@ func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
 	if hash == "" {
 		return
 	}
-	// Workers can be saved while a connection is already online. Lazily
-	// re-check tracking here so best-share updates start flowing without forcing
-	// a reconnect.
 	if !mc.savedWorkerTracked {
-		best, ok, err := mc.savedWorkerStore.BestDifficultyForHash(hash)
-		if err != nil {
-			logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
-			return
-		}
-		if !ok {
-			return
-		}
-		mc.savedWorkerTracked = true
-		mc.savedWorkerBestDiff = best
+		return
 	}
 	if diff <= mc.savedWorkerBestDiff {
 		return
@@ -206,6 +197,20 @@ func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
 		logger.Warn("saved worker best difficulty update failed", "error", err, "hash", hash)
 	}
 	mc.savedWorkerBestDiff = diff
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerMinuteBestDiff(diff float64, now time.Time) {
+	if mc == nil || mc.savedWorkerStore == nil || diff <= 0 {
+		return
+	}
+	hash := strings.TrimSpace(mc.registeredWorkerHash)
+	if hash == "" {
+		return
+	}
+	if !mc.savedWorkerTracked {
+		return
+	}
+	mc.savedWorkerStore.UpdateSavedWorkerMinuteBestDifficulty(hash, diff, now)
 }
 
 // singlePayoutScript selects the output script for single-output coinbase

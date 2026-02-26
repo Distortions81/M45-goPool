@@ -118,6 +118,25 @@ func (s *StatusServer) findSavedWorkerConnections(savedName, savedHash string, n
 	return nil, hash
 }
 
+// refreshLiveSavedWorkerTrackingByHash re-syncs saved-worker tracking state for
+// all active connections currently using the provided worker hash. This lets
+// save/remove actions take effect immediately without per-share DB checks.
+func (s *StatusServer) refreshLiveSavedWorkerTrackingByHash(hash string) {
+	if s == nil || s.workerRegistry == nil {
+		return
+	}
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if hash == "" {
+		return
+	}
+	for _, mc := range s.workerRegistry.getConnectionsByHash(hash) {
+		if mc == nil {
+			continue
+		}
+		mc.syncSavedWorkerState(hash)
+	}
+}
+
 func buildWorkerLookupByHash(workers []WorkerView, banned []WorkerView) map[string]WorkerView {
 	if len(workers) == 0 && len(banned) == 0 {
 		return nil

@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-func TestMaybeUpdateSavedWorkerBestDiff_PicksUpWorkerSavedAfterConnect(t *testing.T) {
+func TestMaybeUpdateSavedWorkerBestDiff_TracksAfterResync(t *testing.T) {
 	store, err := newWorkerListStore(t.TempDir() + "/saved_workers.sqlite")
 	if err != nil {
 		t.Fatalf("newWorkerListStore: %v", err)
@@ -35,8 +35,9 @@ func TestMaybeUpdateSavedWorkerBestDiff_PicksUpWorkerSavedAfterConnect(t *testin
 		t.Fatalf("store.Add: %v", err)
 	}
 
-	// After the worker is saved, the next accepted share should lazily start
-	// tracking and update the saved best difficulty without a reconnect.
+	// After the worker is saved, a tracking resync (triggered by save/remove
+	// handlers for live connections) enables updates without a reconnect.
+	mc.syncSavedWorkerState(hash)
 	mc.maybeUpdateSavedWorkerBestDiff(bestDiff)
 	if !mc.savedWorkerTracked {
 		t.Fatalf("worker should be tracked after save")
