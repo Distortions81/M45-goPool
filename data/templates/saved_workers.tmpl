@@ -127,6 +127,20 @@
 			background: rgba(255,255,255,0.02);
 			margin-top: 3px;
 		}
+		.worker-inline-spark-combined {
+			width: 100%;
+			height: 30px;
+			margin-top: 0;
+			max-width: 100%;
+		}
+		.saved-workers-online-spark-slot {
+			display: inline-flex;
+			align-items: center;
+			flex: 1 1 132px;
+			min-width: 96px;
+			max-width: 220px;
+			min-height: 30px;
+		}
 		.saved-workers-online-table thead th {
 			position: static;
 		}
@@ -178,10 +192,11 @@
 		}
 		.saved-workers-online-block.bottom .saved-workers-online-line {
 			justify-content: flex-start;
+			gap: 16px;
 		}
 		.saved-workers-online-name {
 			min-width: 180px;
-			flex: 1 1 260px;
+			flex: 0 1 240px;
 		}
 		.saved-workers-online-name a {
 			display: inline-block;
@@ -195,9 +210,9 @@
 			flex-wrap: wrap;
 			gap: 8px 12px;
 			align-items: center;
-			justify-content: flex-end;
+			justify-content: flex-start;
 			min-width: 0;
-			flex: 999 1 320px;
+			flex: 1 1 320px;
 		}
 		.saved-workers-online-pill {
 			display: inline-flex;
@@ -211,11 +226,11 @@
 		}
 		.saved-workers-online-pill-label {
 			color: var(--text-muted);
-			font-size: 12px;
+			font-size: 13px;
 			white-space: nowrap;
 		}
 		.saved-workers-online-pill-value {
-			font-size: 13px;
+			font-size: 14px;
 			white-space: nowrap;
 		}
 		.saved-workers-online-pill .worker-inline-spark {
@@ -234,7 +249,8 @@
 		}
 		.saved-workers-online-block.bottom .saved-workers-online-actions {
 			justify-content: flex-start;
-			flex: 0 0 auto;
+			flex: 0 1 240px;
+			min-width: 180px;
 		}
 		@media (max-width: 900px) {
 			.saved-workers-online-line {
@@ -266,16 +282,15 @@
 				{{template "status_boxes" .}}
 			</div>
 
-			<div class="card">
-				<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-					<div>
-						<p class="text-sm" style="margin:0; color:var(--text-muted);">Best difficulty (any saved worker)</p>
-						<div class="mono" id="savedBestDiffValue" style="font-size:1.2rem;">{{formatDiff .SavedWorkersBestDifficulty}}</div>
-					</div>
+			<div class="card graph-card">
+				<div class="graph-card-header">
+					<div class="label">Saved Worker History</div>
+					<p class="text-sm graph-card-description" id="savedWorkersTopChartMeta">
+						Blue bars: total hashrate. Gold line: best share (bucket max).
+					</p>
 				</div>
+				<canvas id="savedWorkersHashrateChart" style="width:100%;height:220px;"></canvas>
 			</div>
-
-			{{template "hashrate_graph" .}}
 
 			<div class="card" id="onlineWorkersCard" {{if not .OnlineWorkerEntries}}style="display:none;"{{end}}>
 				<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
@@ -286,13 +301,7 @@
 					</div>
 				</div>
 				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
-					Note: For workers sharing the same wallet and name, only the first 16 are displayed here.
-				</p>
-				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Force reset button: bans for 30s, then disconnects active sessions so the miner reconnects cleanly.
-				</p>
-				<p class="text-sm" style="color:var(--text-muted); margin:6px 0 0;">
-					Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, stable (no symbol).
+					For workers sharing the same wallet and name, only the first 16 are displayed here. <span aria-hidden="true">•</span> Force reset button: bans for 30s, then disconnects active sessions so the miner reconnects cleanly. <span aria-hidden="true">•</span> Hashrate markers: <span class="mono">~</span> warming, <span class="mono">≈</span> settling, stable (no symbol).
 				</p>
 				<div class="saved-workers-sort" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
 					<label class="text-sm mono" for="savedWorkersSortField" style="margin:0;">Sort by</label>
@@ -321,17 +330,18 @@
 										<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
 									</div>
 									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-spark-slot">
+											<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate and best share sparkline"></canvas>
+										</span>
 										<span class="saved-workers-online-pill">
 											<span class="saved-workers-online-pill-label">Hashrate</span>
 											<span data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value saved-workers-online-pill-value">
 												—
 											</span>
-											<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate sparkline"></canvas>
 										</span>
 										<span class="saved-workers-online-pill">
 											<span class="saved-workers-online-pill-label">Best</span>
 											<span class="saved-workers-online-pill-value">{{formatDiff .BestDifficulty}}</span>
-											<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="{{.Hash}}" aria-label="Worker best share sparkline"></canvas>
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">{{formatShareRate .ShareRate}}</span></span>
@@ -381,7 +391,6 @@
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">{{formatTime .LastShare}}</span></span>
 									</div>
 								</div>
 							</div>
@@ -643,18 +652,13 @@
 		<div class="worker-graphs-body">
 			<div id="workerGraphsStatus" class="text-sm" style="color:var(--text-muted);">Select a worker to load graphs.</div>
 			<div class="worker-graphs-panel">
-				<div class="label">Hashrate (1m buckets)</div>
-				<canvas id="workerGraphsHashrateCanvas" class="worker-graphs-canvas"></canvas>
-			</div>
-			<div class="worker-graphs-panel">
-				<div class="label">Best share (1m bucket max)</div>
-				<canvas id="workerGraphsBestShareCanvas" class="worker-graphs-canvas"></canvas>
+				<div class="label">Hashrate + Best share (combined buckets)</div>
+				<canvas id="workerGraphsCombinedCanvas" class="worker-graphs-canvas"></canvas>
 			</div>
 		</div>
 	</dialog>
 	{{end}}
 	{{if .ClerkUser}}
-	{{template "hashrate_graph_script" .}}
 	<script src="/sha256.js"></script>
 	<script>
 	(function() {
@@ -903,8 +907,9 @@
 		const workerGraphsTitle = document.getElementById('workerGraphsTitle');
 		const workerGraphsSubtitle = document.getElementById('workerGraphsSubtitle');
 		const workerGraphsStatus = document.getElementById('workerGraphsStatus');
-		const workerGraphsHashrateCanvas = document.getElementById('workerGraphsHashrateCanvas');
-		const workerGraphsBestShareCanvas = document.getElementById('workerGraphsBestShareCanvas');
+		const workerGraphsCombinedCanvas = document.getElementById('workerGraphsCombinedCanvas');
+		const savedWorkersTopChartCanvas = document.getElementById('savedWorkersHashrateChart');
+		const savedWorkersTopChartMeta = document.getElementById('savedWorkersTopChartMeta');
 		let lastOnlineWorkers = [];
 		let currentSortField = 'connection_seq';
 		let sortDescending = true;
@@ -914,6 +919,8 @@
 		const workerHashrateFallback = new Map();
 		const workerShareRateFallbackMaxAgeMS = 2 * 60 * 1000;
 		const workerShareRateFallback = new Map();
+		let savedWorkersTopChartLiveHashrate = 0;
+		let savedWorkersTopChartLiveAt = 0;
 
 		function workerHashrateKey(worker) {
 			const hash = String(worker?.hash || '').trim().toLowerCase();
@@ -1308,6 +1315,402 @@
 			return { ctx, width, height };
 		}
 
+		function buildQuantizedBucketRects(xPixelsInput, minBound, maxBound, fallbackWidth) {
+			const xPixels = (Array.isArray(xPixelsInput) ? xPixelsInput : [])
+				.map((v) => Math.round(Number(v)))
+				.filter((v) => Number.isFinite(v));
+			const n = xPixels.length;
+			const leftBound = Math.max(0, Math.round(Number(minBound) || 0));
+			const rightBound = Math.max(leftBound + 1, Math.round(Number(maxBound) || 0));
+			if (n === 0) return [];
+			if (n === 1) {
+				const w = Math.max(1, Math.min(rightBound - leftBound, Math.round(Number(fallbackWidth) || 1)));
+				const left = Math.max(leftBound, Math.min(rightBound - w, xPixels[0] - Math.floor(w / 2)));
+				return [{ left, width: w, center: xPixels[0] }];
+			}
+
+			const edges = new Array(n + 1);
+			edges[0] = Math.max(leftBound, Math.round(xPixels[0] - (xPixels[1] - xPixels[0]) / 2));
+			for (let i = 1; i < n; i++) {
+				edges[i] = Math.round((xPixels[i - 1] + xPixels[i]) / 2);
+			}
+			edges[n] = Math.min(rightBound, Math.round(xPixels[n - 1] + (xPixels[n - 1] - xPixels[n - 2]) / 2));
+
+			edges[0] = Math.max(leftBound, Math.min(rightBound - n, edges[0]));
+			for (let i = 1; i < n; i++) {
+				const minEdge = edges[i - 1] + 1;
+				const maxEdge = rightBound - (n - i);
+				edges[i] = Math.max(minEdge, Math.min(maxEdge, edges[i]));
+			}
+			edges[n] = rightBound;
+			if (edges[n] <= edges[n - 1]) {
+				edges[n] = edges[n - 1] + 1;
+			}
+
+			const rects = new Array(n);
+			for (let i = 0; i < n; i++) {
+				const left = edges[i];
+				const right = Math.max(left + 1, edges[i + 1]);
+				rects[i] = {
+					left,
+					width: right - left,
+					center: xPixels[i],
+				};
+			}
+			return rects;
+		}
+
+		function getSavedWorkersTopChartHashes() {
+			const hashes = new Set();
+			for (const w of (Array.isArray(lastOnlineWorkers) ? lastOnlineWorkers : [])) {
+				const hash = String(w?.hash || '').trim().toLowerCase();
+				if (hash) hashes.add(hash);
+			}
+			return hashes;
+		}
+
+		function aggregateSavedWorkersTopChartSeries() {
+			const hashes = getSavedWorkersTopChartHashes();
+			const hashrateByTs = new Map();
+			const bestByTs = new Map();
+			let cachedWorkers = 0;
+			for (const hash of hashes) {
+				const cached = inlineWorkerChartCache.get(hash);
+				if (!cached) continue;
+				let used = false;
+				const hashrateRows = Array.isArray(cached?.hashrateRows?.rows) ? cached.hashrateRows.rows : [];
+				for (const row of hashrateRows) {
+					const ts = Number(row?.at);
+					const value = Number(row?.value);
+					if (!Number.isFinite(ts) || !Number.isFinite(value) || value < 0) continue;
+					hashrateByTs.set(ts, (hashrateByTs.get(ts) || 0) + value);
+					used = true;
+				}
+				const bestRows = Array.isArray(cached?.bestRows?.rows) ? cached.bestRows.rows : [];
+				for (const row of bestRows) {
+					const ts = Number(row?.at);
+					const value = Number(row?.value);
+					if (!Number.isFinite(ts) || !Number.isFinite(value) || value < 0) continue;
+					bestByTs.set(ts, Math.max(bestByTs.get(ts) || 0, value));
+					used = true;
+				}
+				if (used) cachedWorkers++;
+			}
+
+			const outHashrateRows = Array.from(hashrateByTs.entries())
+				.map(([at, value]) => ({ at, value }))
+				.sort((a, b) => a.at - b.at);
+			const outBestRows = Array.from(bestByTs.entries())
+				.map(([at, value]) => ({ at, value }))
+				.sort((a, b) => a.at - b.at);
+
+			if (savedWorkersTopChartLiveAt > 0 && Number.isFinite(savedWorkersTopChartLiveHashrate)) {
+				const lastTs = outHashrateRows.length > 0 ? Number(outHashrateRows[outHashrateRows.length - 1].at || 0) : 0;
+				if (!(lastTs > 0) || savedWorkersTopChartLiveAt > lastTs) {
+					outHashrateRows.push({
+						at: savedWorkersTopChartLiveAt,
+						value: Math.max(0, Number(savedWorkersTopChartLiveHashrate || 0)),
+					});
+				}
+			}
+
+			return {
+				hashrateRows: outHashrateRows,
+				bestRows: outBestRows,
+				workerCount: hashes.size,
+				cachedWorkers,
+			};
+		}
+
+		function drawSavedWorkersTopChart() {
+			if (!(savedWorkersTopChartCanvas instanceof HTMLCanvasElement)) return;
+			const resized = resizeGraphCanvas(savedWorkersTopChartCanvas);
+			if (!resized) return;
+			const { ctx, width, height } = resized;
+			ctx.clearRect(0, 0, width, height);
+
+			const series = aggregateSavedWorkersTopChartSeries();
+			const hashrateRows = Array.isArray(series?.hashrateRows) ? series.hashrateRows : [];
+			const bestRows = Array.isArray(series?.bestRows) ? series.bestRows : [];
+			const workerCount = Number(series?.workerCount || 0);
+			const cachedWorkers = Number(series?.cachedWorkers || 0);
+			if (savedWorkersTopChartMeta) {
+				if (workerCount > 0) {
+					savedWorkersTopChartMeta.textContent = `Blue bars: total hashrate. Gold line: best share (bucket max). Cached histories: ${cachedWorkers}/${workerCount}.`;
+				} else {
+					savedWorkersTopChartMeta.textContent = 'Blue bars: total hashrate. Gold line: best share (bucket max).';
+				}
+			}
+
+			const allRows = hashrateRows.concat(bestRows);
+			if (allRows.length === 0) {
+				ctx.fillStyle = '#b3bbd4';
+				ctx.font = '13px monospace';
+				ctx.textAlign = 'center';
+				ctx.fillText('Waiting for saved worker history...', width / 2, height / 2);
+				return;
+			}
+
+			const paddingLeft = 82;
+			const paddingRight = 82;
+			const paddingTop = 14;
+			const paddingBottom = 24;
+			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
+			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
+
+			let minX = Number.POSITIVE_INFINITY;
+			let maxX = 0;
+			for (const row of allRows) {
+				const at = Number(row?.at);
+				if (!Number.isFinite(at)) continue;
+				if (at < minX) minX = at;
+				if (at > maxX) maxX = at;
+			}
+			if (!Number.isFinite(minX)) minX = Date.now();
+			if (!(maxX > minX)) maxX = minX + 1;
+			const spanX = Math.max(1, maxX - minX);
+
+			let maxHashrate = 0;
+			for (const row of hashrateRows) {
+				const value = Number(row?.value || 0);
+				if (Number.isFinite(value) && value > maxHashrate) maxHashrate = value;
+			}
+			let maxBest = 0;
+			for (const row of bestRows) {
+				const value = Number(row?.value || 0);
+				if (Number.isFinite(value) && value > maxBest) maxBest = value;
+			}
+			maxHashrate = Math.max(1, maxHashrate * 1.25);
+			maxBest = Math.max(1, maxBest * 1.25);
+
+			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+			const yHashFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxHashrate));
+			const yBestFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxBest));
+			const px = (value) => Math.round(value);
+			const baselineY = px(height - paddingBottom);
+
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				ctx.beginPath();
+				ctx.moveTo(paddingLeft, y);
+				ctx.lineTo(width - paddingRight, y);
+				ctx.stroke();
+			}
+
+			ctx.fillStyle = '#b3bbd4';
+			ctx.font = '10px monospace';
+			ctx.textAlign = 'right';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				const value = maxHashrate - (maxHashrate * i / 4);
+				let label = formatHashrate(value);
+				if ((label === '—' || label === '---') && value <= 0) label = '0';
+				ctx.fillText(label, paddingLeft - 6, y + 3);
+			}
+			ctx.textAlign = 'left';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				const value = maxBest - (maxBest * i / 4);
+				ctx.fillText(formatDifficultyGraph(value), width - paddingRight + 6, y + 3);
+			}
+
+			const hRects = buildQuantizedBucketRects(
+				hashrateRows.map((row) => xFor(row.at)),
+				paddingLeft,
+				width - paddingRight,
+				Math.max(2, Math.ceil(graphWidth / 32)),
+			);
+			const fallbackBarW = hRects.length > 0 ? hRects[0].width : Math.max(2, Math.ceil(graphWidth / 32));
+
+			ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
+			for (let i = 0; i < hashrateRows.length; i++) {
+				const row = hashrateRows[i];
+				const rect = hRects[i];
+				if (!rect) continue;
+				const left = rect.left;
+				const barW = rect.width;
+				const top = px(Math.max(paddingTop, Math.min(baselineY, yHashFor(Number(row.value || 0)))));
+				let h = baselineY - top;
+				if (h <= 0) h = 1;
+				ctx.fillRect(left, baselineY - h, barW, h);
+			}
+
+			if (bestRows.length > 0) {
+				ctx.strokeStyle = '#f3d36b';
+				ctx.lineWidth = 2;
+				const bRects = buildQuantizedBucketRects(
+					bestRows.map((row) => xFor(row.at)),
+					paddingLeft,
+					width - paddingRight,
+					Math.max(4, fallbackBarW),
+				);
+				for (let i = 0; i < bestRows.length; i++) {
+					const row = bestRows[i];
+					const rect = bRects[i];
+					if (!rect) continue;
+					const y = px(yBestFor(Number(row.value || 0)));
+					const left = rect.left;
+					const right = left + rect.width;
+					ctx.beginPath();
+					ctx.moveTo(left, y);
+					ctx.lineTo(right, y);
+					ctx.stroke();
+				}
+			}
+
+			ctx.strokeStyle = '#ffffff';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(paddingLeft, height - paddingBottom);
+			ctx.lineTo(width - paddingRight, height - paddingBottom);
+			ctx.stroke();
+
+			ctx.fillStyle = '#b3bbd4';
+			ctx.textAlign = 'center';
+			ctx.font = '10px monospace';
+			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+		}
+
+		function updateSavedWorkersTopChartLiveHashrate(hashrate) {
+			const value = Number(hashrate || 0);
+			savedWorkersTopChartLiveHashrate = Number.isFinite(value) ? Math.max(0, value) : 0;
+			savedWorkersTopChartLiveAt = Date.now();
+			drawSavedWorkersTopChart();
+		}
+
+		function drawWorkerCombinedHistoryGraph(canvas, hashrateRowsInput, bestRowsInput) {
+			if (!(canvas instanceof HTMLCanvasElement)) return;
+			const resized = resizeGraphCanvas(canvas);
+			if (!resized) return;
+			const { ctx, width, height } = resized;
+			ctx.clearRect(0, 0, width, height);
+
+			const hashrateRows = (Array.isArray(hashrateRowsInput?.rows) ? hashrateRowsInput.rows : (Array.isArray(hashrateRowsInput) ? hashrateRowsInput : []))
+				.map((r) => ({ at: Number(r?.at), value: Number(r?.value || 0) }))
+				.filter((r) => Number.isFinite(r.at) && Number.isFinite(r.value) && r.value >= 0)
+				.sort((a, b) => a.at - b.at);
+			const bestRows = (Array.isArray(bestRowsInput?.rows) ? bestRowsInput.rows : (Array.isArray(bestRowsInput) ? bestRowsInput : []))
+				.map((r) => ({ at: Number(r?.at), value: Number(r?.value || 0) }))
+				.filter((r) => Number.isFinite(r.at) && Number.isFinite(r.value) && r.value >= 0)
+				.sort((a, b) => a.at - b.at);
+			const allRows = hashrateRows.concat(bestRows);
+			if (allRows.length === 0) {
+				ctx.fillStyle = '#b3bbd4';
+				ctx.font = '13px monospace';
+				ctx.textAlign = 'center';
+				ctx.fillText('No data yet', width / 2, height / 2);
+				return;
+			}
+
+			const paddingLeft = 82;
+			const paddingRight = 82;
+			const paddingTop = 14;
+			const paddingBottom = 24;
+			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
+			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
+
+			let minX = Number.POSITIVE_INFINITY;
+			let maxX = 0;
+			for (const row of allRows) {
+				if (row.at < minX) minX = row.at;
+				if (row.at > maxX) maxX = row.at;
+			}
+			if (!Number.isFinite(minX)) minX = Date.now();
+			if (!(maxX > minX)) maxX = minX + 1;
+			const spanX = Math.max(1, maxX - minX);
+
+			let maxHashrate = 0;
+			for (const row of hashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
+			let maxBest = 0;
+			for (const row of bestRows) if (row.value > maxBest) maxBest = row.value;
+			maxHashrate = Math.max(1, maxHashrate * 1.25);
+			maxBest = Math.max(1, maxBest * 1.25);
+
+			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+			const yHashFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxHashrate));
+			const yBestFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxBest));
+			const px = (value) => Math.round(value);
+			const baselineY = px(height - paddingBottom);
+
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				ctx.beginPath();
+				ctx.moveTo(paddingLeft, y);
+				ctx.lineTo(width - paddingRight, y);
+				ctx.stroke();
+			}
+
+			ctx.fillStyle = '#b3bbd4';
+			ctx.font = '10px monospace';
+			ctx.textAlign = 'right';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				const value = maxHashrate - (maxHashrate * i / 4);
+				let label = formatHashrate(value);
+				if ((label === '—' || label === '---') && value <= 0) label = '0';
+				ctx.fillText(label, paddingLeft - 6, y + 3);
+			}
+			ctx.textAlign = 'left';
+			for (let i = 0; i <= 4; i++) {
+				const y = paddingTop + (graphHeight * i / 4);
+				const value = maxBest - (maxBest * i / 4);
+				ctx.fillText(formatDifficultyGraph(value), width - paddingRight + 6, y + 3);
+			}
+
+			const hRects = buildQuantizedBucketRects(
+				hashrateRows.map((row) => xFor(row.at)),
+				paddingLeft,
+				width - paddingRight,
+				Math.max(2, Math.ceil(graphWidth / 32)),
+			);
+			const fallbackBarW = hRects.length > 0 ? hRects[0].width : Math.max(2, Math.ceil(graphWidth / 32));
+
+			ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
+			for (let i = 0; i < hashrateRows.length; i++) {
+				const row = hashrateRows[i];
+				const rect = hRects[i];
+				if (!rect) continue;
+				const top = px(Math.max(paddingTop, Math.min(baselineY, yHashFor(row.value))));
+				let h = baselineY - top;
+				if (h <= 0) h = 1;
+				ctx.fillRect(rect.left, baselineY - h, rect.width, h);
+			}
+
+			const bRects = buildQuantizedBucketRects(
+				bestRows.map((row) => xFor(row.at)),
+				paddingLeft,
+				width - paddingRight,
+				Math.max(4, fallbackBarW),
+			);
+			ctx.strokeStyle = '#f3d36b';
+			ctx.lineWidth = 2;
+			for (let i = 0; i < bestRows.length; i++) {
+				const row = bestRows[i];
+				const rect = bRects[i];
+				if (!rect) continue;
+				const y = px(yBestFor(row.value));
+				ctx.beginPath();
+				ctx.moveTo(rect.left, y);
+				ctx.lineTo(rect.left + rect.width, y);
+				ctx.stroke();
+			}
+
+			ctx.strokeStyle = '#ffffff';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(paddingLeft, height - paddingBottom);
+			ctx.lineTo(width - paddingRight, height - paddingBottom);
+			ctx.stroke();
+			ctx.fillStyle = '#b3bbd4';
+			ctx.textAlign = 'center';
+			ctx.font = '10px monospace';
+			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+		}
+
 		function drawWorkerSeriesGraph(canvas, rowsInput, color, valueFormatter) {
 			const resized = resizeGraphCanvas(canvas);
 			if (!resized) return;
@@ -1560,11 +1963,117 @@
 			for (let i = 0; i < visiblePoints.length; i++) {
 				const p = visiblePoints[i];
 				const xc = px(xFor(p.x));
-				const left = Math.max(0, xc - Math.floor(barW / 2));
+				const left = Math.max(0, Math.min(cssW - barW, xc - Math.floor(barW / 2)));
 				const top = px(Math.max(0, Math.min(baselineY, yFor(p.y))));
 				let h = baselineY - top;
 				if (h <= 0) h = 1;
 				ctx.fillRect(left, baselineY - h, barW, h);
+			}
+		}
+
+		function drawInlineCombinedSparkline(canvas, hashrateRowsInput, bestRowsInput) {
+			if (!(canvas instanceof HTMLCanvasElement)) return;
+			const dpr = window.devicePixelRatio || 1;
+			const cssW = Math.max(24, canvas.clientWidth || 128);
+			const cssH = Math.max(10, canvas.clientHeight || 16);
+			canvas.width = Math.floor(cssW * dpr);
+			canvas.height = Math.floor(cssH * dpr);
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return;
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.scale(dpr, dpr);
+			ctx.clearRect(0, 0, cssW, cssH);
+
+			const toPoints = (rows) => (Array.isArray(rows) ? rows : [])
+				.map((r) => ({ x: Number(r?.at), y: Number(r?.value) }))
+				.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.y >= 0)
+				.sort((a, b) => a.x - b.x);
+			const hPointsRaw = toPoints(hashrateRowsInput);
+			const bPointsRaw = toPoints(bestRowsInput);
+			const maxVisiblePoints = Math.max(1, Math.floor(cssW));
+			const hPoints = hPointsRaw.length > maxVisiblePoints ? hPointsRaw.slice(hPointsRaw.length - maxVisiblePoints) : hPointsRaw;
+			const bPoints = bPointsRaw.length > maxVisiblePoints ? bPointsRaw.slice(bPointsRaw.length - maxVisiblePoints) : bPointsRaw;
+
+			if (hPoints.length === 0 && bPoints.length === 0) {
+				ctx.strokeStyle = '#2a2f3a';
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.moveTo(0, cssH - 1);
+				ctx.lineTo(cssW, cssH - 1);
+				ctx.stroke();
+				return;
+			}
+
+			let minX = Number.POSITIVE_INFINITY;
+			let maxX = 0;
+			for (const p of hPoints.concat(bPoints)) {
+				if (p.x < minX) minX = p.x;
+				if (p.x > maxX) maxX = p.x;
+			}
+			if (!Number.isFinite(minX)) minX = 0;
+			if (!(maxX > minX)) maxX = minX + 1;
+
+			let maxHash = 0;
+			for (const p of hPoints) if (p.y > maxHash) maxHash = p.y;
+			let maxBest = 0;
+			for (const p of bPoints) if (p.y > maxBest) maxBest = p.y;
+			maxHash = maxHash > 0 ? maxHash * 1.25 : 1;
+			maxBest = maxBest > 0 ? maxBest * 1.25 : 1;
+
+			const pad = 1;
+			const spanX = Math.max(1, maxX - minX);
+			const xFor = (x) => pad + ((x - minX) / spanX) * (cssW - pad * 2);
+			const yHashFor = (y) => cssH - pad - (Math.max(0, y) / maxHash) * (cssH - pad * 2);
+			const yBestFor = (y) => cssH - pad - (Math.max(0, y) / maxBest) * (cssH - pad * 2);
+			const px = (v) => Math.round(v);
+			const baselineY = px(cssH - 1);
+
+			const hRects = buildQuantizedBucketRects(
+				hPoints.map((p) => xFor(p.x)),
+				0,
+				cssW,
+				Math.max(2, Math.ceil(cssW / Math.max(1, hPoints.length || bPoints.length || 1))),
+			);
+			const bRects = buildQuantizedBucketRects(
+				bPoints.map((p) => xFor(p.x)),
+				0,
+				cssW,
+				Math.max(3, (hRects[0]?.width || 3)),
+			);
+
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(0, cssH - 1);
+			ctx.lineTo(cssW, cssH - 1);
+			ctx.stroke();
+
+			ctx.fillStyle = 'rgba(74, 158, 255, 0.55)';
+			for (let i = 0; i < hPoints.length; i++) {
+				const p = hPoints[i];
+				const rect = hRects[i];
+				if (!rect) continue;
+				const left = rect.left;
+				const barW = rect.width;
+				const top = px(Math.max(0, Math.min(baselineY, yHashFor(p.y))));
+				let h = baselineY - top;
+				if (h <= 0) h = 1;
+				ctx.fillRect(left, baselineY - h, barW, h);
+			}
+
+			ctx.strokeStyle = '#f3d36b';
+			ctx.lineWidth = 2;
+			for (let i = 0; i < bPoints.length; i++) {
+				const p = bPoints[i];
+				const rect = bRects[i];
+				if (!rect) continue;
+				const y = px(Math.max(0, Math.min(baselineY, yBestFor(p.y))));
+				const left = rect.left;
+				const right = left + rect.width;
+				ctx.beginPath();
+				ctx.moveTo(left, y);
+				ctx.lineTo(right, y);
+				ctx.stroke();
 			}
 		}
 
@@ -1576,10 +2085,15 @@
 				if (!hash) return;
 				const kind = String(canvas.getAttribute('data-worker-inline-chart') || '').trim().toLowerCase();
 				const cached = inlineWorkerChartCache.get(hash);
-				const series = kind === 'bestshare' ? cached?.bestRows : cached?.hashrateRows;
-				const rows = Array.isArray(series) ? series : (Array.isArray(series?.rows) ? series.rows : []);
+				const hashrateRows = Array.isArray(cached?.hashrateRows?.rows) ? cached.hashrateRows.rows : [];
+				const bestRows = Array.isArray(cached?.bestRows?.rows) ? cached.bestRows.rows : [];
+				if (kind === 'combined') {
+					drawInlineCombinedSparkline(canvas, hashrateRows, bestRows);
+					return;
+				}
+				const series = kind === 'bestshare' ? bestRows : hashrateRows;
 				const color = kind === 'bestshare' ? '#f3d36b' : '#4a9eff';
-				drawInlineSparkline(canvas, rows, color);
+				drawInlineSparkline(canvas, series, color);
 			});
 			renderInlineWorkerUptimeFromCache(scope);
 		}
@@ -1667,6 +2181,7 @@
 					bestRows: decodeCompactWorkerSeries(data, 'bq', 'b0', 'b1'),
 					historyUptimePercent: computeWorkerHistoryUptimePercentFromCompact(data),
 				});
+				drawSavedWorkersTopChart();
 			} catch (err) {
 				console.error('inline worker sparkline fetch failed', err);
 				inlineWorkerChartCache.set(hash, { ...(cached || {}), inFlight: false, fetchedAt: now });
@@ -1697,8 +2212,7 @@
 				applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
 			}
 			setWorkerGraphsStatus('Loading history...', false);
-			drawWorkerSeriesGraph(workerGraphsHashrateCanvas, [], '#4a9eff', formatHashrate);
-			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], '#f3d36b', formatDifficultyGraph);
+			drawWorkerCombinedHistoryGraph(workerGraphsCombinedCanvas, [], []);
 			try {
 				if (workerGraphsDialog) {
 					if (typeof workerGraphsDialog.showModal === 'function') workerGraphsDialog.showModal();
@@ -1722,6 +2236,7 @@
 					bestRows,
 					historyUptimePercent: computeWorkerHistoryUptimePercentFromCompact(data),
 				});
+				drawSavedWorkersTopChart();
 				renderInlineWorkerSparklinesFromCache(document);
 				const labelName = String(data?.name || name || '').trim();
 				if (workerGraphsSubtitle) {
@@ -1729,8 +2244,7 @@
 					workerGraphsSubtitle.setAttribute('data-worker-hash', hash);
 					applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
 				}
-				drawWorkerSeriesGraph(workerGraphsHashrateCanvas, hashrateRows, '#4a9eff', formatHashrate);
-				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, bestRows, '#f3d36b', formatDifficultyGraph);
+				drawWorkerCombinedHistoryGraph(workerGraphsCombinedCanvas, hashrateRows, bestRows);
 				const shown = Math.max(hashrateRows.length, bestRows.length);
 				setWorkerGraphsStatus(shown > 0 ? `Showing ${shown} bucket${shown === 1 ? '' : 's'} (2m).` : 'No history recorded yet for this saved worker.', false);
 			} catch (err) {
@@ -1817,15 +2331,16 @@
 										<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
 									</div>
 									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-spark-slot">
+											<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate and best share sparkline"></canvas>
+										</span>
 										<span class="saved-workers-online-pill">
 											<span class="saved-workers-online-pill-label">Hashrate</span>
 											<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
-											<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate sparkline"></canvas>
 										</span>
 										<span class="saved-workers-online-pill">
 											<span class="saved-workers-online-pill-label">Best</span>
 											<span class="saved-workers-online-pill-value">${formatDifficulty(w.best_difficulty)}</span>
-											<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker best share sparkline"></canvas>
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">${formatShareRate(shareRate)}</span></span>
@@ -1869,7 +2384,6 @@
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value">${(() => { const raw = (Number(w.estimated_ping_p50_ms || 0) > 0) ? Number(w.estimated_ping_p50_ms || 0) : Number(w.estimated_ping_p95_ms || 0); return formatLatency(raw > 0 ? (raw / 2) : raw); })()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">${formatLastShare(w.last_share)}</span></span>
 									</div>
 								</div>
 							</div>
@@ -1883,6 +2397,7 @@
 			attachNotifyToggles(onlineWorkersBody);
 			attachWorkerGraphButtons(onlineWorkersBody);
 			refreshInlineWorkerSparklines(onlineWorkersBody);
+			drawSavedWorkersTopChart();
 		}
 
 		async function copyTextToClipboard(text) {
@@ -2158,9 +2673,7 @@
 				}
 				const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
 				window.savedWorkersTotalHashrate = safeHashrate;
-				if (window.updateHashrateGraph) {
-					window.updateHashrateGraph(safeHashrate, null);
-				}
+				updateSavedWorkersTopChartLiveHashrate(safeHashrate);
 				renderOnlineWorkers(online);
 
 				const offlineList = document.getElementById('offlineWorkersList');
@@ -2284,6 +2797,14 @@
 		refreshSavedWorkers();
 		setInterval(refreshSavedWorkers, 5000);
 		setInterval(() => refreshInlineWorkerSparklines(document), inlineWorkerChartRefreshMS);
+		window.addEventListener('resize', drawSavedWorkersTopChart);
+		window.addEventListener('resize', () => {
+			const hash = String(workerGraphsSubtitle?.getAttribute('data-worker-hash') || '').trim().toLowerCase();
+			if (!hash) return;
+			const cached = inlineWorkerChartCache.get(hash);
+			if (!cached) return;
+			drawWorkerCombinedHistoryGraph(workerGraphsCombinedCanvas, cached.hashrateRows, cached.bestRows);
+		});
 		updateSortOrderButtonText();
 		if (sortFieldSelect) {
 			sortFieldSelect.value = currentSortField;
