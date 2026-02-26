@@ -114,7 +114,15 @@ func (s *workerListStore) ConsumeSavedWorkerMinuteBestDifficulty(hash string, bu
 	}
 	s.minuteBestMu.Lock()
 	defer s.minuteBestMu.Unlock()
-	s.pruneSavedWorkerMinuteBestLocked(minute)
+	// Prune using "now", not the sampled bucket minute. The sampler consumes the
+	// previous completed bucket; if current shares have already advanced
+	// ring.lastMinute into the newer bucket, pruning with the older sample minute
+	// can underflow the uint32 age math and incorrectly delete active rings.
+	pruneMinute := savedWorkerUnixMinute(time.Now())
+	if pruneMinute == 0 || pruneMinute < minute {
+		pruneMinute = minute
+	}
+	s.pruneSavedWorkerMinuteBestLocked(pruneMinute)
 	ring := s.minuteBestByID[hash]
 	if ring == nil {
 		return 0
