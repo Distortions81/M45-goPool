@@ -51,7 +51,6 @@
 							<th>Hashrate</th>
 							<th>Shares/min</th>
 							<th>Current diff</th>
-							<th>Ping</th>
 							<th>Connected</th>
 							<th>Last share</th>
 							<th>Accepted</th>
@@ -70,15 +69,6 @@
 								<td>{{if gt .RollingHashrate 0.0}}{{formatHashrate .RollingHashrate}}{{else}}—{{end}}</td>
 								<td>{{formatShareRate .ShareRate}}</td>
 								<td>{{formatDiff .Difficulty}}</td>
-								<td>
-									{{if gt .EstimatedPingP50MS 0.0}}
-										{{formatLatencyMS (divf .EstimatedPingP50MS 2.0)}}
-									{{else if gt .EstimatedPingP95MS 0.0}}
-										{{formatLatencyMS (divf .EstimatedPingP95MS 2.0)}}
-									{{else}}
-										—
-									{{end}}
-								</td>
 								<td>{{formatTime .ConnectedAt}}</td>
 								<td>{{formatTime .LastShare}}</td>
 								<td>{{.Accepted}}</td>
