@@ -366,8 +366,9 @@
 									<div class="saved-workers-online-stats">
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">{{.Accepted}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">{{formatTime .LastShare}}</span></span>
 									</div>
 								</div>
@@ -1035,6 +1036,22 @@
 			return (value / 1000000).toFixed(1) + 'M';
 			}
 
+			function formatDifficultyGraph(diff) {
+				const value = Number(diff || 0);
+				if (!Number.isFinite(value) || value <= 0) return '0';
+				if (value < 1000) return value.toFixed(0);
+				const units = ['K', 'M', 'G', 'T', 'P', 'E'];
+				let scaled = value;
+				let idx = -1;
+				while (scaled >= 1000 && idx < units.length - 1) {
+					scaled /= 1000;
+					idx++;
+				}
+				if (idx < 0) return value.toFixed(0);
+				const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+				return scaled.toFixed(precision) + units[idx];
+			}
+
 			function formatLastShare(value) {
 				if (!value) return '—';
 				const ts = Date.parse(value);
@@ -1110,7 +1127,8 @@
 			pairCells.forEach((el) => {
 				const p50 = Number(el.getAttribute('data-rtt-p50-ms') || 0);
 				const p95 = Number(el.getAttribute('data-rtt-p95-ms') || 0);
-				el.textContent = formatLatency(p50 > 0 ? p50 : p95);
+				const raw = p50 > 0 ? p50 : p95;
+				el.textContent = formatLatency(raw > 0 ? (raw / 2) : raw);
 			});
 			const singleCells = document.querySelectorAll('.latency-single[data-latency-ms]');
 			singleCells.forEach((el) => {
@@ -1298,8 +1316,10 @@
 				}))
 				.filter((p) => Number.isFinite(p.at) && Number.isFinite(p.value) && p.value >= 0)
 				.sort((a, b) => a.at - b.at);
+			const maxVisibleRows = Math.max(1, Math.floor(graphWidth));
+			const visibleRows = rows.length > maxVisibleRows ? rows.slice(rows.length - maxVisibleRows) : rows;
 
-			if (rows.length === 0) {
+			if (visibleRows.length === 0) {
 				ctx.fillStyle = '#b3bbd4';
 				ctx.font = '13px monospace';
 				ctx.textAlign = 'center';
@@ -1307,33 +1327,15 @@
 				return;
 			}
 
-			const minX = rows[0].at;
-			const maxX = rows[rows.length - 1].at;
+			const minX = visibleRows[0].at;
+			const maxX = visibleRows[visibleRows.length - 1].at;
 			const spanX = Math.max(1, maxX - minX);
-			let minY = Number(rowsSource.min);
-			let maxY = Number(rowsSource.max);
-			if (!Number.isFinite(minY) || !Number.isFinite(maxY)) {
-				minY = Number.POSITIVE_INFINITY;
-				maxY = 0;
-				for (const r of rows) {
-					if (r.value < minY) minY = r.value;
-					if (r.value > maxY) maxY = r.value;
-				}
+			let minY = 0;
+			let visibleMaxY = 0;
+			for (const r of visibleRows) {
+				if (r.value > visibleMaxY) visibleMaxY = r.value;
 			}
-			if (!Number.isFinite(minY) || minY < 0) minY = 0;
-			if (!(maxY >= minY)) maxY = minY;
-			if (maxY === minY) {
-				if (maxY <= 0) {
-					minY = 0;
-					maxY = 1;
-				} else {
-					maxY = maxY * 1.15;
-					minY = Math.max(0, minY * 0.95);
-				}
-			} else {
-				const rangeY = maxY - minY;
-				maxY = maxY + (rangeY * 0.15);
-			}
+			let maxY = visibleMaxY > 0 ? (visibleMaxY * 1.25) : 1;
 			const spanY = Math.max(1e-9, maxY - minY);
 
 			ctx.strokeStyle = '#2a2f3a';
@@ -1361,23 +1363,38 @@
 
 			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
 			const yFor = (v) => paddingTop + graphHeight * (1 - ((v - minY) / spanY));
-
-			ctx.strokeStyle = color;
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			rows.forEach((r, idx) => {
-				const x = xFor(r.at);
-				const y = yFor(r.value);
-				if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-			});
-			ctx.stroke();
+			const px = (v) => Math.round(v);
+			const findStepMillis = () => {
+				let step = 0;
+				for (let i = 1; i < visibleRows.length; i++) {
+					const d = visibleRows[i].at - visibleRows[i - 1].at;
+					if (!(d > 0)) continue;
+					if (!(step > 0) || d < step) step = d;
+				}
+				return step > 0 ? step : 0;
+			};
+			const stepMillis = findStepMillis();
+			let barW = 3;
+			if (visibleRows.length > 1 && stepMillis > 0) {
+				const dx = Math.abs(xFor(minX + stepMillis) - xFor(minX));
+				barW = Math.max(1, Math.ceil(dx));
+			} else if (visibleRows.length > 0) {
+				barW = Math.max(1, Math.ceil(graphWidth / Math.max(1, visibleRows.length)));
+			}
+			if (barW > graphWidth) barW = graphWidth;
+			const baselineY = px(height - paddingBottom);
 
 			ctx.fillStyle = color;
-			rows.forEach((r) => {
-				ctx.beginPath();
-				ctx.arc(xFor(r.at), yFor(r.value), 2, 0, Math.PI * 2);
-				ctx.fill();
-			});
+			for (const r of visibleRows) {
+				const xc = px(xFor(r.at));
+				const left = Math.max(paddingLeft, xc - Math.floor(barW / 2));
+				const top = px(Math.max(paddingTop, Math.min(baselineY, yFor(r.value))));
+				let h = baselineY - top;
+				// Render present zero buckets as a 1px baseline bar so offline gaps
+				// remain visible after zero-gap backfill.
+				if (h <= 0) h = 1;
+				ctx.fillRect(left, baselineY - h, barW, h);
+			}
 
 			ctx.strokeStyle = '#ffffff';
 			ctx.lineWidth = 1;
@@ -1445,7 +1462,27 @@
 				rows,
 				min: minV,
 				max: maxV,
+				intervalMillis,
 			};
+		}
+
+		function computeWorkerHistoryUptimePercentFromCompact(data) {
+			const count = Math.max(0, Number(data?.n || 0));
+			if (count <= 0) return null;
+			const present = decodeByteSeries(data?.p);
+			const hq = decodeByteSeries(data?.hq);
+			const bq = decodeByteSeries(data?.bq);
+			let total = 0;
+			let online = 0;
+			for (let i = 0; i < count; i++) {
+				if (!bitIsSet(present, i)) continue;
+				total++;
+				const h = Number(hq[i] || 0);
+				const b = Number(bq[i] || 0);
+				if (h > 0 || b > 0) online++;
+			}
+			if (total <= 0) return null;
+			return (online / total) * 100;
 		}
 
 		function drawInlineSparkline(canvas, rows, color) {
@@ -1465,7 +1502,9 @@
 				.map((r) => ({ x: Number(r?.at), y: Number(r?.value) }))
 				.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.y >= 0)
 				.sort((a, b) => a.x - b.x);
-			if (points.length === 0) {
+			const maxVisiblePoints = Math.max(1, Math.floor(cssW));
+			const visiblePoints = points.length > maxVisiblePoints ? points.slice(points.length - maxVisiblePoints) : points;
+			if (visiblePoints.length === 0) {
 				ctx.strokeStyle = '#2a2f3a';
 				ctx.lineWidth = 1;
 				ctx.beginPath();
@@ -1475,17 +1514,28 @@
 				return;
 			}
 
-			let minX = points[0].x;
-			let maxX = points[points.length - 1].x;
+			let minX = visiblePoints[0].x;
+			let maxX = visiblePoints[visiblePoints.length - 1].x;
 			if (!(maxX > minX)) maxX = minX + 1;
 			let maxY = 0;
-			for (const p of points) {
+			for (const p of visiblePoints) {
 				if (p.y > maxY) maxY = p.y;
 			}
-			if (!(maxY > 0)) maxY = 1;
+			maxY = maxY > 0 ? (maxY * 1.25) : 1;
 			const pad = 1;
 			const xFor = (x) => pad + ((x - minX) / (maxX - minX)) * (cssW - pad*2);
 			const yFor = (y) => cssH - pad - (y / maxY) * (cssH - pad*2);
+			const px = (v) => Math.round(v);
+			let stepX = 0;
+			for (let i = 1; i < visiblePoints.length; i++) {
+				const d = visiblePoints[i].x - visiblePoints[i - 1].x;
+				if (!(d > 0)) continue;
+				const dx = Math.abs(xFor(visiblePoints[i].x) - xFor(visiblePoints[i - 1].x));
+				if (!(stepX > 0) || dx < stepX) stepX = dx;
+			}
+			let barW = Math.max(1, Math.ceil(stepX > 0 ? stepX : (cssW / Math.max(1, visiblePoints.length))));
+			if (barW > cssW) barW = Math.floor(cssW);
+			const baselineY = px(cssH - 1);
 
 			ctx.strokeStyle = '#2a2f3a';
 			ctx.lineWidth = 1;
@@ -1494,17 +1544,16 @@
 			ctx.lineTo(cssW, cssH - 1);
 			ctx.stroke();
 
-			ctx.strokeStyle = color;
-			ctx.lineWidth = 1.5;
-			ctx.beginPath();
-			for (let i = 0; i < points.length; i++) {
-				const p = points[i];
-				const x = xFor(p.x);
-				const y = yFor(p.y);
-				if (i === 0) ctx.moveTo(x, y);
-				else ctx.lineTo(x, y);
+			ctx.fillStyle = color;
+			for (let i = 0; i < visiblePoints.length; i++) {
+				const p = visiblePoints[i];
+				const xc = px(xFor(p.x));
+				const left = Math.max(0, xc - Math.floor(barW / 2));
+				const top = px(Math.max(0, Math.min(baselineY, yFor(p.y))));
+				let h = baselineY - top;
+				if (h <= 0) h = 1;
+				ctx.fillRect(left, baselineY - h, barW, h);
 			}
-			ctx.stroke();
 		}
 
 		function renderInlineWorkerSparklinesFromCache(root) {
@@ -1519,6 +1568,69 @@
 				const rows = Array.isArray(series) ? series : (Array.isArray(series?.rows) ? series.rows : []);
 				const color = kind === 'bestshare' ? '#f3d36b' : '#4a9eff';
 				drawInlineSparkline(canvas, rows, color);
+			});
+			renderInlineWorkerUptimeFromCache(scope);
+		}
+
+		function computeWorkerHistoryUptimePercent(cached) {
+			if (Number.isFinite(cached?.historyUptimePercent)) {
+				return Number(cached.historyUptimePercent);
+			}
+			const hRows = Array.isArray(cached?.hashrateRows?.rows) ? cached.hashrateRows.rows : [];
+			const bRows = Array.isArray(cached?.bestRows?.rows) ? cached.bestRows.rows : [];
+			if (hRows.length === 0 && bRows.length === 0) return null;
+			const intervalMillis = Math.max(
+				1,
+				Number(cached?.hashrateRows?.intervalMillis || 0) || 0,
+				Number(cached?.bestRows?.intervalMillis || 0) || 0,
+			) || 60000;
+			const byTs = new Map();
+			let minTs = Number.POSITIVE_INFINITY;
+			let maxTs = 0;
+			for (const r of hRows) {
+				const ts = Number(r?.at);
+				if (!Number.isFinite(ts)) continue;
+				const rec = byTs.get(ts) || { h: 0, b: 0 };
+				rec.h = Math.max(Number(rec.h || 0), Number(r?.value || 0));
+				byTs.set(ts, rec);
+				if (ts < minTs) minTs = ts;
+				if (ts > maxTs) maxTs = ts;
+			}
+			for (const r of bRows) {
+				const ts = Number(r?.at);
+				if (!Number.isFinite(ts)) continue;
+				const rec = byTs.get(ts) || { h: 0, b: 0 };
+				rec.b = Math.max(Number(rec.b || 0), Number(r?.value || 0));
+				byTs.set(ts, rec);
+				if (ts < minTs) minTs = ts;
+				if (ts > maxTs) maxTs = ts;
+			}
+			if (byTs.size === 0) return null;
+			let online = 0;
+			for (const rec of byTs.values()) {
+				if (Number(rec.h) > 0 || Number(rec.b) > 0) online++;
+			}
+			let total = byTs.size;
+			if (Number.isFinite(minTs) && Number.isFinite(maxTs) && maxTs >= minTs) {
+				total = Math.max(total, Math.floor(((maxTs - minTs) / intervalMillis) + 1));
+			}
+			return (online / Math.max(1, total)) * 100;
+		}
+
+		function formatHistoryUptimePercent(value) {
+			const v = Number(value);
+			if (!Number.isFinite(v) || v < 0) return '—';
+			return `${Math.max(0, Math.min(100, v)).toFixed(2)}%`;
+		}
+
+		function renderInlineWorkerUptimeFromCache(root) {
+			const scope = root || document;
+			const els = scope.querySelectorAll('[data-worker-uptime-history]');
+			els.forEach((el) => {
+				const hash = String(el.getAttribute('data-worker-uptime-history') || '').trim().toLowerCase();
+				if (!hash) return;
+				const cached = inlineWorkerChartCache.get(hash);
+				el.textContent = formatHistoryUptimePercent(computeWorkerHistoryUptimePercent(cached));
 			});
 		}
 
@@ -1541,6 +1653,7 @@
 					fetchedAt: now,
 					hashrateRows: decodeCompactWorkerSeries(data, 'hq', 'h0', 'h1'),
 					bestRows: decodeCompactWorkerSeries(data, 'bq', 'b0', 'b1'),
+					historyUptimePercent: computeWorkerHistoryUptimePercentFromCompact(data),
 				});
 			} catch (err) {
 				console.error('inline worker sparkline fetch failed', err);
@@ -1573,7 +1686,7 @@
 			}
 			setWorkerGraphsStatus('Loading history...', false);
 			drawWorkerSeriesGraph(workerGraphsHashrateCanvas, [], '#4a9eff', formatHashrate);
-			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], '#f3d36b', formatDifficulty);
+			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], '#f3d36b', formatDifficultyGraph);
 			try {
 				if (workerGraphsDialog) {
 					if (typeof workerGraphsDialog.showModal === 'function') workerGraphsDialog.showModal();
@@ -1588,6 +1701,16 @@
 				const data = await res.json();
 				const hashrateRows = decodeCompactWorkerSeries(data, 'hq', 'h0', 'h1');
 				const bestRows = decodeCompactWorkerSeries(data, 'bq', 'b0', 'b1');
+				const fetchedAt = Date.now();
+				inlineWorkerChartCache.set(hash, {
+					...(inlineWorkerChartCache.get(hash) || {}),
+					inFlight: false,
+					fetchedAt,
+					hashrateRows,
+					bestRows,
+					historyUptimePercent: computeWorkerHistoryUptimePercentFromCompact(data),
+				});
+				renderInlineWorkerSparklinesFromCache(document);
 				const labelName = String(data?.name || name || '').trim();
 				if (workerGraphsSubtitle) {
 					workerGraphsSubtitle.setAttribute('data-worker-name', labelName);
@@ -1595,7 +1718,7 @@
 					applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
 				}
 				drawWorkerSeriesGraph(workerGraphsHashrateCanvas, hashrateRows, '#4a9eff', formatHashrate);
-				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, bestRows, '#f3d36b', formatDifficulty);
+				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, bestRows, '#f3d36b', formatDifficultyGraph);
 				const shown = Math.max(hashrateRows.length, bestRows.length);
 				setWorkerGraphsStatus(shown > 0 ? `Showing ${shown} bucket${shown === 1 ? '' : 's'} (2m).` : 'No history recorded yet for this saved worker.', false);
 			} catch (err) {
@@ -1613,6 +1736,25 @@
 				btn.addEventListener('click', async () => {
 					const hash = btn.getAttribute('data-worker-hash') || '';
 					const name = btn.getAttribute('data-worker-name') || '';
+					await openWorkerGraphs(hash, name);
+				});
+			});
+			const sparkCanvases = scope.querySelectorAll('canvas[data-worker-inline-chart][data-worker-hash]');
+			sparkCanvases.forEach((canvas) => {
+				if (canvas.__workerGraphsAttached) return;
+				canvas.__workerGraphsAttached = true;
+				canvas.style.cursor = 'pointer';
+				const existingTitle = String(canvas.getAttribute('title') || '').trim();
+				if (!existingTitle) canvas.setAttribute('title', 'Open worker graphs');
+				canvas.addEventListener('click', async () => {
+					const hash = String(canvas.getAttribute('data-worker-hash') || '').trim().toLowerCase();
+					if (!hash) return;
+					let name = '';
+					const row = canvas.closest('tr');
+					if (row) {
+						const btn = row.querySelector('.worker-history-open');
+						if (btn) name = String(btn.getAttribute('data-worker-name') || '').trim();
+					}
 					await openWorkerGraphs(hash, name);
 				});
 			});
@@ -1712,8 +1854,9 @@
 									<div class="saved-workers-online-stats">
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">${Number(w.accepted || 0).toLocaleString()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value">${formatLatency((Number(w.estimated_ping_p50_ms || 0) > 0) ? w.estimated_ping_p50_ms : w.estimated_ping_p95_ms)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value">${(() => { const raw = (Number(w.estimated_ping_p50_ms || 0) > 0) ? Number(w.estimated_ping_p50_ms || 0) : Number(w.estimated_ping_p95_ms || 0); return formatLatency(raw > 0 ? (raw / 2) : raw); })()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">${formatLastShare(w.last_share)}</span></span>
 									</div>
 								</div>

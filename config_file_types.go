@@ -172,10 +172,11 @@ type miningTuning struct {
 }
 
 type hashrateTuning struct {
-	HashrateEMATauSeconds           *float64 `toml:"hashrate_ema_tau_seconds"`
-	HashrateCumulativeEnabled       *bool    `toml:"hashrate_cumulative_enabled"`
-	HashrateRecentCumulativeEnabled *bool    `toml:"hashrate_recent_cumulative_enabled"`
-	ShareNTimeMaxForwardSeconds     *int     `toml:"share_ntime_max_forward_seconds"`
+	HashrateEMATauSeconds              *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateCumulativeEnabled          *bool    `toml:"hashrate_cumulative_enabled"`
+	HashrateRecentCumulativeEnabled    *bool    `toml:"hashrate_recent_cumulative_enabled"`
+	SavedWorkerHistoryFlushIntervalSec *int     `toml:"saved_worker_history_flush_interval_seconds"`
+	ShareNTimeMaxForwardSeconds        *int     `toml:"share_ntime_max_forward_seconds"`
 }
 
 type peerCleaningTuning struct {
@@ -242,9 +243,10 @@ type policyFileConfig struct {
 }
 
 type tuningHashrateConfig struct {
-	HashrateEMATauSeconds           *float64 `toml:"hashrate_ema_tau_seconds"`
-	HashrateCumulativeEnabled       *bool    `toml:"hashrate_cumulative_enabled"`
-	HashrateRecentCumulativeEnabled *bool    `toml:"hashrate_recent_cumulative_enabled"`
+	HashrateEMATauSeconds              *float64 `toml:"hashrate_ema_tau_seconds"`
+	HashrateCumulativeEnabled          *bool    `toml:"hashrate_cumulative_enabled"`
+	HashrateRecentCumulativeEnabled    *bool    `toml:"hashrate_recent_cumulative_enabled"`
+	SavedWorkerHistoryFlushIntervalSec *int     `toml:"saved_worker_history_flush_interval_seconds"`
 }
 
 type tuningStratumConfig struct {
