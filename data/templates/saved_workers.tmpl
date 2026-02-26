@@ -119,6 +119,14 @@
 			min-width:36px;
 			padding: 6px 8px;
 		}
+		.worker-inline-spark {
+			width: 88px;
+			height: 14px;
+			display: block;
+			border-radius: 4px;
+			background: rgba(255,255,255,0.02);
+			margin-top: 3px;
+		}
 	</style>
 </head>
 <body>
@@ -197,8 +205,14 @@
 								{{range .OnlineWorkerEntries}}
 					<tr>
 						<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
-							<td data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value">—</td>
-						<td>{{formatDiff .BestDifficulty}}</td>
+							<td data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value">
+								—
+								<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate sparkline"></canvas>
+							</td>
+						<td>
+							{{formatDiff .BestDifficulty}}
+							<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="{{.Hash}}" aria-label="Worker best share sparkline"></canvas>
+						</td>
 						<td>{{formatDiff .Difficulty}}</td>
 						<td>{{formatShareRate .ShareRate}}</td>
 						<td>{{formatTime .LastShare}}</td>
@@ -762,6 +776,8 @@
 		let lastOnlineWorkers = [];
 		let currentSortField = 'connection_seq';
 		let sortDescending = true;
+		const inlineWorkerChartRefreshMS = 2 * 60 * 1000;
+		const inlineWorkerChartCache = new Map();
 		const workerHashrateFallbackMaxAgeMS = 2 * 60 * 1000;
 		const workerHashrateFallback = new Map();
 		const workerShareRateFallbackMaxAgeMS = 2 * 60 * 1000;
@@ -1289,6 +1305,119 @@
 			return rows;
 		}
 
+		function drawInlineSparkline(canvas, rows, color) {
+			if (!(canvas instanceof HTMLCanvasElement)) return;
+			const dpr = window.devicePixelRatio || 1;
+			const cssW = Math.max(20, canvas.clientWidth || 120);
+			const cssH = Math.max(8, canvas.clientHeight || 14);
+			canvas.width = Math.floor(cssW * dpr);
+			canvas.height = Math.floor(cssH * dpr);
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return;
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.scale(dpr, dpr);
+			ctx.clearRect(0, 0, cssW, cssH);
+
+			const points = (Array.isArray(rows) ? rows : [])
+				.map((r) => ({ x: Number(r?.at), y: Number(r?.value) }))
+				.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.y >= 0)
+				.sort((a, b) => a.x - b.x);
+			if (points.length === 0) {
+				ctx.strokeStyle = '#2a2f3a';
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.moveTo(0, cssH - 1);
+				ctx.lineTo(cssW, cssH - 1);
+				ctx.stroke();
+				return;
+			}
+
+			let minX = points[0].x;
+			let maxX = points[points.length - 1].x;
+			if (!(maxX > minX)) maxX = minX + 1;
+			let maxY = 0;
+			for (const p of points) {
+				if (p.y > maxY) maxY = p.y;
+			}
+			if (!(maxY > 0)) maxY = 1;
+			const pad = 1;
+			const xFor = (x) => pad + ((x - minX) / (maxX - minX)) * (cssW - pad*2);
+			const yFor = (y) => cssH - pad - (y / maxY) * (cssH - pad*2);
+
+			ctx.strokeStyle = '#2a2f3a';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(0, cssH - 1);
+			ctx.lineTo(cssW, cssH - 1);
+			ctx.stroke();
+
+			ctx.strokeStyle = color;
+			ctx.lineWidth = 1.5;
+			ctx.beginPath();
+			for (let i = 0; i < points.length; i++) {
+				const p = points[i];
+				const x = xFor(p.x);
+				const y = yFor(p.y);
+				if (i === 0) ctx.moveTo(x, y);
+				else ctx.lineTo(x, y);
+			}
+			ctx.stroke();
+		}
+
+		function renderInlineWorkerSparklinesFromCache(root) {
+			const scope = root || document;
+			const canvases = scope.querySelectorAll('canvas[data-worker-inline-chart][data-worker-hash]');
+			canvases.forEach((canvas) => {
+				const hash = String(canvas.getAttribute('data-worker-hash') || '').trim().toLowerCase();
+				if (!hash) return;
+				const kind = String(canvas.getAttribute('data-worker-inline-chart') || '').trim().toLowerCase();
+				const cached = inlineWorkerChartCache.get(hash);
+				const rows = kind === 'bestshare' ? (cached?.bestRows || []) : (cached?.hashrateRows || []);
+				const color = kind === 'bestshare' ? '#f3d36b' : '#4a9eff';
+				drawInlineSparkline(canvas, rows, color);
+			});
+		}
+
+		async function fetchInlineWorkerSparkline(hash) {
+			hash = String(hash || '').trim().toLowerCase();
+			if (!hash) return;
+			const cached = inlineWorkerChartCache.get(hash);
+			const now = Date.now();
+			if (cached?.inFlight) return;
+			if (cached && Number.isFinite(cached.fetchedAt) && (now - cached.fetchedAt) < inlineWorkerChartRefreshMS) {
+				return;
+			}
+			inlineWorkerChartCache.set(hash, { ...(cached || {}), inFlight: true, fetchedAt: cached?.fetchedAt || 0 });
+			try {
+				const res = await fetchWithAuthRefresh(`/api/saved-workers/history?hash=${encodeURIComponent(hash)}`, { credentials: 'same-origin' });
+				if (!res.ok) throw new Error(`http ${res.status}`);
+				const data = await res.json();
+				inlineWorkerChartCache.set(hash, {
+					inFlight: false,
+					fetchedAt: now,
+					hashrateRows: decodeCompactWorkerSeries(data, 'hq', 'h0', 'h1'),
+					bestRows: decodeCompactWorkerSeries(data, 'bq', 'b0', 'b1'),
+				});
+			} catch (err) {
+				console.error('inline worker sparkline fetch failed', err);
+				inlineWorkerChartCache.set(hash, { ...(cached || {}), inFlight: false, fetchedAt: now });
+			}
+		}
+
+		function refreshInlineWorkerSparklines(root) {
+			const scope = root || document;
+			const canvases = scope.querySelectorAll('canvas[data-worker-inline-chart][data-worker-hash]');
+			const hashes = new Set();
+			canvases.forEach((canvas) => {
+				const hash = String(canvas.getAttribute('data-worker-hash') || '').trim().toLowerCase();
+				if (hash) hashes.add(hash);
+			});
+			renderInlineWorkerSparklinesFromCache(scope);
+			hashes.forEach((hash) => {
+				fetchInlineWorkerSparkline(hash).finally(() => renderInlineWorkerSparklinesFromCache(scope));
+			});
+		}
+
 		async function openWorkerGraphs(hash, name) {
 			hash = String(hash || '').trim().toLowerCase();
 			if (!hash) return;
@@ -1384,8 +1513,8 @@
 				return `
 					<tr>
 						<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
-						<td class="hashrate-value ${hashrateClass}">${hashrateText}</td>
-						<td>${formatDifficulty(w.best_difficulty)}</td>
+						<td class="hashrate-value ${hashrateClass}">${hashrateText}<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate sparkline"></canvas></td>
+						<td>${formatDifficulty(w.best_difficulty)}<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker best share sparkline"></canvas></td>
 						<td>${formatDifficulty(w.difficulty)}</td>
 					<td>${formatShareRate(shareRate)}</td>
 					<td>${formatLastShare(w.last_share)}</td>
@@ -1429,6 +1558,7 @@
 			attachReconnectConfirms(onlineWorkersBody);
 			attachNotifyToggles(onlineWorkersBody);
 			attachWorkerGraphButtons(onlineWorkersBody);
+			refreshInlineWorkerSparklines(onlineWorkersBody);
 		}
 
 		async function copyTextToClipboard(text) {
@@ -1787,6 +1917,7 @@
 		attachNotifyAllButtons();
 		attachDiscordDialogHandlers();
 		attachWalletLookupAddHandlers();
+		refreshInlineWorkerSparklines(document);
 		updateWalletLookupAddAllState();
 		updatePrivacyToggle();
 
@@ -1828,6 +1959,7 @@
 
 		refreshSavedWorkers();
 		setInterval(refreshSavedWorkers, 5000);
+		setInterval(() => refreshInlineWorkerSparklines(document), inlineWorkerChartRefreshMS);
 		updateSortOrderButtonText();
 		if (sortFieldSelect) {
 			sortFieldSelect.value = currentSortField;
