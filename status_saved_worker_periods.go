@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -148,6 +149,31 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		ring.lastMinute = sampleMinute
 	}
 	s.pruneSavedWorkerPeriodsLocked(currentMinute)
+}
+
+func (s *StatusServer) runSavedWorkerPeriodSampler(ctx context.Context) {
+	if s == nil || s.workerLists == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Poll frequently and let recordSavedOnlineWorkerPeriods bucket-gate writes.
+	// Sampling now records the previous completed bucket, so request timing no
+	// longer controls bucket contents.
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(time.Now()), time.Now())
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(now), now)
+		}
+	}
 }
 
 func (s *StatusServer) savedWorkerPeriodHistory(hash string, now time.Time) []savedWorkerPeriodSample {
