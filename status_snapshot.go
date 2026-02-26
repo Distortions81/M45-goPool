@@ -1036,7 +1036,13 @@ func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetri
 		requestShutdown:     shutdown,
 	}
 	server.UpdateConfig(cfg)
+	if n, err := server.loadSavedWorkerPeriodsSnapshot(); err != nil {
+		logger.Warn("load saved worker period history snapshot", "error", err)
+	} else if n > 0 {
+		logger.Info("loaded saved worker period history snapshot", "workers", n, "path", server.savedWorkerPeriodsSnapshotPath())
+	}
 	server.scheduleNodeInfoRefresh()
+	go server.runSavedWorkerPeriodsSnapshotFlusher(ctx)
 	go server.runSavedWorkerPeriodSampler(ctx)
 	return server
 }

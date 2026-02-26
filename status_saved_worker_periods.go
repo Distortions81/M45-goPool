@@ -22,6 +22,47 @@ type savedWorkerPeriodRing struct {
 	lastMinute      uint32
 }
 
+// backfillSavedWorkerOfflineGapLocked marks missing buckets between the last
+// recorded online minute and the next online sample as present zeroes so the UI
+// can render explicit offline gaps. Caller must hold s.savedWorkerPeriodsMu.
+func (s *StatusServer) backfillSavedWorkerOfflineGapLocked(ring *savedWorkerPeriodRing, sampleMinute uint32) {
+	if s == nil || ring == nil || sampleMinute == 0 {
+		return
+	}
+	step := uint32(savedWorkerPeriodBucketMinutes)
+	if step == 0 {
+		step = 1
+	}
+	lastOnlineMinute := ring.lastMinute
+	if lastOnlineMinute == 0 || sampleMinute <= lastOnlineMinute+step {
+		return
+	}
+
+	startMinute := lastOnlineMinute + step
+	// Only backfill what can exist in the retained ring window ending at the
+	// current sample minute.
+	if savedWorkerPeriodSlots > 0 {
+		spanMinutes := uint32((savedWorkerPeriodSlots - 1) * savedWorkerPeriodBucketMinutes)
+		oldestMinute := uint32(0)
+		if sampleMinute >= spanMinutes {
+			oldestMinute = sampleMinute - spanMinutes
+		}
+		if startMinute < oldestMinute {
+			startMinute = oldestMinute
+		}
+	}
+
+	for m := startMinute; m < sampleMinute; m += step {
+		idx := savedWorkerRingIndex(m)
+		if ring.minutes[idx] == m {
+			continue
+		}
+		ring.minutes[idx] = m
+		ring.hashrateQ[idx] = 0
+		ring.bestDifficultyQ[idx] = 0
+	}
+}
+
 func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, now time.Time) {
 	if s == nil || s.workerLists == nil || len(allWorkers) == 0 {
 		return
@@ -134,6 +175,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 			ring = &savedWorkerPeriodRing{}
 			s.savedWorkerPeriods[hash] = ring
 		}
+		s.backfillSavedWorkerOfflineGapLocked(ring, sampleMinute)
 		idx := savedWorkerRingIndex(sampleMinute)
 		if ring.minutes[idx] != sampleMinute {
 			ring.minutes[idx] = sampleMinute
@@ -259,7 +301,7 @@ func (s *StatusServer) pruneSavedWorkerPeriodsLocked(nowMinute uint32) {
 			delete(s.savedWorkerPeriods, hash)
 			continue
 		}
-		if ring.lastMinute == 0 || nowMinute-ring.lastMinute > maxAge {
+		if ring.lastMinute == 0 || nowMinute-ring.lastMinute >= maxAge {
 			delete(s.savedWorkerPeriods, hash)
 		}
 	}

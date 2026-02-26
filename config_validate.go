@@ -106,6 +106,9 @@ func validateConfig(cfg Config) error {
 	if cfg.HashrateEMATauSeconds <= 0 {
 		return fmt.Errorf("hashrate_ema_tau_seconds must be > 0, got %v", cfg.HashrateEMATauSeconds)
 	}
+	if cfg.SavedWorkerHistoryFlushInterval < 0 {
+		return fmt.Errorf("saved_worker_history_flush_interval_seconds cannot be negative")
+	}
 	if cfg.StratumPasswordEnabled && strings.TrimSpace(cfg.StratumPassword) == "" {
 		return fmt.Errorf("stratum_password_enabled is true but stratum_password is empty")
 	}

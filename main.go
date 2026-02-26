@@ -956,6 +956,13 @@ func main() {
 			logger.Error("flush accounting", "component", "db", "kind", "flush", "error", err)
 		}
 	}
+	if statusServer != nil {
+		if n, err := statusServer.persistSavedWorkerPeriodsSnapshot(); err != nil {
+			logger.Warn("persist saved worker period history snapshot", "error", err, "path", statusServer.savedWorkerPeriodsSnapshotPath())
+		} else {
+			logger.Info("persisted saved worker period history snapshot", "workers", n, "path", statusServer.savedWorkerPeriodsSnapshotPath())
+		}
+	}
 
 	// Best-effort checkpoint to flush WAL into the main DB on shutdown.
 	checkpointSharedStateDB()

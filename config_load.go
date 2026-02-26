@@ -510,6 +510,9 @@ func applyFileOverrides(cfg *Config, fc fileOverrideConfig) {
 	if fc.Hashrate.HashrateRecentCumulativeEnabled != nil {
 		cfg.HashrateRecentCumulativeEnabled = *fc.Hashrate.HashrateRecentCumulativeEnabled
 	}
+	if fc.Hashrate.SavedWorkerHistoryFlushIntervalSec != nil && *fc.Hashrate.SavedWorkerHistoryFlushIntervalSec > 0 {
+		cfg.SavedWorkerHistoryFlushInterval = time.Duration(*fc.Hashrate.SavedWorkerHistoryFlushIntervalSec) * time.Second
+	}
 	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
 		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
 	}
@@ -582,12 +585,12 @@ func applyPolicyConfig(cfg *Config, fc policyFileConfig) {
 	if fc.Mining.SubmitProcessInline != nil {
 		cfg.SubmitProcessInline = *fc.Mining.SubmitProcessInline
 	}
-		if fc.Mining.ShareCheckDuplicate != nil {
-			cfg.ShareCheckDuplicate = *fc.Mining.ShareCheckDuplicate
-		}
-		if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
-			cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
-		}
+	if fc.Mining.ShareCheckDuplicate != nil {
+		cfg.ShareCheckDuplicate = *fc.Mining.ShareCheckDuplicate
+	}
+	if fc.Hashrate.ShareNTimeMaxForwardSeconds != nil && *fc.Hashrate.ShareNTimeMaxForwardSeconds > 0 {
+		cfg.ShareNTimeMaxForwardSeconds = *fc.Hashrate.ShareNTimeMaxForwardSeconds
+	}
 	t := fileOverrideConfig{
 		Version:  fc.Version,
 		Bans:     fc.Bans,
@@ -615,9 +618,10 @@ func applyTuningConfig(cfg *Config, fc tuningFileConfig) {
 		Mining:       fc.Mining,
 		PeerCleaning: fc.PeerCleaning,
 		Hashrate: hashrateTuning{
-			HashrateEMATauSeconds:           fc.Hashrate.HashrateEMATauSeconds,
-			HashrateCumulativeEnabled:       fc.Hashrate.HashrateCumulativeEnabled,
-			HashrateRecentCumulativeEnabled: fc.Hashrate.HashrateRecentCumulativeEnabled,
+			HashrateEMATauSeconds:              fc.Hashrate.HashrateEMATauSeconds,
+			HashrateCumulativeEnabled:          fc.Hashrate.HashrateCumulativeEnabled,
+			HashrateRecentCumulativeEnabled:    fc.Hashrate.HashrateRecentCumulativeEnabled,
+			SavedWorkerHistoryFlushIntervalSec: fc.Hashrate.SavedWorkerHistoryFlushIntervalSec,
 		},
 	}
 	applyFileOverrides(cfg, t)

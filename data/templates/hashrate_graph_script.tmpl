@@ -136,7 +136,7 @@
 		const minScale = 0;
 		const dataMax = Math.max(...hashrateData);
 
-		const headroomFactor = 2.0;
+		const headroomFactor = 1.25;
 		const defaultMaxScale = 100e3; // 100 kH/s in H/s
 		const maxHashrate = Math.max(dataMax * headroomFactor, defaultMaxScale);
 		const minHashrate = minScale;

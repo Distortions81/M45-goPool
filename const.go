@@ -154,7 +154,8 @@ const (
 	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 4
 	stratumFloodLimitMultiplier = 2
 
-	defaultBackblazeBackupIntervalSeconds = 12 * 60 * 60
+	defaultBackblazeBackupIntervalSeconds  = 12 * 60 * 60
+	defaultSavedWorkerHistoryFlushInterval = 3 * time.Hour
 
 	// Input validation limits.
 	maxMinerClientIDLen       = 256

@@ -149,14 +149,15 @@ type Config struct {
 	TargetSharesPerMin            float64 // vardiff target share rate
 	VarDiffEnabled                bool    // enable dynamic difficulty retargeting
 
-	LockSuggestedDifficulty          bool    // keep suggested difficulty instead of vardiff
-	EnforceSuggestedDifficultyLimits bool    // ban/disconnect when suggest_* outside min/max
-	DifficultyStepGranularity        int     // 1=pow2, 2=half, 3=third, 4=quarter steps
-	HashrateEMATauSeconds            float64 // EMA time constant for hashrate
-	HashrateCumulativeEnabled        bool    // blend per-connection EMA with cumulative hashrate (display)
-	HashrateRecentCumulativeEnabled  bool    // allow short-horizon cumulative (vardiff window) to influence display
-	ShareNTimeMaxForwardSeconds      int     // max seconds ntime can roll forward
-	ShareCheckDuplicate              bool    // enable duplicate detection (off by default for solo)
+	LockSuggestedDifficulty          bool          // keep suggested difficulty instead of vardiff
+	EnforceSuggestedDifficultyLimits bool          // ban/disconnect when suggest_* outside min/max
+	DifficultyStepGranularity        int           // 1=pow2, 2=half, 3=third, 4=quarter steps
+	HashrateEMATauSeconds            float64       // EMA time constant for hashrate
+	HashrateCumulativeEnabled        bool          // blend per-connection EMA with cumulative hashrate (display)
+	HashrateRecentCumulativeEnabled  bool          // allow short-horizon cumulative (vardiff window) to influence display
+	SavedWorkerHistoryFlushInterval  time.Duration // periodic full-file flush cadence for saved worker history snapshot
+	ShareNTimeMaxForwardSeconds      int           // max seconds ntime can roll forward
+	ShareCheckDuplicate              bool          // enable duplicate detection (off by default for solo)
 
 	ShareJobFreshnessMode            int  // 0=off, 1=job_id, 2=job_id+prevhash
 	ShareCheckNTimeWindow            bool // reject ntime outside configured window
@@ -236,6 +237,7 @@ type EffectiveConfig struct {
 	BackblazeBucket                   string   `json:"backblaze_bucket,omitempty"`
 	BackblazePrefix                   string   `json:"backblaze_prefix,omitempty"`
 	BackblazeBackupInterval           string   `json:"backblaze_backup_interval,omitempty"`
+	SavedWorkerHistoryFlushInterval   string   `json:"saved_worker_history_flush_interval,omitempty"`
 	BackblazeKeepLocalCopy            bool     `json:"backblaze_keep_local_copy,omitempty"`
 	BackblazeForceEveryInterval       bool     `json:"backblaze_force_every_interval,omitempty"`
 	BackupSnapshotPath                string   `json:"backup_snapshot_path,omitempty"`
