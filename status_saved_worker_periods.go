@@ -57,14 +57,19 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	}
 
 	savedHashes := make(map[string]struct{}, len(saved))
+	savedNames := make(map[string]struct{}, len(saved))
 	for _, rec := range saved {
 		hash := strings.ToLower(strings.TrimSpace(rec.Hash))
-		if hash == "" {
+		if hash != "" {
+			savedHashes[hash] = struct{}{}
 			continue
 		}
-		savedHashes[hash] = struct{}{}
+		name := strings.TrimSpace(rec.Name)
+		if name != "" {
+			savedNames[name] = struct{}{}
+		}
 	}
-	if len(savedHashes) == 0 {
+	if len(savedHashes) == 0 && len(savedNames) == 0 {
 		s.savedWorkerPeriodsMu.Lock()
 		if bucket.After(s.savedWorkerPeriodsLastBucket) {
 			s.savedWorkerPeriodsLastBucket = bucket
@@ -82,7 +87,11 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 			continue
 		}
 		if _, ok := savedHashes[hash]; !ok {
-			continue
+			// Backfill history for legacy saved-worker rows that were stored
+			// without a hash by matching active worker names.
+			if _, nameMatch := savedNames[strings.TrimSpace(w.Name)]; !nameMatch {
+				continue
+			}
 		}
 		onlineSaved[hash] = struct{}{}
 		h := workerHashrateEstimate(w, now)
@@ -144,7 +153,7 @@ func (s *StatusServer) savedWorkerPeriodHistory(hash string, now time.Time) []sa
 	if hash == "" {
 		return nil
 	}
-	nowMinute := savedWorkerUnixMinute(now)
+	nowMinute := savedWorkerUnixMinute(now.UTC().Truncate(savedWorkerPeriodBucket))
 	if nowMinute == 0 {
 		return nil
 	}

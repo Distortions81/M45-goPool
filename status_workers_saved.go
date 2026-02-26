@@ -70,6 +70,17 @@ func setBit(bits []uint8, idx int) {
 	bits[bi] |= 1 << uint(idx%8)
 }
 
+func widenUint8ForJSON(in []uint8) []uint16 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]uint16, len(in))
+	for i, v := range in {
+		out[i] = uint16(v)
+	}
+	return out
+}
+
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	base := s.baseTemplateData(start)
@@ -136,27 +147,22 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				hashrate := workerHashrateEstimate(view, now)
 				duration := max(now.Sub(view.ConnectedAt), 0)
 				entry := savedWorkerEntry{
-					Name:                      saved.Name,
-					Hash:                      view.WorkerSHA256,
-					NotifyEnabled:             saved.NotifyEnabled,
-					BestDifficulty:            saved.BestDifficulty,
-					Hashrate:                  hashrate,
-					HashrateAccuracy:          view.HashrateAccuracy,
-					ShareRate:                 view.ShareRate,
-					Accepted:                  view.Accepted,
-					Rejected:                  view.Rejected,
-					LastShare:                 view.LastShare,
-					Difficulty:                view.Difficulty,
-					EstimatedPingP50MS:        view.EstimatedPingP50MS,
-					EstimatedPingP95MS:        view.EstimatedPingP95MS,
-					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
-					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
-					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
-					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
-					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
-					ConnectedDuration:         duration,
-					ConnectionID:              view.ConnectionID,
-					ConnectionSeq:             view.ConnectionSeq,
+					Name:               saved.Name,
+					Hash:               view.WorkerSHA256,
+					NotifyEnabled:      saved.NotifyEnabled,
+					BestDifficulty:     saved.BestDifficulty,
+					Hashrate:           hashrate,
+					HashrateAccuracy:   view.HashrateAccuracy,
+					ShareRate:          view.ShareRate,
+					Accepted:           view.Accepted,
+					Rejected:           view.Rejected,
+					LastShare:          view.LastShare,
+					Difficulty:         view.Difficulty,
+					EstimatedPingP50MS: view.EstimatedPingP50MS,
+					EstimatedPingP95MS: view.EstimatedPingP95MS,
+					ConnectedDuration:  duration,
+					ConnectionID:       view.ConnectionID,
+					ConnectionSeq:      view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
 				perNameRowsShown[lookupHash]++
@@ -242,11 +248,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Difficulty                float64 `json:"difficulty"`
 		EstimatedPingP50MS        float64 `json:"estimated_ping_p50_ms,omitempty"`
 		EstimatedPingP95MS        float64 `json:"estimated_ping_p95_ms,omitempty"`
-		NotifyToFirstShareMinMS   float64 `json:"notify_to_first_share_min_ms,omitempty"`
-		NotifyToFirstShareMS      float64 `json:"notify_to_first_share_ms,omitempty"`
-		NotifyToFirstShareP50MS   float64 `json:"notify_to_first_share_p50_ms,omitempty"`
-		NotifyToFirstShareP95MS   float64 `json:"notify_to_first_share_p95_ms,omitempty"`
-		NotifyToFirstShareSamples int     `json:"notify_to_first_share_samples,omitempty"`
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
@@ -345,11 +346,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Difficulty:                view.Difficulty,
 					EstimatedPingP50MS:        view.EstimatedPingP50MS,
 					EstimatedPingP95MS:        view.EstimatedPingP95MS,
-					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
-					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
-					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
-					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
-					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
 					LastShare:                 lastShare,
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
@@ -415,11 +411,11 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 
 	now := time.Now().UTC()
 	samples := s.savedWorkerPeriodHistory(hash, now)
-	nowMinute := savedWorkerUnixMinute(now)
-	windowMinutes := savedWorkerPeriodSlots * savedWorkerPeriodBucketMinutes
+	nowBucketMinute := savedWorkerUnixMinute(now.Truncate(savedWorkerPeriodBucket))
+	spanMinutes := (savedWorkerPeriodSlots - 1) * savedWorkerPeriodBucketMinutes
 	startMinute := uint32(0)
-	if nowMinute >= uint32(windowMinutes-1) {
-		startMinute = nowMinute - uint32(windowMinutes-1)
+	if nowBucketMinute >= uint32(spanMinutes) {
+		startMinute = nowBucketMinute - uint32(spanMinutes)
 	}
 	count := savedWorkerPeriodSlots
 	present := make([]bool, count)
@@ -450,19 +446,19 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 	hMin, hMax, hQ := quantizeSeriesToUint8(hashrateVals, present)
 	bMin, bMax, bQ := quantizeSeriesToUint8(bestVals, present)
 	resp := struct {
-		Hash      string  `json:"hash"`
-		Name      string  `json:"name,omitempty"`
-		U         string  `json:"u"`   // updated_at
-		I         int     `json:"i"`   // interval seconds
-		S         uint32  `json:"s"`   // start unix-minute
-		N         int     `json:"n"`   // number of buckets
-		P         []uint8 `json:"p"`   // presence bitset
-		HMin      float64 `json:"h0"`  // hashrate min
-		HMax      float64 `json:"h1"`  // hashrate max
-		HQ        []uint8 `json:"hq"`  // hashrate q8
-		BMin      float64 `json:"b0"`  // best-share min
-		BMax      float64 `json:"b1"`  // best-share max
-		BQ        []uint8 `json:"bq"`  // best-share q8
+		Hash string  `json:"hash"`
+		Name string  `json:"name,omitempty"`
+		U    string  `json:"u"`  // updated_at
+		I    int     `json:"i"`  // interval seconds
+		S    uint32  `json:"s"`  // start unix-minute
+		N    int     `json:"n"`  // number of buckets
+		P    []uint16 `json:"p"` // presence bitset
+		HMin float64 `json:"h0"` // hashrate min
+		HMax float64 `json:"h1"` // hashrate max
+		HQ   []uint16 `json:"hq"` // hashrate q8
+		BMin float64 `json:"b0"` // best-share min
+		BMax float64 `json:"b1"` // best-share max
+		BQ   []uint16 `json:"bq"` // best-share q8
 	}{
 		Hash: hash,
 		Name: displayName,
@@ -470,13 +466,13 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 		I:    int(savedWorkerPeriodBucket / time.Second),
 		S:    startMinute,
 		N:    count,
-		P:    presentBits,
+		P:    widenUint8ForJSON(presentBits),
 		HMin: hMin,
 		HMax: hMax,
-		HQ:   hQ,
+		HQ:   widenUint8ForJSON(hQ),
 		BMin: bMin,
 		BMax: bMax,
-		BQ:   bQ,
+		BQ:   widenUint8ForJSON(bQ),
 	}
 
 	setShortJSONCacheHeaders(w, true)
