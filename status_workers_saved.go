@@ -251,6 +251,9 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
 	now := time.Now()
+	// Ensure saved-worker history buckets populate even if no other status pages
+	// are being polled. recordSavedOnlineWorkerPeriods is bucket-gated.
+	s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(now), now)
 	discordRegistered := false
 	discordUserEnabled := false
 	if s.workerLists != nil && discordConfigured(s.Config()) {
