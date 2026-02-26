@@ -549,6 +549,7 @@ func main() {
 		mux.HandleFunc("/api/pool-hashrate", statusServer.handlePoolHashrateJSON)
 		mux.HandleFunc("/api/auth/session-refresh", statusServer.handleClerkSessionRefresh)
 		mux.HandleFunc("/api/saved-workers", statusServer.withClerkUser(statusServer.handleSavedWorkersJSON))
+		mux.HandleFunc("/api/saved-workers/history", statusServer.withClerkUser(statusServer.handleSavedWorkerHistoryJSON))
 		mux.HandleFunc("/api/saved-workers/notify-enabled", statusServer.withClerkUser(statusServer.handleSavedWorkersNotifyEnabled))
 		mux.HandleFunc("/api/discord/notify-enabled", statusServer.withClerkUser(statusServer.handleDiscordNotifyEnabled))
 		mux.HandleFunc("/api/saved-workers/one-time-code", statusServer.withClerkUser(statusServer.handleSavedWorkersOneTimeCode))
@@ -568,6 +569,7 @@ func main() {
 	mux.HandleFunc("/admin/bans", statusServer.handleAdminBansPage)
 	mux.HandleFunc("/admin/bans/remove", statusServer.handleAdminBanRemove)
 	mux.HandleFunc("/admin/operator", statusServer.handleAdminOperatorPage)
+	mux.HandleFunc("/admin/config", statusServer.handleAdminConfigPage)
 	mux.HandleFunc("/admin/logs", statusServer.handleAdminLogsPage)
 	mux.HandleFunc("/admin/logs/tail", statusServer.handleAdminLogsTail)
 	mux.HandleFunc("/admin/logs/flags", statusServer.handleAdminLogsSetFlags)
@@ -953,6 +955,13 @@ func main() {
 	if accounting != nil {
 		if err := accounting.Flush(); err != nil {
 			logger.Error("flush accounting", "component", "db", "kind", "flush", "error", err)
+		}
+	}
+	if statusServer != nil {
+		if n, err := statusServer.persistSavedWorkerPeriodsSnapshot(); err != nil {
+			logger.Warn("persist saved worker period history snapshot", "error", err, "path", statusServer.savedWorkerPeriodsSnapshotPath())
+		} else {
+			logger.Info("persisted saved worker period history snapshot", "workers", n, "path", statusServer.savedWorkerPeriodsSnapshotPath())
 		}
 	}
 

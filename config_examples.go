@@ -149,6 +149,7 @@ func tuningConfigDocComments() []byte {
 # - hashrate_ema_tau_seconds: EMA time constant for per-connection hashrate smoothing (seconds; requires restart).
 # - hashrate_cumulative_enabled: Blend per-connection EMA with cumulative hashrate for per-worker display (requires restart).
 # - hashrate_recent_cumulative_enabled: Allow short-window cumulative (vardiff window) to influence per-worker display (requires restart).
+# - saved_worker_history_flush_interval_seconds: Periodic flush cadence for saved-worker history snapshot persistence. The whole snapshot file is rewritten each flush, so use a long interval to reduce drive wear (default: 10800 / 3h).
 #
 # Peer cleaning ([peer_cleaning])
 # - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.

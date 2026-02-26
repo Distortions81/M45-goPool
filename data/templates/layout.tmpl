@@ -30,12 +30,18 @@
 					<span class="nav-icon" aria-hidden="true"><img src="/icons/dark/icon-menu.png" alt="" class="nav-icon-img themed-icon" data-icon="icon-menu.png"></span><span class="nav-text">Menu</span> ▼
 				</button>
 				<div class="header-dropdown-menu" id="moreInfoMenu" role="menu" aria-labelledby="moreInfoMenuButton">
-					<a class="header-dropdown-link" role="menuitem" href="/about"><img src="/icons/dark/icon-about.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-about.png">About Us</a>
 					<a class="header-dropdown-link" role="menuitem" href="/pool"><img src="/icons/dark/icon-pool-stats.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-pool-stats.png">Pool Stats</a>
-					<a class="header-dropdown-link" role="menuitem" href="/help"><img src="/icons/dark/icon-solo-mining-101.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-solo-mining-101.png">Solo Mining 101</a>
 					<a class="header-dropdown-link" role="menuitem" href="/node"><img src="/icons/dark/icon-node-info.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-node-info.png">Bitcoin Node Info</a>
 					<a class="header-dropdown-link" role="menuitem" href="/server"><img src="/icons/dark/icon-server-stats.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-server-stats.png">Server Stats</a>
+					<div class="header-dropdown-divider" role="separator" aria-hidden="true"></div>
+					<a class="header-dropdown-link" role="menuitem" href="/help"><img src="/icons/dark/icon-solo-mining-101.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-solo-mining-101.png">Solo Mining 101</a>
+					<a class="header-dropdown-link" role="menuitem" href="/about"><img src="/icons/dark/icon-about.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-about.png">About Us</a>
+					<div class="header-dropdown-divider" role="separator" aria-hidden="true"></div>
+					<a class="header-dropdown-link" role="menuitem" href="/admin"><img src="/icons/dark/icon-server-stats.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-server-stats.png">Admin Panel</a>
 					<a class="header-dropdown-link" role="menuitem" href="https://m45core.com:8443/" target="_blank" rel="noopener noreferrer"><img src="/icons/dark/icon-poolcensus.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-poolcensus.png">PoolCensus</a>
+					{{if or .GitHubURL .DiscordURL}}
+					<div class="header-dropdown-divider" role="separator" aria-hidden="true"></div>
+					{{end}}
 					{{if .GitHubURL}}
 					<a class="header-dropdown-link" role="menuitem" href="{{.GitHubURL}}" target="_blank" rel="noopener noreferrer"><img src="/icons/dark/icon-github.png" alt="" class="menu-icon-img themed-icon" data-icon="icon-github.png">GitHub</a>
 					{{end}}

@@ -37,7 +37,7 @@
 					<p class="text-sm" style="color:#f88d8d; margin-top:10px;">{{.Error}}</p>
 				{{else if .QueriedWalletHash}}
 					<p class="text-sm" style="margin-top:10px; color:#b3bbd4;">
-						Showing active workers for wallet hash <span class="mono sensitive-data">{{shortID .QueriedWalletHash}}</span>.
+						Showing active workers for this wallet.
 					</p>
 				{{end}}
 			</div>
@@ -49,10 +49,12 @@
 						<tr>
 							<th>Worker</th>
 							<th>Hashrate</th>
+							<th>Shares/min</th>
+							<th>Current diff</th>
+							<th>Connected</th>
 							<th>Last share</th>
 							<th>Accepted</th>
 							<th>Rejected</th>
-							<th>Balance</th>
 							<th></th>
 						</tr>
 					</thead>
@@ -62,16 +64,15 @@
 								<td>
 									<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
 										<a class="mono sensitive-worker worker-link" href="/worker/sha256?hash={{.WorkerSHA256}}">{{.DisplayName}}</a>
-										{{if .WorkerSHA256}}
-											<span class="text-sm" style="color:var(--text-secondary);">{{shortID .WorkerSHA256}}</span>
-										{{end}}
 									</div>
 								</td>
 								<td>{{if gt .RollingHashrate 0.0}}{{formatHashrate .RollingHashrate}}{{else}}—{{end}}</td>
+								<td>{{formatShareRate .ShareRate}}</td>
+								<td>{{formatDiff .Difficulty}}</td>
+								<td>{{formatTime .ConnectedAt}}</td>
 								<td>{{formatTime .LastShare}}</td>
 								<td>{{.Accepted}}</td>
 								<td>{{.Rejected}}</td>
-								<td>{{formatBTCShort .BalanceSats}}</td>
 								<td>
 									<a class="btn" href="/worker/sha256?hash={{.WorkerSHA256}}">View</a>
 								</td>

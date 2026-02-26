@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,75 @@ import (
 )
 
 const manualReconnectBanDuration = 30 * time.Second
+
+func quantizeSeriesToUint8(values []float64, present []bool) (minV, maxV float64, q []uint8) {
+	q = make([]uint8, len(values))
+	first := true
+	for i, v := range values {
+		if i >= len(present) || !present[i] {
+			continue
+		}
+		if first {
+			minV, maxV = v, v
+			first = false
+			continue
+		}
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
+	if first {
+		return 0, 0, q
+	}
+	if !(maxV > minV) {
+		for i := range q {
+			if i < len(present) && present[i] {
+				q[i] = 255
+			}
+		}
+		return minV, maxV, q
+	}
+	span := maxV - minV
+	for i, v := range values {
+		if i >= len(present) || !present[i] {
+			continue
+		}
+		norm := (v - minV) / span
+		if norm < 0 {
+			norm = 0
+		}
+		if norm > 1 {
+			norm = 1
+		}
+		q[i] = uint8(math.Round(norm * 255))
+	}
+	return minV, maxV, q
+}
+
+func setBit(bits []uint8, idx int) {
+	if idx < 0 {
+		return
+	}
+	bi := idx / 8
+	if bi < 0 || bi >= len(bits) {
+		return
+	}
+	bits[bi] |= 1 << uint(idx%8)
+}
+
+func widenUint8ForJSON(in []uint8) []uint16 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]uint16, len(in))
+	for i, v := range in {
+		out[i] = uint16(v)
+	}
+	return out
+}
 
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -77,27 +147,22 @@ func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request
 				hashrate := workerHashrateEstimate(view, now)
 				duration := max(now.Sub(view.ConnectedAt), 0)
 				entry := savedWorkerEntry{
-					Name:                      saved.Name,
-					Hash:                      view.WorkerSHA256,
-					NotifyEnabled:             saved.NotifyEnabled,
-					BestDifficulty:            saved.BestDifficulty,
-					Hashrate:                  hashrate,
-					HashrateAccuracy:          view.HashrateAccuracy,
-					ShareRate:                 view.ShareRate,
-					Accepted:                  view.Accepted,
-					Rejected:                  view.Rejected,
-					LastShare:                 view.LastShare,
-					Difficulty:                view.Difficulty,
-					EstimatedPingP50MS:        view.EstimatedPingP50MS,
-					EstimatedPingP95MS:        view.EstimatedPingP95MS,
-					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
-					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
-					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
-					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
-					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
-					ConnectedDuration:         duration,
-					ConnectionID:              view.ConnectionID,
-					ConnectionSeq:             view.ConnectionSeq,
+					Name:               saved.Name,
+					Hash:               view.WorkerSHA256,
+					NotifyEnabled:      saved.NotifyEnabled,
+					BestDifficulty:     saved.BestDifficulty,
+					Hashrate:           hashrate,
+					HashrateAccuracy:   view.HashrateAccuracy,
+					ShareRate:          view.ShareRate,
+					Accepted:           view.Accepted,
+					Rejected:           view.Rejected,
+					LastShare:          view.LastShare,
+					Difficulty:         view.Difficulty,
+					EstimatedPingP50MS: view.EstimatedPingP50MS,
+					EstimatedPingP95MS: view.EstimatedPingP95MS,
+					ConnectedDuration:  duration,
+					ConnectionID:       view.ConnectionID,
+					ConnectionSeq:      view.ConnectionSeq,
 				}
 				data.SavedWorkersOnline++
 				perNameRowsShown[lookupHash]++
@@ -183,11 +248,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		Difficulty                float64 `json:"difficulty"`
 		EstimatedPingP50MS        float64 `json:"estimated_ping_p50_ms,omitempty"`
 		EstimatedPingP95MS        float64 `json:"estimated_ping_p95_ms,omitempty"`
-		NotifyToFirstShareMinMS   float64 `json:"notify_to_first_share_min_ms,omitempty"`
-		NotifyToFirstShareMS      float64 `json:"notify_to_first_share_ms,omitempty"`
-		NotifyToFirstShareP50MS   float64 `json:"notify_to_first_share_p50_ms,omitempty"`
-		NotifyToFirstShareP95MS   float64 `json:"notify_to_first_share_p95_ms,omitempty"`
-		NotifyToFirstShareSamples int     `json:"notify_to_first_share_samples,omitempty"`
 		ConnectionSeq             uint64  `json:"connection_seq,omitempty"`
 		ConnectionDurationSeconds float64 `json:"connection_duration_seconds,omitempty"`
 	}
@@ -283,11 +343,6 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 					Difficulty:                view.Difficulty,
 					EstimatedPingP50MS:        view.EstimatedPingP50MS,
 					EstimatedPingP95MS:        view.EstimatedPingP95MS,
-					NotifyToFirstShareMinMS:   view.NotifyToFirstShareMinMS,
-					NotifyToFirstShareMS:      view.NotifyToFirstShareMS,
-					NotifyToFirstShareP50MS:   view.NotifyToFirstShareP50MS,
-					NotifyToFirstShareP95MS:   view.NotifyToFirstShareP95MS,
-					NotifyToFirstShareSamples: view.NotifyToFirstShareSamples,
 					LastShare:                 lastShare,
 					ConnectionSeq:             view.ConnectionSeq,
 					ConnectionDurationSeconds: connectionDurationSeconds,
@@ -307,6 +362,125 @@ func (s *StatusServer) handleSavedWorkersJSON(w http.ResponseWriter, r *http.Req
 		return
 	} else if _, err := w.Write(out); err != nil {
 		logger.Debug("saved workers json write", "error", err)
+	}
+}
+
+func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := ClerkUserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.workerLists == nil {
+		http.Error(w, "saved workers not enabled", http.StatusBadRequest)
+		return
+	}
+
+	hash, errMsg := parseSHA256HexStrict(r.URL.Query().Get("hash"))
+	if errMsg != "" || hash == "" {
+		http.Error(w, "invalid hash", http.StatusBadRequest)
+		return
+	}
+
+	list, err := s.workerLists.List(user.UserID)
+	if err != nil {
+		logger.Warn("saved worker history list failed", "error", err, "user_id", user.UserID)
+		http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
+		return
+	}
+	authorized := false
+	displayName := ""
+	for _, saved := range list {
+		if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
+			authorized = true
+			displayName = saved.Name
+			break
+		}
+	}
+	if !authorized {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	now := time.Now().UTC()
+	samples := s.savedWorkerPeriodHistory(hash, now)
+	nowBucketMinute := savedWorkerUnixMinute(now.Truncate(savedWorkerPeriodBucket))
+	spanMinutes := (savedWorkerPeriodSlots - 1) * savedWorkerPeriodBucketMinutes
+	startMinute := uint32(0)
+	if nowBucketMinute >= uint32(spanMinutes) {
+		startMinute = nowBucketMinute - uint32(spanMinutes)
+	}
+	count := savedWorkerPeriodSlots
+	present := make([]bool, count)
+	presentBits := make([]uint8, (count+7)/8)
+	hashrateVals := make([]float64, count)
+	bestVals := make([]float64, count)
+	for _, sample := range samples {
+		if sample.At.IsZero() {
+			continue
+		}
+		m := savedWorkerUnixMinute(sample.At)
+		if m < startMinute {
+			continue
+		}
+		offsetMin := int(m - startMinute)
+		if savedWorkerPeriodBucketMinutes <= 0 || offsetMin < 0 {
+			continue
+		}
+		idx := offsetMin / savedWorkerPeriodBucketMinutes
+		if idx < 0 || idx >= count {
+			continue
+		}
+		present[idx] = true
+		setBit(presentBits, idx)
+		hashrateVals[idx] = decodeHashrateSI16(sample.HashrateQ)
+		bestVals[idx] = decodeBestShareSI16(sample.BestDifficultyQ)
+	}
+	hMin, hMax, hQ := quantizeSeriesToUint8(hashrateVals, present)
+	bMin, bMax, bQ := quantizeSeriesToUint8(bestVals, present)
+	resp := struct {
+		Hash string  `json:"hash"`
+		Name string  `json:"name,omitempty"`
+		U    string  `json:"u"`  // updated_at
+		I    int     `json:"i"`  // interval seconds
+		S    uint32  `json:"s"`  // start unix-minute
+		N    int     `json:"n"`  // number of buckets
+		P    []uint16 `json:"p"` // presence bitset
+		HMin float64 `json:"h0"` // hashrate min
+		HMax float64 `json:"h1"` // hashrate max
+		HQ   []uint16 `json:"hq"` // hashrate q8
+		BMin float64 `json:"b0"` // best-share min
+		BMax float64 `json:"b1"` // best-share max
+		BQ   []uint16 `json:"bq"` // best-share q8
+	}{
+		Hash: hash,
+		Name: displayName,
+		U:    now.Format(time.RFC3339),
+		I:    int(savedWorkerPeriodBucket / time.Second),
+		S:    startMinute,
+		N:    count,
+		P:    widenUint8ForJSON(presentBits),
+		HMin: hMin,
+		HMax: hMax,
+		HQ:   widenUint8ForJSON(hQ),
+		BMin: bMin,
+		BMax: bMax,
+		BQ:   widenUint8ForJSON(bQ),
+	}
+
+	setShortJSONCacheHeaders(w, true)
+	out, err := sonic.Marshal(resp)
+	if err != nil {
+		logger.Error("saved worker history json marshal", "error", err, "user_id", user.UserID, "hash", hash)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(out); err != nil {
+		logger.Debug("saved worker history json write", "error", err, "user_id", user.UserID, "hash", hash)
 	}
 }
 
@@ -582,6 +756,8 @@ func (s *StatusServer) handleWorkerSave(w http.ResponseWriter, r *http.Request) 
 	if s.workerLists != nil {
 		if err := s.workerLists.Add(user.UserID, worker); err != nil {
 			logger.Warn("save worker name", "error", err, "user_id", user.UserID)
+		} else {
+			s.refreshLiveSavedWorkerTrackingByHash(workerNameHash(worker))
 		}
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
@@ -609,6 +785,8 @@ func (s *StatusServer) handleWorkerRemove(w http.ResponseWriter, r *http.Request
 	if s.workerLists != nil {
 		if err := s.workerLists.Remove(user.UserID, hash); err != nil {
 			logger.Warn("remove worker by hash", "error", err, "user_id", user.UserID, "hash", hash)
+		} else {
+			s.refreshLiveSavedWorkerTrackingByHash(hash)
 		}
 	}
 	http.Redirect(w, r, "/saved-workers", http.StatusSeeOther)
