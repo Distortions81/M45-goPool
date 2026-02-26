@@ -315,7 +315,6 @@
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">{{formatShareRate .ShareRate}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">{{formatTime .LastShare}}</span></span>
 									</div>
 								</div>
 							</div>
@@ -330,6 +329,7 @@
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">{{formatTime .LastShare}}</span></span>
 									</div>
 									<div class="saved-workers-online-actions">
 										<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
@@ -1623,7 +1623,6 @@
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">${formatShareRate(shareRate)}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">${formatLastShare(w.last_share)}</span></span>
 									</div>
 								</div>
 							</div>
@@ -1638,6 +1637,7 @@
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value">${formatLatency((Number(w.estimated_ping_p50_ms || 0) > 0) ? w.estimated_ping_p50_ms : w.estimated_ping_p95_ms)}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">${formatLastShare(w.last_share)}</span></span>
 									</div>
 									<div class="saved-workers-online-actions">
 										<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
