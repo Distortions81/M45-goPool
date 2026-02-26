@@ -17,6 +17,22 @@
 		.hashrate-solid {
 			opacity: 1;
 		}
+		.recent-work-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 8px;
+			border: 1px solid rgba(255,255,255,0.08);
+			border-radius: 999px;
+			background: rgba(255,255,255,0.02);
+			min-height: 28px;
+			line-height: 1;
+			white-space: nowrap;
+		}
+		[data-theme="light"] .recent-work-pill {
+			border-color: rgba(40, 46, 58, 0.12);
+			background: rgba(40, 46, 58, 0.035);
+		}
 	</style>
 </head>
 <body>
@@ -501,10 +517,10 @@
 					return `
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
-							<td class="${hashrateClass}">${hashrateText}</td>
-							<td>${formatDiff(worker.difficulty)}</td>
-							<td>${shareRate}</td>
-							<td>${worker.accepted || 0}</td>
+							<td><span class="recent-work-pill ${hashrateClass}">${hashrateText}</span></td>
+							<td><span class="recent-work-pill">${formatDiff(worker.difficulty)}</span></td>
+							<td><span class="recent-work-pill">${shareRate}</span></td>
+							<td><span class="recent-work-pill">${worker.accepted || 0}</span></td>
 						</tr>`;
 				});
 			tbody.innerHTML = rows.join('');
@@ -523,9 +539,9 @@
 				return `
 					<tr>
 						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
-						<td>${formatBestShareDiff(share.difficulty)}</td>
-						<td><span class="time-full">${formatTimeAgo(share.timestamp)}</span><span class="time-short">${formatTimeAgoShort(share.timestamp)}</span></td>
-						<td class="mono">${share.display_hash || share.hash || '—'}</td>
+						<td><span class="recent-work-pill">${formatBestShareDiff(share.difficulty)}</span></td>
+						<td><span class="recent-work-pill"><span class="time-full">${formatTimeAgo(share.timestamp)}</span><span class="time-short">${formatTimeAgoShort(share.timestamp)}</span></span></td>
+						<td class="mono"><span class="recent-work-pill">${share.display_hash || share.hash || '—'}</span></td>
 					</tr>
 				`;
 			});
