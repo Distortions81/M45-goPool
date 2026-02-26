@@ -497,7 +497,7 @@
 		<div class="worker-graphs-body">
 			<div id="workerGraphsStatus" class="text-sm" style="color:var(--text-muted);">Select a worker to load graphs.</div>
 			<div class="worker-graphs-panel">
-				<div class="label">Hashrate (60s buckets)</div>
+				<div class="label">Hashrate (2m buckets)</div>
 				<canvas id="workerGraphsHashrateCanvas" class="worker-graphs-canvas"></canvas>
 			</div>
 			<div class="worker-graphs-panel">
@@ -1162,7 +1162,7 @@
 			return { ctx, width, height };
 		}
 
-		function drawWorkerSeriesGraph(canvas, points, valueKey, color, valueFormatter) {
+		function drawWorkerSeriesGraph(canvas, rowsInput, color, valueFormatter) {
 			const resized = resizeGraphCanvas(canvas);
 			if (!resized) return;
 			const { ctx, width, height } = resized;
@@ -1174,10 +1174,10 @@
 			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
 			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
 
-			const rows = (Array.isArray(points) ? points : [])
+			const rows = (Array.isArray(rowsInput) ? rowsInput : [])
 				.map((p) => ({
-					at: Date.parse(p?.at),
-					value: Number(p?.[valueKey] || 0),
+					at: (typeof p?.at === 'number') ? p.at : Date.parse(p?.at),
+					value: Number(p?.value ?? 0),
 				}))
 				.filter((p) => Number.isFinite(p.at) && Number.isFinite(p.value) && p.value >= 0)
 				.sort((a, b) => a.at - b.at);
@@ -1250,6 +1250,45 @@
 			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
 		}
 
+		function bitIsSet(bytes, idx) {
+			if (!Array.isArray(bytes) || idx < 0) return false;
+			const bi = Math.floor(idx / 8);
+			if (bi < 0 || bi >= bytes.length) return false;
+			const b = Number(bytes[bi] || 0);
+			return ((b >> (idx % 8)) & 1) === 1;
+		}
+
+		function dequantizeQ8(q, minV, maxV) {
+			const qq = Number(q || 0);
+			const lo = Number(minV || 0);
+			const hi = Number(maxV || 0);
+			if (!isFinite(qq) || qq < 0) return lo;
+			if (!isFinite(lo) || !isFinite(hi)) return 0;
+			if (!(hi > lo)) return lo;
+			return lo + (Math.max(0, Math.min(255, qq)) / 255) * (hi - lo);
+		}
+
+		function decodeCompactWorkerSeries(data, qKey, minKey, maxKey) {
+			const count = Math.max(0, Number(data?.n || 0));
+			const startMinute = Math.max(0, Number(data?.s || 0));
+			const intervalSec = Math.max(1, Number(data?.i || 120));
+			const intervalMillis = intervalSec * 1000;
+			const present = Array.isArray(data?.p) ? data.p : [];
+			const q = Array.isArray(data?.[qKey]) ? data[qKey] : [];
+			const minV = Number(data?.[minKey] || 0);
+			const maxV = Number(data?.[maxKey] || 0);
+			const rows = [];
+			for (let i = 0; i < count; i++) {
+				if (!bitIsSet(present, i)) continue;
+				const tsMillis = (startMinute * 60 * 1000) + (i * intervalMillis);
+				rows.push({
+					at: tsMillis,
+					value: dequantizeQ8(q[i], minV, maxV),
+				});
+			}
+			return rows;
+		}
+
 		async function openWorkerGraphs(hash, name) {
 			hash = String(hash || '').trim().toLowerCase();
 			if (!hash) return;
@@ -1260,8 +1299,8 @@
 				applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
 			}
 			setWorkerGraphsStatus('Loading history...', false);
-			drawWorkerSeriesGraph(workerGraphsHashrateCanvas, [], 'hashrate', '#4a9eff', formatHashrate);
-			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], 'best_share', '#f3d36b', formatDifficulty);
+			drawWorkerSeriesGraph(workerGraphsHashrateCanvas, [], '#4a9eff', formatHashrate);
+			drawWorkerSeriesGraph(workerGraphsBestShareCanvas, [], '#f3d36b', formatDifficulty);
 			try {
 				if (workerGraphsDialog) {
 					if (typeof workerGraphsDialog.showModal === 'function') workerGraphsDialog.showModal();
@@ -1274,16 +1313,18 @@
 				const res = await fetchWithAuthRefresh(`/api/saved-workers/history?hash=${encodeURIComponent(hash)}`, { credentials: 'same-origin' });
 				if (!res.ok) throw new Error(`http ${res.status}`);
 				const data = await res.json();
-				const history = Array.isArray(data?.history) ? data.history : [];
+				const hashrateRows = decodeCompactWorkerSeries(data, 'hq', 'h0', 'h1');
+				const bestRows = decodeCompactWorkerSeries(data, 'bq', 'b0', 'b1');
 				const labelName = String(data?.name || name || '').trim();
 				if (workerGraphsSubtitle) {
 					workerGraphsSubtitle.setAttribute('data-worker-name', labelName);
 					workerGraphsSubtitle.setAttribute('data-worker-hash', hash);
 					applyWorkerNameCensoring(workerGraphsSubtitle.parentElement || workerGraphsSubtitle);
 				}
-				drawWorkerSeriesGraph(workerGraphsHashrateCanvas, history, 'hashrate', '#4a9eff', formatHashrate);
-				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, history, 'best_share', '#f3d36b', formatDifficulty);
-				setWorkerGraphsStatus(history.length > 0 ? `Showing ${history.length} minute bucket${history.length === 1 ? '' : 's'}.` : 'No history recorded yet for this saved worker.', false);
+				drawWorkerSeriesGraph(workerGraphsHashrateCanvas, hashrateRows, '#4a9eff', formatHashrate);
+				drawWorkerSeriesGraph(workerGraphsBestShareCanvas, bestRows, '#f3d36b', formatDifficulty);
+				const shown = Math.max(hashrateRows.length, bestRows.length);
+				setWorkerGraphsStatus(shown > 0 ? `Showing ${shown} bucket${shown === 1 ? '' : 's'} (2m).` : 'No history recorded yet for this saved worker.', false);
 			} catch (err) {
 				console.error('worker history fetch failed', err);
 				setWorkerGraphsStatus('Failed to load history.', true);

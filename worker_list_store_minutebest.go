@@ -1,10 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
+
+const savedWorkerPeriodBucketMinutes = int(savedWorkerPeriodBucket / time.Minute)
 
 func savedWorkerMinuteBucketAt(now time.Time) time.Time {
 	if now.IsZero() {
@@ -13,12 +14,23 @@ func savedWorkerMinuteBucketAt(now time.Time) time.Time {
 	return now.UTC().Truncate(savedWorkerPeriodBucket)
 }
 
-func savedWorkerMinuteBestKey(hash string, bucket time.Time) string {
-	hash = strings.ToLower(strings.TrimSpace(hash))
-	if hash == "" || bucket.IsZero() {
-		return ""
+func savedWorkerUnixMinute(now time.Time) uint32 {
+	b := savedWorkerMinuteBucketAt(now)
+	if b.IsZero() {
+		return 0
 	}
-	return fmt.Sprintf("%s:%d", hash, bucket.Unix())
+	sec := b.Unix()
+	if sec <= 0 {
+		return 0
+	}
+	return uint32(sec / 60)
+}
+
+func savedWorkerRingIndex(minute uint32) int {
+	if savedWorkerPeriodBucketMinutes <= 1 {
+		return int(minute % uint32(savedWorkerPeriodSlots))
+	}
+	return int((minute / uint32(savedWorkerPeriodBucketMinutes)) % uint32(savedWorkerPeriodSlots))
 }
 
 func (s *workerListStore) UpdateSavedWorkerMinuteBestDifficulty(hash string, diff float64, now time.Time) {
@@ -29,65 +41,80 @@ func (s *workerListStore) UpdateSavedWorkerMinuteBestDifficulty(hash string, dif
 	if hash == "" || diff <= 0 {
 		return
 	}
-	bucket := savedWorkerMinuteBucketAt(now)
-	if bucket.IsZero() {
+	minute := savedWorkerUnixMinute(now)
+	if minute == 0 {
 		return
 	}
-	key := savedWorkerMinuteBestKey(hash, bucket)
-	if key == "" {
+	code := encodeBestShareSI16(diff)
+	if code == 0 {
 		return
 	}
 
 	s.minuteBestMu.Lock()
 	defer s.minuteBestMu.Unlock()
-	code := encodeBestShareSI16(diff)
-	if code == 0 {
-		return
-	}
 	if s.minuteBestByID == nil {
-		s.minuteBestByID = make(map[string]uint16)
+		s.minuteBestByID = make(map[string]*savedWorkerMinuteBestRing)
 	}
-	if code > s.minuteBestByID[key] {
-		s.minuteBestByID[key] = code
+	ring := s.minuteBestByID[hash]
+	if ring == nil {
+		ring = &savedWorkerMinuteBestRing{}
+		s.minuteBestByID[hash] = ring
 	}
-	s.pruneSavedWorkerMinuteBestLocked(bucket)
+	idx := savedWorkerRingIndex(minute)
+	if ring.minutes[idx] != minute {
+		ring.minutes[idx] = minute
+		ring.bestQ[idx] = 0
+	}
+	if code > ring.bestQ[idx] {
+		ring.bestQ[idx] = code
+	}
+	ring.lastMinute = minute
+	s.pruneSavedWorkerMinuteBestLocked(minute)
 }
 
 func (s *workerListStore) SavedWorkerMinuteBestDifficulty(hash string, bucket time.Time) float64 {
 	if s == nil || s.db == nil {
 		return 0
 	}
-	key := savedWorkerMinuteBestKey(hash, bucket.UTC().Truncate(savedWorkerPeriodBucket))
-	if key == "" {
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if hash == "" {
+		return 0
+	}
+	minute := savedWorkerUnixMinute(bucket)
+	if minute == 0 {
 		return 0
 	}
 	s.minuteBestMu.Lock()
 	defer s.minuteBestMu.Unlock()
-	s.pruneSavedWorkerMinuteBestLocked(bucket)
-	return decodeBestShareSI16(s.minuteBestByID[key])
+	s.pruneSavedWorkerMinuteBestLocked(minute)
+	ring := s.minuteBestByID[hash]
+	if ring == nil {
+		return 0
+	}
+	idx := savedWorkerRingIndex(minute)
+	if ring.minutes[idx] != minute {
+		return 0
+	}
+	return decodeBestShareSI16(ring.bestQ[idx])
 }
 
-func (s *workerListStore) pruneSavedWorkerMinuteBestLocked(now time.Time) {
-	if s == nil || len(s.minuteBestByID) == 0 {
+func (s *workerListStore) pruneSavedWorkerMinuteBestLocked(nowMinute uint32) {
+	if s == nil || len(s.minuteBestByID) == 0 || nowMinute == 0 {
 		return
 	}
-	cutoff := now.Add(-savedWorkerPeriodHistoryWindow).Unix()
-	for key := range s.minuteBestByID {
-		i := strings.LastIndexByte(key, ':')
-		if i < 0 || i+1 >= len(key) {
-			delete(s.minuteBestByID, key)
+	maxAge := uint32(savedWorkerPeriodSlots * savedWorkerPeriodBucketMinutes)
+	for hash, ring := range s.minuteBestByID {
+		if ring == nil {
+			delete(s.minuteBestByID, hash)
 			continue
 		}
-		var ts int64
-		for _, ch := range key[i+1:] {
-			if ch < '0' || ch > '9' {
-				ts = 0
-				break
-			}
-			ts = ts*10 + int64(ch-'0')
+		if ring.lastMinute == 0 {
+			delete(s.minuteBestByID, hash)
+			continue
 		}
-		if ts < cutoff {
-			delete(s.minuteBestByID, key)
+		// uint32 subtraction intentionally handles wraparound.
+		if nowMinute-ring.lastMinute > maxAge {
+			delete(s.minuteBestByID, hash)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,64 @@ import (
 )
 
 const manualReconnectBanDuration = 30 * time.Second
+
+func quantizeSeriesToUint8(values []float64, present []bool) (minV, maxV float64, q []uint8) {
+	q = make([]uint8, len(values))
+	first := true
+	for i, v := range values {
+		if i >= len(present) || !present[i] {
+			continue
+		}
+		if first {
+			minV, maxV = v, v
+			first = false
+			continue
+		}
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
+	if first {
+		return 0, 0, q
+	}
+	if !(maxV > minV) {
+		for i := range q {
+			if i < len(present) && present[i] {
+				q[i] = 255
+			}
+		}
+		return minV, maxV, q
+	}
+	span := maxV - minV
+	for i, v := range values {
+		if i >= len(present) || !present[i] {
+			continue
+		}
+		norm := (v - minV) / span
+		if norm < 0 {
+			norm = 0
+		}
+		if norm > 1 {
+			norm = 1
+		}
+		q[i] = uint8(math.Round(norm * 255))
+	}
+	return minV, maxV, q
+}
+
+func setBit(bits []uint8, idx int) {
+	if idx < 0 {
+		return
+	}
+	bi := idx / 8
+	if bi < 0 || bi >= len(bits) {
+		return
+	}
+	bits[bi] |= 1 << uint(idx%8)
+}
 
 func (s *StatusServer) handleSavedWorkers(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -353,31 +412,68 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 
 	now := time.Now().UTC()
 	samples := s.savedWorkerPeriodHistory(hash, now)
-	type point struct {
-		At         string  `json:"at"`
-		Hashrate   float64 `json:"hashrate"`
-		BestShare  float64 `json:"best_share"`
+	nowMinute := savedWorkerUnixMinute(now)
+	windowMinutes := savedWorkerPeriodSlots * savedWorkerPeriodBucketMinutes
+	startMinute := uint32(0)
+	if nowMinute >= uint32(windowMinutes-1) {
+		startMinute = nowMinute - uint32(windowMinutes-1)
 	}
-	resp := struct {
-		Hash      string  `json:"hash"`
-		Name      string  `json:"name,omitempty"`
-		UpdatedAt string  `json:"updated_at"`
-		History   []point `json:"history"`
-	}{
-		Hash:      hash,
-		Name:      displayName,
-		UpdatedAt: now.Format(time.RFC3339),
-		History:   make([]point, 0, len(samples)),
-	}
+	count := savedWorkerPeriodSlots
+	present := make([]bool, count)
+	presentBits := make([]uint8, (count+7)/8)
+	hashrateVals := make([]float64, count)
+	bestVals := make([]float64, count)
 	for _, sample := range samples {
 		if sample.At.IsZero() {
 			continue
 		}
-		resp.History = append(resp.History, point{
-			At:        sample.At.UTC().Format(time.RFC3339),
-			Hashrate:  decodeHashrateSI16(sample.HashrateQ),
-			BestShare: decodeBestShareSI16(sample.BestDifficultyQ),
-		})
+		m := savedWorkerUnixMinute(sample.At)
+		if m < startMinute {
+			continue
+		}
+		offsetMin := int(m - startMinute)
+		if savedWorkerPeriodBucketMinutes <= 0 || offsetMin < 0 {
+			continue
+		}
+		idx := offsetMin / savedWorkerPeriodBucketMinutes
+		if idx < 0 || idx >= count {
+			continue
+		}
+		present[idx] = true
+		setBit(presentBits, idx)
+		hashrateVals[idx] = decodeHashrateSI16(sample.HashrateQ)
+		bestVals[idx] = decodeBestShareSI16(sample.BestDifficultyQ)
+	}
+	hMin, hMax, hQ := quantizeSeriesToUint8(hashrateVals, present)
+	bMin, bMax, bQ := quantizeSeriesToUint8(bestVals, present)
+	resp := struct {
+		Hash      string  `json:"hash"`
+		Name      string  `json:"name,omitempty"`
+		U         string  `json:"u"`   // updated_at
+		I         int     `json:"i"`   // interval seconds
+		S         uint32  `json:"s"`   // start unix-minute
+		N         int     `json:"n"`   // number of buckets
+		P         []uint8 `json:"p"`   // presence bitset
+		HMin      float64 `json:"h0"`  // hashrate min
+		HMax      float64 `json:"h1"`  // hashrate max
+		HQ        []uint8 `json:"hq"`  // hashrate q8
+		BMin      float64 `json:"b0"`  // best-share min
+		BMax      float64 `json:"b1"`  // best-share max
+		BQ        []uint8 `json:"bq"`  // best-share q8
+	}{
+		Hash: hash,
+		Name: displayName,
+		U:    now.Format(time.RFC3339),
+		I:    int(savedWorkerPeriodBucket / time.Second),
+		S:    startMinute,
+		N:    count,
+		P:    presentBits,
+		HMin: hMin,
+		HMax: hMax,
+		HQ:   hQ,
+		BMin: bMin,
+		BMax: bMax,
+		BQ:   bQ,
 	}
 
 	setShortJSONCacheHeaders(w, true)
