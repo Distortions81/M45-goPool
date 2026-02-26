@@ -98,6 +98,36 @@ func (s *workerListStore) SavedWorkerMinuteBestDifficulty(hash string, bucket ti
 	return decodeBestShareSI16(ring.bestQ[idx])
 }
 
+// ConsumeSavedWorkerMinuteBestDifficulty returns the finalized best share for a
+// bucket and clears that bucket so subsequent reads don't reuse stale values.
+func (s *workerListStore) ConsumeSavedWorkerMinuteBestDifficulty(hash string, bucket time.Time) float64 {
+	if s == nil || s.db == nil {
+		return 0
+	}
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if hash == "" {
+		return 0
+	}
+	minute := savedWorkerUnixMinute(bucket)
+	if minute == 0 {
+		return 0
+	}
+	s.minuteBestMu.Lock()
+	defer s.minuteBestMu.Unlock()
+	s.pruneSavedWorkerMinuteBestLocked(minute)
+	ring := s.minuteBestByID[hash]
+	if ring == nil {
+		return 0
+	}
+	idx := savedWorkerRingIndex(minute)
+	if ring.minutes[idx] != minute {
+		return 0
+	}
+	best := decodeBestShareSI16(ring.bestQ[idx])
+	ring.bestQ[idx] = 0
+	return best
+}
+
 func (s *workerListStore) pruneSavedWorkerMinuteBestLocked(nowMinute uint32) {
 	if s == nil || len(s.minuteBestByID) == 0 || nowMinute == 0 {
 		return
