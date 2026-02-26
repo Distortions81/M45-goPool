@@ -6,33 +6,35 @@ const adminSessionCookieName = "admin_session"
 
 type AdminPageData struct {
 	StatusData
-	AdminEnabled         bool
-	AdminConfigPath      string
-	LoggedIn             bool
-	AdminLoginError      string
-	AdminApplyError      string
-	AdminReloadError     string
-	AdminPersistError    string
-	AdminRebootError     string
-	AdminNotice          string
-	AdminLoginsLoadError string
-	AdminBansLoadError   string
-	AdminLogsLoadError   string
-	Settings             AdminSettingsData
-	AdminSection         string
-	AdminMinerRows       []AdminMinerRow
-	AdminSavedWorkerRows []AdminSavedWorkerRow
-	AdminBannedWorkers   []WorkerView
-	AdminMinerPagination AdminPagination
-	AdminLoginPagination AdminPagination
-	AdminBansPagination  AdminPagination
-	AdminPerPageOptions  []int
-	AdminLogSources      []string
-	AdminLogSource       string
-	AdminDebugEnabled    bool
-	AdminNetDebugEnabled bool
-	AdminNetDebugSupport bool
-	OperatorStats        AdminOperatorStatsData
+	AdminEnabled           bool
+	AdminConfigPath        string
+	LoggedIn               bool
+	AdminLoginError        string
+	AdminApplyError        string
+	AdminReloadError       string
+	AdminPersistError      string
+	AdminRebootError       string
+	AdminNotice            string
+	AdminLoginsLoadError   string
+	AdminBansLoadError     string
+	AdminLogsLoadError     string
+	Settings               AdminSettingsData
+	AdminSection           string
+	AdminMinerRows         []AdminMinerRow
+	AdminSavedWorkerRows   []AdminSavedWorkerRow
+	AdminBannedWorkers     []WorkerView
+	AdminMinerPagination   AdminPagination
+	AdminLoginPagination   AdminPagination
+	AdminBansPagination    AdminPagination
+	AdminPerPageOptions    []int
+	AdminLogSources        []string
+	AdminLogSource         string
+	AdminLoadedConfigJSON  string
+	AdminLoadedConfigError string
+	AdminDebugEnabled      bool
+	AdminNetDebugEnabled   bool
+	AdminNetDebugSupport   bool
+	OperatorStats          AdminOperatorStatsData
 }
 
 type AdminOperatorStatsData struct {

@@ -569,6 +569,7 @@ func main() {
 	mux.HandleFunc("/admin/bans", statusServer.handleAdminBansPage)
 	mux.HandleFunc("/admin/bans/remove", statusServer.handleAdminBanRemove)
 	mux.HandleFunc("/admin/operator", statusServer.handleAdminOperatorPage)
+	mux.HandleFunc("/admin/config", statusServer.handleAdminConfigPage)
 	mux.HandleFunc("/admin/logs", statusServer.handleAdminLogsPage)
 	mux.HandleFunc("/admin/logs/tail", statusServer.handleAdminLogsTail)
 	mux.HandleFunc("/admin/logs/flags", statusServer.handleAdminLogsSetFlags)

@@ -829,6 +829,7 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	adminLoginsPath := filepath.Join(dataDir, "templates", "admin_logins.tmpl")
 	adminBansPath := filepath.Join(dataDir, "templates", "admin_bans.tmpl")
 	adminOperatorPath := filepath.Join(dataDir, "templates", "admin_operator.tmpl")
+	adminConfigPath := filepath.Join(dataDir, "templates", "admin_config.tmpl")
 	adminLogsPath := filepath.Join(dataDir, "templates", "admin_logs.tmpl")
 	errorPath := filepath.Join(dataDir, "templates", "error.tmpl")
 
@@ -917,6 +918,10 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load admin operator template: %w", err)
 	}
+	adminConfigHTML, err := os.ReadFile(adminConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("load admin config template: %w", err)
+	}
 	adminLogsHTML, err := os.ReadFile(adminLogsPath)
 	if err != nil {
 		return nil, fmt.Errorf("load admin logs template: %w", err)
@@ -990,6 +995,9 @@ func loadTemplates(dataDir string) (*template.Template, error) {
 	}
 	if _, err := tmpl.New("admin_operator").Parse(string(adminOperatorHTML)); err != nil {
 		return nil, fmt.Errorf("parse admin operator template: %w", err)
+	}
+	if _, err := tmpl.New("admin_config").Parse(string(adminConfigHTML)); err != nil {
+		return nil, fmt.Errorf("parse admin config template: %w", err)
 	}
 	if _, err := tmpl.New("admin_logs").Parse(string(adminLogsHTML)); err != nil {
 		return nil, fmt.Errorf("parse admin logs template: %w", err)

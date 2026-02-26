@@ -1,0 +1,52 @@
+{{/* Admin config viewer page template */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{if .BrandDomain}}{{.BrandDomain}}{{else}}{{.BrandName}}{{end}} - Config Viewer</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<main class="page admin-page" id="content">
+		<h1>Admin Control Panel</h1>
+		<p class="text-sm" style="margin-top:4px;">
+			Read-only view of loaded config values that differ from compiled defaults (effective runtime config overrides only).
+		</p>
+		{{if .AdminNotice}}
+		<div class="card">
+			<p class="text-sm">{{.AdminNotice}}</p>
+		</div>
+		{{end}}
+		{{if not .AdminEnabled}}
+		<div class="card">
+			<p class="text-sm">
+				The admin panel is disabled. Enable it by editing <span class="mono">{{.AdminConfigPath}}</span> and setting <span class="mono">enabled = true</span>.
+			</p>
+		</div>
+		{{else if not .LoggedIn}}
+		<div class="card">
+			<p class="text-sm">
+				Sign in on the <a href="/admin">main admin page</a> to view config files.
+			</p>
+		</div>
+		{{else}}
+		{{template "admin-nav" .}}
+		<div class="card">
+			<div class="label">Loaded config overrides</div>
+			<p class="text-sm" style="margin:8px 0 0 0;color:var(--text-muted);">
+				Compared against goPool's compiled defaults. Values that match defaults are omitted.
+			</p>
+			{{if .AdminLoadedConfigError}}
+			<p class="text-sm" style="margin:10px 0 0 0;color:#f88d8d;">{{.AdminLoadedConfigError}}</p>
+			{{else}}
+			<pre class="mono" style="margin-top:12px;max-height:65vh;overflow:auto;background:#0b0d12;border:1px solid #2a2f3a;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word;">{{if .AdminLoadedConfigJSON}}{{.AdminLoadedConfigJSON}}{{else}}{}{{end}}</pre>
+			{{end}}
+		</div>
+		{{end}}
+		{{template "footer" .}}
+	</main>
+</body>
+</html>
