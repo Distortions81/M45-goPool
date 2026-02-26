@@ -286,7 +286,7 @@
 				<div class="graph-card-header">
 					<div class="label">Saved Worker History</div>
 					<p class="text-sm graph-card-description" id="savedWorkersTopChartMeta">
-						Blue bars: total hashrate. Gold line: best share (bucket max).
+						Blue bars: total hashrate. Gold line: best share.
 					</p>
 				</div>
 				<canvas id="savedWorkersHashrateChart" style="width:100%;height:220px;"></canvas>
@@ -309,6 +309,14 @@
 						<option value="connection_seq">Connection #</option>
 						<option value="name">Name</option>
 						<option value="hashrate">Hashrate</option>
+						<option value="best_difficulty">Best Share</option>
+						<option value="difficulty">Difficulty</option>
+						<option value="shares_per_minute">Shares/min</option>
+						<option value="accepted">Accepted</option>
+						<option value="rejected">Rejected</option>
+						<option value="ping_ms">Ping</option>
+						<option value="connection_duration_seconds">Connected</option>
+						<option value="uptime_history">Uptime</option>
 					</select>
 					<button id="savedWorkersSortOrder" class="btn btn-secondary" type="button" aria-label="Toggle sort order">Desc ↓</button>
 				</div>
@@ -340,7 +348,7 @@
 											</span>
 										</span>
 										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Best</span>
+											<span class="saved-workers-online-pill-label">Best ever</span>
 											<span class="saved-workers-online-pill-value">{{formatDiff .BestDifficulty}}</span>
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
@@ -652,7 +660,7 @@
 		<div class="worker-graphs-body">
 			<div id="workerGraphsStatus" class="text-sm" style="color:var(--text-muted);">Select a worker to load graphs.</div>
 			<div class="worker-graphs-panel">
-				<div class="label">Hashrate + Best share (combined buckets)</div>
+				<div class="label">Hashrate + Best share</div>
 				<canvas id="workerGraphsCombinedCanvas" class="worker-graphs-canvas"></canvas>
 			</div>
 		</div>
@@ -1090,6 +1098,18 @@
 			return `${secs}s`;
 		}
 
+		function formatGraphTimeSpan(seconds) {
+			const total = Math.max(0, Math.floor(Number(seconds) || 0));
+			const days = Math.floor(total / 86400);
+			const hours = Math.floor((total % 86400) / 3600);
+			const minutes = Math.floor((total % 3600) / 60);
+			const secs = total % 60;
+			if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+			if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+			if (minutes > 0) return `${minutes}m`;
+			return `${secs}s`;
+		}
+
 		function formatLatency(ms) {
 			const v = Number(ms || 0);
 			if (!isFinite(v) || v <= 0) return '—';
@@ -1432,14 +1452,8 @@
 			const series = aggregateSavedWorkersTopChartSeries();
 			const hashrateRows = Array.isArray(series?.hashrateRows) ? series.hashrateRows : [];
 			const bestRows = Array.isArray(series?.bestRows) ? series.bestRows : [];
-			const workerCount = Number(series?.workerCount || 0);
-			const cachedWorkers = Number(series?.cachedWorkers || 0);
 			if (savedWorkersTopChartMeta) {
-				if (workerCount > 0) {
-					savedWorkersTopChartMeta.textContent = `Blue bars: total hashrate. Gold line: best share (bucket max). Cached histories: ${cachedWorkers}/${workerCount}.`;
-				} else {
-					savedWorkersTopChartMeta.textContent = 'Blue bars: total hashrate. Gold line: best share (bucket max).';
-				}
+				savedWorkersTopChartMeta.textContent = 'Blue bars: total hashrate. Gold line: best share.';
 			}
 
 			const allRows = hashrateRows.concat(bestRows);
@@ -1570,7 +1584,7 @@
 			ctx.fillStyle = '#b3bbd4';
 			ctx.textAlign = 'center';
 			ctx.font = '10px monospace';
-			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+			ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
 		}
 
 		function updateSavedWorkersTopChartLiveHashrate(hashrate) {
@@ -1708,7 +1722,7 @@
 			ctx.fillStyle = '#b3bbd4';
 			ctx.textAlign = 'center';
 			ctx.font = '10px monospace';
-			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+			ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
 		}
 
 		function drawWorkerSeriesGraph(canvas, rowsInput, color, valueFormatter) {
@@ -1819,7 +1833,7 @@
 			ctx.stroke();
 			ctx.fillStyle = '#b3bbd4';
 			ctx.textAlign = 'center';
-			ctx.fillText('time', paddingLeft + graphWidth / 2, height - 6);
+			ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
 		}
 
 		function bitIsSet(bytes, idx) {
@@ -2289,6 +2303,9 @@
 		function renderOnlineWorkers(workers) {
 			lastOnlineWorkers = Array.isArray(workers) ? workers.slice() : [];
 			if (!onlineWorkersBody) return;
+			const nowMillis = Date.now();
+			pruneWorkerHashrateFallback(nowMillis);
+			pruneWorkerShareRateFallback(nowMillis);
 			const data = lastOnlineWorkers.slice();
 			data.sort((a, b) => {
 				let va;
@@ -2297,8 +2314,32 @@
 					va = String(a.name || '').toLowerCase();
 					vb = String(b.name || '').toLowerCase();
 				} else if (currentSortField === 'hashrate') {
-					va = Number(a.hashrate || 0);
-					vb = Number(b.hashrate || 0);
+					va = effectiveWorkerHashrate(a, nowMillis);
+					vb = effectiveWorkerHashrate(b, nowMillis);
+				} else if (currentSortField === 'best_difficulty') {
+					va = Number(a.best_difficulty || 0);
+					vb = Number(b.best_difficulty || 0);
+				} else if (currentSortField === 'difficulty') {
+					va = Number(a.difficulty || 0);
+					vb = Number(b.difficulty || 0);
+				} else if (currentSortField === 'shares_per_minute') {
+					va = effectiveWorkerShareRate(a, nowMillis);
+					vb = effectiveWorkerShareRate(b, nowMillis);
+				} else if (currentSortField === 'accepted') {
+					va = Number(a.accepted || 0);
+					vb = Number(b.accepted || 0);
+				} else if (currentSortField === 'rejected') {
+					va = Number(a.rejected || 0);
+					vb = Number(b.rejected || 0);
+				} else if (currentSortField === 'ping_ms') {
+					va = (Number(a.estimated_ping_p50_ms || 0) > 0) ? Number(a.estimated_ping_p50_ms || 0) : Number(a.estimated_ping_p95_ms || 0);
+					vb = (Number(b.estimated_ping_p50_ms || 0) > 0) ? Number(b.estimated_ping_p50_ms || 0) : Number(b.estimated_ping_p95_ms || 0);
+				} else if (currentSortField === 'connection_duration_seconds') {
+					va = Number(a.connection_duration_seconds || 0);
+					vb = Number(b.connection_duration_seconds || 0);
+				} else if (currentSortField === 'uptime_history') {
+					va = Number(computeWorkerHistoryUptimePercent(inlineWorkerChartCache.get(String(a.hash || '').trim().toLowerCase())) || 0);
+					vb = Number(computeWorkerHistoryUptimePercent(inlineWorkerChartCache.get(String(b.hash || '').trim().toLowerCase())) || 0);
 				} else {
 					va = Number(a.connection_seq || 0);
 					vb = Number(b.connection_seq || 0);
@@ -2313,9 +2354,6 @@
 				onlineWorkersBody.innerHTML = '<tr><td class="text-sm">No saved workers online right now.</td></tr>';
 				return;
 			}
-			const nowMillis = Date.now();
-			pruneWorkerHashrateFallback(nowMillis);
-			pruneWorkerShareRateFallback(nowMillis);
 			if (onlineWorkersCard) onlineWorkersCard.style.display = '';
 			onlineWorkersBody.innerHTML = data.map((w) => {
 				const hashrate = effectiveWorkerHashrate(w, nowMillis);
@@ -2339,7 +2377,7 @@
 											<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
 										</span>
 										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Best</span>
+											<span class="saved-workers-online-pill-label">Best ever</span>
 											<span class="saved-workers-online-pill-value">${formatDifficulty(w.best_difficulty)}</span>
 										</span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
