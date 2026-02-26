@@ -130,6 +130,16 @@
 		return rects;
 	}
 
+	function blockMarkerColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#8f6a00' : '#f3d36b';
+	}
+
+	function graphLabelColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#4b5568' : '#b3bbd4';
+	}
+
 		function drawGraph() {
 		// Use display dimensions (logical pixels) for drawing
 		const rect = canvas.getBoundingClientRect();
@@ -159,7 +169,7 @@
 		ctx.clearRect(0, 0, width, height);
 
 		if (hashrateData.length === 0) {
-			ctx.fillStyle = '#b3bbd4';
+			ctx.fillStyle = graphLabelColor();
 			ctx.font = '14px monospace';
 			ctx.textAlign = 'center';
 			ctx.fillText('Waiting for data...', width / 2, height / 2);
@@ -190,7 +200,7 @@
 		}
 
 		// Draw Y-axis labels (hashrate)
-		ctx.fillStyle = '#b3bbd4';
+		ctx.fillStyle = graphLabelColor();
 		ctx.font = '11px monospace';
 		ctx.textAlign = 'right';
 		for (let i = 0; i <= 4; i++) {
@@ -202,9 +212,10 @@
 
 		// Draw block-height change markers (vertical dividers with labels).
 		if (blockHeights.length > 1) {
+			const markerColor = blockMarkerColor();
 			ctx.save();
-			ctx.strokeStyle = '#f3d36b';
-			ctx.fillStyle = '#f3d36b';
+			ctx.strokeStyle = markerColor;
+			ctx.fillStyle = markerColor;
 			ctx.lineWidth = 1;
 			ctx.setLineDash([4, 3]);
 			ctx.font = '11px monospace';
@@ -247,7 +258,7 @@
 		);
 		const baselineY = Math.round(height - paddingBottom);
 		ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
-		ctx.strokeStyle = '#f3d36b';
+		ctx.strokeStyle = blockMarkerColor();
 		ctx.lineWidth = 2;
 		hashrateData.forEach((hashrate, index) => {
 			const rect = rects[index];
@@ -280,7 +291,7 @@
 		}
 
 		// Draw "minutes" label centered below the axis (no numeric labels)
-		ctx.fillStyle = '#b3bbd4';
+		ctx.fillStyle = graphLabelColor();
 		ctx.font = '10px monospace';
 		ctx.textAlign = 'center';
 		ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
