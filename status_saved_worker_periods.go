@@ -29,10 +29,15 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	if bucket.IsZero() {
 		return
 	}
-	minute := savedWorkerUnixMinute(bucket)
-	if minute == 0 {
+	currentMinute := savedWorkerUnixMinute(bucket)
+	if currentMinute == 0 {
 		return
 	}
+	if savedWorkerPeriodBucketMinutes <= 0 || currentMinute <= uint32(savedWorkerPeriodBucketMinutes) {
+		return
+	}
+	sampleMinute := currentMinute - uint32(savedWorkerPeriodBucketMinutes)
+	sampleBucket := bucket.Add(-savedWorkerPeriodBucket)
 
 	s.savedWorkerPeriodsMu.Lock()
 	if !s.savedWorkerPeriodsLastBucket.IsZero() && !bucket.After(s.savedWorkerPeriodsLastBucket) {
@@ -50,7 +55,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		s.savedWorkerPeriodsMu.Lock()
 		if bucket.After(s.savedWorkerPeriodsLastBucket) {
 			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(minute)
+			s.pruneSavedWorkerPeriodsLocked(currentMinute)
 		}
 		s.savedWorkerPeriodsMu.Unlock()
 		return
@@ -73,7 +78,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		s.savedWorkerPeriodsMu.Lock()
 		if bucket.After(s.savedWorkerPeriodsLastBucket) {
 			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(minute)
+			s.pruneSavedWorkerPeriodsLocked(currentMinute)
 		}
 		s.savedWorkerPeriodsMu.Unlock()
 		return
@@ -111,7 +116,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	}
 	s.savedWorkerPeriodsLastBucket = bucket
 	if len(onlineSaved) == 0 {
-		s.pruneSavedWorkerPeriodsLocked(minute)
+		s.pruneSavedWorkerPeriodsLocked(currentMinute)
 		return
 	}
 	if s.savedWorkerPeriods == nil {
@@ -121,16 +126,16 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		hashrateQ := encodeHashrateSI16(hashrateByHash[hash])
 		bestQ := uint16(0)
 		if s.workerLists != nil {
-			bestQ = encodeBestShareSI16(s.workerLists.SavedWorkerMinuteBestDifficulty(hash, bucket))
+			bestQ = encodeBestShareSI16(s.workerLists.ConsumeSavedWorkerMinuteBestDifficulty(hash, sampleBucket))
 		}
 		ring := s.savedWorkerPeriods[hash]
 		if ring == nil {
 			ring = &savedWorkerPeriodRing{}
 			s.savedWorkerPeriods[hash] = ring
 		}
-		idx := savedWorkerRingIndex(minute)
-		if ring.minutes[idx] != minute {
-			ring.minutes[idx] = minute
+		idx := savedWorkerRingIndex(sampleMinute)
+		if ring.minutes[idx] != sampleMinute {
+			ring.minutes[idx] = sampleMinute
 			ring.hashrateQ[idx] = 0
 			ring.bestDifficultyQ[idx] = 0
 		}
@@ -140,9 +145,9 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		if bestQ > ring.bestDifficultyQ[idx] {
 			ring.bestDifficultyQ[idx] = bestQ
 		}
-		ring.lastMinute = minute
+		ring.lastMinute = sampleMinute
 	}
-	s.pruneSavedWorkerPeriodsLocked(minute)
+	s.pruneSavedWorkerPeriodsLocked(currentMinute)
 }
 
 func (s *StatusServer) savedWorkerPeriodHistory(hash string, now time.Time) []savedWorkerPeriodSample {

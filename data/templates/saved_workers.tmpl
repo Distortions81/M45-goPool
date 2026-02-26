@@ -1515,7 +1515,8 @@
 				if (!hash) return;
 				const kind = String(canvas.getAttribute('data-worker-inline-chart') || '').trim().toLowerCase();
 				const cached = inlineWorkerChartCache.get(hash);
-				const rows = kind === 'bestshare' ? (cached?.bestRows || []) : (cached?.hashrateRows || []);
+				const series = kind === 'bestshare' ? cached?.bestRows : cached?.hashrateRows;
+				const rows = Array.isArray(series) ? series : (Array.isArray(series?.rows) ? series.rows : []);
 				const color = kind === 'bestshare' ? '#f3d36b' : '#4a9eff';
 				drawInlineSparkline(canvas, rows, color);
 			});
