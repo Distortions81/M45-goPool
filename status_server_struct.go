@@ -57,7 +57,7 @@ type StatusServer struct {
 	poolHashrateHistoryMu           sync.Mutex
 	poolHashrateHistory             []poolHashrateHistorySample
 	savedWorkerPeriodsMu            sync.Mutex
-	savedWorkerPeriods              map[string][]savedWorkerPeriodSample
+	savedWorkerPeriods              map[string]*savedWorkerPeriodRing
 	savedWorkerPeriodsLastBucket    time.Time
 	stratumEventsMu                 sync.Mutex
 	stratumSafeguardDisconnects     []stratumSafeguardDisconnectEvent

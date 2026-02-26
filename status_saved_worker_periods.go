@@ -5,14 +5,20 @@ import (
 	"time"
 )
 
-// savedWorkerPeriodSample stores one minute-bucket sample for a saved worker.
-// HashrateQ is the summed live hashrate across active connections sharing the
-// same worker hash (SI-quantized uint16). BestDifficultyQ stores the current
-// minute-best share difficulty (SI-quantized uint16).
+// savedWorkerPeriodSample is the external/history snapshot shape used by the
+// saved-worker history API. Values are stored internally in a ring buffer as
+// SI-quantized uint16s and copied out here.
 type savedWorkerPeriodSample struct {
 	At              time.Time
 	HashrateQ       uint16
 	BestDifficultyQ uint16
+}
+
+type savedWorkerPeriodRing struct {
+	minutes         [savedWorkerPeriodSlots]uint32
+	hashrateQ       [savedWorkerPeriodSlots]uint16
+	bestDifficultyQ [savedWorkerPeriodSlots]uint16
+	lastMinute      uint32
 }
 
 func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, now time.Time) {
@@ -21,6 +27,10 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	}
 	bucket := now.UTC().Truncate(savedWorkerPeriodBucket)
 	if bucket.IsZero() {
+		return
+	}
+	minute := savedWorkerUnixMinute(bucket)
+	if minute == 0 {
 		return
 	}
 
@@ -40,7 +50,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		s.savedWorkerPeriodsMu.Lock()
 		if bucket.After(s.savedWorkerPeriodsLastBucket) {
 			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(bucket)
+			s.pruneSavedWorkerPeriodsLocked(minute)
 		}
 		s.savedWorkerPeriodsMu.Unlock()
 		return
@@ -58,7 +68,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		s.savedWorkerPeriodsMu.Lock()
 		if bucket.After(s.savedWorkerPeriodsLastBucket) {
 			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(bucket)
+			s.pruneSavedWorkerPeriodsLocked(minute)
 		}
 		s.savedWorkerPeriodsMu.Unlock()
 		return
@@ -92,38 +102,38 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	}
 	s.savedWorkerPeriodsLastBucket = bucket
 	if len(onlineSaved) == 0 {
-		s.pruneSavedWorkerPeriodsLocked(bucket)
+		s.pruneSavedWorkerPeriodsLocked(minute)
 		return
 	}
 	if s.savedWorkerPeriods == nil {
-		s.savedWorkerPeriods = make(map[string][]savedWorkerPeriodSample, len(hashrateByHash))
+		s.savedWorkerPeriods = make(map[string]*savedWorkerPeriodRing, len(hashrateByHash))
 	}
 	for hash := range onlineSaved {
-		hashrate := hashrateByHash[hash]
-		best := 0.0
+		hashrateQ := encodeHashrateSI16(hashrateByHash[hash])
+		bestQ := uint16(0)
 		if s.workerLists != nil {
-			best = s.workerLists.SavedWorkerMinuteBestDifficulty(hash, bucket)
+			bestQ = encodeBestShareSI16(s.workerLists.SavedWorkerMinuteBestDifficulty(hash, bucket))
 		}
-		hashrateQ := encodeHashrateSI16(hashrate)
-		bestQ := encodeBestShareSI16(best)
-		samples := s.savedWorkerPeriods[hash]
-		if n := len(samples); n > 0 && samples[n-1].At.Equal(bucket) {
-			if hashrateQ > 0 {
-				samples[n-1].HashrateQ = hashrateQ
-			}
-			if bestQ > samples[n-1].BestDifficultyQ {
-				samples[n-1].BestDifficultyQ = bestQ
-			}
-			s.savedWorkerPeriods[hash] = samples
-			continue
+		ring := s.savedWorkerPeriods[hash]
+		if ring == nil {
+			ring = &savedWorkerPeriodRing{}
+			s.savedWorkerPeriods[hash] = ring
 		}
-		s.savedWorkerPeriods[hash] = append(samples, savedWorkerPeriodSample{
-			At:              bucket,
-			HashrateQ:       hashrateQ,
-			BestDifficultyQ: bestQ,
-		})
+		idx := savedWorkerRingIndex(minute)
+		if ring.minutes[idx] != minute {
+			ring.minutes[idx] = minute
+			ring.hashrateQ[idx] = 0
+			ring.bestDifficultyQ[idx] = 0
+		}
+		if hashrateQ > 0 {
+			ring.hashrateQ[idx] = hashrateQ
+		}
+		if bestQ > ring.bestDifficultyQ[idx] {
+			ring.bestDifficultyQ[idx] = bestQ
+		}
+		ring.lastMinute = minute
 	}
-	s.pruneSavedWorkerPeriodsLocked(bucket)
+	s.pruneSavedWorkerPeriodsLocked(minute)
 }
 
 func (s *StatusServer) savedWorkerPeriodHistory(hash string, now time.Time) []savedWorkerPeriodSample {
@@ -134,38 +144,61 @@ func (s *StatusServer) savedWorkerPeriodHistory(hash string, now time.Time) []sa
 	if hash == "" {
 		return nil
 	}
-	s.savedWorkerPeriodsMu.Lock()
-	defer s.savedWorkerPeriodsMu.Unlock()
-	s.pruneSavedWorkerPeriodsLocked(now.UTC())
-	samples := s.savedWorkerPeriods[hash]
-	if len(samples) == 0 {
+	nowMinute := savedWorkerUnixMinute(now)
+	if nowMinute == 0 {
 		return nil
 	}
-	out := make([]savedWorkerPeriodSample, len(samples))
-	copy(out, samples)
+
+	s.savedWorkerPeriodsMu.Lock()
+	defer s.savedWorkerPeriodsMu.Unlock()
+	s.pruneSavedWorkerPeriodsLocked(nowMinute)
+	ring := s.savedWorkerPeriods[hash]
+	if ring == nil {
+		return nil
+	}
+
+	out := make([]savedWorkerPeriodSample, 0, savedWorkerPeriodSlots)
+	var startMinute uint32
+	spanMinutes := uint32((savedWorkerPeriodSlots - 1) * savedWorkerPeriodBucketMinutes)
+	if nowMinute >= spanMinutes {
+		startMinute = nowMinute - spanMinutes
+	}
+	step := uint32(savedWorkerPeriodBucketMinutes)
+	if step == 0 {
+		step = 1
+	}
+	for m := startMinute; m <= nowMinute; m += step {
+		idx := savedWorkerRingIndex(m)
+		if ring.minutes[idx] != m {
+			if m == nowMinute {
+				break
+			}
+			continue
+		}
+		out = append(out, savedWorkerPeriodSample{
+			At:              time.Unix(int64(m)*60, 0).UTC(),
+			HashrateQ:       ring.hashrateQ[idx],
+			BestDifficultyQ: ring.bestDifficultyQ[idx],
+		})
+		if m == nowMinute {
+			break
+		}
+	}
 	return out
 }
 
-func (s *StatusServer) pruneSavedWorkerPeriodsLocked(now time.Time) {
-	if s == nil || len(s.savedWorkerPeriods) == 0 {
+func (s *StatusServer) pruneSavedWorkerPeriodsLocked(nowMinute uint32) {
+	if s == nil || len(s.savedWorkerPeriods) == 0 || nowMinute == 0 {
 		return
 	}
-	cutoff := now.Add(-savedWorkerPeriodHistoryWindow)
-	for hash, samples := range s.savedWorkerPeriods {
-		keepFrom := 0
-		for keepFrom < len(samples) {
-			at := samples[keepFrom].At
-			if at.After(cutoff) || at.Equal(cutoff) {
-				break
-			}
-			keepFrom++
-		}
-		if keepFrom >= len(samples) {
+	maxAge := uint32(savedWorkerPeriodSlots * savedWorkerPeriodBucketMinutes)
+	for hash, ring := range s.savedWorkerPeriods {
+		if ring == nil {
 			delete(s.savedWorkerPeriods, hash)
 			continue
 		}
-		if keepFrom > 0 {
-			s.savedWorkerPeriods[hash] = append([]savedWorkerPeriodSample(nil), samples[keepFrom:]...)
+		if ring.lastMinute == 0 || nowMinute-ring.lastMinute > maxAge {
+			delete(s.savedWorkerPeriods, hash)
 		}
 	}
 	if savedWorkerPeriodMaxWorkers > 0 && len(s.savedWorkerPeriods) > savedWorkerPeriodMaxWorkers {
