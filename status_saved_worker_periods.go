@@ -159,19 +159,41 @@ func (s *StatusServer) runSavedWorkerPeriodSampler(ctx context.Context) {
 		ctx = context.Background()
 	}
 
-	// Poll frequently and let recordSavedOnlineWorkerPeriods bucket-gate writes.
-	// Sampling now records the previous completed bucket, so request timing no
-	// longer controls bucket contents.
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
+	// Run every minute independent of page requests. recordSavedOnlineWorkerPeriods
+	// records the previous completed 1-minute bucket, so history writes happen on
+	// a fixed cadence without request timing bias.
+	now := time.Now()
+	s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(now), now)
 
-	s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(time.Now()), time.Now())
+	tickInterval := time.Minute
+	if tickInterval <= 0 {
+		tickInterval = time.Minute
+	}
+	next := now.UTC().Truncate(tickInterval).Add(tickInterval)
+	wait := time.Until(next)
+	if wait < 0 {
+		wait = 0
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-ticker.C:
-			s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(now), now)
+		case <-timer.C:
+			fireNow := time.Now()
+			s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(fireNow), fireNow)
+
+			ticker := time.NewTicker(tickInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case tickNow := <-ticker.C:
+					s.recordSavedOnlineWorkerPeriods(s.snapshotWorkerViews(tickNow), tickNow)
+				}
+			}
 		}
 	}
 }
