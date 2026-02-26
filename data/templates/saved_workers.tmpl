@@ -630,11 +630,11 @@
 		<div class="worker-graphs-body">
 			<div id="workerGraphsStatus" class="text-sm" style="color:var(--text-muted);">Select a worker to load graphs.</div>
 			<div class="worker-graphs-panel">
-				<div class="label">Hashrate (2m buckets)</div>
+				<div class="label">Hashrate (1m buckets)</div>
 				<canvas id="workerGraphsHashrateCanvas" class="worker-graphs-canvas"></canvas>
 			</div>
 			<div class="worker-graphs-panel">
-				<div class="label">Best share (minute max)</div>
+				<div class="label">Best share (1m bucket max)</div>
 				<canvas id="workerGraphsBestShareCanvas" class="worker-graphs-canvas"></canvas>
 			</div>
 		</div>
@@ -1426,7 +1426,7 @@
 		function decodeCompactWorkerSeries(data, qKey, minKey, maxKey) {
 			const count = Math.max(0, Number(data?.n || 0));
 			const startMinute = Math.max(0, Number(data?.s || 0));
-			const intervalSec = Math.max(1, Number(data?.i || 120));
+			const intervalSec = Math.max(1, Number(data?.i || 60));
 			const intervalMillis = intervalSec * 1000;
 			const present = decodeByteSeries(data?.p);
 			const q = decodeByteSeries(data?.[qKey]);
