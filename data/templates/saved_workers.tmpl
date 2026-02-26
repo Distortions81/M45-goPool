@@ -319,7 +319,6 @@
 						<option value="shares_per_minute">Shares/min</option>
 						<option value="accepted">Accepted</option>
 						<option value="rejected">Rejected</option>
-						<option value="ping_ms">Ping</option>
 						<option value="connection_duration_seconds">Connected</option>
 						<option value="uptime_history">Uptime</option>
 					</select>
@@ -401,7 +400,6 @@
 									<div class="saved-workers-online-stats">
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">{{.Accepted}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
 									</div>
@@ -2423,7 +2421,6 @@
 									<div class="saved-workers-online-stats">
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">${Number(w.accepted || 0).toLocaleString()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Ping</span><span class="saved-workers-online-pill-value">${(() => { const raw = (Number(w.estimated_ping_p50_ms || 0) > 0) ? Number(w.estimated_ping_p50_ms || 0) : Number(w.estimated_ping_p95_ms || 0); return formatLatency(raw > 0 ? (raw / 2) : raw); })()}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
 										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
 									</div>
