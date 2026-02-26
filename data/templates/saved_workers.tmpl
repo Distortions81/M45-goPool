@@ -127,6 +127,107 @@
 			background: rgba(255,255,255,0.02);
 			margin-top: 3px;
 		}
+		.saved-workers-online-table thead th {
+			position: static;
+		}
+		.saved-workers-online-cell {
+			padding: 0 !important;
+		}
+		.saved-workers-online-row-main td {
+			border-bottom: 0;
+		}
+		.saved-workers-online-row-detail td {
+			padding-top: 0 !important;
+		}
+		.saved-workers-online-row:hover td {
+			background: transparent !important;
+		}
+		.saved-workers-online-block {
+			display: grid;
+			gap: 8px;
+			padding: 10px 8px;
+		}
+		.saved-workers-online-block.top {
+			padding-bottom: 6px;
+		}
+		.saved-workers-online-block.bottom {
+			padding-top: 6px;
+			border-top: 1px dashed rgba(255,255,255,0.08);
+		}
+		.saved-workers-online-line {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			flex-wrap: wrap;
+		}
+		.saved-workers-online-block.top .saved-workers-online-line {
+			align-items: flex-start;
+			justify-content: flex-start;
+		}
+		.saved-workers-online-block.bottom .saved-workers-online-line {
+			justify-content: space-between;
+		}
+		.saved-workers-online-name {
+			min-width: 180px;
+			flex: 1 1 260px;
+		}
+		.saved-workers-online-name a {
+			display: inline-block;
+			max-width: 100%;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.saved-workers-online-stats {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px 12px;
+			align-items: center;
+			min-width: 0;
+			flex: 999 1 320px;
+		}
+		.saved-workers-online-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 8px;
+			border: 1px solid rgba(255,255,255,0.08);
+			border-radius: 999px;
+			background: rgba(255,255,255,0.02);
+			min-height: 30px;
+		}
+		.saved-workers-online-pill-label {
+			color: var(--text-muted);
+			font-size: 12px;
+			white-space: nowrap;
+		}
+		.saved-workers-online-pill-value {
+			font-size: 13px;
+			white-space: nowrap;
+		}
+		.saved-workers-online-pill .worker-inline-spark {
+			margin-top: 0;
+			margin-left: 4px;
+		}
+		.saved-workers-online-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			align-items: center;
+			justify-content: flex-end;
+		}
+		.saved-workers-online-actions form {
+			margin: 0;
+		}
+		@media (max-width: 900px) {
+			.saved-workers-online-line {
+				align-items: flex-start;
+			}
+			.saved-workers-online-actions {
+				width: 100%;
+				justify-content: flex-start;
+			}
+		}
 	</style>
 </head>
 <body>
@@ -183,81 +284,91 @@
 					<button id="savedWorkersSortOrder" class="btn btn-secondary" type="button" aria-label="Toggle sort order">Desc ↓</button>
 				</div>
 				<div style="overflow-x:auto; margin-top:12px;">
-					<table class="table">
+					<table class="table saved-workers-online-table">
 					<thead>
 						<tr>
-							<th>Worker</th>
-							<th>Hashrate</th>
-							<th>Best share</th>
-							<th>Diff</th>
-							<th>Shares/min</th>
-							<th>Last share</th>
-							<th>Accepted</th>
-							<th>Rejected</th>
-							<th>Miner Response</th>
-							<th>Work Start</th>
-							<th>Connected</th>
-							<th></th>
+							<th>Worker (two-line view)</th>
 						</tr>
 					</thead>
 						<tbody id="onlineWorkersBody">
 							{{if .OnlineWorkerEntries}}
 								{{range .OnlineWorkerEntries}}
-					<tr>
-						<td><a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a></td>
-							<td data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value">
-								—
-								<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate sparkline"></canvas>
-							</td>
-						<td>
-							{{formatDiff .BestDifficulty}}
-							<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="{{.Hash}}" aria-label="Worker best share sparkline"></canvas>
+					<tr class="saved-workers-online-row saved-workers-online-row-main">
+						<td class="saved-workers-online-cell">
+							<div class="saved-workers-online-block top">
+								<div class="saved-workers-online-line">
+									<div class="saved-workers-online-name">
+										<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+									</div>
+									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-pill">
+											<span class="saved-workers-online-pill-label">Hashrate</span>
+											<span data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value saved-workers-online-pill-value">
+												—
+											</span>
+											<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate sparkline"></canvas>
+										</span>
+										<span class="saved-workers-online-pill">
+											<span class="saved-workers-online-pill-label">Best</span>
+											<span class="saved-workers-online-pill-value">{{formatDiff .BestDifficulty}}</span>
+											<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="{{.Hash}}" aria-label="Worker best share sparkline"></canvas>
+										</span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">{{formatShareRate .ShareRate}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">{{formatTime .LastShare}}</span></span>
+									</div>
+								</div>
+							</div>
 						</td>
-						<td>{{formatDiff .Difficulty}}</td>
-						<td>{{formatShareRate .ShareRate}}</td>
-						<td>{{formatTime .LastShare}}</td>
-						<td>{{.Accepted}}</td>
-						<td>{{.Rejected}}</td>
-						<td class="latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</td>
-						<td class="latency-pair-work" data-work-min-ms="{{printf "%.6f" .NotifyToFirstShareMinMS}}" data-work-p50-ms="{{printf "%.6f" .NotifyToFirstShareP50MS}}" data-work-p95-ms="{{printf "%.6f" .NotifyToFirstShareP95MS}}" data-work-last-ms="{{printf "%.6f" .NotifyToFirstShareMS}}" data-work-samples="{{.NotifyToFirstShareSamples}}">—</td>
-						<td>{{humanDuration .ConnectedDuration}}</td>
-						<td style="text-align:right;">
-										<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
-											<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
-												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-													<path d="M3 3v18h18"></path>
-													<path d="M7 14l4-4 3 3 5-6"></path>
-												</svg>
+					</tr>
+					<tr class="saved-workers-online-row saved-workers-online-row-detail">
+						<td class="saved-workers-online-cell">
+							<div class="saved-workers-online-block bottom">
+								<div class="saved-workers-online-line">
+									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">{{.Accepted}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value latency-pair" data-rtt-p50-ms="{{printf "%.6f" .EstimatedPingP50MS}}" data-rtt-p95-ms="{{printf "%.6f" .EstimatedPingP95MS}}">—</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
+									</div>
+									<div class="saved-workers-online-actions">
+										<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+												<path d="M3 3v18h18"></path>
+												<path d="M7 14l4-4 3 3 5-6"></path>
+											</svg>
+										</button>
+										{{if $.DiscordNotificationsEnabled}}
+											<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+												{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
 											</button>
-											{{if $.DiscordNotificationsEnabled}}
-												<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
-													{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
-												</button>
-											{{end}}
-											<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="{{.Name}}">
-												<input type="hidden" name="hash" value="{{.Hash}}">
+										{{end}}
+										<form method="post" action="/worker/reconnect" data-reconnect-worker="{{.Name}}">
+											<input type="hidden" name="hash" value="{{.Hash}}">
 											<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">
 												Force reset
 											</button>
 										</form>
-											<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="{{.Name}}">
-												<input type="hidden" name="hash" value="{{.Hash}}">
-												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-														<polyline points="3 6 5 6 21 6"></polyline>
-														<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-														<path d="M10 11v6"></path>
-														<path d="M14 11v6"></path>
-														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-													</svg>
-												</button>
-											</form>
-										</div>
-									</td>
-								</tr>
+										<form method="post" action="/worker/remove" data-remove-worker="{{.Name}}">
+											<input type="hidden" name="hash" value="{{.Hash}}">
+											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+													<path d="M10 11v6"></path>
+													<path d="M14 11v6"></path>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+												</svg>
+											</button>
+										</form>
+									</div>
+								</div>
+							</div>
+						</td>
+					</tr>
 								{{end}}
 							{{else}}
-								<tr><td colspan="12" class="text-sm">No saved workers online right now.</td></tr>
+								<tr><td class="text-sm">No saved workers online right now.</td></tr>
 							{{end}}
 						</tbody>
 					</table>
@@ -960,14 +1071,6 @@
 			return `${aMin.toFixed(1)}/${bMin.toFixed(1)}m`;
 		}
 
-		function formatWorkStartLatency(row) {
-			const min = Number(row.notify_to_first_share_min_ms || 0);
-			const p50 = Number(row.notify_to_first_share_p50_ms || 0);
-			const last = Number(row.notify_to_first_share_ms || 0);
-			if (min > 0) return formatLatency(min);
-			return formatLatency(p50 > 0 ? p50 : last);
-		}
-
 		function formatTimeAgo(seconds) {
 			const total = Math.max(0, Math.floor(seconds || 0));
 			const days = Math.floor(total / 86400);
@@ -1004,17 +1107,6 @@
 			const singleCells = document.querySelectorAll('.latency-single[data-latency-ms]');
 			singleCells.forEach((el) => {
 				el.textContent = formatLatency(el.getAttribute('data-latency-ms'));
-			});
-			const workPairCells = document.querySelectorAll('.latency-pair-work[data-work-p95-ms]');
-				workPairCells.forEach((el) => {
-					const min = Number(el.getAttribute('data-work-min-ms') || 0);
-					const p50 = Number(el.getAttribute('data-work-p50-ms') || 0);
-					const last = Number(el.getAttribute('data-work-last-ms') || 0);
-				if (min > 0) {
-					el.textContent = formatLatency(min);
-					return;
-				}
-				el.textContent = formatLatency(p50 > 0 ? p50 : last);
 			});
 		}
 
@@ -1498,7 +1590,7 @@
 
 			if (data.length === 0) {
 				if (onlineWorkersCard) onlineWorkersCard.style.display = 'none';
-				onlineWorkersBody.innerHTML = '<tr><td colspan="12" class="text-sm">No saved workers online right now.</td></tr>';
+				onlineWorkersBody.innerHTML = '<tr><td class="text-sm">No saved workers online right now.</td></tr>';
 				return;
 			}
 			const nowMillis = Date.now();
@@ -1511,46 +1603,71 @@
 				const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(w.hashrate_accuracy) : '';
 				const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, w.hashrate_accuracy) : '—';
 				return `
-					<tr>
-						<td><a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a></td>
-						<td class="hashrate-value ${hashrateClass}">${hashrateText}<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate sparkline"></canvas></td>
-						<td>${formatDifficulty(w.best_difficulty)}<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker best share sparkline"></canvas></td>
-						<td>${formatDifficulty(w.difficulty)}</td>
-					<td>${formatShareRate(shareRate)}</td>
-					<td>${formatLastShare(w.last_share)}</td>
-					<td>${Number(w.accepted || 0).toLocaleString()}</td>
-					<td>${Number(w.rejected || 0).toLocaleString()}</td>
-						<td>${formatLatency((Number(w.estimated_ping_p50_ms || 0) > 0) ? w.estimated_ping_p50_ms : w.estimated_ping_p95_ms)}</td>
-					<td>${formatWorkStartLatency(w)}</td>
-					<td>${formatDuration(w.connection_duration_seconds)}</td>
-					<td style="text-align:right;">
-						<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
-							<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<path d="M3 3v18h18"></path>
-									<path d="M7 14l4-4 3 3 5-6"></path>
-								</svg>
-							</button>
-							${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
-								<form method="post" action="/worker/reconnect" style="margin:0;" data-reconnect-worker="${escapeAttr(w.name || '')}">
-									<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-									<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">Force reset</button>
-								</form>
-							<form method="post" action="/worker/remove" style="margin:0;" data-remove-worker="${escapeAttr(w.name || '')}">
-								<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-								<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-										<polyline points="3 6 5 6 21 6"></polyline>
-										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-										<path d="M10 11v6"></path>
-										<path d="M14 11v6"></path>
-										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-									</svg>
-								</button>
-							</form>
-						</div>
-					</td>
-				</tr>
+					<tr class="saved-workers-online-row saved-workers-online-row-main">
+						<td class="saved-workers-online-cell">
+							<div class="saved-workers-online-block top">
+								<div class="saved-workers-online-line">
+									<div class="saved-workers-online-name">
+										<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}"></a>
+									</div>
+									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-pill">
+											<span class="saved-workers-online-pill-label">Hashrate</span>
+											<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
+											<canvas class="worker-inline-spark worker-inline-spark-hashrate" width="88" height="14" data-worker-inline-chart="hashrate" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate sparkline"></canvas>
+										</span>
+										<span class="saved-workers-online-pill">
+											<span class="saved-workers-online-pill-label">Best</span>
+											<span class="saved-workers-online-pill-value">${formatDifficulty(w.best_difficulty)}</span>
+											<canvas class="worker-inline-spark worker-inline-spark-bestshare" width="88" height="14" data-worker-inline-chart="bestshare" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker best share sparkline"></canvas>
+										</span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">${formatShareRate(shareRate)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Last share</span><span class="saved-workers-online-pill-value">${formatLastShare(w.last_share)}</span></span>
+									</div>
+								</div>
+							</div>
+						</td>
+					</tr>
+					<tr class="saved-workers-online-row saved-workers-online-row-detail">
+						<td class="saved-workers-online-cell">
+							<div class="saved-workers-online-block bottom">
+								<div class="saved-workers-online-line">
+									<div class="saved-workers-online-stats">
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">${Number(w.accepted || 0).toLocaleString()}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Miner response</span><span class="saved-workers-online-pill-value">${formatLatency((Number(w.estimated_ping_p50_ms || 0) > 0) ? w.estimated_ping_p50_ms : w.estimated_ping_p95_ms)}</span></span>
+										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
+									</div>
+									<div class="saved-workers-online-actions">
+										<button class="btn btn-secondary worker-graph-btn worker-history-open" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+												<path d="M3 3v18h18"></path>
+												<path d="M7 14l4-4 3 3 5-6"></path>
+											</svg>
+										</button>
+										${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+										<form method="post" action="/worker/reconnect" data-reconnect-worker="${escapeAttr(w.name || '')}">
+											<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+											<button class="btn btn-secondary" type="submit" aria-label="Force reset worker" title="Force reset (30s ban + disconnect)">Force reset</button>
+										</form>
+										<form method="post" action="/worker/remove" data-remove-worker="${escapeAttr(w.name || '')}">
+											<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+													<path d="M10 11v6"></path>
+													<path d="M14 11v6"></path>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+												</svg>
+											</button>
+										</form>
+									</div>
+								</div>
+							</div>
+						</td>
+					</tr>
 			`;
 			}).join('');
 			applyWorkerNameCensoring(onlineWorkersBody);
