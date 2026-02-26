@@ -1290,7 +1290,8 @@
 			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
 			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
 
-			const rows = (Array.isArray(rowsInput) ? rowsInput : [])
+			const rowsSource = Array.isArray(rowsInput) ? { rows: rowsInput } : (rowsInput || {});
+			const rows = (Array.isArray(rowsSource.rows) ? rowsSource.rows : [])
 				.map((p) => ({
 					at: (typeof p?.at === 'number') ? p.at : Date.parse(p?.at),
 					value: Number(p?.value ?? 0),
@@ -1309,12 +1310,31 @@
 			const minX = rows[0].at;
 			const maxX = rows[rows.length - 1].at;
 			const spanX = Math.max(1, maxX - minX);
-			let maxY = 0;
-			for (const r of rows) {
-				if (r.value > maxY) maxY = r.value;
+			let minY = Number(rowsSource.min);
+			let maxY = Number(rowsSource.max);
+			if (!Number.isFinite(minY) || !Number.isFinite(maxY)) {
+				minY = Number.POSITIVE_INFINITY;
+				maxY = 0;
+				for (const r of rows) {
+					if (r.value < minY) minY = r.value;
+					if (r.value > maxY) maxY = r.value;
+				}
 			}
-			if (!(maxY > 0)) maxY = 1;
-			maxY *= 1.15;
+			if (!Number.isFinite(minY) || minY < 0) minY = 0;
+			if (!(maxY >= minY)) maxY = minY;
+			if (maxY === minY) {
+				if (maxY <= 0) {
+					minY = 0;
+					maxY = 1;
+				} else {
+					maxY = maxY * 1.15;
+					minY = Math.max(0, minY * 0.95);
+				}
+			} else {
+				const rangeY = maxY - minY;
+				maxY = maxY + (rangeY * 0.15);
+			}
+			const spanY = Math.max(1e-9, maxY - minY);
 
 			ctx.strokeStyle = '#2a2f3a';
 			ctx.lineWidth = 1;
@@ -1331,12 +1351,16 @@
 			ctx.textAlign = 'right';
 			for (let i = 0; i <= 4; i++) {
 				const y = paddingTop + (graphHeight * i / 4);
-				const v = maxY - (maxY * i / 4);
-				ctx.fillText(valueFormatter(v), paddingLeft - 6, y + 3);
+				const v = maxY - (spanY * i / 4);
+				let label = String(valueFormatter(v) ?? '');
+				if ((label === '—' || label === '-' || label === '---') && v <= 0) {
+					label = '0';
+				}
+				ctx.fillText(label, paddingLeft - 6, y + 3);
 			}
 
 			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
-			const yFor = (v) => paddingTop + graphHeight * (1 - (v / maxY));
+			const yFor = (v) => paddingTop + graphHeight * (1 - ((v - minY) / spanY));
 
 			ctx.strokeStyle = color;
 			ctx.lineWidth = 2;
@@ -1417,7 +1441,11 @@
 					value: dequantizeQ8(q[i], minV, maxV),
 				});
 			}
-			return rows;
+			return {
+				rows,
+				min: minV,
+				max: maxV,
+			};
 		}
 
 		function drawInlineSparkline(canvas, rows, color) {
