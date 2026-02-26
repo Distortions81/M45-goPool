@@ -94,6 +94,42 @@
 		return true;
 	}
 
+	function buildQuantizedBucketRects(xPixelsInput, minBound, maxBound, fallbackWidth) {
+		const xPixels = (Array.isArray(xPixelsInput) ? xPixelsInput : [])
+			.map(v => Math.round(Number(v)))
+			.filter(v => Number.isFinite(v));
+		const n = xPixels.length;
+		const leftBound = Math.max(0, Math.round(Number(minBound) || 0));
+		const rightBound = Math.max(leftBound + 1, Math.round(Number(maxBound) || 0));
+		if (n === 0) return [];
+		if (n === 1) {
+			const w = Math.max(1, Math.min(rightBound - leftBound, Math.round(Number(fallbackWidth) || 1)));
+			const left = Math.max(leftBound, Math.min(rightBound - w, xPixels[0] - Math.floor(w / 2)));
+			return [{ left, width: w }];
+		}
+		const edges = new Array(n + 1);
+		edges[0] = Math.max(leftBound, Math.round(xPixels[0] - (xPixels[1] - xPixels[0]) / 2));
+		for (let i = 1; i < n; i++) {
+			edges[i] = Math.round((xPixels[i - 1] + xPixels[i]) / 2);
+		}
+		edges[n] = Math.min(rightBound, Math.round(xPixels[n - 1] + (xPixels[n - 1] - xPixels[n - 2]) / 2));
+		edges[0] = Math.max(leftBound, Math.min(rightBound - n, edges[0]));
+		for (let i = 1; i < n; i++) {
+			const minEdge = edges[i - 1] + 1;
+			const maxEdge = rightBound - (n - i);
+			edges[i] = Math.max(minEdge, Math.min(maxEdge, edges[i]));
+		}
+		edges[n] = rightBound;
+		if (edges[n] <= edges[n - 1]) edges[n] = edges[n - 1] + 1;
+		const rects = new Array(n);
+		for (let i = 0; i < n; i++) {
+			const left = edges[i];
+			const right = Math.max(left + 1, edges[i + 1]);
+			rects[i] = { left, width: right - left };
+		}
+		return rects;
+	}
+
 		function drawGraph() {
 		// Use display dimensions (logical pixels) for drawing
 		const rect = canvas.getBoundingClientRect();
@@ -201,17 +237,31 @@
 			ctx.restore();
 		}
 
-		// Draw the line graph
-			ctx.strokeStyle = '#4a9eff';
-			ctx.lineWidth = 2;
+		// Draw quantized bars (touching, no gaps)
+		const xPixels = hashrateData.map((_, index) => xForPoint(index));
+		const rects = buildQuantizedBucketRects(
+			xPixels,
+			paddingLeft,
+			width - paddingRight,
+			Math.max(2, Math.ceil(graphWidth / 32)),
+		);
+		const baselineY = Math.round(height - paddingBottom);
+		ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
+		ctx.strokeStyle = '#f3d36b';
+		ctx.lineWidth = 2;
+		hashrateData.forEach((hashrate, index) => {
+			const rect = rects[index];
+			if (!rect) return;
+			const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
+			const top = Math.round(Math.max(paddingTop, Math.min(baselineY, y)));
+			let h = baselineY - top;
+			if (h <= 0) h = 1;
+			ctx.fillRect(rect.left, baselineY - h, rect.width, h);
 			ctx.beginPath();
-			hashrateData.forEach((hashrate, index) => {
-				const x = xForPoint(index);
-				const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
-				if (index === 0) ctx.moveTo(x, y);
-				else ctx.lineTo(x, y);
-			});
-		ctx.stroke();
+			ctx.moveTo(rect.left, top);
+			ctx.lineTo(rect.left + rect.width, top);
+			ctx.stroke();
+		});
 
 		// Draw X-axis tick marks (no labels)
 		ctx.strokeStyle = '#ffffff';
