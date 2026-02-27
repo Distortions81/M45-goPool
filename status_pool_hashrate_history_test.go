@@ -5,31 +5,7 @@ import (
 	"time"
 )
 
-func hasPoolHistoryBit(bits []uint16, idx int) bool {
-	if idx < 0 {
-		return false
-	}
-	bi := idx / 8
-	if bi < 0 || bi >= len(bits) {
-		return false
-	}
-	return (bits[bi] & (1 << uint(idx%8))) != 0
-}
-
-func countPoolHistoryBits(bits []uint16, n int) int {
-	if n <= 0 {
-		return 0
-	}
-	count := 0
-	for i := 0; i < n; i++ {
-		if hasPoolHistoryBit(bits, i) {
-			count++
-		}
-	}
-	return count
-}
-
-func TestPoolHashrateHistoryQuantizedSnapshotTrimsAndOrders(t *testing.T) {
+func TestPoolHashrateHistorySnapshotTrimsAndOrders(t *testing.T) {
 	t.Parallel()
 
 	base := time.Unix(1_700_000_000, 0).UTC()
@@ -40,37 +16,30 @@ func TestPoolHashrateHistoryQuantizedSnapshotTrimsAndOrders(t *testing.T) {
 	s.appendPoolHashrateHistory(200, 800002, base.Add(-5*time.Minute))
 	s.appendPoolHashrateHistory(300, 800003, base.Add(-time.Minute))
 
-	got := s.poolHashrateHistoryQuantizedSnapshot(base)
-	if got == nil {
-		t.Fatalf("expected non-nil quantized snapshot")
+	got := s.poolHashrateHistorySnapshot(base)
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 history points, got %d", len(got))
 	}
-	if got.N <= 0 || got.I <= 0 {
-		t.Fatalf("invalid quantized metadata: %+v", got)
+	first := decodeHashrateSI8(uint8(got[0]))
+	last := decodeHashrateSI8(uint8(got[len(got)-1]))
+	if first <= 0 || last <= 0 {
+		t.Fatalf("expected positive decoded values, got first=%v last=%v", first, last)
 	}
-	if len(got.P) == 0 || len(got.HQ) == 0 {
-		t.Fatalf("expected quantized arrays in snapshot: %+v", got)
-	}
-	if count := countPoolHistoryBits(got.P, got.N); count < 2 {
-		t.Fatalf("expected at least 2 present buckets, got %d (%+v)", count, got.P)
-	}
-	if got.H0 <= 0 || got.H1 <= 0 || got.H1 < got.H0 {
-		t.Fatalf("unexpected hashrate quantization bounds: h0=%v h1=%v", got.H0, got.H1)
+	if first >= last {
+		t.Fatalf("expected increasing sample order (first < last), got first=%v last=%v", first, last)
 	}
 }
 
-func TestPoolHashrateHistoryQuantizedSnapshotDropsExpired(t *testing.T) {
+func TestPoolHashrateHistorySnapshotDropsExpired(t *testing.T) {
 	t.Parallel()
 
 	base := time.Unix(1_700_000_000, 0).UTC()
 	s := &StatusServer{}
 
 	s.appendPoolHashrateHistory(150, 810000, base.Add(-5*time.Minute))
-	got := s.poolHashrateHistoryQuantizedSnapshot(base.Add(2 * time.Minute))
-	if got == nil {
-		t.Fatalf("expected non-nil quantized snapshot")
-	}
-	if len(got.P) != 0 || len(got.HQ) != 0 {
-		t.Fatalf("expected empty quantized arrays after expiry, got %+v", got)
+	got := s.poolHashrateHistorySnapshot(base.Add(2 * time.Minute))
+	if len(got) != 0 {
+		t.Fatalf("expected empty history after expiry, got len=%d", len(got))
 	}
 }
 
