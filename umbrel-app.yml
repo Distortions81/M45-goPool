@@ -1,0 +1,29 @@
+manifestVersion: 1
+id: gopool
+category: finance
+name: goPool
+version: "1.0.0"
+tagline: Solo Bitcoin mining pool
+description: >-
+  goPool is a high-performance solo Bitcoin mining pool written in Go.
+  Point your ASIC miners at your own Umbrel and mine Bitcoin blocks directly
+  to your own wallet. Features Stratum v1 support, real-time hashrate
+  monitoring, per-worker statistics, automatic difficulty adjustment,
+  and a built-in web dashboard. Supports ZMQ for instant block notifications
+  from your Bitcoin node.
+developer: Distortions81
+website: https://github.com/Distortions81/M45-Core-goPool
+dependencies:
+  - bitcoin
+repo: https://github.com/Distortions81/M45-Core-goPool
+support: https://github.com/Distortions81/M45-Core-goPool/issues
+port: 8580
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+torOnly: false
+permissions: []
+releaseNotes: ""
+submitter: Distortions81
+submission: ""
