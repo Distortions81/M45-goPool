@@ -1061,7 +1061,7 @@
 		}
 
 		function fetchHashrate() {
-			const endpoint = poolHashrateIncludeHistory ? '/api/pool-hashrate?include_history=1' : '/api/pool-hashrate';
+			const endpoint = poolHashrateIncludeHistory ? '/api/pool-hashrate?include_history=2' : '/api/pool-hashrate';
 			fetch(endpoint)
 				.then(response => {
 					if (!response.ok) throw new Error('Network response was not ok');
@@ -1073,8 +1073,8 @@
 							poolHashrateIncludeHistory = false;
 						}
 						const primedFromHistory = !!(window.primeHashrateGraphHistory &&
-							Array.isArray(data?.pool_hashrate_history) &&
-							window.primeHashrateGraphHistory(data.pool_hashrate_history));
+							data?.phh &&
+							window.primeHashrateGraphHistory(data.phh));
 						const heightForGraph = typeof data?.block_height === 'number' && data.block_height > 0 ? data.block_height : null;
 						if (data && typeof data.pool_hashrate === 'number') {
 							updateHashrateDisplay(data.pool_hashrate);

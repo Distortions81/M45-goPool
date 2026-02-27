@@ -8,12 +8,6 @@ type poolHashrateHistorySample struct {
 	BlockHeight int64
 }
 
-type poolHashrateHistoryPoint struct {
-	At          string  `json:"at"`
-	Hashrate    float64 `json:"hashrate"`
-	BlockHeight int64   `json:"block_height,omitempty"`
-}
-
 func (s *StatusServer) appendPoolHashrateHistory(hashrate float64, blockHeight int64, now time.Time) {
 	if s == nil || hashrate <= 0 {
 		return
@@ -29,7 +23,7 @@ func (s *StatusServer) appendPoolHashrateHistory(hashrate float64, blockHeight i
 	s.trimPoolHashrateHistoryLocked(now)
 }
 
-func (s *StatusServer) poolHashrateHistorySnapshot(now time.Time) []poolHashrateHistoryPoint {
+func (s *StatusServer) poolHashrateHistorySnapshot(now time.Time) []uint16 {
 	if s == nil {
 		return nil
 	}
@@ -37,19 +31,46 @@ func (s *StatusServer) poolHashrateHistorySnapshot(now time.Time) []poolHashrate
 	defer s.poolHashrateHistoryMu.Unlock()
 
 	s.trimPoolHashrateHistoryLocked(now)
-	if len(s.poolHashrateHistory) == 0 {
-		return nil
+	intervalSeconds := int(poolHashrateTTL / time.Second)
+	if intervalSeconds <= 0 {
+		intervalSeconds = 1
 	}
-	out := make([]poolHashrateHistoryPoint, 0, len(s.poolHashrateHistory))
+	n := int(poolHashrateHistoryWindow / poolHashrateTTL)
+	if n <= 0 {
+		n = 1
+	}
+	endSec := now.UTC().Unix()
+	endSec -= endSec % int64(intervalSeconds)
+	startSec := endSec - int64((n-1)*intervalSeconds)
+	values := make([]float64, n)
+	present := make([]bool, n)
+	lastAtUnix := make([]int64, n)
+
 	for _, sample := range s.poolHashrateHistory {
 		if sample.Hashrate <= 0 || sample.At.IsZero() {
 			continue
 		}
-		out = append(out, poolHashrateHistoryPoint{
-			At:          sample.At.UTC().Format(time.RFC3339),
-			Hashrate:    sample.Hashrate,
-			BlockHeight: sample.BlockHeight,
-		})
+		atSec := sample.At.UTC().Unix()
+		if atSec < startSec || atSec > endSec {
+			continue
+		}
+		idx := int((atSec - startSec) / int64(intervalSeconds))
+		if idx < 0 || idx >= n {
+			continue
+		}
+		if present[idx] && atSec < lastAtUnix[idx] {
+			continue
+		}
+		present[idx] = true
+		values[idx] = sample.Hashrate
+		lastAtUnix[idx] = atSec
+	}
+	out := make([]uint16, 0, n)
+	for i := 0; i < n; i++ {
+		if !present[i] {
+			continue
+		}
+		out = append(out, uint16(encodeHashrateSI8(values[i])))
 	}
 	return out
 }

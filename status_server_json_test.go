@@ -129,21 +129,34 @@ func TestHandlePoolHashrateJSON_IncludeHistoryToggle(t *testing.T) {
 		t.Fatalf("expected no pool_hashrate_history field without include_history")
 	}
 
-	reqWithHistory := httptest.NewRequest(http.MethodGet, "/api/pool-hashrate?include_history=1", nil)
-	rrWithHistory := httptest.NewRecorder()
-	s.handlePoolHashrateJSON(rrWithHistory, reqWithHistory)
-	if rrWithHistory.Code != http.StatusOK {
-		t.Fatalf("with-history status: expected %d, got %d", http.StatusOK, rrWithHistory.Code)
+	reqWithCompactHistory := httptest.NewRequest(http.MethodGet, "/api/pool-hashrate?include_history=2", nil)
+	rrWithCompactHistory := httptest.NewRecorder()
+	s.handlePoolHashrateJSON(rrWithCompactHistory, reqWithCompactHistory)
+	if rrWithCompactHistory.Code != http.StatusOK {
+		t.Fatalf("with-compact-history status: expected %d, got %d", http.StatusOK, rrWithCompactHistory.Code)
 	}
 
-	var payloadWithHistory struct {
-		PoolHashrateHistory []poolHashrateHistoryPoint `json:"pool_hashrate_history"`
+	var payloadWithCompactHistory struct {
+		PoolHashrateHistoryQ []uint16 `json:"phh"`
 	}
-	if err := json.Unmarshal(rrWithHistory.Body.Bytes(), &payloadWithHistory); err != nil {
-		t.Fatalf("decode with-history response: %v", err)
+	if err := json.Unmarshal(rrWithCompactHistory.Body.Bytes(), &payloadWithCompactHistory); err != nil {
+		t.Fatalf("decode with-compact-history response: %v", err)
 	}
-	if len(payloadWithHistory.PoolHashrateHistory) == 0 {
-		t.Fatalf("expected non-empty pool_hashrate_history with include_history=1")
+	if payloadWithCompactHistory.PoolHashrateHistoryQ == nil {
+		t.Fatalf("expected non-empty phh with include_history=2")
+	}
+	var payloadWithCompactHistoryMap map[string]any
+	if err := json.Unmarshal(rrWithCompactHistory.Body.Bytes(), &payloadWithCompactHistoryMap); err != nil {
+		t.Fatalf("decode with-compact-history map response: %v", err)
+	}
+	if _, ok := payloadWithCompactHistoryMap["pool_hashrate_history"]; ok {
+		t.Fatalf("expected no pool_hashrate_history field with include_history=2")
+	}
+	if len(payloadWithCompactHistory.PoolHashrateHistoryQ) == 0 {
+		t.Fatalf("expected non-empty phh quantized array, got %+v", payloadWithCompactHistory.PoolHashrateHistoryQ)
+	}
+	if _, ok := payloadNoHistory["phh"]; ok {
+		t.Fatalf("expected no phh field without include_history")
 	}
 }
 

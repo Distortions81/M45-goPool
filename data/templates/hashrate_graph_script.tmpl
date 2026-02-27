@@ -52,38 +52,43 @@
 		}
 	}
 
+	function decodeHashrateSI8(code) {
+		const c = Number(code);
+		if (!Number.isFinite(c) || c <= 0) return 0;
+		const mantBits = 5;
+		const maxExp = 7;
+		const mantMask = (1 << mantBits) - 1;
+		const exp = Math.floor((c >> mantBits) & maxExp);
+		const q = Math.floor(c & mantMask);
+		if (q <= 0) return 0;
+		const logT = (q - 1) / (mantMask - 1);
+		let value = Math.pow(1000, logT);
+		for (let i = 0; i < exp; i++) {
+			value *= 1000;
+		}
+		return value;
+	}
+
 	function primeHashrateGraphHistory(history) {
 		if (!Array.isArray(history) || historyPrimed) {
 			return false;
 		}
-		const cutoff = Date.now() - historyWindowMS;
-		const rows = history
-			.map(row => {
-				const hashrate = Number(row && row.hashrate);
-				const ts = Date.parse(row && row.at);
-				const blockHeight = Number(row && row.block_height);
-				return {
-					hashrate,
-					timestamp: ts,
-					blockHeight: Number.isFinite(blockHeight) && blockHeight > 0 ? blockHeight : null,
-				};
-			})
-			.filter(row => Number.isFinite(row.hashrate) && row.hashrate > 0 && Number.isFinite(row.timestamp) && row.timestamp >= cutoff)
-			.sort((a, b) => a.timestamp - b.timestamp);
-
-		if (rows.length === 0) {
+		const decoded = history
+			.map(code => decodeHashrateSI8(code))
+			.filter(v => Number.isFinite(v) && v > 0);
+		if (decoded.length === 0) {
 			return false;
 		}
+		const now = Date.now();
+		const span = decoded.length > 1 ? (historyWindowMS / (decoded.length - 1)) : 0;
 		hashrateData.length = 0;
 		timestamps.length = 0;
 		blockHeights.length = 0;
-		rows.forEach(row => {
-			hashrateData.push(row.hashrate);
-			timestamps.push(new Date(row.timestamp));
-			blockHeights.push(row.blockHeight);
-			if (row.blockHeight) {
-				lastBlockHeight = row.blockHeight;
-			}
+		decoded.forEach((hashrate, idx) => {
+			hashrateData.push(hashrate);
+			const offset = span * (decoded.length - 1 - idx);
+			timestamps.push(new Date(now - offset));
+			blockHeights.push(null);
 		});
 		trimHistory();
 		if (hashrateData.length > 0) {

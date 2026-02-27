@@ -17,14 +17,16 @@ func TestPoolHashrateHistorySnapshotTrimsAndOrders(t *testing.T) {
 	s.appendPoolHashrateHistory(300, 800003, base.Add(-time.Minute))
 
 	got := s.poolHashrateHistorySnapshot(base)
-	if len(got) != 2 {
-		t.Fatalf("unexpected history length: got %d want 2", len(got))
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 history points, got %d", len(got))
 	}
-	if got[0].Hashrate != 200 || got[0].BlockHeight != 800002 {
-		t.Fatalf("unexpected first sample: %+v", got[0])
+	first := decodeHashrateSI8(uint8(got[0]))
+	last := decodeHashrateSI8(uint8(got[len(got)-1]))
+	if first <= 0 || last <= 0 {
+		t.Fatalf("expected positive decoded values, got first=%v last=%v", first, last)
 	}
-	if got[1].Hashrate != 300 || got[1].BlockHeight != 800003 {
-		t.Fatalf("unexpected second sample: %+v", got[1])
+	if first >= last {
+		t.Fatalf("expected increasing sample order (first < last), got first=%v last=%v", first, last)
 	}
 }
 
@@ -37,7 +39,7 @@ func TestPoolHashrateHistorySnapshotDropsExpired(t *testing.T) {
 	s.appendPoolHashrateHistory(150, 810000, base.Add(-5*time.Minute))
 	got := s.poolHashrateHistorySnapshot(base.Add(2 * time.Minute))
 	if len(got) != 0 {
-		t.Fatalf("expected empty history after expiry, got %d samples", len(got))
+		t.Fatalf("expected empty history after expiry, got len=%d", len(got))
 	}
 }
 
