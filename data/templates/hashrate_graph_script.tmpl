@@ -53,24 +53,48 @@
 	}
 
 	function primeHashrateGraphHistory(history) {
-		if (!Array.isArray(history) || historyPrimed) {
+		if (!history || historyPrimed) {
+			return false;
+		}
+		const startSec = Number(history.s);
+		const intervalSec = Number(history.i);
+		const count = Number(history.n);
+		const presentBits = Array.isArray(history.p) ? history.p : [];
+		const hMin = Number(history.h0);
+		const hMax = Number(history.h1);
+		const hQ = Array.isArray(history.hq) ? history.hq : [];
+		if (!Number.isFinite(startSec) || !Number.isFinite(intervalSec) || !Number.isFinite(count) || intervalSec <= 0 || count <= 0) {
 			return false;
 		}
 		const cutoff = Date.now() - historyWindowMS;
-		const rows = history
-			.map(row => {
-				const hashrate = Number(row && row.hashrate);
-				const ts = Date.parse(row && row.at);
-				const blockHeight = Number(row && row.block_height);
-				return {
-					hashrate,
-					timestamp: ts,
-					blockHeight: Number.isFinite(blockHeight) && blockHeight > 0 ? blockHeight : null,
-				};
-			})
-			.filter(row => Number.isFinite(row.hashrate) && row.hashrate > 0 && Number.isFinite(row.timestamp) && row.timestamp >= cutoff)
-			.sort((a, b) => a.timestamp - b.timestamp);
-
+		function hasBit(bits, idx) {
+			const bi = Math.floor(idx / 8);
+			if (bi < 0 || bi >= bits.length) return false;
+			const v = Number(bits[bi]);
+			if (!Number.isFinite(v)) return false;
+			return (v & (1 << (idx % 8))) !== 0;
+		}
+		function decodeQ8(minV, maxV, q) {
+			if (!Number.isFinite(q) || q < 0) return 0;
+			const qNorm = Math.max(0, Math.min(255, q)) / 255;
+			if (Number.isFinite(minV) && Number.isFinite(maxV) && maxV > minV) {
+				return minV + qNorm * (maxV - minV);
+			}
+			if (Number.isFinite(maxV)) return maxV;
+			if (Number.isFinite(minV)) return minV;
+			return 0;
+		}
+		const rows = [];
+		for (let idx = 0; idx < count; idx++) {
+			if (!hasBit(presentBits, idx)) continue;
+			const hq = Number(hQ[idx]);
+			const hashrate = decodeQ8(hMin, hMax, hq);
+			if (!Number.isFinite(hashrate) || hashrate <= 0) continue;
+			const timestamp = (startSec + intervalSec * idx) * 1000;
+			if (!Number.isFinite(timestamp) || timestamp < cutoff) continue;
+			const blockHeight = null;
+			rows.push({ hashrate, timestamp, blockHeight });
+		}
 		if (rows.length === 0) {
 			return false;
 		}

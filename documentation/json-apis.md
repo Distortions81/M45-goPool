@@ -260,13 +260,14 @@ Fast “headline stats” endpoint used for the hashrate UI and block timer.
 
 Query parameters:
 
-- `include_history` (optional; set to `1` to include `pool_hashrate_history` for initial chart priming)
+- `include_history` (optional)
+  - `2`: include `phh` (quantized compact history for chart priming)
 
 Response object:
 
 - `api_version` (string)
 - `pool_hashrate` (number)
-- `pool_hashrate_history` (array of `PoolHashrateHistoryPoint`; optional; returned when `include_history=1`)
+- `phh` (`PoolHashrateHistoryQuantized`; optional; returned when `include_history=2`)
 - `block_height` (integer)
 - `block_difficulty` (number)
 - `block_time_left_sec` (integer; signed seconds)
@@ -281,11 +282,15 @@ Response object:
 - `template_updated_at` (string; optional; RFC3339)
 - `updated_at` (string; RFC3339)
 
-`PoolHashrateHistoryPoint`:
+`PoolHashrateHistoryQuantized`:
 
-- `at` (string; RFC3339)
-- `hashrate` (number)
-- `block_height` (integer; optional)
+- `s` (integer; start Unix second)
+- `i` (integer; bucket interval in seconds)
+- `n` (integer; number of buckets)
+- `p` (array of uint16; presence bitset)
+- `h0` (number; hashrate min)
+- `h1` (number; hashrate max)
+- `hq` (array of uint16; hashrate q8 values for buckets)
 
 Example:
 
