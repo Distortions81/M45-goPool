@@ -20,21 +20,21 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     PAYOUT_ADDR="${PAYOUT_ADDRESS:-YOUR_POOL_WALLET_ADDRESS_HERE}"
     RPC_URL="${BITCOIN_RPC_URL:-http://127.0.0.1:8332}"
     RPC_COOKIE="${BITCOIN_RPC_COOKIE_PATH:-}"
-    ZMQ_HASH="${ZMQ_HASHBLOCK_ADDR:-tcp://127.0.0.1:28334}"
-    ZMQ_RAW="${ZMQ_RAWBLOCK_ADDR:-tcp://127.0.0.1:28332}"
+    ZMQ_HASH="${ZMQ_HASHBLOCK_ADDR:-}"
+    ZMQ_RAW="${ZMQ_RAWBLOCK_ADDR:-}"
     POOL_PORT="${POOL_LISTEN:-:3333}"
     STATUS_PORT="${STATUS_LISTEN:-:8580}"
-    POOL_NAME="${POOL_BRAND_NAME:-goPool}"
+    POOL_NAME="${POOL_BRAND_NAME:-goPool Home}"
     POOL_FEE="${POOL_FEE_PERCENT:-2.0}"
 
     cat > "${CONFIG_FILE}" <<EOF
 [branding]
   fiat_currency = "usd"
-  pool_donation_address = ""
-  server_location = ""
+  pool_donation_address = "3B86bWqfjdQeLEr8nkeeWU6ygksc2K7MoL"
+  server_location = "home"
   status_brand_domain = ""
   status_brand_name = "${POOL_NAME}"
-  status_tagline = "Solo Mining Pool"
+  status_tagline = "Solo Bitcoin Mining Pool"
 
 [logging]
   debug = false

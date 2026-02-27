@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>goPool - Solo Mining Pool</title>
+<title>goPool Home - Solo Bitcoin Mining Pool</title>
 <link rel="icon" href="/logo.png" type="image/png">
 <style>
   :root {
@@ -173,8 +173,9 @@
 
   <div class="header">
     <img src="/logo.png" alt="goPool">
-    <h1>goPool</h1>
-    <div class="tagline">Solo Mining Pool</div>
+    <h1 id="pool-name">goPool Home</h1>
+    <div class="tagline" id="pool-tagline">Solo Bitcoin Mining Pool</div>
+    <div style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);">Running on your Umbrel</div>
   </div>
 
   <div class="card">
@@ -239,6 +240,28 @@
   document.getElementById('link-status').href = statusUrl;
   document.getElementById('link-admin').href = statusUrl + '/admin';
   document.getElementById('stratum-url').textContent = 'stratum+tcp://' + host + ':3333';
+
+  // Parse config.toml for branding and stratum port
+  fetch('/config.toml')
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('not found'); })
+    .then(function(text) {
+      var cfg = {};
+      text.split('\n').forEach(function(line) {
+        var m;
+        if ((m = line.match(/^\s*status_brand_name\s*=\s*"([^"]*)"/))) cfg.name = m[1];
+        if ((m = line.match(/^\s*status_tagline\s*=\s*"([^"]*)"/))) cfg.tagline = m[1];
+        if ((m = line.match(/^\s*pool_listen\s*=\s*"([^"]*)"/))) cfg.stratumPort = m[1];
+      });
+
+      if (cfg.name) document.getElementById('pool-name').textContent = cfg.name;
+      if (cfg.tagline) document.getElementById('pool-tagline').textContent = cfg.tagline;
+
+      if (cfg.stratumPort) {
+        var port = cfg.stratumPort.replace(/^.*:/, '');
+        document.getElementById('stratum-url').textContent = 'stratum+tcp://' + host + ':' + port;
+      }
+    })
+    .catch(function() {});
 
   fetch('/admin.toml')
     .then(function(r) { return r.ok ? r.text() : Promise.reject('not found'); })
