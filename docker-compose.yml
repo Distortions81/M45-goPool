@@ -1,0 +1,25 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: ${DEVICE_HOSTNAME}
+      APP_PORT: 8580
+
+  server:
+    image: ghcr.io/distortions81/gopool:1.0.0
+    restart: on-failure
+    stop_grace_period: 30s
+    network_mode: host
+    volumes:
+      - ${APP_DATA_DIR}/config:/app/data/config
+      - ${APP_DATA_DIR}/state:/app/data/state
+      - ${APP_DATA_DIR}/logs:/app/data/logs
+    environment:
+      BITCOIN_RPC_URL: "http://${APP_BITCOIN_NODE_IP}:${APP_BITCOIN_RPC_PORT}"
+      BITCOIN_RPC_USER: "${APP_BITCOIN_RPC_USER}"
+      BITCOIN_RPC_PASS: "${APP_BITCOIN_RPC_PASS}"
+      ZMQ_HASHBLOCK_ADDR: "tcp://${APP_BITCOIN_NODE_IP}:28334"
+      ZMQ_RAWBLOCK_ADDR: "tcp://${APP_BITCOIN_NODE_IP}:28332"
+      POOL_LISTEN: ":3333"
+      STATUS_LISTEN: ":8580"
