@@ -324,7 +324,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		data := struct {
 			APIVersion             string                        `json:"api_version"`
 			PoolHashrate           float64                       `json:"pool_hashrate"`
-			PoolHashrateHistoryQ   *poolHashrateHistoryQuantized `json:"phh,omitempty"`
+			PoolHashrateHistoryQ   []uint16                      `json:"phh,omitempty"`
 			BlockHeight            int64                         `json:"block_height"`
 			BlockDifficulty        float64                       `json:"block_difficulty"`
 			BlockTimeLeftSec       int64                         `json:"block_time_left_sec"`
@@ -355,7 +355,7 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		if includeHistory {
-			data.PoolHashrateHistoryQ = s.poolHashrateHistoryQuantizedSnapshot(now)
+			data.PoolHashrateHistoryQ = s.poolHashrateHistorySnapshot(now)
 		}
 		return sonic.Marshal(data)
 	})

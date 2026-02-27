@@ -72,3 +72,37 @@ func TestSIQuant16Saturates(t *testing.T) {
 		t.Fatalf("encodeSIQuant16(1e300) = %d, want %d", got, maxCode)
 	}
 }
+
+func TestSIQuant8Zero(t *testing.T) {
+	if got := encodeSIQuant8(0); got != 0 {
+		t.Fatalf("encodeSIQuant8(0) = %d, want 0", got)
+	}
+	if got := decodeSIQuant8(0); got != 0 {
+		t.Fatalf("decodeSIQuant8(0) = %v, want 0", got)
+	}
+}
+
+func TestSIQuant8RoundTripRelativeError(t *testing.T) {
+	values := []float64{
+		1,
+		12.345,
+		999.9,
+		1000,
+		1234.56,
+		999_999,
+		1_234_567,
+		75_000_000_000,
+		123_456_789_012_345,
+	}
+	for _, v := range values {
+		code := encodeSIQuant8(v)
+		got := decodeSIQuant8(code)
+		if got <= 0 {
+			t.Fatalf("decodeSIQuant8(encode(%v)) = %v", v, got)
+		}
+		relErr := math.Abs(got-v) / v
+		if relErr > 0.2 {
+			t.Fatalf("roundtrip relErr too high for %v: got=%v code=%d relErr=%g", v, got, code, relErr)
+		}
+	}
+}

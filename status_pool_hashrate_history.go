@@ -8,16 +8,6 @@ type poolHashrateHistorySample struct {
 	BlockHeight int64
 }
 
-type poolHashrateHistoryQuantized struct {
-	S  int64    `json:"s"`           // start unix-second
-	I  int      `json:"i"`           // interval seconds
-	N  int      `json:"n"`           // number of buckets
-	P  []uint16 `json:"p,omitempty"` // presence bitset
-	H0 float64  `json:"h0,omitempty"`
-	H1 float64  `json:"h1,omitempty"`
-	HQ []uint16 `json:"hq,omitempty"` // hashrate q8
-}
-
 func (s *StatusServer) appendPoolHashrateHistory(hashrate float64, blockHeight int64, now time.Time) {
 	if s == nil || hashrate <= 0 {
 		return
@@ -33,7 +23,7 @@ func (s *StatusServer) appendPoolHashrateHistory(hashrate float64, blockHeight i
 	s.trimPoolHashrateHistoryLocked(now)
 }
 
-func (s *StatusServer) poolHashrateHistoryQuantizedSnapshot(now time.Time) *poolHashrateHistoryQuantized {
+func (s *StatusServer) poolHashrateHistorySnapshot(now time.Time) []uint16 {
 	if s == nil {
 		return nil
 	}
@@ -54,7 +44,6 @@ func (s *StatusServer) poolHashrateHistoryQuantizedSnapshot(now time.Time) *pool
 	startSec := endSec - int64((n-1)*intervalSeconds)
 	values := make([]float64, n)
 	present := make([]bool, n)
-	presentBits := make([]uint8, (n+7)/8)
 	lastAtUnix := make([]int64, n)
 
 	for _, sample := range s.poolHashrateHistory {
@@ -73,32 +62,16 @@ func (s *StatusServer) poolHashrateHistoryQuantizedSnapshot(now time.Time) *pool
 			continue
 		}
 		present[idx] = true
-		setBit(presentBits, idx)
 		values[idx] = sample.Hashrate
 		lastAtUnix[idx] = atSec
 	}
-
-	out := &poolHashrateHistoryQuantized{
-		S: startSec,
-		I: intervalSeconds,
-		N: n,
-	}
-	hasPresent := false
-	for _, ok := range present {
-		if ok {
-			hasPresent = true
-			break
+	out := make([]uint16, 0, n)
+	for i := 0; i < n; i++ {
+		if !present[i] {
+			continue
 		}
+		out = append(out, uint16(encodeHashrateSI8(values[i])))
 	}
-	if !hasPresent {
-		return out
-	}
-
-	out.P = widenUint8ForJSON(presentBits)
-	h0, h1, hq := quantizeSeriesToUint8(values, present)
-	out.H0 = h0
-	out.H1 = h1
-	out.HQ = widenUint8ForJSON(hq)
 	return out
 }
 
