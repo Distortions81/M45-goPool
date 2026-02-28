@@ -15,7 +15,7 @@ Stratum notes:
 - On startup and during runtime, Stratum is gated only when the node/job feed reports errors or the node is in a non-usable syncing/indexing state: new connections are refused and existing miners are disconnected to avoid wasted hashing.
 
 <p align="center">
-  <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
+  <img src="screenshots/main-page.png" alt="goPool status dashboard" width="720">
 </p>
 
 ## Quick start
