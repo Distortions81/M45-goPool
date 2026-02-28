@@ -18,7 +18,13 @@ dependencies:
 repo: https://github.com/Distortions81/M45-Core-goPool
 support: https://github.com/Distortions81/M45-Core-goPool/issues
 port: 80
-gallery: []
+gallery:
+  - main-page.png
+  - pool-stats.png
+  - node-stats.png
+  - server-stats.png
+  - admin-page.png
+  - light-mode.png
 path: ""
 defaultUsername: ""
 defaultPassword: ""

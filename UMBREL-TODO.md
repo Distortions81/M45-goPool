@@ -10,8 +10,8 @@
 - [x] `@sha256:` digest and version auto-pinned in `docker-compose.yml` and `umbrel-app.yml` by the workflow after each build.
 - [x] Landing page with pool info, admin credentials, miner connection, docs, and license.
 - [x] Home/Umbrel branding applied (goPool Home).
-- [ ] Prepare a 256x256 SVG icon (no rounded corners — Umbrel applies its own). Can convert from M45CORE-1024.PNG.
-- [ ] Prepare 3-5 gallery screenshots at 1440x900 PNG.
+- [x] 256x256 PNG icon generated from M45CORE-1024.PNG (`icon.png`).
+- [x] 6 gallery screenshots at 1440x900 PNG in `screenshots/`.
 - [ ] Fork `getumbrel/umbrel-apps`, add the app directory, and open a PR.
 
 ## Optional Enhancements
