@@ -1,0 +1,35 @@
+manifestVersion: 1
+id: gopool
+category: finance
+name: goPool Home
+version: "1.0.0"
+tagline: Run your own solo Bitcoin mining pool at home
+description: >-
+  goPool Home turns your Umbrel into a solo Bitcoin mining pool. Point your
+  ASIC miners at your own node and mine blocks directly to your own wallet,
+  with no third party involved. Features Stratum v1 support, real-time
+  hashrate monitoring, per-worker statistics, automatic difficulty adjustment,
+  and a built-in web dashboard. Includes a landing page with miner connection
+  info, admin credentials, and pool configuration at a glance.
+developer: Distortions81
+website: https://github.com/Distortions81/M45-Core-goPool
+dependencies:
+  - bitcoin
+repo: https://github.com/Distortions81/M45-Core-goPool
+support: https://github.com/Distortions81/M45-Core-goPool/issues
+port: 80
+gallery:
+  - main-page.png
+  - pool-stats.png
+  - node-stats.png
+  - server-stats.png
+  - admin-page.png
+  - light-mode.png
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+torOnly: false
+permissions: []
+releaseNotes: ""
+submitter: Distortions81
+submission: ""

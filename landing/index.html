@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>goPool Home - Solo Bitcoin Mining Pool</title>
+<link rel="icon" href="/logo.png" type="image/png">
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --border: #0f3460;
+    --text: #e0e0e0;
+    --text-muted: #8a8a9a;
+    --accent: #e94560;
+    --accent-hover: #ff6b81;
+    --link: #4fc3f7;
+    --link-hover: #81d4fa;
+    --success: #66bb6a;
+    --code-bg: #0d1b2a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+  .container {
+    max-width: 720px;
+    width: 100%;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  .header img {
+    width: 96px;
+    height: 96px;
+    border-radius: 16px;
+    margin-bottom: 1rem;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+  .header .tagline {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .card h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+  }
+  .links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .links a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--link);
+    text-decoration: none;
+    font-weight: 500;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .links a:hover {
+    border-color: var(--link);
+    color: var(--link-hover);
+  }
+  .connect-box {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.95rem;
+    word-break: break-all;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .connect-box .url { color: var(--success); }
+  .connect-box button {
+    background: var(--border);
+    border: none;
+    color: var(--text);
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .connect-box button:hover { background: var(--accent); }
+  .admin-info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.4rem 1rem;
+    font-size: 0.95rem;
+  }
+  .admin-info .label { color: var(--text-muted); }
+  .admin-info .value {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--success);
+  }
+  .admin-note {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .admin-disabled {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .docs-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .docs-list a {
+    color: var(--link);
+    text-decoration: none;
+  }
+  .docs-list a:hover {
+    color: var(--link-hover);
+    text-decoration: underline;
+  }
+  .license-summary {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .license-summary a {
+    color: var(--link);
+    text-decoration: none;
+  }
+  .footer {
+    text-align: center;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .footer a { color: var(--link); text-decoration: none; }
+  @media (max-width: 500px) {
+    .links { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <img src="/logo.png" alt="goPool">
+    <h1 id="pool-name">goPool Home</h1>
+    <div class="tagline" id="pool-tagline">Solo Bitcoin Mining Pool</div>
+    <div style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);">Running on your Umbrel</div>
+  </div>
+
+  <div class="card">
+    <h2>Quick Links</h2>
+    <div class="links">
+      <a href="" id="link-status">Pool Status</a>
+      <a href="" id="link-admin">Admin Panel</a>
+      <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank">GitHub</a>
+      <a href="https://github.com/Distortions81/M45-Core-goPool/issues" target="_blank">Support</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Connect Your Miner</h2>
+    <p style="margin-bottom:0.5rem; color:var(--text-muted); font-size:0.9rem;">
+      Point your ASIC or mining software at:
+    </p>
+    <div class="connect-box">
+      <span class="url" id="stratum-url"></span>
+      <button onclick="copyStratum()">Copy</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Admin Credentials</h2>
+    <div id="admin-content">
+      <span class="admin-disabled">Loading...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Documentation</h2>
+    <ul class="docs-list">
+      <li><a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/documentation/operations.md" target="_blank">Operations Guide</a> &mdash; Configuration, CLI flags, logging, backups</li>
+      <li><a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/documentation/json-apis.md" target="_blank">JSON API Reference</a> &mdash; /api/* endpoints</li>
+      <li><a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/documentation/stratum-v1.md" target="_blank">Stratum v1 Protocol</a> &mdash; Method compatibility</li>
+      <li><a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md" target="_blank">README</a> &mdash; Project overview and setup</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>License</h2>
+    <div class="license-summary">
+      goPool is licensed under the
+      <a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE" target="_blank">GNU Affero General Public License v3 (AGPL-3.0)</a>.
+      This means you are free to use, modify, and distribute this software, provided that
+      any modified versions made available over a network also make their source code available
+      under the same license.
+    </div>
+  </div>
+
+  <div class="footer">
+    Powered by <a href="https://github.com/Distortions81/M45-Core-goPool" target="_blank">goPool</a>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  var host = location.hostname;
+  var statusUrl = 'http://' + host + ':8580';
+  document.getElementById('link-status').href = statusUrl;
+  document.getElementById('link-admin').href = statusUrl + '/admin';
+  document.getElementById('stratum-url').textContent = 'stratum+tcp://' + host + ':3333';
+
+  // Parse config.toml for branding and stratum port
+  fetch('/config.toml')
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('not found'); })
+    .then(function(text) {
+      var cfg = {};
+      text.split('\n').forEach(function(line) {
+        var m;
+        if ((m = line.match(/^\s*status_brand_name\s*=\s*"([^"]*)"/))) cfg.name = m[1];
+        if ((m = line.match(/^\s*status_tagline\s*=\s*"([^"]*)"/))) cfg.tagline = m[1];
+        if ((m = line.match(/^\s*pool_listen\s*=\s*"([^"]*)"/))) cfg.stratumPort = m[1];
+      });
+
+      if (cfg.name) document.getElementById('pool-name').textContent = cfg.name;
+      if (cfg.tagline) document.getElementById('pool-tagline').textContent = cfg.tagline;
+
+      if (cfg.stratumPort) {
+        var port = cfg.stratumPort.replace(/^.*:/, '');
+        document.getElementById('stratum-url').textContent = 'stratum+tcp://' + host + ':' + port;
+      }
+    })
+    .catch(function() {});
+
+  fetch('/admin.toml')
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('not found'); })
+    .then(function(text) {
+      var enabled = false, username = '', password = '';
+      text.split('\n').forEach(function(line) {
+        var m;
+        if ((m = line.match(/^enabled\s*=\s*(true|false)/))) enabled = m[1] === 'true';
+        if ((m = line.match(/^username\s*=\s*"([^"]*)"/))) username = m[1];
+        if ((m = line.match(/^password\s*=\s*"([^"]*)"/))) password = m[1];
+      });
+
+      var el = document.getElementById('admin-content');
+      if (!enabled) {
+        el.innerHTML = '<span class="admin-disabled">Admin panel is disabled. Set enabled = true in admin.toml to activate.</span>';
+        return;
+      }
+
+      var html = '<div class="admin-info">' +
+        '<span class="label">Username:</span><span class="value">' + escHtml(username) + '</span>' +
+        '<span class="label">Password:</span><span class="value">' +
+        (password ? escHtml(password) : '<em style="color:var(--text-muted)">(cleared after first login)</em>') +
+        '</span></div>';
+      html += '<div class="admin-note">The plain-text password is cleared from admin.toml after the first successful login. ' +
+        'Only the SHA-256 hash is retained. If you need the password, check admin.toml before your first login.</div>';
+      el.innerHTML = html;
+    })
+    .catch(function() {
+      document.getElementById('admin-content').innerHTML =
+        '<span class="admin-disabled">Could not load admin.toml. The admin panel may not be configured yet.</span>';
+    });
+})();
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function copyStratum() {
+  var url = document.getElementById('stratum-url').textContent;
+  navigator.clipboard.writeText(url).then(function() {
+    var btn = document.querySelector('.connect-box button');
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+  });
+}
+</script>
+</body>
+</html>
