@@ -84,7 +84,7 @@ const (
 	// "no job yet" / "node degraded" as actionable for disconnecting/refusing
 	// miners or showing node-down UI. This avoids noisy false alarms while the
 	// pool and node are still starting up.
-	stratumStartupGrace = 60 * time.Second
+	stratumStartupGrace = 5 * time.Minute
 	// stratumStaleJobGrace is the single runtime grace window before Stratum
 	// starts refusing new miners or disconnecting existing miners due to node/job
 	// feed health issues. This keeps transient hiccups from kicking users.

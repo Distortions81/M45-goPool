@@ -166,7 +166,7 @@ func main() {
 		} else {
 			logger.Info("cpu profiling started", "component", "startup", "kind", "profile", "duration", "60s", "path", "default.pgo")
 			go func() {
-				time.Sleep(60 * time.Second)
+				time.Sleep(5 * time.Minute)
 				pprof.StopCPUProfile()
 				_ = f.Close()
 				logger.Info("cpu profiling finished", "component", "startup", "kind", "profile", "path", "default.pgo")

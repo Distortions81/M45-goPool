@@ -80,7 +80,7 @@ func defaultConfig() Config {
 		CleanExpiredBansOnStartup:           true,
 		LogDebug:                            false,
 		LogNetDebug:                         false,
-		ShareJobFreshnessMode:               shareJobFreshnessJobIDPrev,
+		ShareJobFreshnessMode:               shareJobFreshnessJobID,
 		ShareCheckNTimeWindow:               true,
 		ShareCheckVersionRolling:            true,
 		ShareRequireAuthorizedConnection:    true,
