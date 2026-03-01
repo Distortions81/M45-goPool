@@ -429,7 +429,7 @@
 				<div class="graph-card-header">
 					<div class="label">Saved Worker History</div>
 					<p class="text-sm graph-card-description" id="savedWorkersTopChartMeta">
-						Blue bars: total hashrate. Gold line: best share.
+						Cyan bars: total hashrate. Amber line: best share.
 					</p>
 				</div>
 				<canvas id="savedWorkersHashrateChart" style="width:100%;height:220px;"></canvas>
@@ -1277,9 +1277,41 @@
 			return isLight ? '#4b5568' : '#b3bbd4';
 		}
 
-		function savedWorkersGraphGoldColor() {
+		function savedWorkersGraphAccentColor() {
 			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
-			return isLight ? '#8f6a00' : '#f3d36b';
+			return isLight ? '#2e5c8a' : '#2cf1c2';
+		}
+
+		function savedWorkersGraphAmberColor() {
+			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+			return isLight ? '#8a5200' : '#f6b34a';
+		}
+
+		function hexToRGBA(hex, alpha) {
+			const normalized = String(hex || '').trim().replace(/^#/, '');
+			const a = Math.max(0, Math.min(1, Number(alpha)));
+			if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(44, 241, 194, ${a})`;
+			const r = parseInt(normalized.slice(0, 2), 16);
+			const g = parseInt(normalized.slice(2, 4), 16);
+			const b = parseInt(normalized.slice(4, 6), 16);
+			return `rgba(${r}, ${g}, ${b}, ${a})`;
+		}
+
+		function savedWorkersGraphAccentFillColor(alpha) {
+			return hexToRGBA(savedWorkersGraphAccentColor(), alpha);
+		}
+
+		function savedWorkersGraphAccentBarFill(ctx, topY, bottomY) {
+			if (!ctx || typeof ctx.createLinearGradient !== 'function') {
+				return savedWorkersGraphAccentFillColor(0.45);
+			}
+			const y0 = Number(topY);
+			const y1 = Number(bottomY);
+			const grad = ctx.createLinearGradient(0, y0, 0, y1);
+			grad.addColorStop(0, savedWorkersGraphAccentFillColor(0.62));
+			grad.addColorStop(0.45, savedWorkersGraphAccentFillColor(0.48));
+			grad.addColorStop(1, savedWorkersGraphAccentFillColor(0.24));
+			return grad;
 		}
 
 		function formatLatencyPair(p50, p95) {
@@ -1501,11 +1533,21 @@
 			const n = xPixels.length;
 			const leftBound = Math.max(0, Math.round(Number(minBound) || 0));
 			const rightBound = Math.max(leftBound + 1, Math.round(Number(maxBound) || 0));
+			const spanPixels = Math.max(1, rightBound - leftBound);
 			if (n === 0) return [];
 			if (n === 1) {
 				const w = Math.max(1, Math.min(rightBound - leftBound, Math.round(Number(fallbackWidth) || 1)));
 				const left = Math.max(leftBound, Math.min(rightBound - w, xPixels[0] - Math.floor(w / 2)));
 				return [{ left, width: w, center: xPixels[0] }];
+			}
+			if (n > spanPixels) {
+				// When samples outnumber horizontal pixels, multiple points must share pixels.
+				// Force 1px bars clamped to plot bounds to avoid right-edge overflow.
+				const lastPixel = rightBound - 1;
+				return xPixels.map((x) => {
+					const left = Math.max(leftBound, Math.min(lastPixel, x));
+					return { left, width: 1, center: x };
+				});
 			}
 
 			const edges = new Array(n + 1);
@@ -1523,7 +1565,7 @@
 			}
 			edges[n] = rightBound;
 			if (edges[n] <= edges[n - 1]) {
-				edges[n] = edges[n - 1] + 1;
+				edges[n] = Math.min(rightBound, edges[n - 1] + 1);
 			}
 
 			const rects = new Array(n);
@@ -1537,6 +1579,44 @@
 				};
 			}
 			return rects;
+		}
+
+		function resampleSeriesByPixel(rowsInput, minX, spanX, graphWidth, mode) {
+			const rows = Array.isArray(rowsInput) ? rowsInput : [];
+			if (rows.length <= 1 || !(spanX > 0) || !(graphWidth > 0)) return rows;
+			const reducer = String(mode || 'max').toLowerCase();
+			const byPixel = new Map();
+			for (const row of rows) {
+				const at = Number(row?.at);
+				const value = Number(row?.value);
+				if (!Number.isFinite(at) || !Number.isFinite(value) || value < 0) continue;
+				const pixel = Math.max(0, Math.min(Math.floor(graphWidth), Math.round(((at - minX) / spanX) * graphWidth)));
+				const existing = byPixel.get(pixel);
+				if (!existing) {
+					byPixel.set(pixel, { at, value, sum: value, count: 1 });
+					continue;
+				}
+				existing.sum += value;
+				existing.count += 1;
+				if (reducer === 'last') {
+					if (at >= existing.at) {
+						existing.at = at;
+						existing.value = value;
+					}
+				} else {
+					if (value >= existing.value) {
+						existing.at = at;
+						existing.value = value;
+					}
+				}
+			}
+			const sampled = Array.from(byPixel.entries())
+				.sort((a, b) => a[0] - b[0])
+				.map(([, rec]) => ({
+					at: rec.at,
+					value: reducer === 'avg' ? (rec.sum / Math.max(1, rec.count)) : rec.value,
+				}));
+			return sampled.length > 0 ? sampled : rows;
 		}
 
 		function getSavedWorkersTopChartHashes() {
@@ -1612,7 +1692,7 @@
 			const hashrateRows = Array.isArray(series?.hashrateRows) ? series.hashrateRows : [];
 			const bestRows = Array.isArray(series?.bestRows) ? series.bestRows : [];
 			if (savedWorkersTopChartMeta) {
-				savedWorkersTopChartMeta.textContent = 'Blue bars: total hashrate. Gold line: best share.';
+				savedWorkersTopChartMeta.textContent = 'Cyan bars: total hashrate. Amber line: best share.';
 			}
 
 			const allRows = hashrateRows.concat(bestRows);
@@ -1643,13 +1723,16 @@
 			if (!(maxX > minX)) maxX = minX + 1;
 			const spanX = Math.max(1, maxX - minX);
 
+			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
+			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
+
 			let maxHashrate = 0;
-			for (const row of hashrateRows) {
+			for (const row of sampledHashrateRows) {
 				const value = Number(row?.value || 0);
 				if (Number.isFinite(value) && value > maxHashrate) maxHashrate = value;
 			}
 			let maxBest = 0;
-			for (const row of bestRows) {
+			for (const row of sampledBestRows) {
 				const value = Number(row?.value || 0);
 				if (Number.isFinite(value) && value > maxBest) maxBest = value;
 			}
@@ -1690,16 +1773,16 @@
 			}
 
 			const hRects = buildQuantizedBucketRects(
-				hashrateRows.map((row) => xFor(row.at)),
+				sampledHashrateRows.map((row) => xFor(row.at)),
 				paddingLeft,
 				width - paddingRight,
 				Math.max(2, Math.ceil(graphWidth / 32)),
 			);
 			const fallbackBarW = hRects.length > 0 ? hRects[0].width : Math.max(2, Math.ceil(graphWidth / 32));
 
-			ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
-			for (let i = 0; i < hashrateRows.length; i++) {
-				const row = hashrateRows[i];
+			ctx.fillStyle = savedWorkersGraphAccentBarFill(ctx, paddingTop, baselineY);
+			for (let i = 0; i < sampledHashrateRows.length; i++) {
+				const row = sampledHashrateRows[i];
 				const rect = hRects[i];
 				if (!rect) continue;
 				const left = rect.left;
@@ -1711,16 +1794,16 @@
 			}
 
 			if (bestRows.length > 0) {
-				ctx.strokeStyle = savedWorkersGraphGoldColor();
+				ctx.strokeStyle = savedWorkersGraphAmberColor();
 				ctx.lineWidth = 2;
 				const bRects = buildQuantizedBucketRects(
-					bestRows.map((row) => xFor(row.at)),
+					sampledBestRows.map((row) => xFor(row.at)),
 					paddingLeft,
 					width - paddingRight,
 					Math.max(4, fallbackBarW),
 				);
-				for (let i = 0; i < bestRows.length; i++) {
-					const row = bestRows[i];
+				for (let i = 0; i < sampledBestRows.length; i++) {
+					const row = sampledBestRows[i];
 					const rect = bRects[i];
 					if (!rect) continue;
 					const y = px(yBestFor(Number(row.value || 0)));
@@ -1794,10 +1877,13 @@
 			if (!(maxX > minX)) maxX = minX + 1;
 			const spanX = Math.max(1, maxX - minX);
 
+			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
+			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
+
 			let maxHashrate = 0;
-			for (const row of hashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
+			for (const row of sampledHashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
 			let maxBest = 0;
-			for (const row of bestRows) if (row.value > maxBest) maxBest = row.value;
+			for (const row of sampledBestRows) if (row.value > maxBest) maxBest = row.value;
 			maxHashrate = Math.max(1, maxHashrate * 1.25);
 			maxBest = Math.max(1, maxBest * 1.25);
 
@@ -1835,16 +1921,16 @@
 			}
 
 			const hRects = buildQuantizedBucketRects(
-				hashrateRows.map((row) => xFor(row.at)),
+				sampledHashrateRows.map((row) => xFor(row.at)),
 				paddingLeft,
 				width - paddingRight,
 				Math.max(2, Math.ceil(graphWidth / 32)),
 			);
 			const fallbackBarW = hRects.length > 0 ? hRects[0].width : Math.max(2, Math.ceil(graphWidth / 32));
 
-			ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
-			for (let i = 0; i < hashrateRows.length; i++) {
-				const row = hashrateRows[i];
+			ctx.fillStyle = savedWorkersGraphAccentBarFill(ctx, paddingTop, baselineY);
+			for (let i = 0; i < sampledHashrateRows.length; i++) {
+				const row = sampledHashrateRows[i];
 				const rect = hRects[i];
 				if (!rect) continue;
 				const top = px(Math.max(paddingTop, Math.min(baselineY, yHashFor(row.value))));
@@ -1854,15 +1940,15 @@
 			}
 
 			const bRects = buildQuantizedBucketRects(
-				bestRows.map((row) => xFor(row.at)),
+				sampledBestRows.map((row) => xFor(row.at)),
 				paddingLeft,
 				width - paddingRight,
 				Math.max(4, fallbackBarW),
 			);
-			ctx.strokeStyle = savedWorkersGraphGoldColor();
+			ctx.strokeStyle = savedWorkersGraphAmberColor();
 			ctx.lineWidth = 2;
-			for (let i = 0; i < bestRows.length; i++) {
-				const row = bestRows[i];
+			for (let i = 0; i < sampledBestRows.length; i++) {
+				const row = sampledBestRows[i];
 				const rect = bRects[i];
 				if (!rect) continue;
 				const y = px(yBestFor(row.value));
@@ -2221,7 +2307,7 @@
 			ctx.lineTo(cssW, cssH - 1);
 			ctx.stroke();
 
-			ctx.fillStyle = 'rgba(74, 158, 255, 0.55)';
+			ctx.fillStyle = savedWorkersGraphAccentBarFill(ctx, 0, baselineY);
 			for (let i = 0; i < hPoints.length; i++) {
 				const p = hPoints[i];
 				const rect = hRects[i];
@@ -2234,7 +2320,7 @@
 				ctx.fillRect(left, baselineY - h, barW, h);
 			}
 
-			ctx.strokeStyle = '#f3d36b';
+			ctx.strokeStyle = savedWorkersGraphAmberColor();
 			ctx.lineWidth = 2;
 			for (let i = 0; i < bPoints.length; i++) {
 				const p = bPoints[i];
@@ -2265,7 +2351,7 @@
 					return;
 				}
 				const series = kind === 'bestshare' ? bestRows : hashrateRows;
-				const color = kind === 'bestshare' ? '#f3d36b' : '#4a9eff';
+				const color = kind === 'bestshare' ? savedWorkersGraphAmberColor() : savedWorkersGraphAccentColor();
 				drawInlineSparkline(canvas, series, color);
 			});
 			renderInlineWorkerUptimeFromCache(scope);

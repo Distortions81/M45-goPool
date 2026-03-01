@@ -137,7 +137,35 @@
 
 	function blockMarkerColor() {
 		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
-		return isLight ? '#8f6a00' : '#f3d36b';
+		return isLight ? '#8a5200' : '#f6b34a';
+	}
+
+	function graphAccentColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#2e5c8a' : '#2cf1c2';
+	}
+
+	function hexToRGBA(hex, alpha) {
+		const normalized = String(hex || '').trim().replace(/^#/, '');
+		const a = Math.max(0, Math.min(1, Number(alpha)));
+		if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(44, 241, 194, ${a})`;
+		const r = parseInt(normalized.slice(0, 2), 16);
+		const g = parseInt(normalized.slice(2, 4), 16);
+		const b = parseInt(normalized.slice(4, 6), 16);
+		return `rgba(${r}, ${g}, ${b}, ${a})`;
+	}
+
+	function graphAccentBarFill(ctx, topY, bottomY) {
+		if (!ctx || typeof ctx.createLinearGradient !== 'function') {
+			return hexToRGBA(graphAccentColor(), 0.45);
+		}
+		const y0 = Number(topY);
+		const y1 = Number(bottomY);
+		const grad = ctx.createLinearGradient(0, y0, 0, y1);
+		grad.addColorStop(0, hexToRGBA(graphAccentColor(), 0.62));
+		grad.addColorStop(0.45, hexToRGBA(graphAccentColor(), 0.48));
+		grad.addColorStop(1, hexToRGBA(graphAccentColor(), 0.24));
+		return grad;
 	}
 
 	function graphLabelColor() {
@@ -262,7 +290,7 @@
 			Math.max(2, Math.ceil(graphWidth / 32)),
 		);
 		const baselineY = Math.round(height - paddingBottom);
-		ctx.fillStyle = 'rgba(74, 158, 255, 0.45)';
+		ctx.fillStyle = graphAccentBarFill(ctx, paddingTop, baselineY);
 		ctx.strokeStyle = blockMarkerColor();
 		ctx.lineWidth = 2;
 		hashrateData.forEach((hashrate, index) => {
