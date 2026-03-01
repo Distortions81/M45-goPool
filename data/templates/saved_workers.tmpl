@@ -2023,6 +2023,7 @@
 
 			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
 			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
+			const drawableBestRows = sampledBestRows.filter((row) => Number(row?.value || 0) > 1);
 
 			let maxHashrate = 0;
 			for (const row of sampledHashrateRows) {
@@ -2030,7 +2031,7 @@
 				if (Number.isFinite(value) && value > maxHashrate) maxHashrate = value;
 			}
 			let maxBest = 0;
-			for (const row of sampledBestRows) {
+			for (const row of drawableBestRows) {
 				const value = Number(row?.value || 0);
 				if (Number.isFinite(value) && value > maxBest) maxBest = value;
 			}
@@ -2091,17 +2092,17 @@
 				ctx.fillRect(left, baselineY - h, barW, h);
 			}
 
-			if (bestRows.length > 0) {
+			if (drawableBestRows.length > 0) {
 				ctx.strokeStyle = savedWorkersGraphAmberColor();
 				ctx.lineWidth = 2;
 				const bRects = buildQuantizedBucketRects(
-					sampledBestRows.map((row) => xFor(row.at)),
+					drawableBestRows.map((row) => xFor(row.at)),
 					paddingLeft,
 					width - paddingRight,
 					Math.max(4, fallbackBarW),
 				);
-				for (let i = 0; i < sampledBestRows.length; i++) {
-					const row = sampledBestRows[i];
+				for (let i = 0; i < drawableBestRows.length; i++) {
+					const row = drawableBestRows[i];
 					const rect = bRects[i];
 					if (!rect) continue;
 					const y = px(yBestFor(Number(row.value || 0)));
@@ -2178,11 +2179,12 @@
 
 			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
 			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
+			const drawableBestRows = sampledBestRows.filter((row) => Number(row?.value || 0) > 1);
 
 			let maxHashrate = 0;
 			for (const row of sampledHashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
 			let maxBest = 0;
-			for (const row of sampledBestRows) if (row.value > maxBest) maxBest = row.value;
+			for (const row of drawableBestRows) if (row.value > maxBest) maxBest = row.value;
 			maxHashrate = Math.max(1, maxHashrate * 1.25);
 			maxBest = Math.max(1, maxBest * 1.25);
 
@@ -2239,15 +2241,15 @@
 			}
 
 			const bRects = buildQuantizedBucketRects(
-				sampledBestRows.map((row) => xFor(row.at)),
+				drawableBestRows.map((row) => xFor(row.at)),
 				paddingLeft,
 				width - paddingRight,
 				Math.max(4, fallbackBarW),
 			);
 			ctx.strokeStyle = savedWorkersGraphAmberColor();
 			ctx.lineWidth = 2;
-			for (let i = 0; i < sampledBestRows.length; i++) {
-				const row = sampledBestRows[i];
+			for (let i = 0; i < drawableBestRows.length; i++) {
+				const row = drawableBestRows[i];
 				const rect = bRects[i];
 				if (!rect) continue;
 				const y = px(yBestFor(row.value));
@@ -2552,8 +2554,9 @@
 			const maxVisiblePoints = Math.max(1, Math.floor(cssW));
 			const hPoints = hPointsRaw.length > maxVisiblePoints ? hPointsRaw.slice(hPointsRaw.length - maxVisiblePoints) : hPointsRaw;
 			const bPoints = bPointsRaw.length > maxVisiblePoints ? bPointsRaw.slice(bPointsRaw.length - maxVisiblePoints) : bPointsRaw;
+			const bDrawPoints = bPoints.filter((p) => Number(p?.y || 0) > 1);
 
-			if (hPoints.length === 0 && bPoints.length === 0) {
+			if (hPoints.length === 0 && bDrawPoints.length === 0) {
 				ctx.strokeStyle = '#2a2f3a';
 				ctx.lineWidth = 1;
 				ctx.beginPath();
@@ -2565,7 +2568,7 @@
 
 			let minX = Number.POSITIVE_INFINITY;
 			let maxX = 0;
-			for (const p of hPoints.concat(bPoints)) {
+			for (const p of hPoints.concat(bDrawPoints)) {
 				if (p.x < minX) minX = p.x;
 				if (p.x > maxX) maxX = p.x;
 			}
@@ -2575,7 +2578,7 @@
 			let maxHash = 0;
 			for (const p of hPoints) if (p.y > maxHash) maxHash = p.y;
 			let maxBest = 0;
-			for (const p of bPoints) if (p.y > maxBest) maxBest = p.y;
+			for (const p of bDrawPoints) if (p.y > maxBest) maxBest = p.y;
 			maxHash = maxHash > 0 ? maxHash * 1.25 : 1;
 			maxBest = maxBest > 0 ? maxBest * 1.25 : 1;
 
@@ -2594,7 +2597,7 @@
 				Math.max(2, Math.ceil(cssW / Math.max(1, hPoints.length || bPoints.length || 1))),
 			);
 			const bRects = buildQuantizedBucketRects(
-				bPoints.map((p) => xFor(p.x)),
+				bDrawPoints.map((p) => xFor(p.x)),
 				0,
 				cssW,
 				Math.max(3, (hRects[0]?.width || 3)),
@@ -2622,8 +2625,8 @@
 
 			ctx.strokeStyle = savedWorkersGraphAmberColor();
 			ctx.lineWidth = 2;
-			for (let i = 0; i < bPoints.length; i++) {
-				const p = bPoints[i];
+			for (let i = 0; i < bDrawPoints.length; i++) {
+				const p = bDrawPoints[i];
 				const rect = bRects[i];
 				if (!rect) continue;
 				const y = px(Math.max(0, Math.min(baselineY, yBestFor(p.y))));

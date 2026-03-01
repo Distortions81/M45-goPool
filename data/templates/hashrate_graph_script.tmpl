@@ -335,11 +335,12 @@
 		// Use last-value sampling for best-share so empty buckets don't visually
 		// inherit earlier peaks when multiple buckets map to one pixel.
 		const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
+		const drawableBestRows = sampledBestRows.filter((row) => Number(row?.value || 0) > 1);
 
 		let maxHashrate = 0;
 		for (const row of sampledHashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
 		let maxBest = 0;
-		for (const row of sampledBestRows) if (row.value > maxBest) maxBest = row.value;
+		for (const row of drawableBestRows) if (row.value > maxBest) maxBest = row.value;
 		maxHashrate = Math.max(1, maxHashrate * 1.25);
 		maxBest = Math.max(1, maxBest * 1.25);
 
@@ -396,15 +397,15 @@
 		}
 
 		const bRects = buildQuantizedBucketRects(
-			sampledBestRows.map((row) => xFor(row.at)),
+			drawableBestRows.map((row) => xFor(row.at)),
 			paddingLeft,
 			width - paddingRight,
 			Math.max(4, fallbackBarW),
 		);
 		ctx.strokeStyle = savedWorkersGraphAmberColor();
 		ctx.lineWidth = 2;
-		for (let i = 0; i < sampledBestRows.length; i++) {
-			const row = sampledBestRows[i];
+		for (let i = 0; i < drawableBestRows.length; i++) {
+			const row = drawableBestRows[i];
 			const rect = bRects[i];
 			if (!rect) continue;
 			const y = px(yBestFor(row.value));
