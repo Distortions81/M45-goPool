@@ -136,10 +136,16 @@
 		.saved-workers-online-spark-slot {
 			display: inline-flex;
 			align-items: center;
-			flex: 1 1 132px;
-			min-width: 96px;
-			max-width: 220px;
+			flex: 0 0 180px;
+			width: 180px;
+			min-width: 180px;
+			max-width: 180px;
 			min-height: 30px;
+		}
+		.saved-workers-online-spark-slot .worker-inline-spark-combined {
+			width: 180px;
+			min-width: 180px;
+			max-width: 180px;
 		}
 		.saved-workers-online-table thead th {
 			position: static;
@@ -189,6 +195,35 @@
 		.saved-workers-online-block.top .saved-workers-online-line {
 			align-items: flex-start;
 			justify-content: flex-start;
+			flex-wrap: nowrap;
+		}
+		.saved-workers-online-left {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px;
+			flex: 0 0 260px;
+			width: 260px;
+			min-width: 260px;
+			max-width: 260px;
+		}
+		.saved-workers-online-block.top .saved-workers-online-left {
+			flex-direction: column;
+			align-items: flex-start;
+			flex-wrap: nowrap;
+		}
+		.saved-workers-online-block.top .saved-workers-online-left .saved-workers-online-name {
+			flex: 0 0 auto;
+			min-width: 0;
+		}
+		.saved-workers-online-block.top .saved-workers-online-left .saved-workers-online-actions {
+			justify-content: flex-start;
+			width: auto;
+		}
+		.saved-workers-online-right {
+			min-width: 0;
+			flex: 1 1 360px;
+			overflow-x: visible;
 		}
 		.saved-workers-online-block.bottom .saved-workers-online-line {
 			justify-content: flex-start;
@@ -213,6 +248,21 @@
 			justify-content: flex-start;
 			min-width: 0;
 			flex: 1 1 320px;
+		}
+		/* Top row can flow to a second line when needed; bottom row may scroll horizontally. */
+		.saved-workers-online-block.top .saved-workers-online-stats {
+			flex-wrap: wrap;
+			overflow-x: visible;
+		}
+		.saved-workers-online-block.top .saved-workers-online-actions {
+			margin-left: 0;
+			flex: 0 0 auto;
+		}
+		.saved-workers-online-block.bottom .saved-workers-online-stats {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: thin;
 		}
 		.saved-workers-online-pill {
 			display: inline-flex;
@@ -269,6 +319,98 @@
 			flex: 0 1 240px;
 			min-width: 180px;
 		}
+		/* Temporary: force compact worker-row layout across all widths. */
+		body.saved-workers-compact .saved-workers-online-row-detail {
+			display: none;
+		}
+		body.saved-workers-compact .saved-workers-online-name {
+			min-width: 180px;
+			flex: 0 1 240px;
+			order: 0;
+		}
+		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-line,
+		body.saved-workers-compact .saved-workers-online-block.bottom .saved-workers-online-line {
+			gap: 6px 8px;
+			flex-wrap: wrap;
+			overflow-x: visible;
+		}
+		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-stats {
+			flex: 1 1 100%;
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 6px;
+			align-items: center;
+			order: 3;
+		}
+		body.saved-workers-compact .saved-workers-online-mobile-table-legend {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 6px;
+			margin-top: 10px;
+			padding: 6px 8px;
+			border: 1px solid rgba(255,255,255,0.06);
+			border-radius: 8px;
+			background: rgba(255,255,255,0.02);
+		}
+		body.saved-workers-compact .saved-workers-online-mobile-table-legend .saved-workers-online-mobile-legend {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			grid-column: 1 / -1;
+			gap: 6px;
+		}
+		body.saved-workers-compact .saved-workers-online-mobile-table-legend .saved-workers-online-mobile-legend > span + span {
+			border-left: 1px solid rgba(255,255,255,0.14);
+			padding-left: 6px;
+		}
+		body.saved-workers-compact .saved-workers-online-mobile-legend > span {
+			font-size: 10px;
+			color: var(--text-muted);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			white-space: nowrap;
+			text-align: center;
+		}
+		body.saved-workers-compact .saved-workers-online-pill {
+			flex: 0 0 auto;
+			padding: 0;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			min-height: 0;
+		}
+		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-pill {
+			display: inline-flex;
+			width: 100%;
+			justify-content: center;
+		}
+		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-pill + .saved-workers-online-pill {
+			border-left: 1px solid rgba(255,255,255,0.14);
+			padding-left: 6px;
+		}
+		body.saved-workers-compact .saved-workers-online-pill-label {
+			display: none;
+		}
+		body.saved-workers-compact .saved-workers-online-pill-value {
+			font-size: 12px;
+		}
+		body.saved-workers-compact .saved-workers-online-pill-mobile-hide,
+		body.saved-workers-compact .saved-workers-online-spark-slot,
+		body.saved-workers-compact .saved-workers-online-action-remove-mobile {
+			display: none !important;
+		}
+		body.saved-workers-compact .saved-workers-online-mobile-inline-extra {
+			display: inline-flex;
+		}
+		body.saved-workers-compact .saved-workers-online-left .saved-workers-online-actions {
+			display: flex;
+			flex-wrap: nowrap;
+			width: auto;
+			gap: 8px;
+			justify-content: flex-start;
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: thin;
+		}
 		@media (max-width: 900px) {
 			.saved-workers-online-line {
 				align-items: flex-start;
@@ -279,6 +421,19 @@
 			}
 			.saved-workers-online-stats {
 				justify-content: flex-start;
+			}
+			body.saved-workers-compact .saved-workers-online-left .saved-workers-online-actions {
+				width: auto;
+				flex-wrap: nowrap;
+			}
+			.saved-workers-online-block.bottom .saved-workers-online-line {
+				flex-wrap: nowrap;
+				align-items: center;
+			}
+			.saved-workers-online-block.bottom .saved-workers-online-actions {
+				width: auto;
+				flex: 0 0 auto;
+				flex-wrap: nowrap;
 			}
 		}
 		@media (max-width: 540px) {
@@ -345,9 +500,10 @@
 				text-align: center;
 			}
 			.saved-workers-online-block.top .saved-workers-online-spark-slot {
-				flex: 0 0 80px;
-				min-width: 80px;
-				max-width: 80px;
+				flex: 0 0 180px;
+				width: 180px;
+				min-width: 180px;
+				max-width: 180px;
 				min-height: 24px;
 			}
 			.saved-workers-online-block.top .worker-inline-spark-combined {
@@ -409,7 +565,56 @@
 		}
 	</style>
 </head>
-<body>
+	<body>
+		<script>
+			(function() {
+				let layoutModeRaf = 0;
+
+				function needsSavedWorkersCompactMode() {
+					const body = document.body;
+					if (!body) return false;
+					const card = document.getElementById('onlineWorkersCard');
+					if (!card || card.style.display === 'none') return false;
+					const topStatsRows = card.querySelectorAll('.saved-workers-online-row-main .saved-workers-online-stats');
+					for (const stats of topStatsRows) {
+						if (!(stats instanceof HTMLElement)) continue;
+						const visibleChildren = Array.from(stats.children).filter((child) => {
+							return (child instanceof HTMLElement) && child.offsetParent !== null;
+						});
+						const lineTops = new Set();
+						for (const child of visibleChildren) {
+							lineTops.add(Math.round(child.offsetTop));
+							if (lineTops.size > 2) {
+								return true;
+							}
+						}
+					}
+					return false;
+				}
+
+				function applySavedWorkersLayoutMode() {
+					if (!document.body) return;
+					document.body.classList.remove('saved-workers-compact');
+					if (needsSavedWorkersCompactMode()) {
+						document.body.classList.add('saved-workers-compact');
+					}
+				}
+
+				function scheduleSavedWorkersLayoutMode() {
+					if (layoutModeRaf) return;
+					layoutModeRaf = window.requestAnimationFrame(() => {
+						layoutModeRaf = 0;
+						applySavedWorkersLayoutMode();
+					});
+				}
+
+				window.__savedWorkersApplyLayoutMode = applySavedWorkersLayoutMode;
+				window.__savedWorkersScheduleLayoutMode = scheduleSavedWorkersLayoutMode;
+				window.addEventListener('resize', scheduleSavedWorkersLayoutMode);
+				window.addEventListener('load', scheduleSavedWorkersLayoutMode);
+				document.addEventListener('DOMContentLoaded', scheduleSavedWorkersLayoutMode);
+			})();
+		</script>
 	{{template "header" .}}
 	<main class="page" id="content">
 		<noscript>
@@ -421,6 +626,14 @@
 		</noscript>
 		{{if .ClerkUser}}
 		<div class="panel-stack panel-stack-wide">
+			<div class="card" id="savedWorkersAuthNotice" style="display:none; border-color:rgba(248,141,141,0.55);">
+				<p class="text-sm" style="margin:0; color:#f3b5b5;">
+					<span id="savedWorkersAuthNoticeText">Session expired.</span>
+					<a id="savedWorkersAuthNoticeLink" href="/sign-in?redirect=/saved-workers" class="mono">Sign in again</a>
+					to continue live updates.
+				</p>
+			</div>
+
 			<div class="saved-workers-status">
 				{{template "status_boxes" .}}
 			</div>
@@ -483,90 +696,80 @@
 								{{range .OnlineWorkerEntries}}
 					<tr class="saved-workers-online-row saved-workers-online-row-main">
 						<td class="saved-workers-online-cell">
-							<div class="saved-workers-online-block top">
-								<div class="saved-workers-online-line">
-									<form method="post" action="/worker/remove" data-remove-worker="{{.Name}}" class="saved-workers-online-action-remove-mobile">
-										<input type="hidden" name="hash" value="{{.Hash}}">
-										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-												<polyline points="3 6 5 6 21 6"></polyline>
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-												<path d="M10 11v6"></path>
-												<path d="M14 11v6"></path>
-												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-											</svg>
-										</button>
-									</form>
-									<div class="saved-workers-online-name">
-										<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
-									</div>
-									<div class="saved-workers-online-stats">
-										<span class="saved-workers-online-spark-slot">
-											<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate and best share sparkline"></canvas>
-										</span>
-										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Hashrate</span>
-											<span data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value saved-workers-online-pill-value">
-												—
+								<div class="saved-workers-online-block top">
+									<div class="saved-workers-online-line">
+										<div class="saved-workers-online-left">
+											<form method="post" action="/worker/remove" data-remove-worker="{{.Name}}" class="saved-workers-online-action-remove-mobile">
+												<input type="hidden" name="hash" value="{{.Hash}}">
+												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<polyline points="3 6 5 6 21 6"></polyline>
+														<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+														<path d="M10 11v6"></path>
+														<path d="M14 11v6"></path>
+														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+													</svg>
+												</button>
+											</form>
+											<div class="saved-workers-online-name">
+												<a class="mono sensitive-worker worker-link" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" href="/worker/sha256?hash={{.Hash}}"></a>
+											</div>
+											<div class="saved-workers-online-actions">
+												<button class="btn btn-secondary worker-graph-btn worker-history-open saved-workers-online-action-graph-mobile-hide" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<path d="M3 3v18h18"></path>
+														<path d="M7 14l4-4 3 3 5-6"></path>
+													</svg>
+												</button>
+												{{if $.DiscordNotificationsEnabled}}
+													<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
+														{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
+													</button>
+												{{end}}
+												<form method="post" action="/worker/reconnect" data-reconnect-worker="{{.Name}}" class="saved-workers-online-action-reboot">
+													<input type="hidden" name="hash" value="{{.Hash}}">
+													<button class="btn btn-secondary" type="submit" aria-label="Reboot worker" title="Force reset (30s ban + disconnect)">
+														Reboot
+													</button>
+												</form>
+												<form method="post" action="/worker/remove" data-remove-worker="{{.Name}}" class="saved-workers-online-action-remove-bottom-mobile-hide">
+													<input type="hidden" name="hash" value="{{.Hash}}">
+													<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+															<polyline points="3 6 5 6 21 6"></polyline>
+															<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+															<path d="M10 11v6"></path>
+															<path d="M14 11v6"></path>
+															<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+														</svg>
+													</button>
+												</form>
+											</div>
+										</div>
+										<div class="saved-workers-online-right">
+											<div class="saved-workers-online-stats">
+											<span class="saved-workers-online-spark-slot">
+												<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate and best share sparkline"></canvas>
 											</span>
-										</span>
-										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Best ever</span>
-											<span class="saved-workers-online-pill-value">{{formatDiff .BestDifficulty}}</span>
-										</span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">{{formatShareRate .ShareRate}}</span></span>
+											<span class="saved-workers-online-pill">
+												<span data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value saved-workers-online-pill-value">
+													—
+												</span>
+											</span>
+											<span class="saved-workers-online-pill">
+												<span class="saved-workers-online-pill-label">Best</span>
+												<span class="saved-workers-online-pill-value">{{formatDiff .BestDifficulty}}</span>
+											</span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares</span><span class="saved-workers-online-pill-value">{{.Accepted}}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Time</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">{{formatDiff .Difficulty}}</span></span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">{{formatShareRate .ShareRate}}</span></span>
+										</div>
+										</div>
 									</div>
 								</div>
-							</div>
-						</td>
-					</tr>
-					<tr class="saved-workers-online-row saved-workers-online-row-detail">
-						<td class="saved-workers-online-cell">
-							<div class="saved-workers-online-block bottom">
-								<div class="saved-workers-online-line">
-									<div class="saved-workers-online-actions">
-										<button class="btn btn-secondary worker-graph-btn worker-history-open saved-workers-online-action-graph-mobile-hide" type="button" data-worker-name="{{.Name}}" data-worker-hash="{{.Hash}}" aria-label="Open worker graphs" title="Open worker graphs">
-											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-												<path d="M3 3v18h18"></path>
-												<path d="M7 14l4-4 3 3 5-6"></path>
-											</svg>
-										</button>
-										{{if $.DiscordNotificationsEnabled}}
-											<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="{{.Hash}}" data-notify-enabled="{{if .NotifyEnabled}}1{{else}}0{{end}}" aria-label="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}" title="{{if .NotifyEnabled}}Disable pings for this worker{{else}}Enable pings for this worker{{end}}">
-												{{if .NotifyEnabled}}🔔{{else}}🔕{{end}}
-											</button>
-										{{end}}
-										<form method="post" action="/worker/reconnect" data-reconnect-worker="{{.Name}}" class="saved-workers-online-action-reboot">
-											<input type="hidden" name="hash" value="{{.Hash}}">
-											<button class="btn btn-secondary" type="submit" aria-label="Reboot worker" title="Force reset (30s ban + disconnect)">
-												Reboot
-											</button>
-										</form>
-										<form method="post" action="/worker/remove" data-remove-worker="{{.Name}}" class="saved-workers-online-action-remove-bottom-mobile-hide">
-											<input type="hidden" name="hash" value="{{.Hash}}">
-											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-													<polyline points="3 6 5 6 21 6"></polyline>
-													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-													<path d="M10 11v6"></path>
-													<path d="M14 11v6"></path>
-													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-												</svg>
-											</button>
-										</form>
-									</div>
-									<div class="saved-workers-online-stats">
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">{{.Accepted}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">{{.Rejected}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">{{humanDuration .ConnectedDuration}}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="{{.Hash}}">—</span></span>
-									</div>
-								</div>
-							</div>
 						</td>
 					</tr>
 								{{end}}
@@ -827,13 +1030,31 @@
 		const clerkPublishableKey = "{{.ClerkPublishableKey}}";
 		const clerkJSURL = "{{.ClerkJSURL}}";
 		const clerkLoginURL = "{{.ClerkLoginURL}}";
+		const authNoticeEl = document.getElementById('savedWorkersAuthNotice');
+		const authNoticeTextEl = document.getElementById('savedWorkersAuthNoticeText');
+		const authNoticeLinkEl = document.getElementById('savedWorkersAuthNoticeLink');
 
 		let clerkLoadPromise = null;
 		let clerkRefreshing = null;
 
-		function redirectToLogin() {
-			const url = (clerkLoginURL || '/sign-in?redirect=/saved-workers');
-			try { window.location.href = url; } catch (_) {}
+		function loginURL() {
+			return (clerkLoginURL || '/sign-in?redirect=/saved-workers');
+		}
+
+		function showAuthNotice(message) {
+			if (!authNoticeEl) return;
+			if (authNoticeLinkEl) {
+				authNoticeLinkEl.href = loginURL();
+			}
+			if (authNoticeTextEl && message) {
+				authNoticeTextEl.textContent = message;
+			}
+			authNoticeEl.style.display = '';
+		}
+
+		function hideAuthNotice() {
+			if (!authNoticeEl) return;
+			authNoticeEl.style.display = 'none';
 		}
 
 		function loadClerkJS() {
@@ -886,15 +1107,25 @@
 			return clerkRefreshing;
 		}
 
-		async function fetchWithAuthRefresh(url, options) {
+		async function fetchWithAuthRefresh(url, options, authBehavior) {
+			const redirectOnAuthFailure = !!(authBehavior && authBehavior.redirectOnAuthFailure);
 			const res = await fetch(url, options);
-			if (res.status !== 401) return res;
+			if (res.status !== 401) {
+				hideAuthNotice();
+				return res;
+			}
 			const ok = await refreshClerkSession();
 			if (ok) {
 				const retry = await fetch(url, options);
-				if (retry.status !== 401) return retry;
+				if (retry.status !== 401) {
+					hideAuthNotice();
+					return retry;
+				}
 			}
-			redirectToLogin();
+			showAuthNotice('Session expired.');
+			if (redirectOnAuthFailure) {
+				try { window.location.href = loginURL(); } catch (_) {}
+			}
 			return res;
 		}
 
@@ -2624,11 +2855,14 @@
 				return 0;
 			});
 
-			if (data.length === 0) {
-				if (onlineWorkersCard) onlineWorkersCard.style.display = 'none';
-				onlineWorkersBody.innerHTML = '<tr><td class="text-sm">No saved workers online right now.</td></tr>';
-				return;
-			}
+				if (data.length === 0) {
+					if (onlineWorkersCard) onlineWorkersCard.style.display = 'none';
+					onlineWorkersBody.innerHTML = '<tr><td class="text-sm">No saved workers online right now.</td></tr>';
+					if (typeof window.__savedWorkersScheduleLayoutMode === 'function') {
+						window.__savedWorkersScheduleLayoutMode();
+					}
+					return;
+				}
 			if (onlineWorkersCard) onlineWorkersCard.style.display = '';
 			onlineWorkersBody.innerHTML = data.map((w) => {
 				const hashrate = effectiveWorkerHashrate(w, nowMillis);
@@ -2637,94 +2871,87 @@
 				const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, w.hashrate_accuracy) : '—';
 				return `
 					<tr class="saved-workers-online-row saved-workers-online-row-main">
-						<td class="saved-workers-online-cell">
-							<div class="saved-workers-online-block top">
-								<div class="saved-workers-online-line">
-									<form method="post" action="/worker/remove" data-remove-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-remove-mobile">
-										<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-										<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-												<polyline points="3 6 5 6 21 6"></polyline>
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-												<path d="M10 11v6"></path>
-												<path d="M14 11v6"></path>
-												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-											</svg>
-										</button>
-									</form>
-									<div class="saved-workers-online-name">
-										<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}">${escapeHTML(normalizeWorkerDisplayName(w.name || w.hash || 'Unknown'))}</a>
-									</div>
-									<div class="saved-workers-online-stats">
-										<span class="saved-workers-online-spark-slot">
-											<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate and best share sparkline"></canvas>
-										</span>
-										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Hashrate</span>
-											<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
-										</span>
-										<span class="saved-workers-online-pill">
-											<span class="saved-workers-online-pill-label">Best ever</span>
-											<span class="saved-workers-online-pill-value">${formatDifficulty(w.best_difficulty)}</span>
-										</span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-mobile-inline-extra"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">${formatShareRate(shareRate)}</span></span>
-									</div>
-								</div>
-							</div>
-						</td>
-					</tr>
-					<tr class="saved-workers-online-row saved-workers-online-row-detail">
-						<td class="saved-workers-online-cell">
-							<div class="saved-workers-online-block bottom">
-								<div class="saved-workers-online-line">
-									<div class="saved-workers-online-actions">
-										<button class="btn btn-secondary worker-graph-btn worker-history-open saved-workers-online-action-graph-mobile-hide" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
-											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-												<path d="M3 3v18h18"></path>
-												<path d="M7 14l4-4 3 3 5-6"></path>
-											</svg>
-										</button>
-										${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
-										<form method="post" action="/worker/reconnect" data-reconnect-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-reboot">
-											<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-											<button class="btn btn-secondary" type="submit" aria-label="Reboot worker" title="Force reset (30s ban + disconnect)">Reboot</button>
-										</form>
-										<form method="post" action="/worker/remove" data-remove-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-remove-bottom-mobile-hide">
-											<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
-											<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
-												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-													<polyline points="3 6 5 6 21 6"></polyline>
-													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-													<path d="M10 11v6"></path>
-													<path d="M14 11v6"></path>
-													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-												</svg>
-											</button>
-										</form>
-									</div>
-									<div class="saved-workers-online-stats">
-										<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Accepted</span><span class="saved-workers-online-pill-value">${Number(w.accepted || 0).toLocaleString()}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Connected</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
-										<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
+							<td class="saved-workers-online-cell">
+								<div class="saved-workers-online-block top">
+									<div class="saved-workers-online-line">
+										<div class="saved-workers-online-left">
+											<form method="post" action="/worker/remove" data-remove-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-remove-mobile">
+												<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+												<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<polyline points="3 6 5 6 21 6"></polyline>
+														<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+														<path d="M10 11v6"></path>
+														<path d="M14 11v6"></path>
+														<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+													</svg>
+												</button>
+											</form>
+											<div class="saved-workers-online-name">
+												<a class="mono sensitive-worker worker-link" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" href="/worker/sha256?hash=${escapeAttr(w.hash || '')}">${escapeHTML(normalizeWorkerDisplayName(w.name || w.hash || 'Unknown'))}</a>
+											</div>
+											<div class="saved-workers-online-actions">
+												<button class="btn btn-secondary worker-graph-btn worker-history-open saved-workers-online-action-graph-mobile-hide" type="button" data-worker-name="${escapeAttr(w.name || '')}" data-worker-hash="${escapeAttr(w.hash || '')}" title="Open worker graphs" aria-label="Open worker graphs">
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+														<path d="M3 3v18h18"></path>
+														<path d="M7 14l4-4 3 3 5-6"></path>
+													</svg>
+												</button>
+												${discordNotificationsEnabled ? `<button class="btn btn-secondary worker-notify-toggle" type="button" data-worker-hash="${escapeAttr(w.hash || '')}" data-notify-enabled="${w.notify_enabled ? '1' : '0'}" title="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}" aria-label="${escapeAttr(notifyToggleTitle(!!w.notify_enabled))}">${escapeHTML(notifyToggleText(!!w.notify_enabled))}</button>` : ''}
+												<form method="post" action="/worker/reconnect" data-reconnect-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-reboot">
+													<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+													<button class="btn btn-secondary" type="submit" aria-label="Reboot worker" title="Force reset (30s ban + disconnect)">Reboot</button>
+												</form>
+												<form method="post" action="/worker/remove" data-remove-worker="${escapeAttr(w.name || '')}" class="saved-workers-online-action-remove-bottom-mobile-hide">
+													<input type="hidden" name="hash" value="${escapeAttr(w.hash || '')}">
+													<button class="btn btn-secondary" type="submit" aria-label="Remove worker" title="Remove">
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+															<polyline points="3 6 5 6 21 6"></polyline>
+															<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+															<path d="M10 11v6"></path>
+															<path d="M14 11v6"></path>
+															<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+														</svg>
+													</button>
+												</form>
+											</div>
+										</div>
+										<div class="saved-workers-online-right">
+											<div class="saved-workers-online-stats">
+											<span class="saved-workers-online-spark-slot">
+												<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate and best share sparkline"></canvas>
+											</span>
+											<span class="saved-workers-online-pill">
+												<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
+											</span>
+											<span class="saved-workers-online-pill">
+												<span class="saved-workers-online-pill-label">Best</span>
+												<span class="saved-workers-online-pill-value">${formatDifficulty(w.best_difficulty)}</span>
+											</span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares</span><span class="saved-workers-online-pill-value">${Number(w.accepted || 0).toLocaleString()}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Rejected</span><span class="saved-workers-online-pill-value">${Number(w.rejected || 0).toLocaleString()}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Time</span><span class="saved-workers-online-pill-value">${formatDuration(w.connection_duration_seconds)}</span></span>
+											<span class="saved-workers-online-pill"><span class="saved-workers-online-pill-label">Uptime</span><span class="saved-workers-online-pill-value" data-worker-uptime-history="${escapeAttr(w.hash || '')}">—</span></span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Diff</span><span class="saved-workers-online-pill-value">${formatDifficulty(w.difficulty)}</span></span>
+											<span class="saved-workers-online-pill saved-workers-online-pill-mobile-hide"><span class="saved-workers-online-pill-label">Shares/min</span><span class="saved-workers-online-pill-value">${formatShareRate(shareRate)}</span></span>
+										</div>
+										</div>
 									</div>
 								</div>
-							</div>
 						</td>
 					</tr>
-			`;
+				`;
 			}).join('');
 			attachRemoveConfirms(onlineWorkersBody);
 			attachReconnectConfirms(onlineWorkersBody);
 			attachNotifyToggles(onlineWorkersBody);
-			attachWorkerGraphButtons(onlineWorkersBody);
-			refreshInlineWorkerSparklines(onlineWorkersBody);
-			drawSavedWorkersTopChart();
-		}
+				attachWorkerGraphButtons(onlineWorkersBody);
+				refreshInlineWorkerSparklines(onlineWorkersBody);
+				drawSavedWorkersTopChart();
+				if (typeof window.__savedWorkersScheduleLayoutMode === 'function') {
+					window.__savedWorkersScheduleLayoutMode();
+				}
+			}
 
 		async function copyTextToClipboard(text) {
 			const clip = navigator.clipboard;
@@ -3076,7 +3303,13 @@
 
 		// Best-effort: keep the login cookie fresh while this page is open.
 		if (clerkEnabled) {
-			setInterval(() => { refreshClerkSession(); }, 60 * 1000);
+			refreshClerkSession();
+			setInterval(() => { refreshClerkSession(); }, 30 * 1000);
+			document.addEventListener('visibilitychange', () => {
+				if (!document.hidden) {
+					refreshClerkSession();
+				}
+			});
 		}
 
 		if (workerGraphsClose && !workerGraphsClose.__workerGraphsCloseAttached) {
