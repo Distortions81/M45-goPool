@@ -1277,6 +1277,11 @@
 			return isLight ? '#4b5568' : '#b3bbd4';
 		}
 
+		function savedWorkersGraphTickColor() {
+			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+			return isLight ? 'rgba(75, 85, 104, 0.52)' : 'rgba(179, 187, 212, 0.46)';
+		}
+
 		function savedWorkersGraphAccentColor() {
 			const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
 			return isLight ? '#2e5c8a' : '#2cf1c2';
@@ -1312,6 +1317,27 @@
 			grad.addColorStop(0.45, savedWorkersGraphAccentFillColor(0.48));
 			grad.addColorStop(1, savedWorkersGraphAccentFillColor(0.24));
 			return grad;
+		}
+
+		function drawHourTickmarks(ctx, minX, maxX, paddingLeft, graphWidth, baselineY) {
+			const hourMS = 60 * 60 * 1000;
+			const spanX = Math.max(1, maxX - minX);
+			if (!(graphWidth > 0) || !(spanX >= hourMS)) return;
+			const firstHour = Math.ceil(minX / hourMS) * hourMS;
+			if (!(firstHour <= maxX)) return;
+			const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+
+			ctx.save();
+			ctx.strokeStyle = savedWorkersGraphTickColor();
+			ctx.lineWidth = 1;
+			for (let at = firstHour; at <= maxX; at += hourMS) {
+				const x = Math.round(xFor(at));
+				ctx.beginPath();
+				ctx.moveTo(x, baselineY);
+				ctx.lineTo(x, baselineY + 7);
+				ctx.stroke();
+			}
+			ctx.restore();
 		}
 
 		function formatLatencyPair(p50, p95) {
@@ -1707,7 +1733,7 @@
 			const paddingLeft = 82;
 			const paddingRight = 82;
 			const paddingTop = 14;
-			const paddingBottom = 24;
+			const paddingBottom = 34;
 			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
 			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
 
@@ -1822,6 +1848,7 @@
 			ctx.moveTo(paddingLeft, height - paddingBottom);
 			ctx.lineTo(width - paddingRight, height - paddingBottom);
 			ctx.stroke();
+			drawHourTickmarks(ctx, minX, maxX, paddingLeft, graphWidth, baselineY);
 
 			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.textAlign = 'center';
@@ -1863,7 +1890,7 @@
 			const paddingLeft = 82;
 			const paddingRight = 82;
 			const paddingTop = 14;
-			const paddingBottom = 24;
+			const paddingBottom = 34;
 			const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
 			const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
 
@@ -1964,6 +1991,7 @@
 			ctx.moveTo(paddingLeft, height - paddingBottom);
 			ctx.lineTo(width - paddingRight, height - paddingBottom);
 			ctx.stroke();
+			drawHourTickmarks(ctx, minX, maxX, paddingLeft, graphWidth, baselineY);
 			ctx.fillStyle = savedWorkersGraphLabelColor();
 			ctx.textAlign = 'center';
 			ctx.font = '10px monospace';
