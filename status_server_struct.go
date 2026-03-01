@@ -9,30 +9,31 @@ import (
 )
 
 type StatusServer struct {
-	tmpl                *template.Template
-	tmplMu              sync.RWMutex
-	jobMgr              *JobManager
-	metrics             *PoolMetrics
-	registry            *MinerRegistry
-	workerRegistry      *workerConnectionRegistry
-	accounting          *AccountStore
-	rpc                 *RPCClient
-	cfg                 atomic.Value
-	statusPublicURL     atomic.Value
-	ctx                 context.Context
-	clerk               *ClerkVerifier
-	start               time.Time
-	workerLookupLimiter *workerLookupRateLimiter
-	workerLists         *workerListStore
-	lastStatsMu         sync.Mutex
-	lastAccepted        uint64
-	lastRejected        uint64
-	cpuMu               sync.Mutex
-	lastCPUProc         uint64
-	lastCPUTotal        uint64
-	lastCPUUsage        float64
-	oneTimeCodeMu       sync.Mutex
-	oneTimeCodes        map[string]oneTimeCodeEntry
+	tmpl                    *template.Template
+	tmplMu                  sync.RWMutex
+	jobMgr                  *JobManager
+	metrics                 *PoolMetrics
+	registry                *MinerRegistry
+	workerRegistry          *workerConnectionRegistry
+	accounting              *AccountStore
+	rpc                     *RPCClient
+	cfg                     atomic.Value
+	statusPublicURL         atomic.Value
+	ctx                     context.Context
+	clerk                   *ClerkVerifier
+	savedWorkersLocalNoAuth bool
+	start                   time.Time
+	workerLookupLimiter     *workerLookupRateLimiter
+	workerLists             *workerListStore
+	lastStatsMu             sync.Mutex
+	lastAccepted            uint64
+	lastRejected            uint64
+	cpuMu                   sync.Mutex
+	lastCPUProc             uint64
+	lastCPUTotal            uint64
+	lastCPUUsage            float64
+	oneTimeCodeMu           sync.Mutex
+	oneTimeCodes            map[string]oneTimeCodeEntry
 
 	statusMu        sync.RWMutex
 	cachedStatus    StatusData

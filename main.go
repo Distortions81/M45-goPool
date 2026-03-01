@@ -124,6 +124,7 @@ func main() {
 	netDebugFlag := flag.Bool("net-debug", false, "enable raw network debug logging at startup (when supported)")
 	backupOnBootFlag := flag.Bool("backup-on-boot", false, "run a forced database backup once at startup (best-effort)")
 	minerProfileJSONFlag := flag.String("miner-profile-json", "", "optional path to write aggregated miner profile JSON for offline tuning")
+	savedWorkersLocalNoAuthFlag := flag.Bool("saved-workers-local-noauth", false, "allow saved-workers pages without Clerk auth (local single-user mode)")
 	flag.Parse()
 
 	network := strings.ToLower(*networkFlag)
@@ -466,6 +467,10 @@ func main() {
 	// Start the status webserver before connecting to the node so operators
 	// can see connection state while bitcoind starts up.
 	statusServer := NewStatusServer(ctx, nil, metrics, registry, workerRegistry, accounting, rpcClient, cfg, startTime, clerkVerifier, workerLists, cfgPath, adminConfigPath, stop)
+	statusServer.savedWorkersLocalNoAuth = *savedWorkersLocalNoAuthFlag
+	if statusServer.savedWorkersLocalNoAuth {
+		logger.Warn("saved-workers local no-auth mode enabled", "flag", "saved-workers-local-noauth")
+	}
 	statusServer.SetBackupService(backupSvc)
 	statusServer.startOneTimeCodeJanitor(ctx)
 	statusServer.loadOneTimeCodesFromDB(cfg.DataDir)

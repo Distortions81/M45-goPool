@@ -7,12 +7,23 @@ import (
 	"time"
 )
 
+const savedWorkersLocalNoAuthUserID = "local-noauth"
+
 func (s *StatusServer) withClerkUser(h http.HandlerFunc) http.HandlerFunc {
-	if s == nil || s.clerk == nil {
+	if s == nil {
+		return h
+	}
+	if s.clerk == nil && !s.savedWorkersLocalNoAuth {
 		return h
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := s.clerkUserFromRequest(r)
+		if user == nil && s.savedWorkersLocalNoAuth {
+			user = &ClerkUser{
+				UserID:    savedWorkersLocalNoAuthUserID,
+				SessionID: savedWorkersLocalNoAuthUserID,
+			}
+		}
 		if user != nil {
 			if s.workerLists != nil {
 				_ = s.workerLists.RecordClerkUserSeen(user.UserID, time.Now())
