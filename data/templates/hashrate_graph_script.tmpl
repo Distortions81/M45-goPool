@@ -328,7 +328,9 @@
 		const spanX = Math.max(1, maxX - minX);
 
 		const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
-		const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
+		// Use last-value sampling for best-share so empty buckets don't visually
+		// inherit earlier peaks when multiple buckets map to one pixel.
+		const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
 
 		let maxHashrate = 0;
 		for (const row of sampledHashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
