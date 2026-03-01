@@ -1069,17 +1069,17 @@
 					return response.json().then(data => ({ data, updatedAt }));
 				})
 					.then(({ data, updatedAt }) => {
-						if (poolHashrateIncludeHistory) {
+						const primedFromHistory = !!(window.primeHashrateGraphHistory && (
+							(data?.ph24 && window.primeHashrateGraphHistory(data.ph24)) ||
+							(data?.phh && window.primeHashrateGraphHistory(data.phh))
+						));
+						if (poolHashrateIncludeHistory && primedFromHistory) {
 							poolHashrateIncludeHistory = false;
 						}
-						const primedFromHistory = !!(window.primeHashrateGraphHistory &&
-							data?.phh &&
-							window.primeHashrateGraphHistory(data.phh));
-						const heightForGraph = typeof data?.block_height === 'number' && data.block_height > 0 ? data.block_height : null;
 						if (data && typeof data.pool_hashrate === 'number') {
 							updateHashrateDisplay(data.pool_hashrate);
 							if (window.updateHashrateGraph && data.pool_hashrate > 0 && !primedFromHistory) {
-								window.updateHashrateGraph(data.pool_hashrate, heightForGraph);
+								window.updateHashrateGraph(data.pool_hashrate);
 							}
 						}
 						if (data && typeof data.template_tx_fees_sats === 'number') {

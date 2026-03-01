@@ -36,6 +36,7 @@ const savedWorkerPeriodBucket = 1 * time.Minute
 const savedWorkerPeriodHistoryWindow = 24 * time.Hour
 const savedWorkerPeriodSlots = int(savedWorkerPeriodHistoryWindow / savedWorkerPeriodBucket)
 const savedWorkerPeriodMaxWorkers = 4096
+const savedWorkerPeriodPoolKey = "pool"
 const blocksRefreshInterval = 3 * time.Second
 const settlingHashrateMaxRelativeError = 0.20
 const settlingHashrateMinExpectedShares = 8.0

@@ -1,55 +1,267 @@
 {{define "hashrate_graph_script"}}
 <script>
-// Pool Hashrate Graph
 (function() {
 	const canvas = document.getElementById('{{.HashrateGraphID}}');
-	if (!canvas) return;
+	if (!(canvas instanceof HTMLCanvasElement)) return;
 
-	// Set canvas size to match display size for crisp rendering
-	function resizeCanvas() {
+	let historyPrimed = false;
+	let historyHashrateRows = [];
+	let historyBestRows = [];
+	let liveHashrate = 0;
+	let liveHashrateAt = 0;
+	let legacyHistoryWindowMS = 6 * 60 * 1000;
+
+	function resizeGraphCanvas(canvasEl) {
+		if (!canvasEl) return null;
 		const dpr = window.devicePixelRatio || 1;
-		const rect = canvas.getBoundingClientRect();
-		canvas.width = rect.width * dpr;
-		canvas.height = rect.height * dpr;
-		const ctx = canvas.getContext('2d');
+		const rect = canvasEl.getBoundingClientRect();
+		const width = Math.max(10, Math.floor(rect.width || canvasEl.clientWidth || 10));
+		const height = Math.max(10, Math.floor(rect.height || canvasEl.clientHeight || 10));
+		canvasEl.width = Math.floor(width * dpr);
+		canvasEl.height = Math.floor(height * dpr);
+		const ctx = canvasEl.getContext('2d');
+		if (!ctx) return null;
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
 		ctx.scale(dpr, dpr);
-		return ctx;
+		return { ctx, width, height };
 	}
 
-	let ctx = resizeCanvas();
+	function formatHashrate(value) {
+		if (!value) return '0';
+		if (value < 1000) return value.toFixed(1);
+		if (value < 1000000) return (value / 1000).toFixed(1) + 'K';
+		if (value < 1000000000) return (value / 1000000).toFixed(1) + 'M';
+		return (value / 1000000000).toFixed(1) + 'B';
+	}
 
-	// Re-render on window resize
-	window.addEventListener('resize', function() {
-		ctx = resizeCanvas();
-		drawGraph();
-	});
-	const sampleIntervalMS = 5000;
-	const historyWindowMS = 6 * 60 * 1000;
-	const maxDataPoints = Math.floor(historyWindowMS / sampleIntervalMS); // 6 minutes at 5-second intervals
-	const hashrateData = [];
-	const timestamps = [];
-	const blockHeights = [];
-	let smoothedHashrate = null;
-	let lastBlockHeight = null;
-	let historyPrimed = false;
+	function formatDifficultyGraph(diff) {
+		const value = Number(diff || 0);
+		if (!Number.isFinite(value) || value <= 0) return '0';
+		if (value < 1000) return value.toFixed(0);
+		const units = ['K', 'M', 'G', 'T', 'P', 'E'];
+		let scaled = value;
+		let idx = -1;
+		while (scaled >= 1000 && idx < units.length - 1) {
+			scaled /= 1000;
+			idx++;
+		}
+		if (idx < 0) return value.toFixed(0);
+		const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+		return scaled.toFixed(precision) + units[idx];
+	}
 
-	function trimHistory() {
-		const cutoff = Date.now() - historyWindowMS;
-		while (timestamps.length > 0) {
-			const ts = timestamps[0];
-			if (!(ts instanceof Date) || Number.isNaN(ts.getTime()) || ts.getTime() < cutoff) {
-				hashrateData.shift();
-				timestamps.shift();
-				blockHeights.shift();
+	function formatGraphTimeSpan(seconds) {
+		const total = Math.max(0, Math.floor(Number(seconds) || 0));
+		const days = Math.floor(total / 86400);
+		const hours = Math.floor((total % 86400) / 3600);
+		const minutes = Math.floor((total % 3600) / 60);
+		const secs = total % 60;
+		if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+		if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+		if (minutes > 0) return `${minutes}m`;
+		return `${secs}s`;
+	}
+
+	function savedWorkersGraphLabelColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#4b5568' : '#b3bbd4';
+	}
+
+	function savedWorkersGraphTickColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? 'rgba(75, 85, 104, 0.52)' : 'rgba(179, 187, 212, 0.46)';
+	}
+
+	function savedWorkersGraphAccentColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#2e5c8a' : '#2cf1c2';
+	}
+
+	function savedWorkersGraphAmberColor() {
+		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
+		return isLight ? '#8a5200' : '#f6b34a';
+	}
+
+	function hexToRGBA(hex, alpha) {
+		const normalized = String(hex || '').trim().replace(/^#/, '');
+		const a = Math.max(0, Math.min(1, Number(alpha)));
+		if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(44, 241, 194, ${a})`;
+		const r = parseInt(normalized.slice(0, 2), 16);
+		const g = parseInt(normalized.slice(2, 4), 16);
+		const b = parseInt(normalized.slice(4, 6), 16);
+		return `rgba(${r}, ${g}, ${b}, ${a})`;
+	}
+
+	function savedWorkersGraphAccentFillColor(alpha) {
+		return hexToRGBA(savedWorkersGraphAccentColor(), alpha);
+	}
+
+	function savedWorkersGraphAccentBarFill(ctx, topY, bottomY) {
+		if (!ctx || typeof ctx.createLinearGradient !== 'function') {
+			return savedWorkersGraphAccentFillColor(0.45);
+		}
+		const y0 = Number(topY);
+		const y1 = Number(bottomY);
+		const grad = ctx.createLinearGradient(0, y0, 0, y1);
+		grad.addColorStop(0, savedWorkersGraphAccentFillColor(0.62));
+		grad.addColorStop(0.45, savedWorkersGraphAccentFillColor(0.48));
+		grad.addColorStop(1, savedWorkersGraphAccentFillColor(0.24));
+		return grad;
+	}
+
+	function drawHourTickmarks(ctx, minX, maxX, paddingLeft, graphWidth, baselineY) {
+		const hourMS = 60 * 60 * 1000;
+		const spanX = Math.max(1, maxX - minX);
+		if (!(graphWidth > 0) || !(spanX >= hourMS)) return;
+		const firstHour = Math.ceil(minX / hourMS) * hourMS;
+		if (!(firstHour <= maxX)) return;
+		const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+
+		ctx.save();
+		ctx.strokeStyle = savedWorkersGraphTickColor();
+		ctx.lineWidth = 1;
+		for (let at = firstHour; at <= maxX; at += hourMS) {
+			const x = Math.round(xFor(at));
+			ctx.beginPath();
+			ctx.moveTo(x, baselineY);
+			ctx.lineTo(x, baselineY + 7);
+			ctx.stroke();
+		}
+		ctx.restore();
+	}
+
+	function buildQuantizedBucketRects(xPixelsInput, minBound, maxBound, fallbackWidth) {
+		const xPixels = (Array.isArray(xPixelsInput) ? xPixelsInput : [])
+			.map((v) => Math.round(Number(v)))
+			.filter((v) => Number.isFinite(v));
+		const n = xPixels.length;
+		const leftBound = Math.max(0, Math.round(Number(minBound) || 0));
+		const rightBound = Math.max(leftBound + 1, Math.round(Number(maxBound) || 0));
+		const spanPixels = Math.max(1, rightBound - leftBound);
+		if (n === 0) return [];
+		if (n === 1) {
+			const w = Math.max(1, Math.min(rightBound - leftBound, Math.round(Number(fallbackWidth) || 1)));
+			const left = Math.max(leftBound, Math.min(rightBound - w, xPixels[0] - Math.floor(w / 2)));
+			return [{ left, width: w, center: xPixels[0] }];
+		}
+		if (n > spanPixels) {
+			const lastPixel = rightBound - 1;
+			return xPixels.map((x) => {
+				const left = Math.max(leftBound, Math.min(lastPixel, x));
+				return { left, width: 1, center: x };
+			});
+		}
+
+		const edges = new Array(n + 1);
+		edges[0] = Math.max(leftBound, Math.round(xPixels[0] - (xPixels[1] - xPixels[0]) / 2));
+		for (let i = 1; i < n; i++) {
+			edges[i] = Math.round((xPixels[i - 1] + xPixels[i]) / 2);
+		}
+		edges[n] = Math.min(rightBound, Math.round(xPixels[n - 1] + (xPixels[n - 1] - xPixels[n - 2]) / 2));
+
+		edges[0] = Math.max(leftBound, Math.min(rightBound - n, edges[0]));
+		for (let i = 1; i < n; i++) {
+			const minEdge = edges[i - 1] + 1;
+			const maxEdge = rightBound - (n - i);
+			edges[i] = Math.max(minEdge, Math.min(maxEdge, edges[i]));
+		}
+		edges[n] = rightBound;
+		if (edges[n] <= edges[n - 1]) {
+			edges[n] = Math.min(rightBound, edges[n - 1] + 1);
+		}
+
+		const rects = new Array(n);
+		for (let i = 0; i < n; i++) {
+			const left = edges[i];
+			const right = Math.max(left + 1, edges[i + 1]);
+			rects[i] = { left, width: right - left, center: xPixels[i] };
+		}
+		return rects;
+	}
+
+	function resampleSeriesByPixel(rowsInput, minX, spanX, graphWidth, mode) {
+		const rows = Array.isArray(rowsInput) ? rowsInput : [];
+		if (rows.length <= 1 || !(spanX > 0) || !(graphWidth > 0)) return rows;
+		const reducer = String(mode || 'max').toLowerCase();
+		const byPixel = new Map();
+		for (const row of rows) {
+			const at = Number(row?.at);
+			const value = Number(row?.value);
+			if (!Number.isFinite(at) || !Number.isFinite(value) || value < 0) continue;
+			const pixel = Math.max(0, Math.min(Math.floor(graphWidth), Math.round(((at - minX) / spanX) * graphWidth)));
+			const existing = byPixel.get(pixel);
+			if (!existing) {
+				byPixel.set(pixel, { at, value, sum: value, count: 1 });
 				continue;
 			}
-			break;
+			existing.sum += value;
+			existing.count += 1;
+			if (reducer === 'last') {
+				if (at >= existing.at) {
+					existing.at = at;
+					existing.value = value;
+				}
+			} else if (value >= existing.value) {
+				existing.at = at;
+				existing.value = value;
+			}
 		}
-		while (hashrateData.length > maxDataPoints) {
-			hashrateData.shift();
-			timestamps.shift();
-			blockHeights.shift();
+		const sampled = Array.from(byPixel.entries())
+			.sort((a, b) => a[0] - b[0])
+			.map(([, rec]) => ({
+				at: rec.at,
+				value: reducer === 'avg' ? (rec.sum / Math.max(1, rec.count)) : rec.value,
+			}));
+		return sampled.length > 0 ? sampled : rows;
+	}
+
+	function bitIsSet(bytes, idx) {
+		if (!Array.isArray(bytes) || idx < 0) return false;
+		const bi = Math.floor(idx / 8);
+		if (bi < 0 || bi >= bytes.length) return false;
+		const b = Number(bytes[bi] || 0);
+		return ((b >> (idx % 8)) & 1) === 1;
+	}
+
+	function decodeByteSeries(value) {
+		if (Array.isArray(value)) return value;
+		if (typeof value !== 'string' || !value) return [];
+		try {
+			const raw = atob(value);
+			const out = new Array(raw.length);
+			for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i) & 255;
+			return out;
+		} catch (_) {
+			return [];
 		}
+	}
+
+	function dequantizeQ8(q, minV, maxV) {
+		const qq = Number(q || 0);
+		const lo = Number(minV || 0);
+		const hi = Number(maxV || 0);
+		if (!isFinite(qq) || qq < 0) return lo;
+		if (!isFinite(lo) || !isFinite(hi)) return 0;
+		if (!(hi > lo)) return lo;
+		return lo + (Math.max(0, Math.min(255, qq)) / 255) * (hi - lo);
+	}
+
+	function decodeCompactWorkerSeries(data, qKey, minKey, maxKey) {
+		const count = Math.max(0, Number(data?.n || 0));
+		const startMinute = Math.max(0, Number(data?.s || 0));
+		const intervalSec = Math.max(1, Number(data?.i || 60));
+		const intervalMillis = intervalSec * 1000;
+		const present = decodeByteSeries(data?.p);
+		const q = decodeByteSeries(data?.[qKey]);
+		const minV = Number(data?.[minKey] || 0);
+		const maxV = Number(data?.[maxKey] || 0);
+		const rows = [];
+		for (let i = 0; i < count; i++) {
+			if (!bitIsSet(present, i)) continue;
+			const tsMillis = (startMinute * 60 * 1000) + (i * intervalMillis);
+			rows.push({ at: tsMillis, value: dequantizeQ8(q[i], minV, maxV) });
+		}
+		return { rows, min: minV, max: maxV, intervalMillis };
 	}
 
 	function decodeHashrateSI8(code) {
@@ -63,324 +275,189 @@
 		if (q <= 0) return 0;
 		const logT = (q - 1) / (mantMask - 1);
 		let value = Math.pow(1000, logT);
-		for (let i = 0; i < exp; i++) {
-			value *= 1000;
-		}
+		for (let i = 0; i < exp; i++) value *= 1000;
 		return value;
 	}
 
-	function primeHashrateGraphHistory(history) {
-		if (!Array.isArray(history) || historyPrimed) {
-			return false;
-		}
-		const decoded = history
-			.map(code => decodeHashrateSI8(code))
-			.filter(v => Number.isFinite(v) && v > 0);
-		if (decoded.length === 0) {
-			return false;
-		}
-		const now = Date.now();
-		const span = decoded.length > 1 ? (historyWindowMS / (decoded.length - 1)) : 0;
-		hashrateData.length = 0;
-		timestamps.length = 0;
-		blockHeights.length = 0;
-		decoded.forEach((hashrate, idx) => {
-			hashrateData.push(hashrate);
-			const offset = span * (decoded.length - 1 - idx);
-			timestamps.push(new Date(now - offset));
-			blockHeights.push(null);
-		});
-		trimHistory();
-		if (hashrateData.length > 0) {
-			smoothedHashrate = hashrateData[hashrateData.length - 1];
-		}
-		historyPrimed = true;
-		drawGraph();
-		return true;
-	}
-
-	function buildQuantizedBucketRects(xPixelsInput, minBound, maxBound, fallbackWidth) {
-		const xPixels = (Array.isArray(xPixelsInput) ? xPixelsInput : [])
-			.map(v => Math.round(Number(v)))
-			.filter(v => Number.isFinite(v));
-		const n = xPixels.length;
-		const leftBound = Math.max(0, Math.round(Number(minBound) || 0));
-		const rightBound = Math.max(leftBound + 1, Math.round(Number(maxBound) || 0));
-		if (n === 0) return [];
-		if (n === 1) {
-			const w = Math.max(1, Math.min(rightBound - leftBound, Math.round(Number(fallbackWidth) || 1)));
-			const left = Math.max(leftBound, Math.min(rightBound - w, xPixels[0] - Math.floor(w / 2)));
-			return [{ left, width: w }];
-		}
-		const edges = new Array(n + 1);
-		edges[0] = Math.max(leftBound, Math.round(xPixels[0] - (xPixels[1] - xPixels[0]) / 2));
-		for (let i = 1; i < n; i++) {
-			edges[i] = Math.round((xPixels[i - 1] + xPixels[i]) / 2);
-		}
-		edges[n] = Math.min(rightBound, Math.round(xPixels[n - 1] + (xPixels[n - 1] - xPixels[n - 2]) / 2));
-		edges[0] = Math.max(leftBound, Math.min(rightBound - n, edges[0]));
-		for (let i = 1; i < n; i++) {
-			const minEdge = edges[i - 1] + 1;
-			const maxEdge = rightBound - (n - i);
-			edges[i] = Math.max(minEdge, Math.min(maxEdge, edges[i]));
-		}
-		edges[n] = rightBound;
-		if (edges[n] <= edges[n - 1]) edges[n] = edges[n - 1] + 1;
-		const rects = new Array(n);
-		for (let i = 0; i < n; i++) {
-			const left = edges[i];
-			const right = Math.max(left + 1, edges[i + 1]);
-			rects[i] = { left, width: right - left };
-		}
-		return rects;
-	}
-
-	function blockMarkerColor() {
-		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
-		return isLight ? '#8a5200' : '#f6b34a';
-	}
-
-	function graphAccentColor() {
-		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
-		return isLight ? '#2e5c8a' : '#2cf1c2';
-	}
-
-	function hexToRGBA(hex, alpha) {
-		const normalized = String(hex || '').trim().replace(/^#/, '');
-		const a = Math.max(0, Math.min(1, Number(alpha)));
-		if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(44, 241, 194, ${a})`;
-		const r = parseInt(normalized.slice(0, 2), 16);
-		const g = parseInt(normalized.slice(2, 4), 16);
-		const b = parseInt(normalized.slice(4, 6), 16);
-		return `rgba(${r}, ${g}, ${b}, ${a})`;
-	}
-
-	function graphAccentBarFill(ctx, topY, bottomY) {
-		if (!ctx || typeof ctx.createLinearGradient !== 'function') {
-			return hexToRGBA(graphAccentColor(), 0.45);
-		}
-		const y0 = Number(topY);
-		const y1 = Number(bottomY);
-		const grad = ctx.createLinearGradient(0, y0, 0, y1);
-		grad.addColorStop(0, hexToRGBA(graphAccentColor(), 0.62));
-		grad.addColorStop(0.45, hexToRGBA(graphAccentColor(), 0.48));
-		grad.addColorStop(1, hexToRGBA(graphAccentColor(), 0.24));
-		return grad;
-	}
-
-	function graphLabelColor() {
-		const isLight = document.documentElement && document.documentElement.getAttribute('data-theme') === 'light';
-		return isLight ? '#4b5568' : '#b3bbd4';
-	}
-
-		function drawGraph() {
-		// Use display dimensions (logical pixels) for drawing
-		const rect = canvas.getBoundingClientRect();
-		const width = rect.width;
-		const height = rect.height;
-		const paddingLeft = 90; // Extra padding for Y-axis labels
-		const paddingRight = 20;
-		const paddingTop = 20;
-		const paddingBottom = 30;
-			const graphWidth = width - paddingLeft - paddingRight;
-			const graphHeight = height - paddingTop - paddingBottom;
-			const nowMillis = Date.now();
-			const windowStartMillis = nowMillis - historyWindowMS;
-			const windowSpan = historyWindowMS;
-
-			function xForPoint(index) {
-				const ts = timestamps[index];
-				if (!(ts instanceof Date) || Number.isNaN(ts.getTime())) {
-					const denom = Math.max(1, maxDataPoints - 1);
-					return paddingLeft + (graphWidth / denom) * index;
-				}
-				const ratio = Math.max(0, Math.min(1, (ts.getTime() - windowStartMillis) / windowSpan));
-				return paddingLeft + ratio * graphWidth;
-			}
-
-		// Clear canvas
+	function drawPoolCombinedHistoryGraph() {
+		const resized = resizeGraphCanvas(canvas);
+		if (!resized) return;
+		const { ctx, width, height } = resized;
 		ctx.clearRect(0, 0, width, height);
 
-		if (hashrateData.length === 0) {
-			ctx.fillStyle = graphLabelColor();
-			ctx.font = '14px monospace';
+		const hashrateRows = (Array.isArray(historyHashrateRows) ? historyHashrateRows : [])
+			.map((r) => ({ at: Number(r?.at), value: Number(r?.value || 0) }))
+			.filter((r) => Number.isFinite(r.at) && Number.isFinite(r.value) && r.value >= 0)
+			.sort((a, b) => a.at - b.at);
+		const bestRows = (Array.isArray(historyBestRows) ? historyBestRows : [])
+			.map((r) => ({ at: Number(r?.at), value: Number(r?.value || 0) }))
+			.filter((r) => Number.isFinite(r.at) && Number.isFinite(r.value) && r.value >= 0)
+			.sort((a, b) => a.at - b.at);
+
+		if (liveHashrateAt > 0 && Number.isFinite(liveHashrate) && liveHashrate >= 0) {
+			const lastTs = hashrateRows.length > 0 ? Number(hashrateRows[hashrateRows.length - 1].at || 0) : 0;
+			if (!(lastTs > 0) || liveHashrateAt > lastTs) {
+				hashrateRows.push({ at: liveHashrateAt, value: Math.max(0, Number(liveHashrate || 0)) });
+			}
+		}
+
+		const allRows = hashrateRows.concat(bestRows);
+		if (allRows.length === 0) {
+			ctx.fillStyle = savedWorkersGraphLabelColor();
+			ctx.font = '13px monospace';
 			ctx.textAlign = 'center';
-			ctx.fillText('Waiting for data...', width / 2, height / 2);
+			ctx.fillText('Waiting for pool history...', width / 2, height / 2);
 			return;
 		}
 
-		// Find min/max for scaling, with headroom so peaks don't peg the top.
-		// Keep a minimum Y-axis floor so low-hashrate pools aren't rendered
-		// against an always-zero baseline.
-		const minScale = 0;
-		const dataMax = Math.max(...hashrateData);
+		const paddingLeft = 82;
+		const paddingRight = 82;
+		const paddingTop = 14;
+		const paddingBottom = 34;
+		const graphWidth = Math.max(10, width - paddingLeft - paddingRight);
+		const graphHeight = Math.max(10, height - paddingTop - paddingBottom);
 
-		const headroomFactor = 1.25;
-		const defaultMaxScale = 100e3; // 100 kH/s in H/s
-		const maxHashrate = Math.max(dataMax * headroomFactor, defaultMaxScale);
-		const minHashrate = minScale;
-		const range = Math.max(1, maxHashrate - minHashrate);
+		let minX = Number.POSITIVE_INFINITY;
+		let maxX = 0;
+		for (const row of allRows) {
+			if (row.at < minX) minX = row.at;
+			if (row.at > maxX) maxX = row.at;
+		}
+		if (!Number.isFinite(minX)) minX = Date.now();
+		if (!(maxX > minX)) maxX = minX + 1;
+		const spanX = Math.max(1, maxX - minX);
 
-		// Draw grid lines
+		const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
+		const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
+
+		let maxHashrate = 0;
+		for (const row of sampledHashrateRows) if (row.value > maxHashrate) maxHashrate = row.value;
+		let maxBest = 0;
+		for (const row of sampledBestRows) if (row.value > maxBest) maxBest = row.value;
+		maxHashrate = Math.max(1, maxHashrate * 1.25);
+		maxBest = Math.max(1, maxBest * 1.25);
+
+		const xFor = (at) => paddingLeft + ((at - minX) / spanX) * graphWidth;
+		const yHashFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxHashrate));
+		const yBestFor = (value) => paddingTop + graphHeight * (1 - (Math.max(0, value) / maxBest));
+		const px = (value) => Math.round(value);
+		const baselineY = px(height - paddingBottom);
+
 		ctx.strokeStyle = '#2a2f3a';
 		ctx.lineWidth = 1;
 		for (let i = 0; i <= 4; i++) {
-			const y = paddingTop + (graphHeight / 4) * i;
+			const y = paddingTop + (graphHeight * i / 4);
 			ctx.beginPath();
 			ctx.moveTo(paddingLeft, y);
 			ctx.lineTo(width - paddingRight, y);
 			ctx.stroke();
 		}
 
-		// Draw Y-axis labels (hashrate)
-		ctx.fillStyle = graphLabelColor();
-		ctx.font = '11px monospace';
+		ctx.fillStyle = savedWorkersGraphLabelColor();
+		ctx.font = '10px monospace';
 		ctx.textAlign = 'right';
 		for (let i = 0; i <= 4; i++) {
-			const y = paddingTop + (graphHeight / 4) * i;
-			const value = maxHashrate - (range / 4) * i;
-			const formatted = formatHashrateShort(value);
-			ctx.fillText(formatted, paddingLeft - 8, y + 4);
+			const y = paddingTop + (graphHeight * i / 4);
+			const value = maxHashrate - (maxHashrate * i / 4);
+			let label = formatHashrate(value);
+			if ((label === '—' || label === '---') && value <= 0) label = '0';
+			ctx.fillText(label, paddingLeft - 6, y + 3);
+		}
+		ctx.textAlign = 'left';
+		for (let i = 0; i <= 4; i++) {
+			const y = paddingTop + (graphHeight * i / 4);
+			const value = maxBest - (maxBest * i / 4);
+			ctx.fillText(formatDifficultyGraph(value), width - paddingRight + 6, y + 3);
 		}
 
-		// Draw block-height change markers (vertical dividers with labels).
-		if (blockHeights.length > 1) {
-			const markerColor = blockMarkerColor();
-			ctx.save();
-			ctx.strokeStyle = markerColor;
-			ctx.fillStyle = markerColor;
-			ctx.lineWidth = 1;
-			ctx.setLineDash([4, 3]);
-			ctx.font = '11px monospace';
-				for (let i = 1; i < blockHeights.length; i++) {
-				const prev = blockHeights[i - 1];
-				const cur = blockHeights[i];
-				if (!prev || !cur || cur === prev) {
-					continue;
-				}
-					const x = xForPoint(i);
-				ctx.beginPath();
-				ctx.moveTo(x, paddingTop);
-				ctx.lineTo(x, height - paddingBottom);
-				ctx.stroke();
-				ctx.setLineDash([]);
-				const label = `#${cur}`;
-				const labelY = paddingTop + 12;
-				const paddingX = 6;
-				const maxX = width - paddingRight - paddingX;
-				const desiredX = x + paddingX;
-				if (desiredX > maxX) {
-					ctx.textAlign = 'right';
-					ctx.fillText(label, x - paddingX, labelY);
-				} else {
-					ctx.textAlign = 'left';
-					ctx.fillText(label, desiredX, labelY);
-				}
-				ctx.setLineDash([4, 3]);
-			}
-			ctx.restore();
-		}
-
-		// Draw quantized bars (touching, no gaps)
-		const xPixels = hashrateData.map((_, index) => xForPoint(index));
-		const rects = buildQuantizedBucketRects(
-			xPixels,
+		const hRects = buildQuantizedBucketRects(
+			sampledHashrateRows.map((row) => xFor(row.at)),
 			paddingLeft,
 			width - paddingRight,
 			Math.max(2, Math.ceil(graphWidth / 32)),
 		);
-		const baselineY = Math.round(height - paddingBottom);
-		ctx.fillStyle = graphAccentBarFill(ctx, paddingTop, baselineY);
-		ctx.strokeStyle = blockMarkerColor();
-		ctx.lineWidth = 2;
-		hashrateData.forEach((hashrate, index) => {
-			const rect = rects[index];
-			if (!rect) return;
-			const y = paddingTop + (graphHeight * (1 - (hashrate - minHashrate) / range));
-			const top = Math.round(Math.max(paddingTop, Math.min(baselineY, y)));
+		const fallbackBarW = hRects.length > 0 ? hRects[0].width : Math.max(2, Math.ceil(graphWidth / 32));
+
+		ctx.fillStyle = savedWorkersGraphAccentBarFill(ctx, paddingTop, baselineY);
+		for (let i = 0; i < sampledHashrateRows.length; i++) {
+			const row = sampledHashrateRows[i];
+			const rect = hRects[i];
+			if (!rect) continue;
+			const top = px(Math.max(paddingTop, Math.min(baselineY, yHashFor(row.value))));
 			let h = baselineY - top;
 			if (h <= 0) h = 1;
 			ctx.fillRect(rect.left, baselineY - h, rect.width, h);
-			ctx.beginPath();
-			ctx.moveTo(rect.left, top);
-			ctx.lineTo(rect.left + rect.width, top);
-			ctx.stroke();
-		});
+		}
 
-		// Draw X-axis tick marks (no labels)
+		const bRects = buildQuantizedBucketRects(
+			sampledBestRows.map((row) => xFor(row.at)),
+			paddingLeft,
+			width - paddingRight,
+			Math.max(4, fallbackBarW),
+		);
+		ctx.strokeStyle = savedWorkersGraphAmberColor();
+		ctx.lineWidth = 2;
+		for (let i = 0; i < sampledBestRows.length; i++) {
+			const row = sampledBestRows[i];
+			const rect = bRects[i];
+			if (!rect) continue;
+			const y = px(yBestFor(row.value));
+			ctx.beginPath();
+			ctx.moveTo(rect.left, y);
+			ctx.lineTo(rect.left + rect.width, y);
+			ctx.stroke();
+		}
+
 		ctx.strokeStyle = '#ffffff';
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		ctx.moveTo(paddingLeft, height - paddingBottom);
 		ctx.lineTo(width - paddingRight, height - paddingBottom);
 		ctx.stroke();
-		const interval = Math.floor(maxDataPoints / 6);
-		for (let i = 0; i < maxDataPoints; i += interval) {
-			const x = paddingLeft + (graphWidth / (maxDataPoints - 1)) * i;
-			ctx.beginPath();
-			ctx.moveTo(x, height - paddingBottom);
-			ctx.lineTo(x, height - paddingBottom + 5);
-			ctx.stroke();
-		}
-
-		// Draw "minutes" label centered below the axis (no numeric labels)
-		ctx.fillStyle = graphLabelColor();
-		ctx.font = '10px monospace';
+		drawHourTickmarks(ctx, minX, maxX, paddingLeft, graphWidth, baselineY);
+		ctx.fillStyle = savedWorkersGraphLabelColor();
 		ctx.textAlign = 'center';
-		ctx.fillText('minutes', paddingLeft + graphWidth / 2, height - 5);
-
+		ctx.font = '10px monospace';
+		ctx.fillText(`time: ${formatGraphTimeSpan((maxX - minX) / 1000)}`, paddingLeft + graphWidth / 2, height - 6);
 	}
 
-	function formatHashrateShort(h) {
-		if (!h) return '0';
-		const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
-		let val = h, idx = 0;
-		while (val >= 1000 && idx < units.length - 1) {
-			val /= 1000;
-			idx++;
+	function primeHashrateGraphHistory(history) {
+		if (historyPrimed) return false;
+		let hRows = [];
+		let bRows = [];
+		if (history && typeof history === 'object' && !Array.isArray(history) && Array.isArray(history.hq)) {
+			hRows = decodeCompactWorkerSeries(history, 'hq', 'h0', 'h1').rows;
+			bRows = decodeCompactWorkerSeries(history, 'bq', 'b0', 'b1').rows;
+		} else if (Array.isArray(history)) {
+			const decoded = history.map((code) => decodeHashrateSI8(code)).filter((v) => Number.isFinite(v) && v > 0);
+			const now = Date.now();
+			const span = decoded.length > 1 ? (legacyHistoryWindowMS / (decoded.length - 1)) : 0;
+			hRows = decoded.map((value, idx) => ({ at: now - span * (decoded.length - 1 - idx), value }));
+			bRows = [];
 		}
-		return val.toFixed(1) + ' ' + units[idx];
-	}
-
-		function updateHashrateGraph(newHashrate, blockHeight) {
-			if (!newHashrate || newHashrate <= 0) return;
-
-		const effectiveBlockHeight = typeof blockHeight === 'number' && blockHeight > 0 ? blockHeight : lastBlockHeight;
-		if (typeof blockHeight === 'number' && blockHeight > 0) {
-			lastBlockHeight = blockHeight;
+		if ((!Array.isArray(hRows) || hRows.length === 0) && (!Array.isArray(bRows) || bRows.length === 0)) {
+			return false;
 		}
-
-			let nextHashrate = newHashrate;
-			if (!historyPrimed) {
-				// Before server-side history is primed, apply a light EMA so
-				// early points don't jump sharply between polls.
-				if (smoothedHashrate === null) {
-					smoothedHashrate = newHashrate;
-				} else {
-					const alpha = 0.25; // smoothing factor (0..1); lower = smoother
-					smoothedHashrate = smoothedHashrate + alpha * (newHashrate - smoothedHashrate);
-				}
-				nextHashrate = smoothedHashrate;
-			}
-
-			hashrateData.push(nextHashrate);
-		timestamps.push(new Date());
-		blockHeights.push(effectiveBlockHeight || null);
-
-		trimHistory();
-
-		drawGraph();
+		historyHashrateRows = Array.isArray(hRows) ? hRows : [];
+		historyBestRows = Array.isArray(bRows) ? bRows : [];
+		historyPrimed = true;
+		drawPoolCombinedHistoryGraph();
+		return true;
 	}
 
-	// Initial draw
-	drawGraph();
+	function updateHashrateGraph(newHashrate) {
+		const value = Number(newHashrate || 0);
+		if (!Number.isFinite(value) || value <= 0) return;
+		liveHashrate = value;
+		liveHashrateAt = Date.now();
+		drawPoolCombinedHistoryGraph();
+	}
 
-	// Expose update function globally so auto-refresh can call it
-	window.updateHashrateGraph = updateHashrateGraph;
 	window.primeHashrateGraphHistory = primeHashrateGraphHistory;
+	window.updateHashrateGraph = updateHashrateGraph;
 
-	// Redraw on window resize
-	window.addEventListener('resize', drawGraph);
+	drawPoolCombinedHistoryGraph();
+	window.addEventListener('resize', drawPoolCombinedHistoryGraph);
 })();
 </script>
 {{end}}

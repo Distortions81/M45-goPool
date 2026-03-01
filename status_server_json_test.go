@@ -113,6 +113,20 @@ func TestHandlePoolHashrateJSON_IncludeHistoryToggle(t *testing.T) {
 	s := newStatusServerForJSONTests()
 	now := time.Now()
 	s.appendPoolHashrateHistory(123.45, 910000, now.Add(-time.Minute))
+	s.savedWorkerPeriodsMu.Lock()
+	s.savedWorkerPeriods = map[string]*savedWorkerPeriodRing{
+		savedWorkerPeriodPoolKey: {},
+	}
+	poolRing := s.savedWorkerPeriods[savedWorkerPeriodPoolKey]
+	sampleMinute := savedWorkerUnixMinute(now.UTC().Truncate(savedWorkerPeriodBucket))
+	if sampleMinute > uint32(savedWorkerPeriodBucketMinutes) {
+		sampleMinute -= uint32(savedWorkerPeriodBucketMinutes)
+	}
+	idx := savedWorkerRingIndex(sampleMinute)
+	poolRing.minutes[idx] = sampleMinute
+	poolRing.hashrateQ[idx] = encodeHashrateSI16(123.45)
+	poolRing.lastMinute = sampleMinute
+	s.savedWorkerPeriodsMu.Unlock()
 
 	reqNoHistory := httptest.NewRequest(http.MethodGet, "/api/pool-hashrate", nil)
 	rrNoHistory := httptest.NewRecorder()
@@ -137,13 +151,23 @@ func TestHandlePoolHashrateJSON_IncludeHistoryToggle(t *testing.T) {
 	}
 
 	var payloadWithCompactHistory struct {
-		PoolHashrateHistoryQ []uint16 `json:"phh"`
+		PoolHashrateHistoryQ   []uint16               `json:"phh"`
+		PoolHashrateHistory24h *compactHashrateSeries `json:"ph24"`
 	}
 	if err := json.Unmarshal(rrWithCompactHistory.Body.Bytes(), &payloadWithCompactHistory); err != nil {
 		t.Fatalf("decode with-compact-history response: %v", err)
 	}
 	if payloadWithCompactHistory.PoolHashrateHistoryQ == nil {
 		t.Fatalf("expected non-empty phh with include_history=2")
+	}
+	if payloadWithCompactHistory.PoolHashrateHistory24h == nil {
+		t.Fatalf("expected ph24 compact history with include_history=2")
+	}
+	if payloadWithCompactHistory.PoolHashrateHistory24h.N != savedWorkerPeriodSlots {
+		t.Fatalf("unexpected ph24 bucket count: got %d want %d", payloadWithCompactHistory.PoolHashrateHistory24h.N, savedWorkerPeriodSlots)
+	}
+	if len(payloadWithCompactHistory.PoolHashrateHistory24h.HQ) == 0 {
+		t.Fatalf("expected non-empty ph24 hashrate q array")
 	}
 	var payloadWithCompactHistoryMap map[string]any
 	if err := json.Unmarshal(rrWithCompactHistory.Body.Bytes(), &payloadWithCompactHistoryMap); err != nil {

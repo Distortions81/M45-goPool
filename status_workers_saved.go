@@ -380,30 +380,42 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 		return
 	}
 
-	hash, errMsg := parseSHA256HexStrict(r.URL.Query().Get("hash"))
-	if errMsg != "" || hash == "" {
-		http.Error(w, "invalid hash", http.StatusBadRequest)
-		return
-	}
-
-	list, err := s.workerLists.List(user.UserID)
-	if err != nil {
-		logger.Warn("saved worker history list failed", "error", err, "user_id", user.UserID)
-		http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
-		return
-	}
-	authorized := false
-	displayName := ""
-	for _, saved := range list {
-		if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
-			authorized = true
-			displayName = saved.Name
-			break
+	rawHash := strings.TrimSpace(r.URL.Query().Get("hash"))
+	hash := ""
+	isPoolHistory := strings.EqualFold(rawHash, savedWorkerPeriodPoolKey)
+	if isPoolHistory {
+		hash = savedWorkerPeriodPoolKey
+	} else {
+		var errMsg string
+		hash, errMsg = parseSHA256HexStrict(rawHash)
+		if errMsg != "" || hash == "" {
+			http.Error(w, "invalid hash", http.StatusBadRequest)
+			return
 		}
 	}
-	if !authorized {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
+
+	displayName := ""
+	if isPoolHistory {
+		displayName = savedWorkerPeriodPoolKey
+	} else {
+		list, err := s.workerLists.List(user.UserID)
+		if err != nil {
+			logger.Warn("saved worker history list failed", "error", err, "user_id", user.UserID)
+			http.Error(w, "failed to load saved workers", http.StatusInternalServerError)
+			return
+		}
+		authorized := false
+		for _, saved := range list {
+			if strings.EqualFold(strings.TrimSpace(saved.Hash), hash) {
+				authorized = true
+				displayName = saved.Name
+				break
+			}
+		}
+		if !authorized {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 	}
 
 	now := time.Now().UTC()
@@ -443,18 +455,18 @@ func (s *StatusServer) handleSavedWorkerHistoryJSON(w http.ResponseWriter, r *ht
 	hMin, hMax, hQ := quantizeSeriesToUint8(hashrateVals, present)
 	bMin, bMax, bQ := quantizeSeriesToUint8(bestVals, present)
 	resp := struct {
-		Hash string  `json:"hash"`
-		Name string  `json:"name,omitempty"`
-		U    string  `json:"u"`  // updated_at
-		I    int     `json:"i"`  // interval seconds
-		S    uint32  `json:"s"`  // start unix-minute
-		N    int     `json:"n"`  // number of buckets
-		P    []uint16 `json:"p"` // presence bitset
-		HMin float64 `json:"h0"` // hashrate min
-		HMax float64 `json:"h1"` // hashrate max
+		Hash string   `json:"hash"`
+		Name string   `json:"name,omitempty"`
+		U    string   `json:"u"`  // updated_at
+		I    int      `json:"i"`  // interval seconds
+		S    uint32   `json:"s"`  // start unix-minute
+		N    int      `json:"n"`  // number of buckets
+		P    []uint16 `json:"p"`  // presence bitset
+		HMin float64  `json:"h0"` // hashrate min
+		HMax float64  `json:"h1"` // hashrate max
 		HQ   []uint16 `json:"hq"` // hashrate q8
-		BMin float64 `json:"b0"` // best-share min
-		BMax float64 `json:"b1"` // best-share max
+		BMin float64  `json:"b0"` // best-share min
+		BMax float64  `json:"b1"` // best-share max
 		BQ   []uint16 `json:"bq"` // best-share q8
 	}{
 		Hash: hash,

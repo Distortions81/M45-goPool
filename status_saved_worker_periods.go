@@ -64,7 +64,7 @@ func (s *StatusServer) backfillSavedWorkerOfflineGapLocked(ring *savedWorkerPeri
 }
 
 func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, now time.Time) {
-	if s == nil || s.workerLists == nil || len(allWorkers) == 0 {
+	if s == nil {
 		return
 	}
 	bucket := now.UTC().Truncate(savedWorkerPeriodBucket)
@@ -88,42 +88,49 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	}
 	s.savedWorkerPeriodsMu.Unlock()
 
-	saved, err := s.workerLists.ListAllSavedWorkers()
-	if err != nil {
-		logger.Warn("list saved workers for minute sampler", "error", err)
-		return
-	}
-	if len(saved) == 0 {
-		s.savedWorkerPeriodsMu.Lock()
-		if bucket.After(s.savedWorkerPeriodsLastBucket) {
-			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(currentMinute)
+	poolHashrate := 0.0
+	poolBestDifficulty := 0.0
+	for _, w := range allWorkers {
+		h := workerHashrateEstimate(w, now)
+		if h <= 0 {
+			h = w.RollingHashrate
 		}
-		s.savedWorkerPeriodsMu.Unlock()
-		return
-	}
-
-	savedHashes := make(map[string]struct{}, len(saved))
-	savedNames := make(map[string]struct{}, len(saved))
-	for _, rec := range saved {
-		hash := strings.ToLower(strings.TrimSpace(rec.Hash))
-		if hash != "" {
-			savedHashes[hash] = struct{}{}
+		if h <= 0 {
 			continue
 		}
-		name := strings.TrimSpace(rec.Name)
-		if name != "" {
-			savedNames[name] = struct{}{}
+		poolHashrate += h
+
+		// Snapshot-mode best-share bucket: only include shares whose last-share
+		// timestamp lands in the sampled completed minute.
+		if !w.LastShare.IsZero() {
+			lastShare := w.LastShare.UTC()
+			if !lastShare.Before(sampleBucket) && lastShare.Before(bucket) && w.LastShareDifficulty > poolBestDifficulty {
+				poolBestDifficulty = w.LastShareDifficulty
+			}
 		}
 	}
-	if len(savedHashes) == 0 && len(savedNames) == 0 {
-		s.savedWorkerPeriodsMu.Lock()
-		if bucket.After(s.savedWorkerPeriodsLastBucket) {
-			s.savedWorkerPeriodsLastBucket = bucket
-			s.pruneSavedWorkerPeriodsLocked(currentMinute)
+
+	savedHashes := make(map[string]struct{})
+	savedNames := make(map[string]struct{})
+	if s.workerLists != nil {
+		saved, err := s.workerLists.ListAllSavedWorkers()
+		if err != nil {
+			logger.Warn("list saved workers for minute sampler", "error", err)
+			return
 		}
-		s.savedWorkerPeriodsMu.Unlock()
-		return
+		savedHashes = make(map[string]struct{}, len(saved))
+		savedNames = make(map[string]struct{}, len(saved))
+		for _, rec := range saved {
+			hash := strings.ToLower(strings.TrimSpace(rec.Hash))
+			if hash != "" {
+				savedHashes[hash] = struct{}{}
+				continue
+			}
+			name := strings.TrimSpace(rec.Name)
+			if name != "" {
+				savedNames[name] = struct{}{}
+			}
+		}
 	}
 
 	hashrateByHash := make(map[string]float64, len(savedHashes))
@@ -157,13 +164,34 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		return
 	}
 	s.savedWorkerPeriodsLastBucket = bucket
+	if s.savedWorkerPeriods == nil {
+		sizeHint := len(hashrateByHash) + 1
+		if sizeHint < 1 {
+			sizeHint = 1
+		}
+		s.savedWorkerPeriods = make(map[string]*savedWorkerPeriodRing, sizeHint)
+	}
+	poolRing := s.savedWorkerPeriods[savedWorkerPeriodPoolKey]
+	if poolRing == nil {
+		poolRing = &savedWorkerPeriodRing{}
+		s.savedWorkerPeriods[savedWorkerPeriodPoolKey] = poolRing
+	}
+	s.backfillSavedWorkerOfflineGapLocked(poolRing, sampleMinute)
+	poolIdx := savedWorkerRingIndex(sampleMinute)
+	if poolRing.minutes[poolIdx] != sampleMinute {
+		poolRing.minutes[poolIdx] = sampleMinute
+		poolRing.hashrateQ[poolIdx] = 0
+		poolRing.bestDifficultyQ[poolIdx] = 0
+	}
+	poolRing.hashrateQ[poolIdx] = encodeHashrateSI16(poolHashrate)
+	poolRing.bestDifficultyQ[poolIdx] = encodeBestShareSI16(poolBestDifficulty)
+	poolRing.lastMinute = sampleMinute
+
 	if len(onlineSaved) == 0 {
 		s.pruneSavedWorkerPeriodsLocked(currentMinute)
 		return
 	}
-	if s.savedWorkerPeriods == nil {
-		s.savedWorkerPeriods = make(map[string]*savedWorkerPeriodRing, len(hashrateByHash))
-	}
+
 	for hash := range onlineSaved {
 		hashrateQ := encodeHashrateSI16(hashrateByHash[hash])
 		bestQ := uint16(0)
@@ -194,7 +222,7 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 }
 
 func (s *StatusServer) runSavedWorkerPeriodSampler(ctx context.Context) {
-	if s == nil || s.workerLists == nil {
+	if s == nil {
 		return
 	}
 	if ctx == nil {
@@ -310,7 +338,18 @@ func (s *StatusServer) pruneSavedWorkerPeriodsLocked(nowMinute uint32) {
 			if len(s.savedWorkerPeriods) <= savedWorkerPeriodMaxWorkers {
 				break
 			}
+			if hash == savedWorkerPeriodPoolKey {
+				continue
+			}
 			delete(s.savedWorkerPeriods, hash)
+		}
+		if len(s.savedWorkerPeriods) > savedWorkerPeriodMaxWorkers {
+			for hash := range s.savedWorkerPeriods {
+				if len(s.savedWorkerPeriods) <= savedWorkerPeriodMaxWorkers {
+					break
+				}
+				delete(s.savedWorkerPeriods, hash)
+			}
 		}
 	}
 }

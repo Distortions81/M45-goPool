@@ -11,6 +11,19 @@ import (
 	"github.com/hako/durafmt"
 )
 
+type compactHashrateSeries struct {
+	I    int      `json:"i"`  // interval seconds
+	S    uint32   `json:"s"`  // start unix-minute
+	N    int      `json:"n"`  // number of buckets
+	P    []uint16 `json:"p"`  // presence bitset
+	HMin float64  `json:"h0"` // hashrate min
+	HMax float64  `json:"h1"` // hashrate max
+	HQ   []uint16 `json:"hq"` // hashrate q8
+	BMin float64  `json:"b0"` // best-share min
+	BMax float64  `json:"b1"` // best-share max
+	BQ   []uint16 `json:"bq"` // best-share q8
+}
+
 // handleNodePageJSON returns Bitcoin node information.
 func (s *StatusServer) handleNodePageJSON(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -322,17 +335,18 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 			}
 		}
 		data := struct {
-			APIVersion             string                        `json:"api_version"`
-			PoolHashrate           float64                       `json:"pool_hashrate"`
-			PoolHashrateHistoryQ   []uint16                      `json:"phh,omitempty"`
-			BlockHeight            int64                         `json:"block_height"`
-			BlockDifficulty        float64                       `json:"block_difficulty"`
-			BlockTimeLeftSec       int64                         `json:"block_time_left_sec"`
-			RecentBlockTimes       []string                      `json:"recent_block_times"`
-			NextDifficultyRetarget *nextDifficultyRetarget       `json:"next_difficulty_retarget,omitempty"`
-			TemplateTxFeesSats     *int64                        `json:"template_tx_fees_sats,omitempty"`
-			TemplateUpdatedAt      string                        `json:"template_updated_at,omitempty"`
-			UpdatedAt              string                        `json:"updated_at"`
+			APIVersion             string                  `json:"api_version"`
+			PoolHashrate           float64                 `json:"pool_hashrate"`
+			PoolHashrateHistoryQ   []uint16                `json:"phh,omitempty"`
+			PoolHashrateHistory24h *compactHashrateSeries  `json:"ph24,omitempty"`
+			BlockHeight            int64                   `json:"block_height"`
+			BlockDifficulty        float64                 `json:"block_difficulty"`
+			BlockTimeLeftSec       int64                   `json:"block_time_left_sec"`
+			RecentBlockTimes       []string                `json:"recent_block_times"`
+			NextDifficultyRetarget *nextDifficultyRetarget `json:"next_difficulty_retarget,omitempty"`
+			TemplateTxFeesSats     *int64                  `json:"template_tx_fees_sats,omitempty"`
+			TemplateUpdatedAt      string                  `json:"template_updated_at,omitempty"`
+			UpdatedAt              string                  `json:"updated_at"`
 		}{
 			APIVersion:             apiVersion,
 			BlockHeight:            blockHeight,
@@ -356,7 +370,67 @@ func (s *StatusServer) handlePoolHashrateJSON(w http.ResponseWriter, r *http.Req
 		}
 		if includeHistory {
 			data.PoolHashrateHistoryQ = s.poolHashrateHistorySnapshot(now)
+			data.PoolHashrateHistory24h = s.compactPoolHashrateSeries(now.UTC())
 		}
 		return sonic.Marshal(data)
 	})
+}
+
+func (s *StatusServer) compactPoolHashrateSeries(now time.Time) *compactHashrateSeries {
+	if s == nil {
+		return nil
+	}
+	samples := s.savedWorkerPeriodHistory(savedWorkerPeriodPoolKey, now)
+	if len(samples) == 0 {
+		return nil
+	}
+	nowBucketMinute := savedWorkerUnixMinute(now.Truncate(savedWorkerPeriodBucket))
+	if nowBucketMinute == 0 {
+		return nil
+	}
+	spanMinutes := (savedWorkerPeriodSlots - 1) * savedWorkerPeriodBucketMinutes
+	startMinute := uint32(0)
+	if nowBucketMinute >= uint32(spanMinutes) {
+		startMinute = nowBucketMinute - uint32(spanMinutes)
+	}
+	count := savedWorkerPeriodSlots
+	present := make([]bool, count)
+	presentBits := make([]uint8, (count+7)/8)
+	hashrateVals := make([]float64, count)
+	bestVals := make([]float64, count)
+	for _, sample := range samples {
+		if sample.At.IsZero() {
+			continue
+		}
+		m := savedWorkerUnixMinute(sample.At)
+		if m < startMinute {
+			continue
+		}
+		offsetMin := int(m - startMinute)
+		if savedWorkerPeriodBucketMinutes <= 0 || offsetMin < 0 {
+			continue
+		}
+		idx := offsetMin / savedWorkerPeriodBucketMinutes
+		if idx < 0 || idx >= count {
+			continue
+		}
+		present[idx] = true
+		setBit(presentBits, idx)
+		hashrateVals[idx] = decodeHashrateSI16(sample.HashrateQ)
+		bestVals[idx] = decodeBestShareSI16(sample.BestDifficultyQ)
+	}
+	hMin, hMax, hQ := quantizeSeriesToUint8(hashrateVals, present)
+	bMin, bMax, bQ := quantizeSeriesToUint8(bestVals, present)
+	return &compactHashrateSeries{
+		I:    int(savedWorkerPeriodBucket / time.Second),
+		S:    startMinute,
+		N:    count,
+		P:    widenUint8ForJSON(presentBits),
+		HMin: hMin,
+		HMax: hMax,
+		HQ:   widenUint8ForJSON(hQ),
+		BMin: bMin,
+		BMax: bMax,
+		BQ:   widenUint8ForJSON(bQ),
+	}
 }
