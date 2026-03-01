@@ -136,16 +136,16 @@
 		.saved-workers-online-spark-slot {
 			display: inline-flex;
 			align-items: center;
-			flex: 0 0 180px;
-			width: 180px;
-			min-width: 180px;
-			max-width: 180px;
+			flex: 0 0 100px;
+			width: 100px;
+			min-width: 100px;
+			max-width: 100px;
 			min-height: 30px;
 		}
 		.saved-workers-online-spark-slot .worker-inline-spark-combined {
-			width: 180px;
-			min-width: 180px;
-			max-width: 180px;
+			width: 100px;
+			min-width: 100px;
+			max-width: 100px;
 		}
 		.saved-workers-online-table thead th {
 			position: static;
@@ -280,8 +280,13 @@
 			white-space: nowrap;
 		}
 		.saved-workers-online-pill-value {
+			display: inline-block;
 			font-size: 14px;
 			white-space: nowrap;
+			min-width: 7ch;
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+			font-feature-settings: "tnum" 1;
 		}
 		.saved-workers-online-pill .worker-inline-spark {
 			margin-top: 0;
@@ -334,6 +339,9 @@
 			flex-wrap: wrap;
 			overflow-x: visible;
 		}
+		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-line {
+			flex-wrap: nowrap;
+		}
 		body.saved-workers-compact .saved-workers-online-block.top .saved-workers-online-stats {
 			flex: 1 1 100%;
 			display: grid;
@@ -346,6 +354,8 @@
 			display: grid;
 			grid-template-columns: repeat(5, minmax(0, 1fr));
 			gap: 6px;
+			margin-left: 272px;
+			width: calc(100% - 272px);
 			margin-top: 10px;
 			padding: 6px 8px;
 			border: 1px solid rgba(255,255,255,0.06);
@@ -500,10 +510,10 @@
 				text-align: center;
 			}
 			.saved-workers-online-block.top .saved-workers-online-spark-slot {
-				flex: 0 0 180px;
-				width: 180px;
-				min-width: 180px;
-				max-width: 180px;
+				flex: 0 0 100px;
+				width: 100px;
+				min-width: 100px;
+				max-width: 100px;
 				min-height: 24px;
 			}
 			.saved-workers-online-block.top .worker-inline-spark-combined {
@@ -677,20 +687,15 @@
 				</div>
 				<div class="saved-workers-online-mobile-table-legend" aria-hidden="true">
 					<div class="saved-workers-online-mobile-legend">
-						<span>Hash</span>
+						<span>hash/s</span>
 						<span>Best</span>
 						<span>Rej</span>
-						<span>Conn</span>
+						<span>Time</span>
 						<span>Up</span>
 					</div>
 				</div>
 				<div style="overflow-x:auto; margin-top:12px;">
 					<table class="table saved-workers-online-table">
-					<thead>
-						<tr>
-							<th>Worker</th>
-						</tr>
-					</thead>
 						<tbody id="onlineWorkersBody">
 							{{if .OnlineWorkerEntries}}
 								{{range .OnlineWorkerEntries}}
@@ -749,7 +754,7 @@
 										<div class="saved-workers-online-right">
 											<div class="saved-workers-online-stats">
 											<span class="saved-workers-online-spark-slot">
-												<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate and best share sparkline"></canvas>
+												<canvas class="worker-inline-spark worker-inline-spark-combined" width="100" height="16" data-worker-inline-chart="combined" data-worker-hash="{{.Hash}}" aria-label="Worker hashrate and best share sparkline"></canvas>
 											</span>
 											<span class="saved-workers-online-pill">
 												<span data-hashrate="{{printf "%.0f" .Hashrate}}" data-hashrate-accuracy="{{.HashrateAccuracy}}" class="hashrate-value saved-workers-online-pill-value">
@@ -2919,7 +2924,7 @@
 										<div class="saved-workers-online-right">
 											<div class="saved-workers-online-stats">
 											<span class="saved-workers-online-spark-slot">
-												<canvas class="worker-inline-spark worker-inline-spark-combined" width="128" height="16" data-worker-inline-chart="combined" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate and best share sparkline"></canvas>
+												<canvas class="worker-inline-spark worker-inline-spark-combined" width="100" height="16" data-worker-inline-chart="combined" data-worker-hash="${escapeAttr(w.hash || '')}" aria-label="Worker hashrate and best share sparkline"></canvas>
 											</span>
 											<span class="saved-workers-online-pill">
 												<span class="hashrate-value ${hashrateClass} saved-workers-online-pill-value">${hashrateText}</span>
