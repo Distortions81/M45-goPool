@@ -32,11 +32,11 @@ Stratum notes:
 
 ## Codebase size
 
-- **Go source (excluding tests):** 34,401 lines across 142 non-test `.go` files.
-- **Go tests:** 16,245 lines across 102 `*_test.go` files.
-- **Go source (total):** 50,646 lines across 244 `.go` files.
+- **Go source (excluding tests):** 35,438 lines across 147 non-test `.go` files.
+- **Go tests:** 17,518 lines across 107 `*_test.go` files.
+- **Go source (total):** 52,956 lines across 254 `.go` files.
 
-Counts above were collected on February 24, 2026.
+Counts above were collected on March 1, 2026.
 
 ## Configuration overview
 
@@ -49,7 +49,7 @@ Counts above were collected on February 24, 2026.
   - `data/config/tuning.toml` for rate limits, vardiff, EMA tuning, and peer-cleaning controls.
   - `data/config/secrets.toml` for sensitive credentials (RPC user/pass, Discord/Clerk secrets, Backblaze keys).
 - `data/config/admin.toml` controls the optional admin UI at `/admin`. The file is auto-generated on first run with `enabled = false` and a random password (read the file to see the generated secret). Update it to enable the panel, pick fresh credentials, and keep the file private. goPool writes `password_sha256` on startup and clears the plaintext password after the first successful login; subsequent logins use the hash. The admin UI provides a field-based editor for the in-memory config, can force-write `config.toml` + split override files, and includes a reboot control; reboot requests require typing `REBOOT` and resubmitting the admin password.
-- `[logging].level` controls runtime verbosity (`debug`, `info`, `warn`, `error`) and gates features like `net-debug.log`; override it temporarily with `-log-level <level>`.
+- `[logging]` uses boolean toggles: `debug` enables verbose runtime logs, and `net_debug` enables raw network tracing (`net-debug.log`). You can also force these at startup with `-debug` and `-net-debug`.
 - `share_*` validation toggles live in `data/config/policy.toml` `[mining]` (for example `share_check_duplicate`).
 
 Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the corresponding config file values for a single run—they are not written back to `config.toml`.

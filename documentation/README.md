@@ -1,7 +1,7 @@
 # Documentation Index
 
-- `operations.md` - Configuration, CLI flags, logging, backup, and runtime procedures.
-- `json-apis.md` - JSON API reference for `/api/*`.
-- `stratum-v1.md` - Stratum v1 method compatibility notes.
-- `TESTING.md` - Test suite usage and contribution testing guidance.
-- `systemd.service` - Example systemd unit file.
+- `operations.md` - Build, configuration, runtime flags, listeners/TLS, backups, and day-to-day operations.
+- `json-apis.md` - Public and authenticated `/api/*` endpoint reference (payloads, auth expectations, caching).
+- `stratum-v1.md` - Stratum v1 method compatibility matrix and behavior notes.
+- `TESTING.md` - Unit/compat/fuzz/benchmark test workflows and profiling helpers.
+- `systemd.service` - Example systemd unit for long-running deployments.

@@ -62,12 +62,6 @@ In particular:
 
 ## Endpoint catalog
 
-  - `GET /api/overview` for headline miner/hashrate values
-  - `GET /api/pool-page` for pool RPC/share diagnostics
-  - `GET /api/server` for process/system diagnostics
-  - `GET /api/pool-hashrate` for fast hashrate + block timer telemetry
-  - `GET /api/blocks` for recent found blocks
-
 Public (no auth):
 
 - `GET /api/overview` — overview page snapshot (default refresh ~10s)
@@ -76,6 +70,16 @@ Public (no auth):
 - `GET /api/server` — server diagnostics snapshot (default refresh ~10s)
 - `GET /api/pool-hashrate` — fast pool hashrate/block timer snapshot (default refresh ~5s)
 - `GET /api/blocks` — recent blocks list (default refresh ~3s; supports `?limit=`)
+
+Authenticated (Clerk/session-based):
+
+- `POST /api/auth/session-refresh` — refreshes/sets the Clerk session cookie using a validated token
+- `GET /api/saved-workers` — saved workers list + online/offline status snapshot for current user
+- `GET /api/saved-workers/history?hash=<sha256|pool>` — compact hashrate/best-share history for a saved worker (or `pool`)
+- `POST /api/saved-workers/notify-enabled` — toggle per-worker notifications
+- `POST /api/discord/notify-enabled` — toggle account-level Discord notifications
+- `POST /api/saved-workers/one-time-code` — mint one-time Discord linking code
+- `POST /api/saved-workers/one-time-code/clear` — clear one-time Discord linking code
 
 ## Endpoints
 
@@ -154,6 +158,8 @@ Response object: `PoolPageData`
 - `rpc_gbt_min_1h_sec` (number)
 - `rpc_gbt_avg_1h_sec` (number)
 - `rpc_gbt_max_1h_sec` (number)
+- `stratum_safeguard_disconnect_count` (integer; optional)
+- `stratum_safeguard_disconnects` (array of `PoolDisconnectEvent`; optional)
 - `error_history` (array of `PoolErrorEvent`; optional)
 
 `PoolErrorEvent`:
@@ -161,6 +167,13 @@ Response object: `PoolPageData`
 - `at` (string; RFC3339; optional)
 - `type` (string)
 - `message` (string)
+
+`PoolDisconnectEvent`:
+
+- `at` (string; RFC3339; optional)
+- `disconnected` (integer)
+- `reason` (string; optional)
+- `detail` (string; optional)
 
 Example:
 
@@ -327,3 +340,16 @@ Example:
 ```bash
 curl -sS 'https://STATUS_HOST/api/blocks?limit=25' | jq .
 ```
+
+## Authenticated endpoint notes
+
+These endpoints require a valid authenticated user context (unless the daemon is started in local no-auth mode):
+
+- `GET /api/saved-workers`
+- `GET /api/saved-workers/history`
+- `POST /api/saved-workers/notify-enabled`
+- `POST /api/discord/notify-enabled`
+- `POST /api/saved-workers/one-time-code`
+- `POST /api/saved-workers/one-time-code/clear`
+
+`POST /api/auth/session-refresh` is also authenticated/validated, but specifically used to establish or refresh the Clerk session cookie from a token.

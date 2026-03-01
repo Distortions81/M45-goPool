@@ -2038,7 +2038,7 @@
 			const spanX = Math.max(1, maxX - minX);
 
 			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
-			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
+			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
 			const drawableBestRows = sampledBestRows.filter((row) => Number(row?.value || 0) > 1);
 
 			let maxHashrate = 0;
@@ -2197,7 +2197,7 @@
 			const spanX = Math.max(1, maxX - minX);
 
 			const sampledHashrateRows = resampleSeriesByPixel(hashrateRows, minX, spanX, graphWidth, 'max');
-			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'last');
+			const sampledBestRows = resampleSeriesByPixel(bestRows, minX, spanX, graphWidth, 'max');
 			const drawableBestRows = sampledBestRows.filter((row) => Number(row?.value || 0) > 1);
 
 			let maxHashrate = 0;
@@ -2316,8 +2316,13 @@
 				}))
 				.filter((p) => Number.isFinite(p.at) && Number.isFinite(p.value) && p.value >= 0)
 				.sort((a, b) => a.at - b.at);
-			const maxVisibleRows = Math.max(1, Math.floor(graphWidth));
-			const visibleRows = rows.length > maxVisibleRows ? rows.slice(rows.length - maxVisibleRows) : rows;
+			let visibleRows = rows;
+			if (rows.length > 1) {
+				const fullMinX = rows[0].at;
+				const fullMaxX = rows[rows.length - 1].at;
+				const fullSpanX = Math.max(1, fullMaxX - fullMinX);
+				visibleRows = resampleSeriesByPixel(rows, fullMinX, fullSpanX, graphWidth, 'max');
+			}
 
 			if (visibleRows.length === 0) {
 				ctx.fillStyle = '#b3bbd4';
@@ -2485,6 +2490,49 @@
 			return (online / total) * 100;
 		}
 
+		function downsamplePointsByPixel(pointsInput, maxPixels, mode) {
+			const points = Array.isArray(pointsInput) ? pointsInput : [];
+			const width = Math.max(1, Math.floor(Number(maxPixels) || 0));
+			if (points.length <= 1 || points.length <= width) return points;
+			const reducer = String(mode || 'max').toLowerCase();
+			const minX = Number(points[0]?.x);
+			const maxX = Number(points[points.length - 1]?.x);
+			if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !(maxX > minX)) {
+				return points.slice(points.length - width);
+			}
+			const span = maxX - minX;
+			const byPixel = new Map();
+			for (const p of points) {
+				const x = Number(p?.x);
+				const y = Number(p?.y);
+				if (!Number.isFinite(x) || !Number.isFinite(y) || y < 0) continue;
+				const pixel = Math.max(0, Math.min(width - 1, Math.round(((x - minX) / span) * (width - 1))));
+				const existing = byPixel.get(pixel);
+				if (!existing) {
+					byPixel.set(pixel, { x, y, sum: y, count: 1 });
+					continue;
+				}
+				existing.sum += y;
+				existing.count += 1;
+				if (reducer === 'last') {
+					if (x >= existing.x) {
+						existing.x = x;
+						existing.y = y;
+					}
+				} else if (y >= existing.y) {
+					existing.x = x;
+					existing.y = y;
+				}
+			}
+			const sampled = Array.from(byPixel.entries())
+				.sort((a, b) => a[0] - b[0])
+				.map(([, rec]) => ({
+					x: rec.x,
+					y: reducer === 'avg' ? (rec.sum / Math.max(1, rec.count)) : rec.y,
+				}));
+			return sampled.length > 0 ? sampled : points.slice(points.length - width);
+		}
+
 		function drawInlineSparkline(canvas, rows, color) {
 			if (!(canvas instanceof HTMLCanvasElement)) return;
 			const dpr = window.devicePixelRatio || 1;
@@ -2503,7 +2551,7 @@
 				.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.y >= 0)
 				.sort((a, b) => a.x - b.x);
 			const maxVisiblePoints = Math.max(1, Math.floor(cssW));
-			const visiblePoints = points.length > maxVisiblePoints ? points.slice(points.length - maxVisiblePoints) : points;
+			const visiblePoints = downsamplePointsByPixel(points, maxVisiblePoints, 'max');
 			if (visiblePoints.length === 0) {
 				ctx.strokeStyle = '#2a2f3a';
 				ctx.lineWidth = 1;
@@ -2576,8 +2624,8 @@
 			const hPointsRaw = toPoints(hashrateRowsInput);
 			const bPointsRaw = toPoints(bestRowsInput);
 			const maxVisiblePoints = Math.max(1, Math.floor(cssW));
-			const hPoints = hPointsRaw.length > maxVisiblePoints ? hPointsRaw.slice(hPointsRaw.length - maxVisiblePoints) : hPointsRaw;
-			const bPoints = bPointsRaw.length > maxVisiblePoints ? bPointsRaw.slice(bPointsRaw.length - maxVisiblePoints) : bPointsRaw;
+			const hPoints = downsamplePointsByPixel(hPointsRaw, maxVisiblePoints, 'max');
+			const bPoints = downsamplePointsByPixel(bPointsRaw, maxVisiblePoints, 'max');
 			const bDrawPoints = bPoints.filter((p) => Number(p?.y || 0) > 1);
 
 			if (hPoints.length === 0 && bDrawPoints.length === 0) {

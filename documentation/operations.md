@@ -25,7 +25,7 @@ cd M45-Core-goPool
 go build -o goPool
 ```
 
-Use `GOOS`/`GOARCH` for cross-compilation and avoid `go install` unless populating `GOBIN` intentionally. Hardware acceleration flags (`noavx`, `nojsonsimd`) remain the only build tags you usually need; logging verbosity no longer relies on a build tag but on `[logging].level`/`-log-level`.
+Use `GOOS`/`GOARCH` for cross-compilation and avoid `go install` unless populating `GOBIN` intentionally. Hardware acceleration flags (`noavx`, `nojsonsimd`) remain the only build tags you usually need; runtime logging/tracing is controlled by `[logging].debug` and `[logging].net_debug` (or `-debug` / `-net-debug`).
 
 ### Build metadata
 
@@ -55,17 +55,26 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 |------|-------------|
 | `-network <mainnet|testnet|signet|regtest>` | Temporarily sets default RPC/ZMQ ports and ensures only one network is active. |
 | `-bind <ip>` | Replace the bind IP of every listener (Stratum, status HTTP/HTTPS). |
+| `-listen <addr>` | Override Stratum TCP listen address for this run (for example `:3333`). |
+| `-status <addr>` | Override status HTTP listen address for this run (for example `:80`). |
+| `-status-tls <addr>` | Override status HTTPS listen address for this run (for example `:443`). |
+| `-stratum-tls <addr>` | Override Stratum TLS listen address for this run (for example `:24333`). |
 | `-rpc-url <url>` | Override `node.rpc_url` for this run—useful for temporary test nodes. |
 | `-rpc-cookie <path>` | Override `node.rpc_cookie_path` when testing alternate cookie locations. |
+| `-data-dir <path>` | Override the data directory (logs/state/config/examples) for this run. |
+| `-max-conns <n>` | Override max concurrent miner connections (`-1` keeps configured value). |
+| `-safe-mode <true|false>` | Force conservative compatibility/safety settings (can disable fast-path tuning and automatic bans). |
 | `-secrets <path>` | Point to an alternate `secrets.toml`; the file is not rewritten. |
 | `-rewrite-config` | Persist derived values like `pool_entropy` back into `config.toml`. |
 | `-stdout` | Mirror every structured log entry to stdout (nice when running under systemd/journal). |
-| `-profile` | Capture a 60-second `default.pgo` CPU profile. |
+| `-profile` | Write a CPU profile to `default.pgo` for offline `pprof` analysis. |
 | `-flood` | Force both `min_difficulty` and `max_difficulty` to a low value for stress testing. |
-| `-log-level <debug|info|warn|error>` | Override `[logging].level` for this run only (not persisted). |
+| `-debug` / `-net-debug` | Force debug logging and raw network tracing at startup. |
 | `-no-json` | Disable the JSON status endpoints while keeping the HTML UI active. |
 | `-allow-public-rpc` | Allow connecting to an unauthenticated RPC endpoint (testing only). |
 | `-allow-rpc-creds` | Force username/password auth from `secrets.toml`; logs a warning and is deprecated. |
+| `-backup-on-boot` | Run one forced database backup pass at startup (best-effort). |
+| `-saved-workers-local-noauth` | Allow saved-worker pages without Clerk auth (local single-user mode). |
 
 Flags only override values for the running instance; nothing is written back to `config.toml` (except `node.rpc_cookie_path` when auto-detected). Use configuration files for durable behavior.
 
@@ -85,17 +94,26 @@ Flags only override values for the running instance; nothing is written back to 
 |------|-------------|
 | `-network <mainnet|testnet|signet|regtest>` | Force network defaults for RPC/ZMQ ports and version mask adjustments. Only one mode is accepted. |
 | `-bind <ip>` | Override the bind IP for all listeners (Stratum, status UI). Ports remain as configured. |
+| `-listen <addr>` | Override Stratum TCP listen address for this run. |
+| `-status <addr>` | Override status HTTP listen address for this run. |
+| `-status-tls <addr>` | Override status HTTPS listen address for this run. |
+| `-stratum-tls <addr>` | Override Stratum TLS listen address for this run. |
 | `-rpc-url <url>` | Override the RPC URL defined in `config.toml`. |
 | `-rpc-cookie <path>` | Override the RPC cookie path; useful for temporary deployments while keeping `config.toml` untouched. |
+| `-data-dir <path>` | Override the data directory used for config/state/logs for this run. |
+| `-max-conns <n>` | Override maximum concurrent miner connections (`-1` keeps config value). |
 | `-secrets <path>` | Use an alternative `secrets.toml` location (defaults to `data/config/secrets.toml`). |
 | `-stdout` | Mirror structured logs to stdout in addition to the rolling files. |
-| `-profile` | Capture a 60‑second CPU profile in `default.pgo`. |
+| `-profile` | Write a CPU profile to `default.pgo` for offline `pprof` analysis. |
 | `-rewrite-config` | Rewrite `config.toml` after applying runtime overrides (reorders sections and fills derived values). |
 | `-flood` | Force `min_difficulty`/`max_difficulty` to the same low value for stress testing. |
-| `-log-level <debug|info|warn|error>` | Override the `[logging].level` setting for the current run (not persisted back to config). |
+| `-safe-mode <true|false>` | Toggle conservative compatibility/safety mode for this run. |
+| `-debug` / `-net-debug` | Force debug logging and raw network tracing at startup. |
 | `-no-json` | Disable the JSON status endpoints (you still get the HTML status UI). |
 | `-allow-public-rpc` | Allow connecting to an unauthenticated RPC endpoint (testing only). |
 | `-allow-rpc-creds` | Force RPC auth to come from `secrets.toml` `rpc_user`/`rpc_pass`. Deprecated and insecure; prefer cookie auth. |
+| `-backup-on-boot` | Force one startup backup run (best-effort). |
+| `-saved-workers-local-noauth` | Disable Clerk auth requirement for saved-worker pages (local single-user mode). |
 
 Additional runtime knobs exist in `config.toml` plus optional `services.toml`/`policy.toml`/`tuning.toml`, but the flags above let you temporarily override them without editing files.
 Flags such as `-network`, `-rpc-url`, `-rpc-cookie`, `-allow-public-rpc`, and `-secrets` only affect the current invocation; they override the values from `config.toml` or `secrets.toml` at runtime but are not persisted back to the files.
@@ -114,7 +132,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - Optional runtime overrides (temporary): `-ckpool-emulate`, `-stratum-fast-decode`, `-stratum-fast-encode`, `-stratum-tcp-read-buffer`, and `-stratum-tcp-write-buffer`.
 - `[node]`: `rpc_url`, `rpc_cookie_path`, and ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`).
 - `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
-- `[logging]`: `level` sets the default log verbosity (`debug`, `info`, `warn`, or `error`). It controls the structured log output and whether `net-debug.log` is enabled.
+- `[logging]`: `debug` enables verbose runtime logging, and `net_debug` enables raw network tracing (`net-debug.log`) when debug logging is active.
 
 Set numeric values explicitly (do not rely on automation), and trim whitespace (goPool trims internally but a clean config is easier to audit). After editing, restart goPool or send `SIGUSR2` (see below).
 
@@ -230,10 +248,10 @@ Because the admin login is intentionally simple, bind this UI to trusted network
   - `share_require_authorized_connection` defaults to `true`.
   - `share_job_freshness_mode` defaults to `1` (options: `0=off`, `1=job_id`, `2=job_id+prevhash`).
   - `share_check_param_format` defaults to `true`.
-  - `share_check_ntime_window` and `share_check_version_rolling` default to `false`.
+  - `share_check_ntime_window` and `share_check_version_rolling` default to `true`.
 - `share_check_duplicate` defaults to `true` and enables duplicate-share detection (same job/extranonce2/ntime/nonce/version on one connection).
 - `share_require_worker_match` defaults to `false`; enable it if you want strict submit/authorize worker-name matching.
-- `submit_process_inline` defaults to `true` and usually provides materially better submit latency. Set it in `policy.toml` `[mining]` and disable mainly for very large pools (for example, tens of thousands of concurrent miners) where queue isolation is preferred.
+- `submit_process_inline` defaults to `false`. Enabling it can reduce submit latency by processing `mining.submit` inline instead of queueing work.
 - `vardiff_enabled` defaults to `true`; set it to `false` to keep connection difficulty static unless explicitly changed.
 
 ## Logging and diagnostics
@@ -242,7 +260,7 @@ Log files live under `data/logs/`:
 
 - `pool.log` – structured log of pool events.
 - `errors.log` – captures `ERROR` events for quick troubleshooting.
-- `net-debug.log` – recorded when `[logging].level` or `-log-level` is set to `debug`; contains raw requests/responses and raw RPC/ZMQ traffic.
+- `net-debug.log` – recorded when debug logging + network tracing are enabled (`[logging].debug=true` and `[logging].net_debug=true`, or `-debug -net-debug`); contains raw requests/responses and raw RPC/ZMQ traffic.
 
 Use `-stdout` to mirror every entry to stdout. Pair that with `journalctl` or container logs for live debugging.
 
@@ -309,17 +327,17 @@ Each override value logs when set, so goPool operators can audit what changed vi
 
 ## Monitoring APIs
 
-- `/api/overview`, `/api/pool-page`, `/api/server`, etc., provide JSON snapshots consumed by the UI. Disable them with `-no-json`.
+- `/api/overview`, `/api/pool-page`, `/api/server`, `/api/node`, `/api/pool-hashrate`, and `/api/blocks` provide the public JSON snapshots consumed by the UI. Disable all JSON APIs with `-no-json`.
 - `/user/<wallet>` and `/stats/<wallet>` are standard wallet lookup routes.
 - `/users/<wallet_sha256>` is the privacy variant of wallet lookup (keeps raw wallet values out of links/bookmarks).
 - `/stats/` serves the saved-worker dashboards, including per-worker graphing data.
-- The status UI exposes worker-level metrics (hashrate, bans, accepted shares) and automatically lists Discord/Clerk states if configured.
+- Authenticated JSON routes (`/api/saved-workers*`, `/api/discord/notify-enabled`, `/api/auth/session-refresh`) back saved-worker and Clerk/Discord flows when enabled.
 
 ## Profiling and debugging
 
 - `-profile` writes `default.pgo`; use `go tool pprof` or `./scripts/profile-graph.sh default.pgo profile.svg` to inspect the profile and generate SVGs.
-- Watch `metrics` JSON endpoints for bumps in share handling latency (`SubmitState` exposures).
-- `net-debug.log` records RPC/ZMQ traffic when log level is `debug` (set via `[logging].level` or `-log-level debug`); tail the file when you need detailed traces.
+- Watch `/api/pool-page` and `/api/server` for RPC/share error counters and feed-health drift.
+- `net-debug.log` records RPC/ZMQ traffic when debug logging + network tracing are enabled (`[logging].debug=true` and `[logging].net_debug=true`, or `-debug -net-debug`).
 
 ## Related guides
 
