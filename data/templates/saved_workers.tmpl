@@ -1961,9 +1961,25 @@
 				.map(([at, value]) => ({ at, value }))
 				.sort((a, b) => a.at - b.at);
 
+			const detectSeriesStepMillis = (rows) => {
+				const arr = Array.isArray(rows) ? rows : [];
+				let step = 0;
+				for (let i = 1; i < arr.length; i++) {
+					const prev = Number(arr[i - 1]?.at);
+					const next = Number(arr[i]?.at);
+					const d = next - prev;
+					if (!(d > 0)) continue;
+					if (!(step > 0) || d < step) step = d;
+				}
+				return step > 0 ? step : 120000;
+			};
+
 			if (savedWorkersTopChartLiveAt > 0 && Number.isFinite(savedWorkersTopChartLiveHashrate)) {
 				const lastTs = outHashrateRows.length > 0 ? Number(outHashrateRows[outHashrateRows.length - 1].at || 0) : 0;
-				if (!(lastTs > 0) || savedWorkersTopChartLiveAt > lastTs) {
+				const historyStep = detectSeriesStepMillis(outHashrateRows);
+				const maxLeadMillis = Math.max(120000, historyStep * 2);
+				const nearHistoryTail = !(lastTs > 0) || ((savedWorkersTopChartLiveAt - lastTs) <= maxLeadMillis);
+				if (nearHistoryTail && (!(lastTs > 0) || savedWorkersTopChartLiveAt > lastTs)) {
 					outHashrateRows.push({
 						at: savedWorkersTopChartLiveAt,
 						value: Math.max(0, Number(savedWorkersTopChartLiveHashrate || 0)),
@@ -2101,13 +2117,16 @@
 					width - paddingRight,
 					Math.max(4, fallbackBarW),
 				);
+				const bestSegW = Math.max(2, fallbackBarW);
 				for (let i = 0; i < drawableBestRows.length; i++) {
 					const row = drawableBestRows[i];
 					const rect = bRects[i];
 					if (!rect) continue;
 					const y = px(yBestFor(Number(row.value || 0)));
-					const left = rect.left;
-					const right = left + rect.width;
+					const center = Number(rect.center);
+					const segLeft = Number.isFinite(center) ? Math.round(center - (bestSegW / 2)) : rect.left;
+					const left = Math.max(paddingLeft, Math.min((width - paddingRight) - bestSegW, segLeft));
+					const right = left + bestSegW;
 					ctx.beginPath();
 					ctx.moveTo(left, y);
 					ctx.lineTo(right, y);
@@ -2246,6 +2265,7 @@
 				width - paddingRight,
 				Math.max(4, fallbackBarW),
 			);
+			const bestSegW = Math.max(2, fallbackBarW);
 			ctx.strokeStyle = savedWorkersGraphAmberColor();
 			ctx.lineWidth = 2;
 			for (let i = 0; i < drawableBestRows.length; i++) {
@@ -2253,9 +2273,13 @@
 				const rect = bRects[i];
 				if (!rect) continue;
 				const y = px(yBestFor(row.value));
+				const center = Number(rect.center);
+				const segLeft = Number.isFinite(center) ? Math.round(center - (bestSegW / 2)) : rect.left;
+				const left = Math.max(paddingLeft, Math.min((width - paddingRight) - bestSegW, segLeft));
+				const right = left + bestSegW;
 				ctx.beginPath();
-				ctx.moveTo(rect.left, y);
-				ctx.lineTo(rect.left + rect.width, y);
+				ctx.moveTo(left, y);
+				ctx.lineTo(right, y);
 				ctx.stroke();
 			}
 
@@ -2602,6 +2626,7 @@
 				cssW,
 				Math.max(3, (hRects[0]?.width || 3)),
 			);
+			const bestSegW = Math.max(2, (hRects[0]?.width || 3));
 
 			ctx.strokeStyle = '#2a2f3a';
 			ctx.lineWidth = 1;
@@ -2630,8 +2655,10 @@
 				const rect = bRects[i];
 				if (!rect) continue;
 				const y = px(Math.max(0, Math.min(baselineY, yBestFor(p.y))));
-				const left = rect.left;
-				const right = left + rect.width;
+				const center = Number(rect.center);
+				const segLeft = Number.isFinite(center) ? Math.round(center - (bestSegW / 2)) : rect.left;
+				const left = Math.max(0, Math.min(cssW - bestSegW, segLeft));
+				const right = left + bestSegW;
 				ctx.beginPath();
 				ctx.moveTo(left, y);
 				ctx.lineTo(right, y);

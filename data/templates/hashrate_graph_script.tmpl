@@ -402,6 +402,7 @@
 			width - paddingRight,
 			Math.max(4, fallbackBarW),
 		);
+		const bestSegW = Math.max(2, fallbackBarW);
 		ctx.strokeStyle = savedWorkersGraphAmberColor();
 		ctx.lineWidth = 2;
 		for (let i = 0; i < drawableBestRows.length; i++) {
@@ -409,9 +410,13 @@
 			const rect = bRects[i];
 			if (!rect) continue;
 			const y = px(yBestFor(row.value));
+			const center = Number(rect.center);
+			const segLeft = Number.isFinite(center) ? Math.round(center - (bestSegW / 2)) : rect.left;
+			const left = Math.max(paddingLeft, Math.min((width - paddingRight) - bestSegW, segLeft));
+			const right = left + bestSegW;
 			ctx.beginPath();
-			ctx.moveTo(rect.left, y);
-			ctx.lineTo(rect.left + rect.width, y);
+			ctx.moveTo(left, y);
+			ctx.lineTo(right, y);
 			ctx.stroke();
 		}
 
