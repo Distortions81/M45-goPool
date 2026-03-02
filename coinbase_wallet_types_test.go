@@ -2,64 +2,125 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"math"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 )
 
-// TestDualCoinbaseWithMixedWalletTypes verifies that dual coinbase (pool + worker)
-// works correctly with all combinations of wallet types: P2PKH, P2SH, P2WPKH, P2WSH, and P2TR (taproot).
-func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
+type walletFixture struct {
+	name     string
+	address  string
+	addrType string
+}
+
+func mustGeneratedMainnetWalletFixtures(t *testing.T) []walletFixture {
+	t.Helper()
 	params := &chaincfg.MainNetParams
 
-	// Define test wallet addresses for each type
-	wallets := []struct {
-		name     string
-		address  string
-		addrType string
-	}{
-		{
-			name:     "P2PKH",
-			address:  "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-			addrType: "P2PKH",
-		},
-		{
-			name:     "P2SH",
-			address:  "3Ai1JZ8pdJb2ksieUV8FsxSNVJCpoPi8W6",
-			addrType: "P2SH",
-		},
-		{
-			name:     "P2WPKH",
-			address:  "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
-			addrType: "P2WPKH",
-		},
-		{
-			name:     "P2WSH",
-			address:  "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3",
-			addrType: "P2WSH",
-		},
-		{
-			name:     "P2TR_Taproot",
-			address:  "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			addrType: "P2TR",
-		},
-		{
-			name:     "P2TR_Taproot_2",
-			address:  "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
-			addrType: "P2TR",
-		},
+	newPriv := func() *btcec.PrivateKey {
+		priv, err := btcec.NewPrivateKey()
+		if err != nil {
+			t.Fatalf("NewPrivateKey: %v", err)
+		}
+		return priv
 	}
 
-	// Test all combinations of pool + worker wallet types
+	newP2PKH := func() string {
+		pkh := btcutil.Hash160(newPriv().PubKey().SerializeCompressed())
+		addr, err := btcutil.NewAddressPubKeyHash(pkh, params)
+		if err != nil {
+			t.Fatalf("NewAddressPubKeyHash: %v", err)
+		}
+		return addr.EncodeAddress()
+	}
+
+	newNestedP2WPKH := func() string {
+		pkh := btcutil.Hash160(newPriv().PubKey().SerializeCompressed())
+		redeemScript := append([]byte{0x00, 0x14}, pkh...)
+		redeemHash := btcutil.Hash160(redeemScript)
+		addr, err := btcutil.NewAddressScriptHashFromHash(redeemHash, params)
+		if err != nil {
+			t.Fatalf("NewAddressScriptHashFromHash: %v", err)
+		}
+		return addr.EncodeAddress()
+	}
+
+	newP2WPKH := func() string {
+		pkh := btcutil.Hash160(newPriv().PubKey().SerializeCompressed())
+		addr, err := btcutil.NewAddressWitnessPubKeyHash(pkh, params)
+		if err != nil {
+			t.Fatalf("NewAddressWitnessPubKeyHash: %v", err)
+		}
+		return addr.EncodeAddress()
+	}
+
+	newP2WSH := func() string {
+		witnessScript, err := txscript.NewScriptBuilder().
+			AddData(newPriv().PubKey().SerializeCompressed()).
+			AddOp(txscript.OP_CHECKSIG).
+			Script()
+		if err != nil {
+			t.Fatalf("build witness script: %v", err)
+		}
+		hash := sha256.Sum256(witnessScript)
+		addr, err := btcutil.NewAddressWitnessScriptHash(hash[:], params)
+		if err != nil {
+			t.Fatalf("NewAddressWitnessScriptHash: %v", err)
+		}
+		return addr.EncodeAddress()
+	}
+
+	newP2TR := func() string {
+		internal := newPriv().PubKey()
+		outputKey := txscript.ComputeTaprootKeyNoScript(internal)
+		addr, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(outputKey), params)
+		if err != nil {
+			t.Fatalf("NewAddressTaproot: %v", err)
+		}
+		return addr.EncodeAddress()
+	}
+
+	return []walletFixture{
+		{name: "P2PKH", address: newP2PKH(), addrType: "P2PKH"},
+		{name: "P2SH_P2WPKH_Nested", address: newNestedP2WPKH(), addrType: "P2SH-P2WPKH"},
+		{name: "P2WPKH", address: newP2WPKH(), addrType: "P2WPKH"},
+		{name: "P2WSH", address: newP2WSH(), addrType: "P2WSH"},
+		{name: "P2TR_Taproot", address: newP2TR(), addrType: "P2TR"},
+		{name: "P2TR_Taproot_2", address: newP2TR(), addrType: "P2TR"},
+	}
+}
+
+func walletByName(t *testing.T, wallets []walletFixture, name string) walletFixture {
+	t.Helper()
+	for _, w := range wallets {
+		if w.name == name {
+			return w
+		}
+	}
+	t.Fatalf("wallet fixture %q not found", name)
+	return walletFixture{}
+}
+
+// TestDualCoinbaseWithMixedWalletTypes verifies that dual coinbase (pool + worker)
+// works correctly with all combinations of wallet types, including:
+// P2PKH, nested SegWit P2SH-P2WPKH, native SegWit P2WPKH, P2WSH, and P2TR.
+func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
+	params := &chaincfg.MainNetParams
+	wallets := mustGeneratedMainnetWalletFixtures(t)
+
+	// Test all combinations of pool + worker wallet types.
 	for _, poolWallet := range wallets {
 		for _, workerWallet := range wallets {
 			testName := poolWallet.name + "_pool_with_" + workerWallet.name + "_worker"
 			t.Run(testName, func(t *testing.T) {
-				// Generate scripts for both addresses
+				// Generate scripts for both addresses.
 				poolScript, err := scriptForAddress(poolWallet.address, params)
 				if err != nil {
 					t.Skipf("Could not generate script for %s: %v", poolWallet.address, err)
@@ -70,7 +131,7 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 					t.Skipf("Could not generate script for %s: %v", workerWallet.address, err)
 				}
 
-				// Create dual coinbase transaction
+				// Create dual coinbase transaction.
 				height := int64(800000)
 				ex1 := []byte{0x01, 0x02, 0x03, 0x04}
 				ex2 := []byte{0xaa, 0xbb, 0xcc, 0xdd}
@@ -104,22 +165,22 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 					t.Fatalf("expected 32-byte txid, got %d", len(txid))
 				}
 
-				// Decode with btcd to verify structure
+				// Decode with btcd to verify structure.
 				var tx wire.MsgTx
 				if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
 					t.Fatalf("failed to deserialize coinbase: %v", err)
 				}
 
-				// Verify we have exactly 2 outputs (pool + worker)
+				// Verify we have exactly 2 outputs (pool + worker).
 				if len(tx.TxOut) != 2 {
 					t.Fatalf("expected 2 outputs, got %d", len(tx.TxOut))
 				}
 
-				// Calculate expected values
+				// Calculate expected values.
 				poolFee := int64(math.Round(float64(totalValue) * feePercent / 100.0))
 				workerValue := totalValue - poolFee
 
-				// Verify pool output
+				// Verify pool output.
 				var (
 					poolOut   *wire.TxOut
 					workerOut *wire.TxOut
@@ -159,13 +220,13 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 					}
 				}
 
-				// Verify total adds up
+				// Verify total adds up.
 				totalOut := poolOut.Value + workerOut.Value
 				if totalOut != totalValue {
 					t.Errorf("total output mismatch: got %d, want %d", totalOut, totalValue)
 				}
 
-				// Verify scripts can be decoded back to addresses
+				// Verify scripts can be decoded back to addresses.
 				poolAddr := scriptToAddress(poolOut.PkScript, params)
 				workerAddr := scriptToAddress(workerOut.PkScript, params)
 
@@ -187,17 +248,7 @@ func TestDualCoinbaseWithMixedWalletTypes(t *testing.T) {
 // works with all wallet types including taproot.
 func TestSingleCoinbaseWithAllWalletTypes(t *testing.T) {
 	params := &chaincfg.MainNetParams
-
-	wallets := []struct {
-		name    string
-		address string
-	}{
-		{"P2PKH", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"},
-		{"P2SH", "3Ai1JZ8pdJb2ksieUV8FsxSNVJCpoPi8W6"},
-		{"P2WPKH", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"},
-		{"P2WSH", "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"},
-		{"P2TR", "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"},
-	}
+	wallets := mustGeneratedMainnetWalletFixtures(t)
 
 	for _, wallet := range wallets {
 		t.Run(wallet.name, func(t *testing.T) {
@@ -236,7 +287,7 @@ func TestSingleCoinbaseWithAllWalletTypes(t *testing.T) {
 				t.Fatalf("expected 32-byte txid, got %d", len(txid))
 			}
 
-			// Decode and verify
+			// Decode and verify.
 			var tx wire.MsgTx
 			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
 				t.Fatalf("failed to deserialize: %v", err)
@@ -254,7 +305,7 @@ func TestSingleCoinbaseWithAllWalletTypes(t *testing.T) {
 				t.Errorf("script mismatch")
 			}
 
-			// Verify round-trip
+			// Verify round-trip.
 			addr := scriptToAddress(tx.TxOut[0].PkScript, params)
 			if addr != wallet.address {
 				t.Errorf("address round-trip failed:\ngot:  %s\nwant: %s", addr, wallet.address)
@@ -269,40 +320,33 @@ func TestSingleCoinbaseWithAllWalletTypes(t *testing.T) {
 // the same scripts as btcd for all wallet types.
 func TestScriptCompatibilityWithBtcd(t *testing.T) {
 	params := &chaincfg.MainNetParams
+	wallets := mustGeneratedMainnetWalletFixtures(t)
 
-	addresses := []string{
-		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",                             // P2PKH
-		"3Ai1JZ8pdJb2ksieUV8FsxSNVJCpoPi8W6",                             // P2SH
-		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",                     // P2WPKH
-		"bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3", // P2WSH
-		"bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr", // P2TR (taproot)
-		"bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", // P2TR (taproot)
-	}
+	for _, wallet := range wallets {
+		t.Run(wallet.name, func(t *testing.T) {
+			addrStr := wallet.address
 
-	for _, addrStr := range addresses {
-		t.Run(addrStr, func(t *testing.T) {
-			// Decode with btcd
+			// Decode with btcd.
 			btcdAddr, err := btcutil.DecodeAddress(addrStr, params)
 			if err != nil {
 				t.Skipf("btcd doesn't support this address: %v", err)
 			}
 
-			// Generate script with btcd
+			// Generate script with btcd.
 			btcdScript, err := txscript.PayToAddrScript(btcdAddr)
 			if err != nil {
 				t.Fatalf("btcd PayToAddrScript failed: %v", err)
 			}
 
-			// Generate script with goPool
+			// Generate script with goPool.
 			poolScript, err := scriptForAddress(addrStr, params)
 			if err != nil {
 				t.Fatalf("goPool scriptForAddress failed: %v", err)
 			}
 
-			// Compare
+			// Compare.
 			if !bytes.Equal(btcdScript, poolScript) {
-				t.Errorf("script mismatch for %s:\nbtcd:   %x\ngoPool: %x",
-					addrStr, btcdScript, poolScript)
+				t.Errorf("script mismatch for %s:\nbtcd:   %x\ngoPool: %x", addrStr, btcdScript, poolScript)
 			}
 
 			t.Logf("✓ %s matches btcd", addrStr)
@@ -314,6 +358,12 @@ func TestScriptCompatibilityWithBtcd(t *testing.T) {
 // correctly in dual coinbase mode (the most complex scenario).
 func TestTaprootInDualCoinbase(t *testing.T) {
 	params := &chaincfg.MainNetParams
+	wallets := mustGeneratedMainnetWalletFixtures(t)
+
+	p2pkh := walletByName(t, wallets, "P2PKH")
+	p2wpkh := walletByName(t, wallets, "P2WPKH")
+	taproot1 := walletByName(t, wallets, "P2TR_Taproot")
+	taproot2 := walletByName(t, wallets, "P2TR_Taproot_2")
 
 	testCases := []struct {
 		name        string
@@ -323,26 +373,26 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 	}{
 		{
 			name:        "taproot_pool_legacy_worker",
-			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:  "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+			poolAddr:    taproot1.address,
+			workerAddr:  p2pkh.address,
 			description: "Taproot pool receiving fees, legacy P2PKH worker",
 		},
 		{
 			name:        "legacy_pool_taproot_worker",
-			poolAddr:    "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-			workerAddr:  "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+			poolAddr:    p2pkh.address,
+			workerAddr:  taproot1.address,
 			description: "Legacy pool, taproot worker getting reward",
 		},
 		{
 			name:        "both_taproot",
-			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:  "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0",
+			poolAddr:    taproot1.address,
+			workerAddr:  taproot2.address,
 			description: "Both pool and worker using taproot",
 		},
 		{
 			name:        "taproot_pool_segwit_worker",
-			poolAddr:    "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-			workerAddr:  "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+			poolAddr:    taproot1.address,
+			workerAddr:  p2wpkh.address,
 			description: "Taproot pool, segwit v0 worker",
 		},
 	}
@@ -359,7 +409,7 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 				t.Fatalf("failed to generate worker script: %v", err)
 			}
 
-			// Create dual coinbase
+			// Create dual coinbase.
 			height := int64(900000)
 			ex1 := []byte{0x01, 0x02, 0x03, 0x04}
 			ex2 := []byte{0xaa, 0xbb, 0xcc, 0xdd}
@@ -389,7 +439,7 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 				t.Fatalf("serializeDualCoinbaseTx failed: %v", err)
 			}
 
-			// Decode and verify
+			// Decode and verify.
 			var tx wire.MsgTx
 			if err := tx.Deserialize(bytes.NewReader(raw)); err != nil {
 				t.Fatalf("failed to deserialize: %v", err)
@@ -418,7 +468,7 @@ func TestTaprootInDualCoinbase(t *testing.T) {
 				t.Fatalf("worker output not found by script")
 			}
 
-			// Verify addresses match
+			// Verify addresses match.
 			poolAddrOut := scriptToAddress(poolOut.PkScript, params)
 			workerAddrOut := scriptToAddress(workerOut.PkScript, params)
 
