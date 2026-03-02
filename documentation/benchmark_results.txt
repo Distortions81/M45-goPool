@@ -1,0 +1,88 @@
+goos: linux
+goarch: amd64
+pkg: goPool
+cpu: AMD Ryzen 9 7950X 16-Core Processor            
+BenchmarkDecodeHexToFixedBytesBytes_32_SingleLUT-32                	74501094	        14.58 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_SingleLUT_Upper-32          	83092720	        14.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_PairLUT-32                  	94147404	        12.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_PairLUT_Upper-32            	95062749	        12.08 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_Std-32                      	61181749	        18.58 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_Std_Upper-32                	64193370	        18.57 ns/op	       0 B/op	       0 allocs/op
+BenchmarkParseUint32BEHexBytes_LUT-32                              	589526568	         2.013 ns/op	       0 B/op	       0 allocs/op
+BenchmarkParseUint32BEHexBytes_Switch-32                           	248722243	         4.828 ns/op	       0 B/op	       0 allocs/op
+BenchmarkParseUint32BEHexBytes_LUT_Upper-32                        	593740378	         2.026 ns/op	       0 B/op	       0 allocs/op
+BenchmarkParseUint32BEHexBytes_Switch_Upper-32                     	209202238	         5.735 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeBytesToFixedHex_32_Std-32                           	64210372	        18.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncode32ToHex64Lower_LUTLoop-32                           	71874006	        15.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncode32ToHex64Lower_2ByteLUTLoop-32                      	63176990	        18.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncode32ToHex64Lower_Unrolled-32                          	148569733	         8.045 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeToString_32_Std-32                                  	24877348	        48.33 ns/op	     128 B/op	       2 allocs/op
+BenchmarkEncodeToString_32_StdStackBuf-32                          	31642078	        35.92 ns/op	      64 B/op	       1 allocs/op
+BenchmarkEncodeToString_32_Unrolled-32                             	52058736	        21.32 ns/op	      64 B/op	       1 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_32_PoolPairLUT-32              	68434141	        16.62 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHex8To4_String_PairLUT-32                           	681731520	         1.752 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_4_PoolPairLUT-32               	376709432	         3.177 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDecodeHexToFixedBytesBytes_4_Std-32                       	357129858	         3.379 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFormatBigInt_064x_Sprintf-32                              	 7797034	       156.9 ns/op	     152 B/op	       5 allocs/op
+BenchmarkFormatBigInt_32_FillBytesHexEncodeToString-32             	19330873	        65.23 ns/op	     128 B/op	       2 allocs/op
+BenchmarkStratumDecodeFastJSON-32                                  	 9513711	       128.2 ns/op	     107 B/op	       3 allocs/op
+BenchmarkStratumDecodeManual-32                                    	30908343	        38.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStratumDecodeFastJSON_MiningSubmit-32                     	 3461053	       349.9 ns/op	     463 B/op	      11 allocs/op
+BenchmarkStratumDecodeManual_MiningSubmit-32                       	10892079	       109.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStratumDecodeFastJSON_MiningSubscribe-32                  	 5917798	       180.8 ns/op	     172 B/op	       5 allocs/op
+BenchmarkStratumDecodeManual_MiningSubscribe-32                    	10200378	       113.4 ns/op	      32 B/op	       2 allocs/op
+BenchmarkStratumDecodeFastJSON_MiningAuthorize-32                  	 5915431	       203.5 ns/op	     188 B/op	       6 allocs/op
+BenchmarkStratumDecodeManual_MiningAuthorize-32                    	 8970410	       132.1 ns/op	      56 B/op	       3 allocs/op
+BenchmarkFastJSONMarshalSimple-32                                  	 9629696	       119.1 ns/op	     227 B/op	       5 allocs/op
+BenchmarkFmtSprintfSimple-32                                       	17993379	        67.87 ns/op	      56 B/op	       2 allocs/op
+BenchmarkManualAppendSimple-32                                     	53785938	        23.82 ns/op	      64 B/op	       1 allocs/op
+BenchmarkFastJSONMarshalSubscribe-32                               	 5501211	       217.2 ns/op	     424 B/op	       5 allocs/op
+BenchmarkManualAppendSubscribe-32                                  	19006324	        67.24 ns/op	     296 B/op	       1 allocs/op
+BenchmarkProcessSubmissionTaskAcceptedShare-32                     	 1432725	       909.3 ns/op	       909.3 ns/share	   1099772 shares/s	   4399088 workers@15spm	   3079361 workers@15spm_70pct	    1190 B/op	      19 allocs/op
+BenchmarkHandleSubmitAndProcessAcceptedShare-32                    	 2129619	       550.5 ns/op	       550.5 ns/share	   1816373 shares/s	   7265493 workers@15spm	   5085845 workers@15spm_70pct	    1526 B/op	      33 allocs/op
+BenchmarkHandleSubmitAndProcessAcceptedShare_DupCheckEnabled-32    	 2246118	       536.3 ns/op	       536.3 ns/share	   1864528 shares/s	   7458113 workers@15spm	   5220679 workers@15spm_70pct	    1629 B/op	      33 allocs/op
+BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckDisabled-32    	24172785	        49.81 ns/op	     176 B/op	       9 allocs/op
+BenchmarkPrepareSubmissionTaskAcceptedShare_DupCheckEnabled-32     	23997753	        49.59 ns/op	     176 B/op	       9 allocs/op
+BenchmarkMerkleBranchComputation/1_transactions-32                 	 8661020	       119.5 ns/op	     456 B/op	       5 allocs/op
+BenchmarkMerkleBranchComputation/10_transactions-32                	  583927	      1896 ns/op	    3696 B/op	      54 allocs/op
+BenchmarkMerkleBranchComputation/100_transactions-32               	   68442	     17455 ns/op	   30504 B/op	     426 allocs/op
+BenchmarkMerkleBranchComputation/1000_transactions-32              	    6754	    181219 ns/op	  278736 B/op	    4028 allocs/op
+BenchmarkMerkleBranchComputation/4000_transactions-32              	    1806	    662238 ns/op	 1070336 B/op	   16038 allocs/op
+BenchmarkSavedWorkersJSON_15Saved-32                               	   26713	     42182 ns/op	     23707 req/s	    118534 viewers@5s	     82974 viewers@5s_70pct	   34938 B/op	     210 allocs/op
+BenchmarkApproximateMinerCapacity/100_workers-32                   	 1953578	       614.1 ns/op	         6.141 ns/worker	         0 overhead_pct	       0 B/op	       0 allocs/op
+BenchmarkApproximateMinerCapacity/1000_workers-32                  	  192656	      6187 ns/op	         6.187 ns/worker	         0.7548 overhead_pct	       0 B/op	       0 allocs/op
+BenchmarkApproximateMinerCapacity/10000_workers-32                 	   18518	     64621 ns/op	         6.462 ns/worker	         5.234 overhead_pct	       0 B/op	       0 allocs/op
+BenchmarkApproximateMinerCapacity/100000_workers-32                	    1220	    973650 ns/op	         9.737 ns/worker	        58.56 overhead_pct	       0 B/op	       0 allocs/op
+BenchmarkApproximateMinerCapacity/1000000_workers-32               	     120	   9970391 ns/op	         9.970 ns/worker	        62.36 overhead_pct	       0 B/op	       0 allocs/op
+BenchmarkOverviewPagePayload/100_workers-32                        	  190504	      6100 ns/op	       122.0 ns/recent_worker	   15925 B/op	     104 allocs/op
+BenchmarkOverviewPagePayload/1000_workers-32                       	  197890	      5978 ns/op	       119.6 ns/recent_worker	   15837 B/op	     104 allocs/op
+BenchmarkOverviewPagePayload/10000_workers-32                      	  191102	      6144 ns/op	       122.9 ns/recent_worker	   15559 B/op	     104 allocs/op
+BenchmarkOverviewPagePayload/100000_workers-32                     	  161355	      6344 ns/op	       126.9 ns/recent_worker	   15277 B/op	     104 allocs/op
+BenchmarkOverviewPagePayload/1000000_workers-32                    	  172146	      6406 ns/op	       128.1 ns/recent_worker	   15241 B/op	     104 allocs/op
+BenchmarkBuildStatusData/1000_conns-32                             	    1290	    932435 ns/op	     10725 conns@10ms	     16087 conns@15ms	     32174 conns@30ms	      5362 conns@5ms	     64348 conns@60ms	       932.4 ns/conn	 3487319 B/op	    4077 allocs/op
+BenchmarkBuildStatusData/10000_conns-32                            	      76	  15001947 ns/op	      6666 conns@10ms	      9999 conns@15ms	     19997 conns@30ms	      3333 conns@5ms	     39995 conns@60ms	      1500 ns/conn	34151528 B/op	   40161 allocs/op
+BenchmarkBuildStatusData/50000_conns-32                            	      10	 100570045 ns/op	      4972 conns@10ms	      7457 conns@15ms	     14915 conns@30ms	      2486 conns@5ms	     29830 conns@60ms	      2011 ns/conn	169279208 B/op	  200449 allocs/op
+BenchmarkBuildStatusData/100000_conns-32                           	       5	 213699074 ns/op	      4679 conns@10ms	      7019 conns@15ms	     14038 conns@30ms	      2340 conns@5ms	     28077 conns@60ms	      2137 ns/conn	338533224 B/op	  400833 allocs/op
+BenchmarkEstimateMemory500kWorkers-32                              	1000000000	         0.1867 ns/op	       0 B/op	       0 allocs/op
+--- BENCH: BenchmarkEstimateMemory500kWorkers-32
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+    status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
+BenchmarkStratumEncodeTrueResponse_Normal-32                       	 6902528	       171.3 ns/op	     192 B/op	       4 allocs/op
+BenchmarkStratumEncodeTrueResponse_Fast-32                         	26142127	        44.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStratumEncodePongResponse_Normal-32                       	 8736789	       179.2 ns/op	     192 B/op	       4 allocs/op
+BenchmarkStratumEncodePongResponse_Fast-32                         	25689387	        45.18 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStratumEncodeSubscribeResponse_CKPool_Normal-32           	 3431833	       369.9 ns/op	     472 B/op	      11 allocs/op
+BenchmarkStratumEncodeSubscribeResponse_CKPool_Fast-32             	18773166	        62.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStratumEncodeSubscribeResponse_Expanded_Normal-32         	 1781980	       599.6 ns/op	     992 B/op	      17 allocs/op
+BenchmarkStratumEncodeSubscribeResponse_Expanded_Fast-32           	11248816	       104.9 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	goPool	111.738s
+
+Estimated Max Miners (derived from benchmarks at 15 shares/min per miner)
+- Conservative (70% headroom, lower measured path): ~3,079,361 miners
+- Practical target (70% headroom, full submit+process path): ~5,085,845 miners
+- Peak benchmark-only ceiling (no headroom): ~7,458,113 miners
