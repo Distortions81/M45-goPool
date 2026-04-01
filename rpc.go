@@ -483,6 +483,13 @@ func (c *RPCClient) shouldRetry(err error) bool {
 			return statusErr.StatusCode >= 500
 		}
 	}
+	var rpcErr *rpcError
+	if errors.As(err, &rpcErr) {
+		// -28 = RPC_IN_WARMUP: node is still starting up ("Verifying blocks...",
+		// "Warming up: ..."). Retry so the pool recovers automatically once the
+		// node becomes ready without requiring operator intervention.
+		return rpcErr.Code == -28
+	}
 	return false
 }
 

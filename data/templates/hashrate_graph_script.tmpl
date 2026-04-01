@@ -433,13 +433,13 @@
 	}
 
 	function primeHashrateGraphHistory(history) {
-		if (historyPrimed) return false;
 		let hRows = [];
 		let bRows = [];
 		if (history && typeof history === 'object' && !Array.isArray(history) && Array.isArray(history.hq)) {
 			hRows = decodeCompactWorkerSeries(history, 'hq', 'h0', 'h1').rows;
 			bRows = decodeCompactWorkerSeries(history, 'bq', 'b0', 'b1').rows;
 		} else if (Array.isArray(history)) {
+			if (historyPrimed) return false;
 			const decoded = history.map((code) => decodeHashrateSI8(code)).filter((v) => Number.isFinite(v) && v > 0);
 			const now = Date.now();
 			const span = decoded.length > 1 ? (legacyHistoryWindowMS / (decoded.length - 1)) : 0;
@@ -449,7 +449,9 @@
 		if ((!Array.isArray(hRows) || hRows.length === 0) && (!Array.isArray(bRows) || bRows.length === 0)) {
 			return false;
 		}
-		historyHashrateRows = Array.isArray(hRows) ? hRows : [];
+		if (!historyPrimed) {
+			historyHashrateRows = Array.isArray(hRows) ? hRows : [];
+		}
 		historyBestRows = Array.isArray(bRows) ? bRows : [];
 		historyPrimed = true;
 		drawPoolCombinedHistoryGraph();

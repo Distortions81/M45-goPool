@@ -2885,7 +2885,7 @@
 				}
 				drawWorkerCombinedHistoryGraph(workerGraphsCombinedCanvas, hashrateRows, bestRows);
 				const shown = Math.max(hashrateRows.length, bestRows.length);
-				setWorkerGraphsStatus(shown > 0 ? `Showing ${shown} bucket${shown === 1 ? '' : 's'} (2m).` : 'No history recorded yet for this saved worker.', false);
+				setWorkerGraphsStatus(shown > 0 ? `Showing ${shown} bucket${shown === 1 ? '' : 's'} (1m).` : 'No history recorded yet for this saved worker.', false);
 			} catch (err) {
 				console.error('worker history fetch failed', err);
 				setWorkerGraphsStatus('Failed to load history.', true);

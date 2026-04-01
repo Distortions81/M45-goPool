@@ -688,7 +688,18 @@ func (m *PoolMetrics) recordBestShare(share BestShare) {
 	m.bestSharesMu.Unlock()
 
 	if len(snapshot) > 0 {
-		m.persistBestShares(snapshot)
+		if err := m.persistBestShares(snapshot); err != nil {
+			go func() {
+				time.Sleep(5 * time.Second)
+				m.bestSharesMu.RLock()
+				retry := make([]BestShare, m.bestShareCount)
+				copy(retry, m.bestShares[:m.bestShareCount])
+				m.bestSharesMu.RUnlock()
+				if len(retry) > 0 {
+					m.persistBestShares(retry) //nolint:errcheck
+				}
+			}()
+		}
 	}
 }
 
@@ -701,14 +712,16 @@ func sanitizeLabel(val, fallback string) string {
 	return val
 }
 
-func (m *PoolMetrics) persistBestShares(shares []BestShare) {
+func (m *PoolMetrics) persistBestShares(shares []BestShare) error {
 	if m == nil || len(shares) == 0 {
-		return
+		return nil
 	}
 	shares = sanitizeBestSharesForDB(shares)
 	if err := m.persistBestSharesToDB(shares); err != nil {
 		logger.Warn("persist best shares to sqlite", "error", err)
+		return err
 	}
+	return nil
 }
 
 func (m *PoolMetrics) persistBestSharesToDB(shares []BestShare) error {

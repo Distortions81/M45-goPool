@@ -26,6 +26,8 @@ const (
 	siQuant8MantMask = (1 << siQuant8MantBits) - 1
 	siQuant8MaxExp   = (1 << siQuant8ExpBits) - 1
 	siQuant8Base     = 1000.0
+	siQuant8MantMin  = 1.0
+	siQuant8MantMax  = 1000.0
 	siQuant8QLevels  = siQuant8MantMask
 )
 
@@ -111,18 +113,18 @@ func encodeSIQuant8(v float64) uint8 {
 
 	exp := uint8(0)
 	mant := v
-	for mant >= siQuant16MantMax && exp < siQuant8MaxExp {
+	for mant >= siQuant8MantMax && exp < siQuant8MaxExp {
 		mant /= siQuant8Base
 		exp++
 	}
-	if exp == siQuant8MaxExp && mant >= siQuant16MantMax {
+	if exp == siQuant8MaxExp && mant >= siQuant8MantMax {
 		return uint8((exp << siQuant8MantBits) | siQuant8MantMask)
 	}
-	if mant < siQuant16MantMin {
-		mant = siQuant16MantMin
+	if mant < siQuant8MantMin {
+		mant = siQuant8MantMin
 	}
-	if mant >= siQuant16MantMax {
-		mant = math.Nextafter(siQuant16MantMax, 0)
+	if mant >= siQuant8MantMax {
+		mant = math.Nextafter(siQuant8MantMax, 0)
 	}
 
 	logT := math.Log(mant) / math.Log(siQuant8Base)

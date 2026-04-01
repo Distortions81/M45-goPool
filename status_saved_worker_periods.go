@@ -89,7 +89,6 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 	s.savedWorkerPeriodsMu.Unlock()
 
 	poolHashrate := 0.0
-	poolBestDifficulty := 0.0
 	for _, w := range allWorkers {
 		h := workerHashrateEstimate(w, now)
 		if h <= 0 {
@@ -99,15 +98,6 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 			continue
 		}
 		poolHashrate += h
-
-		// Snapshot-mode best-share bucket: only include shares whose last-share
-		// timestamp lands in the sampled completed minute.
-		if !w.LastShare.IsZero() {
-			lastShare := w.LastShare.UTC()
-			if !lastShare.Before(sampleBucket) && lastShare.Before(bucket) && w.LastShareDifficulty > poolBestDifficulty {
-				poolBestDifficulty = w.LastShareDifficulty
-			}
-		}
 	}
 
 	savedHashes := make(map[string]struct{})
@@ -184,7 +174,6 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		poolRing.bestDifficultyQ[poolIdx] = 0
 	}
 	poolRing.hashrateQ[poolIdx] = encodeHashrateSI16(poolHashrate)
-	poolRing.bestDifficultyQ[poolIdx] = encodeBestShareSI16(poolBestDifficulty)
 	poolRing.lastMinute = sampleMinute
 
 	if len(onlineSaved) == 0 {
@@ -192,11 +181,15 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 		return
 	}
 
+	var poolBestQ uint16
 	for hash := range onlineSaved {
 		hashrateQ := encodeHashrateSI16(hashrateByHash[hash])
 		bestQ := uint16(0)
 		if s.workerLists != nil {
 			bestQ = encodeBestShareSI16(s.workerLists.ConsumeSavedWorkerMinuteBestDifficulty(hash, sampleBucket))
+		}
+		if bestQ > poolBestQ {
+			poolBestQ = bestQ
 		}
 		ring := s.savedWorkerPeriods[hash]
 		if ring == nil {
@@ -217,6 +210,9 @@ func (s *StatusServer) recordSavedOnlineWorkerPeriods(allWorkers []WorkerView, n
 			ring.bestDifficultyQ[idx] = bestQ
 		}
 		ring.lastMinute = sampleMinute
+	}
+	if poolBestQ > poolRing.bestDifficultyQ[poolIdx] {
+		poolRing.bestDifficultyQ[poolIdx] = poolBestQ
 	}
 	s.pruneSavedWorkerPeriodsLocked(currentMinute)
 }

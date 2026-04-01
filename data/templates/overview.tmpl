@@ -1186,6 +1186,10 @@
 
 		fetchHashrate();
 		setInterval(fetchHashrate, REFRESH_INTERVAL);
+		// Re-fetch history every 60s so new best-share data flows into the graph
+		// after the initial prime. The ring buffer updates once per minute, so
+		// polling more often than this is pointless.
+		setInterval(() => { poolHashrateIncludeHistory = true; }, 60000);
 		setInterval(() => {
 			renderTemplateTxFees();
 			if (typeof blockTimeLeftSec !== 'number') {

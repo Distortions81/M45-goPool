@@ -195,6 +195,7 @@ func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
 	}
 	if _, err := mc.savedWorkerStore.UpdateSavedWorkerBestDifficulty(hash, diff); err != nil {
 		logger.Warn("saved worker best difficulty update failed", "error", err, "hash", hash)
+		return
 	}
 	mc.savedWorkerBestDiff = diff
 }

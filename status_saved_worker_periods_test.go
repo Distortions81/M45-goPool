@@ -96,33 +96,40 @@ func TestRecordSavedOnlineWorkerPeriodsRecordsPoolBestShareForSampledMinuteOnly(
 	}
 	defer store.Close()
 
-	now := time.Unix(1_700_000_000, 0).UTC().Add(30 * time.Second)
+	hashA := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hashB := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	hashC := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+
+	// Register A and B as saved workers; C is intentionally omitted so its
+	// ring-buffer entry (if any) is ignored by the pool aggregation.
+	for _, h := range []string{hashA, hashB} {
+		if _, err := store.db.Exec(
+			"INSERT OR IGNORE INTO saved_workers (user_id, worker, worker_hash, worker_display, notify_enabled) VALUES (?, ?, ?, ?, 1)",
+			"testuser", h, h, h[:8],
+		); err != nil {
+			t.Fatalf("insert saved worker: %v", err)
+		}
+	}
+
+	now := time.Now().UTC().Truncate(savedWorkerPeriodBucket).Add(30 * time.Second)
 	bucket := now.UTC().Truncate(savedWorkerPeriodBucket)
 	sampleBucket := bucket.Add(-savedWorkerPeriodBucket)
+
+	// Pre-populate the minute-best ring buffer: this is what the new pool
+	// best-share path reads via ConsumeSavedWorkerMinuteBestDifficulty.
+	store.UpdateSavedWorkerMinuteBestDifficulty(hashA, 1200, sampleBucket.Add(10*time.Second))
+	store.UpdateSavedWorkerMinuteBestDifficulty(hashB, 3400, sampleBucket.Add(20*time.Second))
+	// C has a high difficulty but is not a saved worker — must not affect pool best.
+	store.UpdateSavedWorkerMinuteBestDifficulty(hashC, 9900, sampleBucket.Add(5*time.Second))
 
 	s := &StatusServer{
 		workerLists:        store,
 		savedWorkerPeriods: make(map[string]*savedWorkerPeriodRing),
 	}
 	workers := []WorkerView{
-		{
-			WorkerSHA256:        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			RollingHashrate:     1500,
-			LastShare:           sampleBucket.Add(10 * time.Second),
-			LastShareDifficulty: 1200,
-		},
-		{
-			WorkerSHA256:        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			RollingHashrate:     2500,
-			LastShare:           sampleBucket.Add(20 * time.Second),
-			LastShareDifficulty: 3400,
-		},
-		{
-			WorkerSHA256:        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-			RollingHashrate:     900,
-			LastShare:           sampleBucket.Add(-10 * time.Second), // outside sampled minute
-			LastShareDifficulty: 9900,
-		},
+		{WorkerSHA256: hashA, RollingHashrate: 1500},
+		{WorkerSHA256: hashB, RollingHashrate: 2500},
+		{WorkerSHA256: hashC, RollingHashrate: 900},
 	}
 	s.recordSavedOnlineWorkerPeriods(workers, now)
 
