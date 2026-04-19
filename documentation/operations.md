@@ -11,7 +11,50 @@ Operational Stratum notes:
 - A background heartbeat (`stratumHeartbeatInterval`) performs periodic non-longpoll template refreshes so "quiet mempool / no template churn" does not look like a dead node.
 - When updates are degraded but basic node RPC calls still work, the node-unavailable page will also show common sync/indexing indicators (IBD flag and blocks/headers) to help diagnose "node indexing" situations.
 
-## Building
+
+## Containerization (Docker/Compose)
+
+goPool provides a Dockerfile and docker-compose.yml for containerized deployments. This is the recommended way to run in production or for easy local testing.
+
+### Building and running with Docker
+
+Build the image:
+
+```bash
+docker build -t gopool:local .
+```
+
+Run the container:
+
+```bash
+docker run --rm -it \
+  -e BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -e BUILD_VERSION="v0.0.0-dev" \
+  -p 3333:3333 -p 80:80 -p 443:443 \
+  -v "$PWD/data:/app/data" \
+  gopool:local -stdout
+```
+
+### Using Docker Compose
+
++Edit `.env` or `env.example` to set environment variables (ports, build args, runtime flags). Then:
+
+```bash
+docker compose up -d --build
+```
+
+This will build and start the container, mapping ports and mounting `./data` for persistent config/state.
+
+### Build arguments and environment variables
+
+- `BUILD_TIME` and `BUILD_VERSION` are passed at build time (set automatically by the Makefile and CI).
+- Runtime environment variables (see `env.example`) control ports, network mode, and extra flags.
+
+### Persistent data
+
+The `data` directory is mounted into the container at `/app/data` to persist configuration, logs, and state. Always back up this directory.
+
+---
 
 Requirements:
 * **Go 1.26.0+** — install from https://go.dev/dl/ for matching ABI guarantees.

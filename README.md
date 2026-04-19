@@ -74,10 +74,11 @@ Stratum notes:
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
 </p>
 
+
 ## Quick start
 
 1. Install Go 1.26 or later and ZeroMQ (`libzmq3-dev` or equivalent depending on your platform).
-2. Clone the repo and build the pool.
+2. Clone the repo and build the pool:
     ```bash
     git clone https://github.com/Distortions81/M45-Core-goPool.git
     cd M45-Core-goPool
@@ -85,6 +86,38 @@ Stratum notes:
     ```
 3. Run `./goPool` once to generate example config files under `data/config/examples/`, then copy the base example into `data/config/config.toml` and edit it.
 4. Set the required `node.payout_address`, `node.rpc_url`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to run RPC/longpoll-only) before restarting the pool.
+
+## Containerization (Docker/Compose)
+
+You can run goPool using Docker or Docker Compose for easy deployment and reproducibility.
+
+### Build and run with Docker
+
+```bash
+docker build -t gopool:local .
+docker run --rm -it \
+  -e BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -e BUILD_VERSION="v0.0.0-dev" \
+  -p 3333:3333 -p 80:80 -p 443:443 \
+  -v "$PWD/data:/app/data" \
+  gopool:local -stdout
+```
+
+### Using Docker Compose
+
+Edit `.env` or `env.example` to set environment variables as needed. Then:
+
+```bash
+# Build and start in background
+make up
+
+# View logs
+make logs
+
+# Stop and remove containers
+make down
+```
+
 
 ## Codebase size
 

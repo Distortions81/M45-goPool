@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  gopool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TIME: "${BUILD_TIME}"
+        BUILD_VERSION: "${BUILD_VERSION}"
+    image: gopool:local
+    container_name: gopool
+    restart: unless-stopped
+    network_mode: "${NETWORK_MODE:-bridge}"
+    ports:
+      - "${PORT_STRATUM:-3333}:3333"
+      - "${PORT_STRATUM_SSL:-3334}:3334"
+      - "${PORT_HTTP:-80}:80"
+      - "${PORT_HTTPS:-443}:443"
+    volumes:
+      - ./data:/app/data
+    command: ["/app/goPool", "-stdout", "-pool-log=/dev/null"]
+    healthcheck:
+        test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/127.0.0.1/3333' || exit 1"]
+        interval: 30s
+        timeout: 5s
+        retries: 5
+        start_period: 20s
