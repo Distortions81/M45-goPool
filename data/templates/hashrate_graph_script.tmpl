@@ -447,7 +447,9 @@
 	function primeHashrateGraphHistory(history) {
 		let hRows = [];
 		let bRows = [];
+		let compactHistory = false;
 		if (history && typeof history === 'object' && !Array.isArray(history) && Array.isArray(history.hq)) {
+			compactHistory = true;
 			hRows = decodeCompactWorkerSeries(history, 'hq', 'h0', 'h1').rows;
 			bRows = decodeCompactWorkerSeries(history, 'bq', 'b0', 'b1').rows;
 		} else if (Array.isArray(history)) {
@@ -461,7 +463,7 @@
 		if ((!Array.isArray(hRows) || hRows.length === 0) && (!Array.isArray(bRows) || bRows.length === 0)) {
 			return false;
 		}
-		if (!historyPrimed) {
+		if (!historyPrimed || compactHistory) {
 			historyHashrateRows = Array.isArray(hRows) ? hRows : [];
 		}
 		historyBestRows = Array.isArray(bRows) ? bRows : [];

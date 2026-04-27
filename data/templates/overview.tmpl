@@ -1088,7 +1088,7 @@
 						}
 						if (data && typeof data.pool_hashrate === 'number') {
 							updateHashrateDisplay(data.pool_hashrate);
-							if (window.updateHashrateGraph && data.pool_hashrate > 0 && !primedFromHistory) {
+							if (window.updateHashrateGraph && data.pool_hashrate > 0) {
 								window.updateHashrateGraph(data.pool_hashrate);
 							}
 						}
