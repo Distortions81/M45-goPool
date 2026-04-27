@@ -1104,6 +1104,7 @@
 
 		let clerkLoadPromise = null;
 		let clerkRefreshing = null;
+		let lastOverviewData = null;
 
 		function loginURL() {
 			return (clerkLoginURL || '/sign-in?redirect=/saved-workers');
@@ -3373,12 +3374,20 @@
 				const online = Array.isArray(data.online_workers) ? data.online_workers : [];
 				// Update total hashrate time series (sum of online worker hashrate).
 				let totalHashrate = 0;
+				let totalShareRate = 0;
 				for (const w of online) {
 					totalHashrate += Number(w.hashrate || 0);
+					totalShareRate += Number(w.shares_per_minute || 0);
 				}
 				const safeHashrate = isFinite(totalHashrate) ? totalHashrate : 0;
+				const safeShareRate = isFinite(totalShareRate) ? totalShareRate : 0;
+				window.savedWorkersOnlineCount = online.length;
 				window.savedWorkersTotalHashrate = safeHashrate;
+				window.savedWorkersTotalSharesPerMinute = safeShareRate;
 				updateSavedWorkersTopChartLiveHashrate(safeHashrate);
+				if (lastOverviewData) {
+					updateGridCards(lastOverviewData);
+				}
 				renderOnlineWorkers(online);
 
 				const offlineList = document.getElementById('offlineWorkersList');
@@ -3689,8 +3698,12 @@
 						break;
 					case 'Shares per minute':
 						{
-							const rate = newData.shares_per_minute ?? 0;
-							const workers = newData.active_miners ?? 0;
+							const rate = typeof window.savedWorkersTotalSharesPerMinute === 'number'
+								? window.savedWorkersTotalSharesPerMinute
+								: (newData.shares_per_minute ?? 0);
+							const workers = typeof window.savedWorkersOnlineCount === 'number'
+								? window.savedWorkersOnlineCount
+								: (newData.active_miners ?? 0);
 							const avgPerWorker = workers > 0 ? rate / workers : 0;
 							if (workers > 0) {
 								valueEl.innerHTML = `${formatShareRate(rate)} <span class="text-sm" style="color:#666;">(${formatShareRate(avgPerWorker)}/worker)</span>`;
@@ -3749,6 +3762,7 @@
 
 		function updateOverviewDOM(newData, updatedAt) {
 			if (!newData) return;
+			lastOverviewData = newData;
 			if (poolTagEl) {
 				const tag = normalizePoolTag(newData.pool_tag);
 				poolTagEl.textContent = tag || '--';
