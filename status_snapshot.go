@@ -743,7 +743,7 @@ func buildTemplateFuncs() template.FuncMap {
 			}
 			base := formatHashrateValue(h)
 			marker := strings.TrimSpace(accuracy)
-			if marker == "" {
+			if marker == "" || marker == "≈+" || marker == "✓" {
 				return base
 			}
 			return marker + " " + base

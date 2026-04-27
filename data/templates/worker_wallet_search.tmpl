@@ -66,7 +66,7 @@
 										<a class="mono sensitive-worker worker-link" href="/worker/sha256?hash={{.WorkerSHA256}}">{{.DisplayName}}</a>
 									</div>
 								</td>
-								<td>{{if gt .RollingHashrate 0.0}}{{formatHashrate .RollingHashrate}}{{else}}—{{end}}</td>
+								<td>{{formatWorkerHashrate .RollingHashrate .HashrateAccuracy}}</td>
 								<td>{{formatShareRate .ShareRate}}</td>
 								<td>{{formatDiff .Difficulty}}</td>
 								<td>{{formatTime .ConnectedAt}}</td>
