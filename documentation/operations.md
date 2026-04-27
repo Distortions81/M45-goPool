@@ -68,10 +68,8 @@ Both values appear on the status page and JSON endpoints so you can verify the e
 | `-debug-log <path>` | Override debug log file path. |
 | `-net-debug-log <path>` | Override net-debug log file path. |
 | `-max-conns <n>` | Override max concurrent miner connections (`-1` keeps configured value). |
-| `-safe-mode <true|false>` | Force conservative compatibility/safety settings (can disable fast-path tuning and automatic bans). |
+| `-safe-mode <true|false>` | Force conservative compatibility/safety settings (can disable automatic bans). |
 | `-ckpool-emulate <true|false>` | Override CKPool-style Stratum subscribe response shape. |
-| `-stratum-fast-decode <true|false>` | Override fast-path Stratum decode/sniffing behavior. |
-| `-stratum-fast-encode <true|false>` | Override fast-path Stratum response encoding behavior. |
 | `-stratum-tcp-read-buffer <bytes>` | Override Stratum TCP read buffer bytes (`0` uses OS default). |
 | `-stratum-tcp-write-buffer <bytes>` | Override Stratum TCP write buffer bytes (`0` uses OS default). |
 | `-secrets <path>` | Point to an alternate `secrets.toml`; the file is not rewritten. |
@@ -99,8 +97,8 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - `[branding]`: Styling and branding options shown in the status UI (tagline, pool donation link, location string).
 - `[stratum]`: `stratum_tls_listen` for TLS-enabled Stratum (leave blank to disable secure Stratum), plus `stratum_password_enabled`/`stratum_password` to require a shared password on `mining.authorize`, and `stratum_password_public` to show the password on the public connect panel.
 - `policy.toml [stratum]`: `ckpool_emulate` controls CKPool-style subscribe response compatibility.
-- `tuning.toml [stratum]`: `fast_decode_enabled`, `fast_encode_enabled`, `tcp_read_buffer_bytes`, and `tcp_write_buffer_bytes` control Stratum fast-path and socket buffer tuning.
-- Optional runtime overrides (temporary): `-ckpool-emulate`, `-stratum-fast-decode`, `-stratum-fast-encode`, `-stratum-tcp-read-buffer`, and `-stratum-tcp-write-buffer`.
+- `tuning.toml [stratum]`: `tcp_read_buffer_bytes` and `tcp_write_buffer_bytes` control Stratum socket buffer tuning.
+- Optional runtime overrides (temporary): `-ckpool-emulate`, `-stratum-tcp-read-buffer`, and `-stratum-tcp-write-buffer`.
 - `[node]`: `rpc_url`, `rpc_cookie_path`, and ZMQ addresses (`zmq_hashblock_addr`/`zmq_rawblock_addr`).
 - `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
 - `[logging]`: `debug` enables verbose runtime logging, and `net_debug` enables raw network tracing (`net-debug.log`) when debug logging is active.

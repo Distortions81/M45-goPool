@@ -7,10 +7,10 @@ import (
 )
 
 func TestBuildSubscribeResponseBytes(t *testing.T) {
-	b, err := buildSubscribeResponseBytes(int64(7), "0011aabb", 4)
-	if err != nil {
-		t.Fatalf("buildSubscribeResponseBytes: %v", err)
-	}
+	conn := &recordConn{}
+	mc := &MinerConn{conn: conn, cfg: Config{CKPoolEmulate: true}}
+	mc.writeSubscribeResponse(int64(7), "0011aabb", 4, "1")
+	b := []byte(conn.String())
 	if !bytes.HasSuffix(b, []byte{'\n'}) {
 		t.Fatalf("expected newline-terminated response")
 	}
@@ -60,10 +60,10 @@ func TestBuildSubscribeResponseBytes(t *testing.T) {
 }
 
 func TestBuildSubscribeResponseBytes_ExpandedWhenCKPoolEmulateDisabled(t *testing.T) {
-	b, err := buildSubscribeResponseBytesWithMode(int64(7), "0011aabb", 4, false)
-	if err != nil {
-		t.Fatalf("buildSubscribeResponseBytesWithMode: %v", err)
-	}
+	conn := &recordConn{}
+	mc := &MinerConn{conn: conn, cfg: Config{CKPoolEmulate: false}}
+	mc.writeSubscribeResponse(int64(7), "0011aabb", 4, "1")
+	b := []byte(conn.String())
 
 	var resp StratumResponse
 	if err := json.Unmarshal(bytes.TrimSpace(b), &resp); err != nil {

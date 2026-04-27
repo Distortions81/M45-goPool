@@ -96,7 +96,7 @@ func baseConfigDocComments() []byte {
 # - [stratum].stratum_password_enabled: Require miners to send a password on authorize (requires restart).
 # - [stratum].stratum_password: Password string checked against mining.authorize params (requires restart).
 # - [stratum].stratum_password_public: Show the stratum password on the public connect panel (requires restart).
-# - [stratum].safe_mode: Force conservative compatibility/safety behavior (disables fast-path Stratum tuning and unsafe debug/public-RPC toggles).
+# - [stratum].safe_mode: Force conservative compatibility/safety behavior (disables unsafe debug/public-RPC toggles).
 # - Runtime override: --safe-mode=true/false
 #
 # Logging
@@ -156,8 +156,6 @@ func tuningConfigDocComments() []byte {
 # - enabled/max_ping_ms/min_peers: Optional cleanup of high-latency peers.
 #
 # Stratum tuning ([stratum])
-# - fast_decode_enabled: Enable fast-path decoding/sniffing for common Stratum methods (restart to apply).
-# - fast_encode_enabled: Enable fast-path response encoding for common Stratum responses (restart to apply).
 # - tcp_read_buffer_bytes / tcp_write_buffer_bytes: Socket buffer sizes in bytes (0 = OS default; restart to apply).
 #
 #

@@ -14,8 +14,6 @@ type runtimeOverrides struct {
 	stratumTLSListen    string
 	safeMode            *bool
 	ckpoolEmulate       *bool
-	stratumFastDecode   *bool
-	stratumFastEncode   *bool
 	stratumTCPReadBuf   *int
 	stratumTCPWriteBuf  *int
 	rpcURL              string
@@ -134,12 +132,6 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if overrides.safeMode != nil {
 		cfg.SafeMode = *overrides.safeMode
 	}
-	if overrides.stratumFastDecode != nil {
-		cfg.StratumFastDecodeEnabled = *overrides.stratumFastDecode
-	}
-	if overrides.stratumFastEncode != nil {
-		cfg.StratumFastEncodeEnabled = *overrides.stratumFastEncode
-	}
 	if overrides.stratumTCPReadBuf != nil {
 		cfg.StratumTCPReadBufferBytes = *overrides.stratumTCPReadBuf
 	}
@@ -172,8 +164,6 @@ func applySafeModeProfile(cfg *Config) {
 
 	// Conservative compatibility/safety defaults for troubleshooting and broad miner support.
 	cfg.CKPoolEmulate = true
-	cfg.StratumFastDecodeEnabled = false
-	cfg.StratumFastEncodeEnabled = false
 	cfg.StratumTCPReadBufferBytes = 0
 	cfg.StratumTCPWriteBufferBytes = 0
 

@@ -62,24 +62,6 @@ func main() {
 		ckpoolEmulateFlag = &b
 		return nil
 	})
-	var fastDecodeFlag *bool
-	flag.Func("stratum-fast-decode", "override fast-path Stratum decode/sniffing (true/false)", func(v string) error {
-		b, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err != nil {
-			return err
-		}
-		fastDecodeFlag = &b
-		return nil
-	})
-	var fastEncodeFlag *bool
-	flag.Func("stratum-fast-encode", "override fast-path Stratum response encoding (true/false)", func(v string) error {
-		b, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err != nil {
-			return err
-		}
-		fastEncodeFlag = &b
-		return nil
-	})
 	var stratumTCPReadBufFlag *int
 	flag.Func("stratum-tcp-read-buffer", "override Stratum TCP read buffer bytes (0 = OS default)", func(v string) error {
 		n, err := strconv.Atoi(strings.TrimSpace(v))
@@ -137,8 +119,6 @@ func main() {
 		stratumTLSListen:    *stratumTLSFlag,
 		safeMode:            safeModeFlag,
 		ckpoolEmulate:       ckpoolEmulateFlag,
-		stratumFastDecode:   fastDecodeFlag,
-		stratumFastEncode:   fastEncodeFlag,
 		stratumTCPReadBuf:   stratumTCPReadBufFlag,
 		stratumTCPWriteBuf:  stratumTCPWriteBufFlag,
 		rpcURL:              *rpcURLFlag,

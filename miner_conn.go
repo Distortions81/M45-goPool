@@ -357,60 +357,6 @@ func (mc *MinerConn) handle() {
 			return
 		}
 
-		if sniffedOK && mc.cfg.StratumFastDecodeEnabled {
-			switch sniffedMethod {
-			case stratumMethodMiningPing:
-				mc.writePongResponseRawID(sniffedIDRaw)
-				continue
-			case stratumMethodMiningAuthorize:
-				// Fast-path: mining.authorize typically uses string params.
-				// Avoid full JSON unmarshal on the connection goroutine.
-				if params, ok := sniffStratumStringParams(line, 2); ok && len(params) > 0 {
-					worker := params[0]
-					pass := ""
-					if len(params) > 1 {
-						pass = params[1]
-					}
-					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
-					if ok {
-						mc.handleAuthorizeID(idVal, worker, pass)
-					}
-					continue
-				}
-			case stratumMethodMiningSubscribe:
-				// Fast-path: mining.subscribe only needs the request ID and (optionally)
-				// a string client identifier in params[0] and optional session in params[1].
-				params, ok := sniffStratumStringParams(line, 2)
-				if ok {
-					clientID := ""
-					haveClientID := false
-					sessionID := ""
-					haveSessionID := false
-					if len(params) > 0 {
-						clientID = params[0]
-						haveClientID = true
-					}
-					if len(params) > 1 {
-						sessionID = strings.TrimSpace(params[1])
-						haveSessionID = sessionID != ""
-					}
-					mc.handleSubscribeRawID(sniffedIDRaw, clientID, haveClientID, sessionID, haveSessionID)
-					continue
-				}
-			case stratumMethodMiningSubmit:
-				// Fast-path: most mining.submit payloads are small and string-only.
-				// Avoid full JSON unmarshal on the connection goroutine to reduce
-				// allocations and tail latency under load.
-				worker, jobID, en2, ntime, nonce, version, haveVersion, ok := sniffStratumSubmitParamsBytes(line)
-				if ok {
-					idVal, _, ok := parseJSONValue(sniffedIDRaw, 0)
-					if ok {
-						mc.handleSubmitFastBytes(idVal, worker, jobID, en2, ntime, nonce, version, haveVersion)
-					}
-					continue
-				}
-			}
-		}
 		var req StratumRequest
 		if err := fastJSONUnmarshal(line, &req); err != nil {
 			if sniffedOK && len(sniffedIDRaw) > 0 {

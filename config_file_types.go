@@ -252,10 +252,8 @@ type tuningHashrateConfig struct {
 }
 
 type tuningStratumConfig struct {
-	FastDecodeEnabled   *bool `toml:"fast_decode_enabled"`
-	FastEncodeEnabled   *bool `toml:"fast_encode_enabled"`
-	TCPReadBufferBytes  *int  `toml:"tcp_read_buffer_bytes"`
-	TCPWriteBufferBytes *int  `toml:"tcp_write_buffer_bytes"`
+	TCPReadBufferBytes  *int `toml:"tcp_read_buffer_bytes"`
+	TCPWriteBufferBytes *int `toml:"tcp_write_buffer_bytes"`
 }
 
 type tuningFileConfig struct {

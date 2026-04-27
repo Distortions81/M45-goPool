@@ -26,18 +26,11 @@ BenchmarkDecodeHexToFixedBytesBytes_4_Std-32                       	357129858	  
 BenchmarkFormatBigInt_064x_Sprintf-32                              	 7797034	       156.9 ns/op	     152 B/op	       5 allocs/op
 BenchmarkFormatBigInt_32_FillBytesHexEncodeToString-32             	19330873	        65.23 ns/op	     128 B/op	       2 allocs/op
 BenchmarkStratumDecodeFastJSON-32                                  	 9513711	       128.2 ns/op	     107 B/op	       3 allocs/op
-BenchmarkStratumDecodeManual-32                                    	30908343	        38.54 ns/op	       0 B/op	       0 allocs/op
 BenchmarkStratumDecodeFastJSON_MiningSubmit-32                     	 3461053	       349.9 ns/op	     463 B/op	      11 allocs/op
-BenchmarkStratumDecodeManual_MiningSubmit-32                       	10892079	       109.3 ns/op	       0 B/op	       0 allocs/op
 BenchmarkStratumDecodeFastJSON_MiningSubscribe-32                  	 5917798	       180.8 ns/op	     172 B/op	       5 allocs/op
-BenchmarkStratumDecodeManual_MiningSubscribe-32                    	10200378	       113.4 ns/op	      32 B/op	       2 allocs/op
 BenchmarkStratumDecodeFastJSON_MiningAuthorize-32                  	 5915431	       203.5 ns/op	     188 B/op	       6 allocs/op
-BenchmarkStratumDecodeManual_MiningAuthorize-32                    	 8970410	       132.1 ns/op	      56 B/op	       3 allocs/op
 BenchmarkFastJSONMarshalSimple-32                                  	 9629696	       119.1 ns/op	     227 B/op	       5 allocs/op
-BenchmarkFmtSprintfSimple-32                                       	17993379	        67.87 ns/op	      56 B/op	       2 allocs/op
-BenchmarkManualAppendSimple-32                                     	53785938	        23.82 ns/op	      64 B/op	       1 allocs/op
 BenchmarkFastJSONMarshalSubscribe-32                               	 5501211	       217.2 ns/op	     424 B/op	       5 allocs/op
-BenchmarkManualAppendSubscribe-32                                  	19006324	        67.24 ns/op	     296 B/op	       1 allocs/op
 BenchmarkProcessSubmissionTaskAcceptedShare-32                     	 1432725	       909.3 ns/op	       909.3 ns/share	   1099772 shares/s	   4399088 workers@15spm	   3079361 workers@15spm_70pct	    1190 B/op	      19 allocs/op
 BenchmarkHandleSubmitAndProcessAcceptedShare-32                    	 2129619	       550.5 ns/op	       550.5 ns/share	   1816373 shares/s	   7265493 workers@15spm	   5085845 workers@15spm_70pct	    1526 B/op	      33 allocs/op
 BenchmarkHandleSubmitAndProcessAcceptedShare_DupCheckEnabled-32    	 2246118	       536.3 ns/op	       536.3 ns/share	   1864528 shares/s	   7458113 workers@15spm	   5220679 workers@15spm_70pct	    1629 B/op	      33 allocs/op
@@ -71,14 +64,6 @@ BenchmarkEstimateMemory500kWorkers-32                              	1000000000	 
     status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
     status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
     status_bench_test.go:301: Estimated 500k workers memory: heapAlloc=2.34 GiB heapInuse=2.36 GiB objects=1504104 (alloc≈4.90 KiB/worker inuse≈4.96 KiB/worker)
-BenchmarkStratumEncodeTrueResponse_Normal-32                       	 6902528	       171.3 ns/op	     192 B/op	       4 allocs/op
-BenchmarkStratumEncodeTrueResponse_Fast-32                         	26142127	        44.44 ns/op	       0 B/op	       0 allocs/op
-BenchmarkStratumEncodePongResponse_Normal-32                       	 8736789	       179.2 ns/op	     192 B/op	       4 allocs/op
-BenchmarkStratumEncodePongResponse_Fast-32                         	25689387	        45.18 ns/op	       0 B/op	       0 allocs/op
-BenchmarkStratumEncodeSubscribeResponse_CKPool_Normal-32           	 3431833	       369.9 ns/op	     472 B/op	      11 allocs/op
-BenchmarkStratumEncodeSubscribeResponse_CKPool_Fast-32             	18773166	        62.67 ns/op	       0 B/op	       0 allocs/op
-BenchmarkStratumEncodeSubscribeResponse_Expanded_Normal-32         	 1781980	       599.6 ns/op	     992 B/op	      17 allocs/op
-BenchmarkStratumEncodeSubscribeResponse_Expanded_Fast-32           	11248816	       104.9 ns/op	       0 B/op	       0 allocs/op
 PASS
 ok  	goPool	111.738s
 

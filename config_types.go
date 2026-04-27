@@ -55,12 +55,6 @@ type Config struct {
 	StratumPasswordEnabled bool
 	StratumPassword        string
 	StratumPasswordPublic  bool // show password in public connect panel when enabled
-	// Stratum fast decode: enables lightweight request sniffing for common methods
-	// (e.g. mining.submit/mining.subscribe/mining.ping) to reduce allocations.
-	StratumFastDecodeEnabled bool
-	// Stratum fast encode: enables canned/manual JSON encoding for common Stratum
-	// responses to reduce allocations (encode path only).
-	StratumFastEncodeEnabled bool
 	// Safe mode: force conservative compatibility/safety-oriented runtime behavior.
 	SafeMode bool
 	// CKPool compatibility mode: advertise a minimal CKPool-style subscribe
@@ -208,8 +202,6 @@ type EffectiveConfig struct {
 	GitHubURL                         string   `json:"github_url,omitempty"`
 	ServerLocation                    string   `json:"server_location,omitempty"`
 	StratumTLSListen                  string   `json:"stratum_tls_listen,omitempty"`
-	StratumFastDecodeEnabled          bool     `json:"stratum_fast_decode_enabled"`
-	StratumFastEncodeEnabled          bool     `json:"stratum_fast_encode_enabled"`
 	SafeMode                          bool     `json:"safe_mode,omitempty"`
 	CKPoolEmulate                     bool     `json:"ckpool_emulate"`
 	StratumTCPReadBufferBytes         int      `json:"stratum_tcp_read_buffer_bytes,omitempty"`

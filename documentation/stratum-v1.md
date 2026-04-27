@@ -9,7 +9,7 @@ Code pointers:
 - Encode helpers + subscribe response shape: `miner_io.go`
 - Difficulty / version mask / extranonce notifications: `miner_rejects.go`
 - Submit parsing / policy: `miner_submit_parse.go`
-- Fast-path method sniffing (decode): `stratum_sniff.go`
+- Method sniffing for rate limits and parse-error IDs: `stratum_sniff.go`
 
 ## Supported (client → pool)
 

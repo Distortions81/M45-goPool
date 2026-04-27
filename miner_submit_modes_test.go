@@ -63,56 +63,25 @@ type prepareOutcome struct {
 	out  string
 }
 
-func runPrepareSubmissionBothPaths(
+func runPrepareSubmission(
 	t *testing.T,
 	configure func(mc *MinerConn, job *Job),
 	mutateReq func(req *StratumRequest),
-) (prepareOutcome, prepareOutcome) {
+) prepareOutcome {
 	t.Helper()
 
-	runStandard := func() prepareOutcome {
-		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		if configure != nil {
-			configure(mc, job)
-		}
-		conn := &recordConn{}
-		mc.conn = conn
-		req := testSubmitRequestForJob(job, mc.currentWorker())
-		if mutateReq != nil {
-			mutateReq(req)
-		}
-		task, ok := mc.prepareSubmissionTask(req, time.Unix(1700000000, 0))
-		return prepareOutcome{task: task, ok: ok, out: conn.String()}
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	if configure != nil {
+		configure(mc, job)
 	}
-
-	runFast := func() prepareOutcome {
-		mc, job := newSubmitReadyMinerConnForModesTest(t)
-		if configure != nil {
-			configure(mc, job)
-		}
-		conn := &recordConn{}
-		mc.conn = conn
-		req := testSubmitRequestForJob(job, mc.currentWorker())
-		if mutateReq != nil {
-			mutateReq(req)
-		}
-
-		worker := []byte(req.Params[0].(string))
-		jobID := []byte(req.Params[1].(string))
-		en2 := []byte(req.Params[2].(string))
-		ntime := []byte(req.Params[3].(string))
-		nonce := []byte(req.Params[4].(string))
-		var version []byte
-		haveVersion := len(req.Params) == 6
-		if haveVersion {
-			version = []byte(req.Params[5].(string))
-		}
-
-		task, ok := mc.prepareSubmissionTaskFastBytes(req.ID, worker, jobID, en2, ntime, nonce, version, haveVersion, time.Unix(1700000000, 0))
-		return prepareOutcome{task: task, ok: ok, out: conn.String()}
+	conn := &recordConn{}
+	mc.conn = conn
+	req := testSubmitRequestForJob(job, mc.currentWorker())
+	if mutateReq != nil {
+		mutateReq(req)
 	}
-
-	return runStandard(), runFast()
+	task, ok := mc.prepareSubmissionTask(req, time.Unix(1700000000, 0))
+	return prepareOutcome{task: task, ok: ok, out: conn.String()}
 }
 
 func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) {
@@ -607,7 +576,7 @@ func TestPrepareSubmissionTask_VersionRollingPolicyBoundaries(t *testing.T) {
 	})
 }
 
-func TestPrepareSubmissionTaskFastBytes_Parity_FieldValidationAndBoundaries(t *testing.T) {
+func TestPrepareSubmissionTask_FieldValidationAndBoundaries(t *testing.T) {
 	type parityCase struct {
 		name             string
 		configure        func(mc *MinerConn, job *Job)
@@ -868,48 +837,36 @@ func TestPrepareSubmissionTaskFastBytes_Parity_FieldValidationAndBoundaries(t *t
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			std, fast := runPrepareSubmissionBothPaths(t, tc.configure, tc.mutateReq)
+			got := runPrepareSubmission(t, tc.configure, tc.mutateReq)
 
-			if std.ok != fast.ok {
-				t.Fatalf("path parity mismatch ok: standard=%v fast=%v", std.ok, fast.ok)
-			}
-			if std.ok != tc.wantOK {
-				t.Fatalf("ok=%v want %v", std.ok, tc.wantOK)
+			if got.ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v", got.ok, tc.wantOK)
 			}
 
 			if !tc.wantOK {
-				if !strings.Contains(std.out, tc.wantErrContains) {
-					t.Fatalf("standard path expected error %q, got: %q", tc.wantErrContains, std.out)
-				}
-				if !strings.Contains(fast.out, tc.wantErrContains) {
-					t.Fatalf("fast path expected error %q, got: %q", tc.wantErrContains, fast.out)
+				if !strings.Contains(got.out, tc.wantErrContains) {
+					t.Fatalf("expected error %q, got: %q", tc.wantErrContains, got.out)
 				}
 				return
 			}
 
-			if std.task.policyReject.reason != fast.task.policyReject.reason {
-				t.Fatalf("policy parity mismatch: standard=%v fast=%v", std.task.policyReject.reason, fast.task.policyReject.reason)
+			if got.task.policyReject.reason != tc.wantPolicyReason {
+				t.Fatalf("policy=%v want %v", got.task.policyReject.reason, tc.wantPolicyReason)
 			}
-			if std.task.policyReject.reason != tc.wantPolicyReason {
-				t.Fatalf("policy=%v want %v", std.task.policyReject.reason, tc.wantPolicyReason)
+			if got.task.ntimeVal != tc.wantNTime {
+				t.Fatalf("ntime=%d want=%d", got.task.ntimeVal, tc.wantNTime)
 			}
-			if std.task.ntimeVal != fast.task.ntimeVal || std.task.ntimeVal != tc.wantNTime {
-				t.Fatalf("ntime parity/value mismatch: standard=%d fast=%d want=%d", std.task.ntimeVal, fast.task.ntimeVal, tc.wantNTime)
+			if got.task.nonceVal != tc.wantNonce {
+				t.Fatalf("nonce=%d want=%d", got.task.nonceVal, tc.wantNonce)
 			}
-			if std.task.nonceVal != fast.task.nonceVal || std.task.nonceVal != tc.wantNonce {
-				t.Fatalf("nonce parity/value mismatch: standard=%d fast=%d want=%d", std.task.nonceVal, fast.task.nonceVal, tc.wantNonce)
-			}
-			if std.task.useVersion != fast.task.useVersion {
-				t.Fatalf("useVersion parity mismatch: standard=%d fast=%d", std.task.useVersion, fast.task.useVersion)
-			}
-			if std.task.useVersion != tc.wantUseVersion {
-				t.Fatalf("useVersion=%d want=%d", std.task.useVersion, tc.wantUseVersion)
+			if got.task.useVersion != tc.wantUseVersion {
+				t.Fatalf("useVersion=%d want=%d", got.task.useVersion, tc.wantUseVersion)
 			}
 		})
 	}
 }
 
-func TestPrepareSubmissionTaskFastBytes_Parity_StaleAndFallbackFreshnessModes(t *testing.T) {
+func TestPrepareSubmissionTask_StaleAndFallbackFreshnessModes(t *testing.T) {
 	type parityCase struct {
 		name             string
 		configure        func(mc *MinerConn, job *Job)
@@ -973,33 +930,24 @@ func TestPrepareSubmissionTaskFastBytes_Parity_StaleAndFallbackFreshnessModes(t 
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			std, fast := runPrepareSubmissionBothPaths(t, tc.configure, tc.mutateReq)
+			got := runPrepareSubmission(t, tc.configure, tc.mutateReq)
 
-			if std.ok != fast.ok {
-				t.Fatalf("path parity mismatch ok: standard=%v fast=%v", std.ok, fast.ok)
-			}
-			if std.ok != tc.wantOK {
-				t.Fatalf("ok=%v want %v", std.ok, tc.wantOK)
+			if got.ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v", got.ok, tc.wantOK)
 			}
 
 			if !tc.wantOK {
-				if !strings.Contains(std.out, tc.wantErrContains) {
-					t.Fatalf("standard path expected error %q, got: %q", tc.wantErrContains, std.out)
-				}
-				if !strings.Contains(fast.out, tc.wantErrContains) {
-					t.Fatalf("fast path expected error %q, got: %q", tc.wantErrContains, fast.out)
+				if !strings.Contains(got.out, tc.wantErrContains) {
+					t.Fatalf("expected error %q, got: %q", tc.wantErrContains, got.out)
 				}
 				return
 			}
 
-			if std.task.policyReject.reason != fast.task.policyReject.reason {
-				t.Fatalf("policy parity mismatch: standard=%v fast=%v", std.task.policyReject.reason, fast.task.policyReject.reason)
+			if got.task.policyReject.reason != tc.wantPolicyReason {
+				t.Fatalf("policy=%v want %v", got.task.policyReject.reason, tc.wantPolicyReason)
 			}
-			if std.task.policyReject.reason != tc.wantPolicyReason {
-				t.Fatalf("policy=%v want %v", std.task.policyReject.reason, tc.wantPolicyReason)
-			}
-			if std.task.job == nil || fast.task.job == nil {
-				t.Fatalf("expected both paths to return a populated task job")
+			if got.task.job == nil {
+				t.Fatalf("expected a populated task job")
 			}
 		})
 	}

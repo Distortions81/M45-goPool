@@ -35,7 +35,7 @@ goPool is a **from-scratch Golang solo Bitcoin mining pool**. It connects direct
 - **Operator controls**: optional admin panel for live settings updates, persist-to-disk controls, log tooling, and guarded reboot action.
 - **Storage and backups**: SQLite state store with atomic snapshots and optional Backblaze B2 upload workflow.
 - **Auth/integrations**: optional Clerk auth flows, saved-worker pages, Discord notification toggles, and one-time worker linking codes.
-- **Performance options**: fast-path Stratum decode/encode toggles, socket buffer tuning, optional SIMD JSON/hash paths, and built-in profiling hooks.
+- **Performance options**: Stratum socket buffer tuning, optional SIMD JSON/hash paths, and built-in profiling hooks.
 
 ## Direct Go libraries and licenses
 

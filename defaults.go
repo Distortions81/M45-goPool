@@ -20,8 +20,6 @@ func defaultConfig() Config {
 		StratumPasswordPublic:               false,
 		SafeMode:                            false,
 		CKPoolEmulate:                       true,
-		StratumFastDecodeEnabled:            false,
-		StratumFastEncodeEnabled:            false,
 		StratumTCPReadBufferBytes:           0,
 		StratumTCPWriteBufferBytes:          0,
 		ClerkIssuerURL:                      defaultClerkIssuerURL,

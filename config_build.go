@@ -166,8 +166,6 @@ func buildTuningFileConfig(cfg Config) tuningFileConfig {
 			SavedWorkerHistoryFlushIntervalSec: new(int(cfg.SavedWorkerHistoryFlushInterval / time.Second)),
 		},
 		Stratum: tuningStratumConfig{
-			FastDecodeEnabled:   new(cfg.StratumFastDecodeEnabled),
-			FastEncodeEnabled:   new(cfg.StratumFastEncodeEnabled),
 			TCPReadBufferBytes:  new(cfg.StratumTCPReadBufferBytes),
 			TCPWriteBufferBytes: new(cfg.StratumTCPWriteBufferBytes),
 		},
@@ -203,8 +201,6 @@ func (cfg Config) Effective() EffectiveConfig {
 		GitHubURL:                         cfg.GitHubURL,
 		ServerLocation:                    cfg.ServerLocation,
 		StratumTLSListen:                  cfg.StratumTLSListen,
-		StratumFastDecodeEnabled:          cfg.StratumFastDecodeEnabled,
-		StratumFastEncodeEnabled:          cfg.StratumFastEncodeEnabled,
 		SafeMode:                          cfg.SafeMode,
 		CKPoolEmulate:                     cfg.CKPoolEmulate,
 		StratumTCPReadBufferBytes:         cfg.StratumTCPReadBufferBytes,
