@@ -636,7 +636,7 @@ func (s *StatusServer) findAllWorkerViewsByHash(hash string, now time.Time) []Wo
 }
 
 func formatHashrateValue(h float64) string {
-	units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s"}
+	units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s", "EH/s"}
 	unit := units[0]
 	val := h
 	for i := 0; i < len(units)-1 && val >= 1000; i++ {
