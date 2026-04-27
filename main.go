@@ -463,7 +463,7 @@ func main() {
 		logger.Warn("discord notifier start failed", "error", err)
 	}
 
-	// Start SIGUSR1/SIGUSR2 handler for live template/config reloading
+	// Start SIGUSR1/SIGUSR2 handler for embedded UI refreshes and config reloading.
 	go func() {
 		for {
 			select {
@@ -472,7 +472,7 @@ func main() {
 			case sig := <-reloadChan:
 				switch sig {
 				case syscall.SIGUSR1:
-					logger.Info("SIGUSR1 received, reloading templates and static cache")
+					logger.Info("SIGUSR1 received, refreshing embedded templates and static cache")
 					if err := statusServer.ReloadTemplates(); err != nil {
 						logger.Error("template reload failed", "error", err)
 					}
@@ -511,12 +511,6 @@ func main() {
 			}
 		}
 	}()
-
-	// Prepare www directory for static files (certbot .well-known, logo.png, style.css, etc.)
-	wwwDir := filepath.Join(cfg.DataDir, "www")
-	if err := os.MkdirAll(wwwDir, 0o755); err != nil {
-		logger.Warn("create www directory", "error", err)
-	}
 
 	disableJSONEndpoints := *disableJSONFlag
 	if disableJSONEndpoints {
@@ -593,24 +587,16 @@ func main() {
 	mux.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookupByWallet(w, r, "/stats")
 	})
-	// Catch-all: try static files first, fall back to status server
-	// Use os.OpenRoot for secure, chroot-like file serving that prevents path traversal.
-	wwwRoot, err := os.OpenRoot(wwwDir)
+	// Catch-all: try embedded static files first, fall back to status server.
+	staticFiles, err := newEmbeddedStaticFileServer(statusServer)
 	if err != nil {
-		logger.Warn("open www root", "error", err, "path", wwwDir)
-		// Fall back to status server only if we can't open the www directory
+		logger.Warn("open embedded static assets", "error", err)
 		mux.Handle("/", statusServer)
 	} else {
-		staticFiles := &fileServerWithFallback{
-			fileServer: http.FileServer(http.Dir(wwwDir)),
-			fallback:   statusServer,
-			wwwRoot:    wwwRoot,
-			wwwDir:     wwwDir,
-		}
 		if err := staticFiles.PreloadCache(); err != nil {
 			logger.Warn("preload static cache failed", "error", err)
 		} else {
-			logger.Info("static cache preloaded", "path", wwwDir)
+			logger.Info("embedded static cache preloaded")
 		}
 		statusServer.SetStaticFileServer(staticFiles)
 		mux.Handle("/", staticFiles)

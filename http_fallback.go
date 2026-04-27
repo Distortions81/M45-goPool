@@ -3,12 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/fs"
 	"mime"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -19,18 +17,15 @@ const (
 	staticCacheMaxFileBytes = 2 << 20  // 2MB per file
 )
 
-// fileServerWithFallback tries to serve static files from www directory first,
+// fileServerWithFallback tries to serve embedded static files first,
 // and falls back to the status server if the file doesn't exist.
 type fileServerWithFallback struct {
-	fileServer http.Handler
-	fallback   http.Handler
-	wwwRoot    *os.Root
-	wwwDir     string
+	staticFS fs.FS
+	fallback http.Handler
 
-	cacheMu     sync.RWMutex
-	cache       map[string]cachedStaticFile
-	cacheBytes  int64
-	cacheFrozen bool
+	cacheMu    sync.RWMutex
+	cache      map[string]cachedStaticFile
+	cacheBytes int64
 }
 
 type cachedStaticFile struct {
@@ -38,6 +33,25 @@ type cachedStaticFile struct {
 	size        int64
 	modTime     time.Time
 	contentType string
+}
+
+func newEmbeddedStaticFileServer(fallback http.Handler) (*fileServerWithFallback, error) {
+	assets, err := newUIAssetLoader()
+	if err != nil {
+		return nil, err
+	}
+	staticFS, err := assets.staticFiles()
+	if err != nil {
+		return nil, err
+	}
+	return newStaticFileServer(staticFS, fallback), nil
+}
+
+func newStaticFileServer(staticFS fs.FS, fallback http.Handler) *fileServerWithFallback {
+	return &fileServerWithFallback{
+		staticFS: staticFS,
+		fallback: fallback,
+	}
 }
 
 func (h *fileServerWithFallback) ServeCached(w http.ResponseWriter, r *http.Request, cleanPath string) bool {
@@ -53,82 +67,67 @@ func (h *fileServerWithFallback) ServeCached(w http.ResponseWriter, r *http.Requ
 	if entry.contentType != "" {
 		w.Header().Set("Content-Type", entry.contentType)
 	}
-	http.ServeContent(w, r, filepath.Base(cleanPath), entry.modTime, bytes.NewReader(entry.payload))
+	http.ServeContent(w, r, path.Base(cleanPath), entry.modTime, bytes.NewReader(entry.payload))
 	return true
 }
 
 func (h *fileServerWithFallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Check if file exists in www directory using os.Root for secure path resolution.
-	// os.Root provides OS-level guarantees against path traversal by ensuring all
-	// file operations stay within the root directory, similar to chroot.
-	urlPath := strings.TrimPrefix(r.URL.Path, "/")
-	cleanPath := filepath.Clean(urlPath)
-
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		h.fileServer.ServeHTTP(w, r)
+		h.serveFallback(w, r)
 		return
 	}
 
-	if h.ServeCached(w, r, cleanPath) {
+	if h.ServePath(w, r, r.URL.Path) {
 		return
 	}
-
-	// Use os.Root to safely check if file exists within wwwDir.
-	// This automatically prevents any path traversal attempts.
-	info, err := h.wwwRoot.Stat(cleanPath)
-	if err == nil && !info.IsDir() {
-		if h.cacheFrozen {
-			h.fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		if info.Size() <= 0 || info.Size() > staticCacheMaxFileBytes || info.Size() > staticCacheMaxBytes {
-			h.fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		h.cacheMu.Lock()
-		if h.cacheBytes+info.Size() > staticCacheMaxBytes {
-			h.cache = make(map[string]cachedStaticFile)
-			h.cacheBytes = 0
-		}
-		h.cacheMu.Unlock()
-
-		file, err := h.wwwRoot.Open(cleanPath)
-		if err != nil {
-			h.fileServer.ServeHTTP(w, r)
-			return
-		}
-		defer file.Close()
-
-		payload, err := io.ReadAll(file)
-		if err != nil {
-			h.fileServer.ServeHTTP(w, r)
-			return
-		}
-		if int64(len(payload)) != info.Size() {
-			h.fileServer.ServeHTTP(w, r)
-			return
-		}
-
-		contentType := detectContentType(cleanPath, payload)
-		h.storeCached(cleanPath, info, payload, contentType)
-		w.Header().Set("Content-Type", contentType)
-		http.ServeContent(w, r, filepath.Base(cleanPath), info.ModTime(), bytes.NewReader(payload))
-		return
-	}
-	h.fallback.ServeHTTP(w, r)
+	h.serveFallback(w, r)
 }
 
-func (h *fileServerWithFallback) storeCached(cleanPath string, info os.FileInfo, payload []byte, contentType string) {
+func (h *fileServerWithFallback) ServePath(w http.ResponseWriter, r *http.Request, requestPath string) bool {
+	if h == nil || h.staticFS == nil {
+		return false
+	}
+	cleanPath, ok := cleanStaticAssetPath(requestPath)
+	if !ok {
+		return false
+	}
+	if h.ServeCached(w, r, cleanPath) {
+		return true
+	}
+
+	info, err := fs.Stat(h.staticFS, cleanPath)
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	payload, err := fs.ReadFile(h.staticFS, cleanPath)
+	if err != nil {
+		return false
+	}
+	if int64(len(payload)) != info.Size() {
+		return false
+	}
+
+	contentType := detectContentType(cleanPath, payload)
+	if canCacheStaticFile(info) {
+		h.reserveStaticCacheSpace(info.Size())
+		h.storeCached(cleanPath, info, payload, contentType)
+	}
+	w.Header().Set("Content-Type", contentType)
+	http.ServeContent(w, r, path.Base(cleanPath), info.ModTime(), bytes.NewReader(payload))
+	return true
+}
+
+func (h *fileServerWithFallback) storeCached(cleanPath string, info fs.FileInfo, payload []byte, contentType string) {
 	h.cacheMu.Lock()
 	defer h.cacheMu.Unlock()
 	if h.cache == nil {
 		h.cache = make(map[string]cachedStaticFile)
 	}
-	if _, ok := h.cache[cleanPath]; !ok {
-		h.cacheBytes += info.Size()
+	if prev, ok := h.cache[cleanPath]; ok {
+		h.cacheBytes -= prev.size
 	}
+	h.cacheBytes += info.Size()
 	h.cache[cleanPath] = cachedStaticFile{
 		payload:     payload,
 		size:        info.Size(),
@@ -137,27 +136,38 @@ func (h *fileServerWithFallback) storeCached(cleanPath string, info os.FileInfo,
 	}
 }
 
+func (h *fileServerWithFallback) reserveStaticCacheSpace(size int64) {
+	h.cacheMu.Lock()
+	defer h.cacheMu.Unlock()
+	if h.cache == nil {
+		h.cache = make(map[string]cachedStaticFile)
+	}
+	if h.cacheBytes+size > staticCacheMaxBytes {
+		h.cache = make(map[string]cachedStaticFile)
+		h.cacheBytes = 0
+	}
+}
+
 func (h *fileServerWithFallback) PreloadCache() error {
 	if h == nil {
 		return nil
 	}
-	if h.wwwDir == "" {
-		return fmt.Errorf("www directory not configured")
+	if h.staticFS == nil {
+		return fmt.Errorf("static asset filesystem not configured")
 	}
 	h.cacheMu.Lock()
 	if h.cache == nil {
 		h.cache = make(map[string]cachedStaticFile)
 	}
-	h.cacheFrozen = false
 	h.cacheMu.Unlock()
 
-	err := filepath.WalkDir(h.wwwDir, func(path string, d fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(h.staticFS, ".", func(assetPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
 			if d.Name() == ".well-known" {
-				return filepath.SkipDir
+				return fs.SkipDir
 			}
 			return nil
 		}
@@ -165,15 +175,14 @@ func (h *fileServerWithFallback) PreloadCache() error {
 		if err != nil {
 			return nil
 		}
-		if info.Size() <= 0 || info.Size() > staticCacheMaxFileBytes || info.Size() > staticCacheMaxBytes {
+		if !canCacheStaticFile(info) {
 			return nil
 		}
-		rel, err := filepath.Rel(h.wwwDir, path)
-		if err != nil {
+		cleanPath, ok := cleanStaticAssetPath(assetPath)
+		if !ok {
 			return nil
 		}
-		cleanPath := filepath.Clean(rel)
-		payload, err := os.ReadFile(path)
+		payload, err := fs.ReadFile(h.staticFS, cleanPath)
 		if err != nil {
 			return nil
 		}
@@ -181,12 +190,7 @@ func (h *fileServerWithFallback) PreloadCache() error {
 			return nil
 		}
 
-		h.cacheMu.Lock()
-		if h.cacheBytes+info.Size() > staticCacheMaxBytes {
-			h.cache = make(map[string]cachedStaticFile)
-			h.cacheBytes = 0
-		}
-		h.cacheMu.Unlock()
+		h.reserveStaticCacheSpace(info.Size())
 
 		contentType := detectContentType(cleanPath, payload)
 		h.storeCached(cleanPath, info, payload, contentType)
@@ -195,9 +199,6 @@ func (h *fileServerWithFallback) PreloadCache() error {
 	if err != nil {
 		return err
 	}
-	h.cacheMu.Lock()
-	h.cacheFrozen = true
-	h.cacheMu.Unlock()
 	return nil
 }
 
@@ -208,13 +209,24 @@ func (h *fileServerWithFallback) ReloadCache() error {
 	h.cacheMu.Lock()
 	h.cache = make(map[string]cachedStaticFile)
 	h.cacheBytes = 0
-	h.cacheFrozen = false
 	h.cacheMu.Unlock()
 	return h.PreloadCache()
 }
 
+func (h *fileServerWithFallback) serveFallback(w http.ResponseWriter, r *http.Request) {
+	if h != nil && h.fallback != nil {
+		h.fallback.ServeHTTP(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func canCacheStaticFile(info fs.FileInfo) bool {
+	return info != nil && info.Size() > 0 && info.Size() <= staticCacheMaxFileBytes && info.Size() <= staticCacheMaxBytes
+}
+
 func detectContentType(cleanPath string, payload []byte) string {
-	ext := strings.ToLower(filepath.Ext(cleanPath))
+	ext := strings.ToLower(path.Ext(cleanPath))
 	contentType := mime.TypeByExtension(ext)
 	if contentType == "" {
 		contentType = http.DetectContentType(payload)
@@ -223,4 +235,18 @@ func detectContentType(cleanPath string, payload []byte) string {
 		contentType = "application/octet-stream"
 	}
 	return contentType
+}
+
+func cleanStaticAssetPath(requestPath string) (string, bool) {
+	requestPath = strings.TrimPrefix(requestPath, "/")
+	for _, part := range strings.Split(requestPath, "/") {
+		if part == ".." {
+			return "", false
+		}
+	}
+	cleanPath := strings.TrimPrefix(path.Clean("/"+requestPath), "/")
+	if cleanPath == "" || cleanPath == "." || !fs.ValidPath(cleanPath) {
+		return "", false
+	}
+	return cleanPath, true
 }

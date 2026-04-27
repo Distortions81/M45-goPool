@@ -10,7 +10,7 @@ import (
 )
 
 func TestStatusServerOverview_RendersNodeDownWhenStale(t *testing.T) {
-	tmpl, err := loadTemplates("data")
+	tmpl, err := loadTemplates()
 	if err != nil {
 		t.Fatalf("loadTemplates: %v", err)
 	}

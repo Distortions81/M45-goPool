@@ -1,33 +1,22 @@
 package main
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // TestFileServerPathTraversal verifies that the fileServerWithFallback
 // correctly prevents path traversal attacks.
 func TestFileServerPathTraversal(t *testing.T) {
-	// Create a temporary www directory with a test file
-	tmpDir := t.TempDir()
-	wwwDir := filepath.Join(tmpDir, "www")
-	if err := os.MkdirAll(wwwDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a test file inside www directory
-	testFile := filepath.Join(wwwDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("safe content"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a sensitive file outside www directory
-	sensitiveFile := filepath.Join(tmpDir, "secrets.txt")
-	if err := os.WriteFile(sensitiveFile, []byte("sensitive data"), 0644); err != nil {
-		t.Fatal(err)
+	staticFS := fstest.MapFS{
+		"test.txt": &fstest.MapFile{
+			Data: []byte("safe content"),
+			Mode: fs.FileMode(0o644),
+		},
 	}
 
 	// Create a fallback handler that returns 404
@@ -36,24 +25,12 @@ func TestFileServerPathTraversal(t *testing.T) {
 		w.Write([]byte("Not found"))
 	})
 
-	// Create the file server with fallback using os.Root for security
-	wwwRoot, err := os.OpenRoot(wwwDir)
-	if err != nil {
-		t.Fatalf("Failed to open www root: %v", err)
-	}
-	defer wwwRoot.Close()
-
-	handler := &fileServerWithFallback{
-		fileServer: http.FileServer(http.Dir(wwwDir)),
-		fallback:   fallback,
-		wwwRoot:    wwwRoot,
-	}
+	handler := newStaticFileServer(staticFS, fallback)
 
 	tests := []struct {
 		name          string
 		path          string
 		expectStatus  int
-		expectContent string
 		shouldContain string
 	}{
 		{
@@ -100,7 +77,7 @@ func TestFileServerPathTraversal(t *testing.T) {
 			}
 
 			body := rec.Body.String()
-			if tt.shouldContain != "" && body != tt.shouldContain {
+			if tt.shouldContain != "" && !strings.Contains(body, tt.shouldContain) {
 				t.Errorf("Expected body to contain %q, got %q", tt.shouldContain, body)
 			}
 
@@ -109,5 +86,26 @@ func TestFileServerPathTraversal(t *testing.T) {
 				t.Fatal("SECURITY ISSUE: Sensitive file was served via path traversal!")
 			}
 		})
+	}
+}
+
+func TestEmbeddedStaticFileServerServesAssets(t *testing.T) {
+	handler, err := newEmbeddedStaticFileServer(http.NotFoundHandler())
+	if err != nil {
+		t.Fatalf("newEmbeddedStaticFileServer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/style.css", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/css") {
+		t.Fatalf("Content-Type=%q, want text/css", got)
+	}
+	if !strings.Contains(rec.Body.String(), "--bg-gradient-start") {
+		t.Fatalf("expected embedded stylesheet body, got %q", rec.Body.String()[:min(len(rec.Body.String()), 120)])
 	}
 }

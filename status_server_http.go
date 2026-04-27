@@ -17,7 +17,10 @@ func (s *StatusServer) SetJobManager(jm *JobManager) {
 func (s *StatusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/favicon.png":
-		http.ServeFile(w, r, "logo.png")
+		if s != nil && s.staticFiles != nil && s.staticFiles.ServePath(w, r, "favicon.png") {
+			return
+		}
+		http.NotFound(w, r)
 
 	case r.URL.Path == "/" || r.URL.Path == "":
 		if err := s.serveOverviewOrNodeDown(w); err != nil {

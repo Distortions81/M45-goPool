@@ -9,8 +9,6 @@ import (
 	"io"
 	"math"
 	"net"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -804,217 +802,72 @@ func buildTemplateFuncs() template.FuncMap {
 	}
 }
 
-// loadTemplates loads and parses all HTML templates from the specified data directory.
+// loadTemplates loads and parses all embedded HTML templates.
 // It returns a fully configured template or an error if any template fails to load or parse.
-func loadTemplates(dataDir string) (*template.Template, error) {
+func loadTemplates() (*template.Template, error) {
+	assets, err := newUIAssetLoader()
+	if err != nil {
+		return nil, err
+	}
+	return loadTemplatesFromAssets(assets)
+}
+
+func loadTemplatesFromAssets(assets *uiAssetLoader) (*template.Template, error) {
 	funcs := buildTemplateFuncs()
 
-	// Build template paths
-	layoutPath := filepath.Join(dataDir, "templates", "layout.tmpl")
-	statusPath := filepath.Join(dataDir, "templates", "overview.tmpl")
-	statusBoxesPath := filepath.Join(dataDir, "templates", "status_boxes.tmpl")
-	hashrateGraphPath := filepath.Join(dataDir, "templates", "hashrate_graph.tmpl")
-	hashrateGraphScriptPath := filepath.Join(dataDir, "templates", "hashrate_graph_script.tmpl")
-	serverInfoPath := filepath.Join(dataDir, "templates", "server.tmpl")
-	workerLoginPath := filepath.Join(dataDir, "templates", "worker_login.tmpl")
-	signInPath := filepath.Join(dataDir, "templates", "sign_in.tmpl")
-	savedWorkersPath := filepath.Join(dataDir, "templates", "saved_workers.tmpl")
-	workerStatusPath := filepath.Join(dataDir, "templates", "worker_status.tmpl")
-	workerWalletSearchPath := filepath.Join(dataDir, "templates", "worker_wallet_search.tmpl")
-	nodeInfoPath := filepath.Join(dataDir, "templates", "node.tmpl")
-	poolInfoPath := filepath.Join(dataDir, "templates", "pool.tmpl")
-	aboutPath := filepath.Join(dataDir, "templates", "about.tmpl")
-	helpPath := filepath.Join(dataDir, "templates", "help.tmpl")
-	nodeDownPath := filepath.Join(dataDir, "templates", "node_down.tmpl")
-	adminPath := filepath.Join(dataDir, "templates", "admin.tmpl")
-	adminMinersPath := filepath.Join(dataDir, "templates", "admin_miners.tmpl")
-	adminLoginsPath := filepath.Join(dataDir, "templates", "admin_logins.tmpl")
-	adminBansPath := filepath.Join(dataDir, "templates", "admin_bans.tmpl")
-	adminOperatorPath := filepath.Join(dataDir, "templates", "admin_operator.tmpl")
-	adminConfigPath := filepath.Join(dataDir, "templates", "admin_config.tmpl")
-	adminLogsPath := filepath.Join(dataDir, "templates", "admin_logs.tmpl")
-	errorPath := filepath.Join(dataDir, "templates", "error.tmpl")
-
-	// Load template files
-	layoutHTML, err := os.ReadFile(layoutPath)
-	if err != nil {
-		return nil, fmt.Errorf("load layout template: %w", err)
-	}
-	statusHTML, err := os.ReadFile(statusPath)
-	if err != nil {
-		return nil, fmt.Errorf("load status template: %w", err)
-	}
-	statusBoxesHTML, err := os.ReadFile(statusBoxesPath)
-	if err != nil {
-		return nil, fmt.Errorf("load status boxes template: %w", err)
-	}
-	hashrateGraphHTML, err := os.ReadFile(hashrateGraphPath)
-	if err != nil {
-		return nil, fmt.Errorf("load hashrate graph template: %w", err)
-	}
-	hashrateGraphScriptHTML, err := os.ReadFile(hashrateGraphScriptPath)
-	if err != nil {
-		return nil, fmt.Errorf("load hashrate graph script template: %w", err)
-	}
-	serverInfoHTML, err := os.ReadFile(serverInfoPath)
-	if err != nil {
-		return nil, fmt.Errorf("load server info template: %w", err)
-	}
-	workerLoginHTML, err := os.ReadFile(workerLoginPath)
-	if err != nil {
-		return nil, fmt.Errorf("load worker login template: %w", err)
-	}
-	signInHTML, err := os.ReadFile(signInPath)
-	if err != nil {
-		return nil, fmt.Errorf("load sign in template: %w", err)
-	}
-	savedWorkersHTML, err := os.ReadFile(savedWorkersPath)
-	if err != nil {
-		return nil, fmt.Errorf("load saved workers template: %w", err)
-	}
-	workerStatusHTML, err := os.ReadFile(workerStatusPath)
-	if err != nil {
-		return nil, fmt.Errorf("load worker status template: %w", err)
-	}
-	workerWalletSearchHTML, err := os.ReadFile(workerWalletSearchPath)
-	if err != nil {
-		return nil, fmt.Errorf("load worker wallet search template: %w", err)
-	}
-	nodeInfoHTML, err := os.ReadFile(nodeInfoPath)
-	if err != nil {
-		return nil, fmt.Errorf("load node info template: %w", err)
-	}
-	poolInfoHTML, err := os.ReadFile(poolInfoPath)
-	if err != nil {
-		return nil, fmt.Errorf("load pool info template: %w", err)
-	}
-	aboutHTML, err := os.ReadFile(aboutPath)
-	if err != nil {
-		return nil, fmt.Errorf("load about template: %w", err)
-	}
-	helpHTML, err := os.ReadFile(helpPath)
-	if err != nil {
-		return nil, fmt.Errorf("load help template: %w", err)
-	}
-	nodeDownHTML, err := os.ReadFile(nodeDownPath)
-	if err != nil {
-		return nil, fmt.Errorf("load node down template: %w", err)
-	}
-	adminHTML, err := os.ReadFile(adminPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin template: %w", err)
-	}
-	adminMinersHTML, err := os.ReadFile(adminMinersPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin miners template: %w", err)
-	}
-	adminLoginsHTML, err := os.ReadFile(adminLoginsPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin logins template: %w", err)
-	}
-	adminBansHTML, err := os.ReadFile(adminBansPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin bans template: %w", err)
-	}
-	adminOperatorHTML, err := os.ReadFile(adminOperatorPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin operator template: %w", err)
-	}
-	adminConfigHTML, err := os.ReadFile(adminConfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin config template: %w", err)
-	}
-	adminLogsHTML, err := os.ReadFile(adminLogsPath)
-	if err != nil {
-		return nil, fmt.Errorf("load admin logs template: %w", err)
-	}
-	errorHTML, err := os.ReadFile(errorPath)
-	if err != nil {
-		return nil, fmt.Errorf("load error template: %w", err)
+	templateFiles := []struct {
+		name  string
+		path  string
+		label string
+	}{
+		{"layout", "layout.tmpl", "layout template"},
+		{"overview", "overview.tmpl", "status template"},
+		{"status_boxes", "status_boxes.tmpl", "status boxes template"},
+		{"hashrate_graph", "hashrate_graph.tmpl", "hashrate graph template"},
+		{"hashrate_graph_script", "hashrate_graph_script.tmpl", "hashrate graph script template"},
+		{"server", "server.tmpl", "server info template"},
+		{"worker_login", "worker_login.tmpl", "worker login template"},
+		{"sign_in", "sign_in.tmpl", "sign in template"},
+		{"saved_workers", "saved_workers.tmpl", "saved workers template"},
+		{"worker_status", "worker_status.tmpl", "worker status template"},
+		{"worker_wallet_search", "worker_wallet_search.tmpl", "worker wallet search template"},
+		{"node", "node.tmpl", "node info template"},
+		{"pool", "pool.tmpl", "pool template"},
+		{"about", "about.tmpl", "about template"},
+		{"help", "help.tmpl", "help template"},
+		{"node_down", "node_down.tmpl", "node down template"},
+		{"admin", "admin.tmpl", "admin template"},
+		{"admin_miners", "admin_miners.tmpl", "admin miners template"},
+		{"admin_logins", "admin_logins.tmpl", "admin logins template"},
+		{"admin_bans", "admin_bans.tmpl", "admin bans template"},
+		{"admin_operator", "admin_operator.tmpl", "admin operator template"},
+		{"admin_config", "admin_config.tmpl", "admin config template"},
+		{"admin_logs", "admin_logs.tmpl", "admin logs template"},
+		{"error", "error.tmpl", "error template"},
 	}
 
-	// Parse templates
 	tmpl := template.New("layout").Funcs(funcs)
-	if _, err := tmpl.Parse(string(layoutHTML)); err != nil {
-		return nil, fmt.Errorf("parse layout template: %w", err)
-	}
-	if _, err := tmpl.New("overview").Parse(string(statusHTML)); err != nil {
-		return nil, fmt.Errorf("parse status template: %w", err)
-	}
-	if _, err := tmpl.New("status_boxes").Parse(string(statusBoxesHTML)); err != nil {
-		return nil, fmt.Errorf("parse status boxes template: %w", err)
-	}
-	if _, err := tmpl.New("hashrate_graph").Parse(string(hashrateGraphHTML)); err != nil {
-		return nil, fmt.Errorf("parse hashrate graph template: %w", err)
-	}
-	if _, err := tmpl.New("hashrate_graph_script").Parse(string(hashrateGraphScriptHTML)); err != nil {
-		return nil, fmt.Errorf("parse hashrate graph script template: %w", err)
-	}
-	if _, err := tmpl.New("server").Parse(string(serverInfoHTML)); err != nil {
-		return nil, fmt.Errorf("parse server info template: %w", err)
-	}
-	if _, err := tmpl.New("worker_login").Parse(string(workerLoginHTML)); err != nil {
-		return nil, fmt.Errorf("parse worker login template: %w", err)
-	}
-	if _, err := tmpl.New("sign_in").Parse(string(signInHTML)); err != nil {
-		return nil, fmt.Errorf("parse sign in template: %w", err)
-	}
-	if _, err := tmpl.New("saved_workers").Parse(string(savedWorkersHTML)); err != nil {
-		return nil, fmt.Errorf("parse saved workers template: %w", err)
-	}
-	if _, err := tmpl.New("worker_status").Parse(string(workerStatusHTML)); err != nil {
-		return nil, fmt.Errorf("parse worker status template: %w", err)
-	}
-	if _, err := tmpl.New("worker_wallet_search").Parse(string(workerWalletSearchHTML)); err != nil {
-		return nil, fmt.Errorf("parse worker wallet search template: %w", err)
-	}
-	if _, err := tmpl.New("node").Parse(string(nodeInfoHTML)); err != nil {
-		return nil, fmt.Errorf("parse node info template: %w", err)
-	}
-	if _, err := tmpl.New("pool").Parse(string(poolInfoHTML)); err != nil {
-		return nil, fmt.Errorf("parse pool template: %w", err)
-	}
-	if _, err := tmpl.New("about").Parse(string(aboutHTML)); err != nil {
-		return nil, fmt.Errorf("parse about template: %w", err)
-	}
-	if _, err := tmpl.New("help").Parse(string(helpHTML)); err != nil {
-		return nil, fmt.Errorf("parse help template: %w", err)
-	}
-	if _, err := tmpl.New("node_down").Parse(string(nodeDownHTML)); err != nil {
-		return nil, fmt.Errorf("parse node down template: %w", err)
-	}
-	if _, err := tmpl.New("admin").Parse(string(adminHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin template: %w", err)
-	}
-	if _, err := tmpl.New("admin_miners").Parse(string(adminMinersHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin miners template: %w", err)
-	}
-	if _, err := tmpl.New("admin_logins").Parse(string(adminLoginsHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin logins template: %w", err)
-	}
-	if _, err := tmpl.New("admin_bans").Parse(string(adminBansHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin bans template: %w", err)
-	}
-	if _, err := tmpl.New("admin_operator").Parse(string(adminOperatorHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin operator template: %w", err)
-	}
-	if _, err := tmpl.New("admin_config").Parse(string(adminConfigHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin config template: %w", err)
-	}
-	if _, err := tmpl.New("admin_logs").Parse(string(adminLogsHTML)); err != nil {
-		return nil, fmt.Errorf("parse admin logs template: %w", err)
-	}
-	if _, err := tmpl.New("error").Parse(string(errorHTML)); err != nil {
-		return nil, fmt.Errorf("parse error template: %w", err)
+	for _, item := range templateFiles {
+		payload, err := assets.readTemplate(item.path)
+		if err != nil {
+			return nil, fmt.Errorf("load %s: %w", item.label, err)
+		}
+		if item.name == "layout" {
+			if _, err := tmpl.Parse(string(payload)); err != nil {
+				return nil, fmt.Errorf("parse %s: %w", item.label, err)
+			}
+			continue
+		}
+		if _, err := tmpl.New(item.name).Parse(string(payload)); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", item.label, err)
+		}
 	}
 
 	return tmpl, nil
 }
 
 func NewStatusServer(ctx context.Context, jobMgr *JobManager, metrics *PoolMetrics, registry *MinerRegistry, workerRegistry *workerConnectionRegistry, accounting *AccountStore, rpc *RPCClient, cfg Config, start time.Time, clerk *ClerkVerifier, workerLists *workerListStore, configPath, adminConfigPath string, shutdown func()) *StatusServer {
-	// Load HTML templates from data_dir/templates so operators can customize the
-	// UI without recompiling. These are treated as required assets.
-	tmpl, err := loadTemplates(cfg.DataDir)
+	tmpl, err := loadTemplates()
 	if err != nil {
 		fatal("load templates", err)
 	}
@@ -1070,15 +923,13 @@ func (s *StatusServer) executeTemplate(w io.Writer, name string, data any) error
 	return tmpl.ExecuteTemplate(w, name, data)
 }
 
-// ReloadTemplates reloads all HTML templates from disk. This allows operators
-// to update templates without restarting the pool server. It's designed to be
-// called in response to SIGUSR1 or other reload triggers.
+// ReloadTemplates reloads the embedded HTML templates and clears cached pages.
 func (s *StatusServer) ReloadTemplates() error {
 	if s == nil {
 		return fmt.Errorf("status server is nil")
 	}
 
-	tmpl, err := loadTemplates(s.Config().DataDir)
+	tmpl, err := loadTemplates()
 	if err != nil {
 		return err
 	}
@@ -1088,7 +939,7 @@ func (s *StatusServer) ReloadTemplates() error {
 	s.tmpl = tmpl
 	s.tmplMu.Unlock()
 	s.clearPageCache()
-	logger.Info("templates reloaded successfully")
+	logger.Info("embedded templates reloaded successfully")
 	return nil
 }
 
