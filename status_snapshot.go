@@ -733,8 +733,10 @@ func buildTemplateFuncs() template.FuncMap {
 				return fmt.Sprintf("%.0f", math.Round(d))
 			}
 			switch {
+			case d >= 1_000_000_000_000_000:
+				return fmt.Sprintf("%.1fP", d/1_000_000_000_000_000.0)
 			case d >= 1_000_000_000_000:
-				return fmt.Sprintf("%.1fP", d/1_000_000_000_000.0)
+				return fmt.Sprintf("%.1fT", d/1_000_000_000_000.0)
 			case d >= 1_000_000_000:
 				return fmt.Sprintf("%.1fG", d/1_000_000_000.0)
 			default:

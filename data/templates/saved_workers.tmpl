@@ -4134,7 +4134,8 @@
 					let diffLabel = '—';
 					if (diff && diff > 0) {
 						if (diff < 1000000) diffLabel = diff.toFixed(0);
-						else if (diff >= 1e12) diffLabel = (diff / 1e12).toFixed(1) + 'P';
+						else if (diff >= 1e15) diffLabel = (diff / 1e15).toFixed(1) + 'P';
+						else if (diff >= 1e12) diffLabel = (diff / 1e12).toFixed(1) + 'T';
 						else if (diff >= 1e9) diffLabel = (diff / 1e9).toFixed(1) + 'G';
 						else diffLabel = (diff / 1e6).toFixed(1) + 'M';
 					}
