@@ -972,7 +972,7 @@ header {
 	padding: 8px;
 	min-width: 190px;
 	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-	z-index: 12;
+	z-index: 999999;
 }
 
 .header-dropdown-divider {
