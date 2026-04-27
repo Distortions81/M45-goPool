@@ -357,6 +357,15 @@
 			}
 		}
 
+		function escapeHTML(value) {
+			return String(value ?? '')
+				.replaceAll('&', '&amp;')
+				.replaceAll('<', '&lt;')
+				.replaceAll('>', '&gt;')
+				.replaceAll('"', '&quot;')
+				.replaceAll("'", '&#39;');
+		}
+
 		function formatHashrate(h) {
 			if (!h) return '---';
 			const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s'];
@@ -511,12 +520,13 @@
 				pruneWorkerHashrateFallback(nowMillis);
 				pruneWorkerShareRateFallback(nowMillis);
 				const rows = workers.map(worker => {
-					const name = worker.display_name || worker.name || '—';
-					const suffix = workerSuffix(name);
+					const rawName = worker.display_name || worker.name || '—';
+					const name = escapeHTML(rawName);
+					const suffix = escapeHTML(workerSuffix(rawName));
 					const shareRate = effectiveWorkerShareRate(worker, nowMillis).toFixed(1);
 					const hashrate = effectiveWorkerHashrate(worker, nowMillis);
 					const hashrateClass = hashrate > 0 ? hashrateClassForAccuracy(worker.hashrate_accuracy) : '';
-					const hashrateText = hashrate > 0 ? formatWorkerHashrate(hashrate, worker.hashrate_accuracy) : '—';
+					const hashrateText = escapeHTML(hashrate > 0 ? formatWorkerHashrate(hashrate, worker.hashrate_accuracy) : '—');
 					return `
 						<tr>
 							<td class="mono"><span class="worker-full">${name}</span><span class="worker-suffix">${suffix}</span></td>
@@ -537,14 +547,16 @@
 				return;
 			}
 			const rows = bestShares.map(share => {
-				const worker = share.display_worker || share.worker || '—';
-				const suffix = workerSuffix(worker);
+				const rawWorker = share.display_worker || share.worker || '—';
+				const worker = escapeHTML(rawWorker);
+				const suffix = escapeHTML(workerSuffix(rawWorker));
+				const hash = escapeHTML(share.display_hash || share.hash || '—');
 				return `
 					<tr>
 						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
 						<td><span class="recent-work-pill">${formatBestShareDiff(share.difficulty)}</span></td>
 						<td><span class="recent-work-pill"><span class="time-full">${formatTimeAgo(share.timestamp)}</span><span class="time-short">${formatTimeAgoShort(share.timestamp)}</span></span></td>
-						<td class="mono"><span class="recent-work-pill">${share.display_hash || share.hash || '—'}</span></td>
+						<td class="mono"><span class="recent-work-pill">${hash}</span></td>
 					</tr>
 				`;
 			});
@@ -572,12 +584,14 @@
 						resultLabel = 'Stale';
 						resultStyle = 'color:#fca5a5;';
 					}
-					const worker = block.display_worker || block.worker || '—';
-					const suffix = workerSuffix(worker);
+					const rawWorker = block.display_worker || block.worker || '—';
+					const worker = escapeHTML(rawWorker);
+					const suffix = escapeHTML(workerSuffix(rawWorker));
+					const hash = escapeHTML(block.display_hash || block.hash || '—');
 					return `
 					<tr>
 						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
-						<td class="mono">${block.display_hash || block.hash || '—'}</td>
+						<td class="mono">${hash}</td>
 						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
 						<td style="${resultStyle}">${resultLabel}</td>
 						<td class="mono">${confirmations}</td>
@@ -605,14 +619,14 @@
 			list.style.display = '';
 			const entries = minerTypes.map(mt => {
 				const versionText = mt.versions && mt.versions.length ?
-					mt.versions.map((v, idx) => `${idx ? ', ' : ''}${v.version || '(unknown)'} (${v.workers})`).join('') :
+					mt.versions.map((v, idx) => `${idx ? ', ' : ''}${escapeHTML(v.version || '(unknown)')} (${Number(v.workers || 0)})`).join('') :
 					'(no version info)';
-				const total = mt.total_workers || 0;
+				const total = Number(mt.total_workers || 0);
 				return `
 					<li>
 						<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
 							<div>
-								<span class="mono">${mt.name}</span><br>
+								<span class="mono">${escapeHTML(mt.name || '(unknown)')}</span><br>
 								<span class="text-sm">${total} worker${total === 1 ? '' : 's'}</span>
 							</div>
 							<div class="text-sm mono" style="text-align:right;">
@@ -639,8 +653,9 @@
 				warning.style.display = 'none';
 			}
 			const rows = bannedWorkers.map(worker => {
-				const name = worker.display_name || worker.name || '—';
-				const banStatus = `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeUntil(worker.banned_until)}${worker.ban_reason ? `<br><span class="label">Reason</span> ${worker.ban_reason}` : ''}`;
+				const name = escapeHTML(worker.display_name || worker.name || '—');
+				const reason = worker.ban_reason ? `<br><span class="label">Reason</span> ${escapeHTML(worker.ban_reason)}` : '';
+				const banStatus = `<span class="badge">Banned</span><br><span class="label">Until</span> ${formatTimeUntil(worker.banned_until)}${reason}`;
 				return `
 					<tr>
 						<td class="mono">${name}</td>
@@ -712,7 +727,7 @@
 			return '/' + tag;
 		}
 
-		function updateBTCPrice(newData) {
+		function updateBTCPrice(newData, fallbackUpdatedAt) {
 			if (!newData) return;
 			const priceEl = document.getElementById('status-btc-price');
 			const updatedEl = document.getElementById('status-btc-price-updated');
@@ -723,35 +738,33 @@
 			if (priceEl) {
 				const formatted = price > 0 ? formatFiatNoDecimals(Math.round(price), currency) : null;
 				priceEl.textContent = formatted ? ('BTC ' + formatted + ' ' + currency) : '--';
-			}
-			if (updatedEl) {
-				const ts = newData.btc_price_updated_at;
-				if (ts) {
-					try {
-						const d = new Date(ts);
-						const millis = d.getTime();
-						const ago = formatTimeAgoMillis(millis);
-						updatedEl.textContent = ago ? `Updated ${ago}` : 'Updated --';
-					} catch (_) {
-						updatedEl.textContent = 'Updated --';
-					}
+				}
+				if (updatedEl) {
+					const ts = newData.btc_price_updated_at || (price > 0 ? fallbackUpdatedAt : '');
+					if (ts) {
+						try {
+							const ago = formatTimeAgo(ts);
+							updatedEl.textContent = ago && ago !== '—' ? `Updated ${ago}` : 'Updated --';
+						} catch (_) {
+							updatedEl.textContent = 'Updated --';
+						}
 				} else {
 					updatedEl.textContent = 'Updated --';
 				}
 			}
 		}
 
-		function updateDOM(newData) {
+		function updateDOM(newData, updatedAt) {
 			if (!newData) return;
 			const poolTagEl = document.getElementById('status-pool-tag');
 			if (poolTagEl) {
 				const tag = normalizePoolTag(newData.pool_tag);
 				poolTagEl.textContent = tag || '--';
-			}
-			updateGridCards(newData);
-			updateBTCPrice(newData);
-			renderWorkersTable(newData.workers);
-			renderBestSharesTable(newData.best_shares);
+				}
+				updateGridCards(newData);
+				updateBTCPrice(newData, updatedAt);
+				renderWorkersTable(newData.workers);
+				renderBestSharesTable(newData.best_shares);
 			renderMinerTypesList(newData.miner_types);
 			renderBannedWorkersTable(newData.banned_workers);
 			updateRenderTime(newData.render_duration);
@@ -773,14 +786,14 @@
 					if (!response.ok) throw new Error('Network response was not ok');
 					const updatedAt = response.headers.get('X-JSON-Updated-At');
 					const dataRefreshedEl = document.getElementById('overview-data-refreshed');
-					if (dataRefreshedEl && updatedAt) {
-						dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
-					}
-					return response.json();
-				})
-				.then(data => {
-					updateDOM(data);
-				})
+						if (dataRefreshedEl && updatedAt) {
+							dataRefreshedEl.textContent = formatUTCTimestamp(updatedAt);
+						}
+						return response.json().then(data => ({ data, updatedAt }));
+					})
+					.then(({ data, updatedAt }) => {
+						updateDOM(data, updatedAt);
+					})
 				.catch(error => {
 					console.error('Error fetching status update:', error);
 				});
@@ -1119,12 +1132,12 @@
 								blockHeightContextEl.innerHTML = `${next.toLocaleString()}<br><span class="text-sm" style="color:var(--text-muted);">(~${durationText})</span>`;
 							}
 						}
-					} else if (blockHeightEl) {
-						blockHeightEl.textContent = '--';
-						if (blockHeightContextEl) {
-							blockHeightContextEl.textContent = 'Current chain tip';
+						} else if (blockHeightEl) {
+							blockHeightEl.textContent = '--';
+							if (blockHeightContextEl) {
+								blockHeightContextEl.textContent = '--';
+							}
 						}
-					}
 					let networkHashrate = null;
 					if (blockDifficultyEl && typeof data.block_difficulty === 'number') {
 						blockDifficultyEl.textContent = formatDifficulty(data.block_difficulty);

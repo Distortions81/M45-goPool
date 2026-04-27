@@ -2,11 +2,7 @@ package main
 
 import "strings"
 
-// shortDisplayID returns a sanitized, shortened version of s suitable for
-// display in HTML templates. It keeps only [A-Za-z0-9._-] characters and, if
-// the cleaned string is longer than prefix+suffix+3, returns
-// prefix + "..." + suffix.
-func shortDisplayID(s string, prefix, suffix int) string {
+func cleanDisplayID(s string) string {
 	if s == "" {
 		return ""
 	}
@@ -23,6 +19,15 @@ func shortDisplayID(s string, prefix, suffix int) string {
 			// drop spaces, newlines, and any other unexpected chars
 		}
 	}
+	return string(cleaned)
+}
+
+// shortDisplayID returns a sanitized, shortened version of s suitable for
+// display in HTML templates. It keeps only [A-Za-z0-9._-] characters and, if
+// the cleaned string is longer than prefix+suffix+3, returns
+// prefix + "..." + suffix.
+func shortDisplayID(s string, prefix, suffix int) string {
+	cleaned := []byte(cleanDisplayID(s))
 	if len(cleaned) == 0 {
 		return ""
 	}
@@ -59,5 +64,12 @@ func shortWorkerName(s string, prefix, suffix int) string {
 		return shortDisplayID(s, prefix, suffix)
 	}
 	shortHead := shortDisplayID(head, prefix, suffix)
-	return shortHead + "." + tail
+	cleanTail := cleanDisplayID(tail)
+	if cleanTail == "" {
+		return shortHead
+	}
+	if shortHead == "" {
+		return "." + cleanTail
+	}
+	return shortHead + "." + cleanTail
 }

@@ -218,13 +218,19 @@
 				item.className = 'peer-entry';
 				const pingLabel = peer.ping_ms > 0 ? `${peer.ping_ms.toFixed(1)} ms` : '--';
 				const connectedLabel = formatDurationLabel(peer.connected_at);
-				item.innerHTML = `
-					<div class="peer-label">${peer.display}</div>
-					<div class="peer-meta">
-						<span>Ping ${pingLabel}</span>
-						<span>Time ${connectedLabel}</span>
-					</div>
-				`;
+				const label = document.createElement('div');
+				label.className = 'peer-label';
+				label.textContent = peer.display || '--';
+				const meta = document.createElement('div');
+				meta.className = 'peer-meta';
+				const ping = document.createElement('span');
+				ping.textContent = `Ping ${pingLabel}`;
+				const connected = document.createElement('span');
+				connected.textContent = `Time ${connectedLabel}`;
+				meta.appendChild(ping);
+				meta.appendChild(connected);
+				item.appendChild(label);
+				item.appendChild(meta);
 				grid.appendChild(item);
 			});
 			peerListEl.appendChild(grid);

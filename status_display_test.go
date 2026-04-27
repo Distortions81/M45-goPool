@@ -30,6 +30,13 @@ func TestShortWorkerName_PreservesSuffixAfterDot(t *testing.T) {
 	}
 }
 
+func TestShortWorkerName_SanitizesSuffixAfterDot(t *testing.T) {
+	got := shortWorkerName("1234567890.<script>alert(1)</script>", 3, 3)
+	if got != "123...890.scriptalert1script" {
+		t.Fatalf("got %q, want %q", got, "123...890.scriptalert1script")
+	}
+}
+
 func TestShortWorkerName_NoDotUsesShortDisplayID(t *testing.T) {
 	got := shortWorkerName("0123456789", 3, 3)
 	if got != "012...789" {

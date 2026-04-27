@@ -134,13 +134,42 @@ document.addEventListener('click', function(e) {
 	if (!copyable) return;
 
 	const text = copyable.dataset.copy || copyable.textContent;
-	navigator.clipboard.writeText(text).then(function() {
+	function fallbackCopy(value) {
+		const ta = document.createElement('textarea');
+		ta.value = value;
+		ta.setAttribute('readonly', '');
+		ta.style.position = 'fixed';
+		ta.style.opacity = '0';
+		document.body.appendChild(ta);
+		ta.select();
+		try {
+			return document.execCommand('copy');
+		} finally {
+			document.body.removeChild(ta);
+		}
+	}
+
+	function flashCopied() {
 		const original = copyable.style.background;
 		copyable.style.background = 'var(--accent-soft)';
 		setTimeout(function() {
 			copyable.style.background = original;
 		}, 200);
-	}).catch(function(err) {
+	}
+
+	const canUseClipboard = navigator.clipboard && typeof navigator.clipboard.writeText === 'function';
+	const copyPromise = canUseClipboard
+		? navigator.clipboard.writeText(text)
+		: new Promise(function(resolve, reject) {
+			try {
+				fallbackCopy(text);
+				resolve();
+			} catch (err) {
+				reject(err);
+			}
+		});
+
+	copyPromise.then(flashCopied).catch(function(err) {
 		console.error('Failed to copy:', err);
 	});
 });

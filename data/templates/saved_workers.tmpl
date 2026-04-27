@@ -700,6 +700,7 @@
 					<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
 						<span class="badge saved-workers-top-badge">Slots: <span id="savedCount">{{.SavedWorkersCount}}</span> / <span id="savedMax">{{.SavedWorkersMax}}</span></span>
 						<span class="badge saved-workers-top-badge">Online: <span id="onlineCount">{{.SavedWorkersOnline}}</span></span>
+						<span class="badge saved-workers-top-badge">Best: <span id="savedBestDiffValue">{{if gt .SavedWorkersBestDifficulty 0.0}}{{formatDiff .SavedWorkersBestDifficulty}}{{else}}—{{end}}</span></span>
 					</div>
 				</div>
 				<p class="text-sm" style="color:var(--text-muted); margin:8px 0 0;">
@@ -3560,9 +3561,18 @@
 				} catch (_) {}
 			}
 
-		// Used by the saved workers table (hashrate cells render from data-hashrate attributes).
-		// This script block runs separately from the main saved-workers dashboard script above,
-		// so it must define its own helper to avoid ReferenceError and breaking status boxes.
+			function escapeHTML(value) {
+				return String(value ?? '')
+					.replaceAll('&', '&amp;')
+					.replaceAll('<', '&lt;')
+					.replaceAll('>', '&gt;')
+					.replaceAll('"', '&quot;')
+					.replaceAll("'", '&#39;');
+			}
+
+			// Used by the saved workers table (hashrate cells render from data-hashrate attributes).
+			// This script block runs separately from the main saved-workers dashboard script above,
+			// so it must define its own helper to avoid ReferenceError and breaking status boxes.
 			function renderStoredHashrates() {
 				const cells = document.querySelectorAll('[data-hashrate]');
 				cells.forEach((el) => {
@@ -3698,7 +3708,7 @@
 			});
 		}
 
-		function updateBTCPrice(newData) {
+		function updateBTCPrice(newData, fallbackUpdatedAt) {
 			if (!newData) return;
 			const priceEl = document.getElementById('status-btc-price');
 			const updatedEl = document.getElementById('status-btc-price-updated');
@@ -3708,12 +3718,12 @@
 			if (priceEl) {
 				const formatted = price > 0 ? formatFiatNoDecimals(Math.round(price), fiatCurrency) : null;
 				priceEl.textContent = formatted ? ('BTC ' + formatted + ' ' + fiatCurrency) : '--';
-			}
-			if (updatedEl) {
-				const ts = newData.btc_price_updated_at;
-				if (ts) {
-					try {
-						const d = new Date(ts);
+				}
+				if (updatedEl) {
+					const ts = newData.btc_price_updated_at || (price > 0 ? fallbackUpdatedAt : '');
+					if (ts) {
+						try {
+							const d = new Date(ts);
 						updatedEl.textContent = 'Updated ' + d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 					} catch (_) {
 						updatedEl.textContent = 'Updated --';
@@ -3724,14 +3734,14 @@
 			}
 		}
 
-		function updateOverviewDOM(newData) {
+		function updateOverviewDOM(newData, updatedAt) {
 			if (!newData) return;
 			if (poolTagEl) {
 				const tag = normalizePoolTag(newData.pool_tag);
 				poolTagEl.textContent = tag || '--';
 			}
 			updateGridCards(newData);
-			updateBTCPrice(newData);
+			updateBTCPrice(newData, updatedAt);
 		}
 
 		function formatOddsText(chance) {
@@ -3949,16 +3959,17 @@
 			}
 		}
 
-		function fetchOverview() {
-			fetch('/api/overview', { credentials: 'same-origin' })
-				.then(response => {
-					if (!response.ok) throw new Error('Network response was not ok');
-					return response.json();
-				})
-				.then(data => {
-					writeJSONCache(OVERVIEW_CACHE_KEY, data);
-					updateOverviewDOM(data);
-				})
+			function fetchOverview() {
+				fetch('/api/overview', { credentials: 'same-origin' })
+					.then(response => {
+						if (!response.ok) throw new Error('Network response was not ok');
+						const updatedAt = response.headers.get('X-JSON-Updated-At');
+						return response.json().then(data => ({ data, updatedAt }));
+					})
+					.then(({ data, updatedAt }) => {
+						writeJSONCache(OVERVIEW_CACHE_KEY, { data, updatedAt });
+						updateOverviewDOM(data, updatedAt);
+					})
 				.catch(err => {
 					console.error('Error fetching overview stats:', err);
 				});
@@ -4075,11 +4086,15 @@
 				});
 		}
 
-			fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
-			const cachedOverview = readRecentJSONCache(OVERVIEW_CACHE_KEY, REFRESH_INTERVAL);
-			if (cachedOverview) {
-				updateOverviewDOM(cachedOverview);
-			}
+				fiatCurrency = normalizeFiatCurrency(FIAT_CURRENCY);
+				const cachedOverview = readRecentJSONCache(OVERVIEW_CACHE_KEY, REFRESH_INTERVAL);
+				if (cachedOverview) {
+					if (cachedOverview.data) {
+						updateOverviewDOM(cachedOverview.data, cachedOverview.updatedAt);
+					} else {
+						updateOverviewDOM(cachedOverview);
+					}
+				}
 			const cachedHashrate = readRecentJSONCache(HASHRATE_CACHE_KEY, REFRESH_INTERVAL);
 			if (cachedHashrate && cachedHashrate.data) {
 				const data = cachedHashrate.data;
@@ -4129,6 +4144,9 @@
 					const str = String(worker);
 					const dotIdx = str.indexOf('.');
 					const suffix = dotIdx === -1 ? str : str.slice(dotIdx);
+					const workerText = escapeHTML(worker);
+					const suffixText = escapeHTML(suffix);
+					const hashText = escapeHTML(block.display_hash || block.hash || '—');
 					const ts = block.timestamp ? formatTimeAgoMillis(new Date(block.timestamp).getTime()) || '—' : '—';
 					const diff = block.share_diff;
 					let diffLabel = '—';
@@ -4141,8 +4159,8 @@
 					}
 					return `<tr>
 						<td class="mono">${block.height !== undefined ? block.height : '—'}</td>
-						<td class="mono">${block.display_hash || block.hash || '—'}</td>
-						<td class="mono"><span class="worker-full">${worker}</span><span class="worker-suffix">${suffix}</span></td>
+						<td class="mono">${hashText}</td>
+						<td class="mono"><span class="worker-full">${workerText}</span><span class="worker-suffix">${suffixText}</span></td>
 						<td style="${resultStyle}">${resultLabel}</td>
 						<td class="mono">${confirmations}</td>
 						<td>${block.pool_fee_sats || 0}</td>
