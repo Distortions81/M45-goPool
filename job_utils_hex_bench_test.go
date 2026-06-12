@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	benchHexNibbleLUT [256]byte
-	benchHexPairLUT   [65536]uint16
+	benchHexNibbleLUT       [256]byte
+	benchHexPairLUT         [65536]uint16
 	benchHexPairLowerEncLUT [256]uint16
 	benchHexQuadLowerEncLUT [65536]uint32
-	benchEncodeInputs [1024][32]byte
+	benchEncodeInputs       [1024][32]byte
 )
 
 func parseUint32BEHexBytesSwitch(hexBytes []byte) (uint32, bool) {
@@ -126,6 +126,240 @@ func decodeHexToFixedBytesBytesPairLUT(dst []byte, src []byte) bool {
 		dst[i] = byte(v)
 	}
 	return true
+}
+
+func benchNaiveHexNibble(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func encode32ToHex64Lower_Naive(dst *[64]byte, src *[32]byte) {
+	for i, j := 0, 0; i < 32; i, j = i+1, j+2 {
+		hi := src[i] >> 4
+		if hi < 10 {
+			dst[j] = '0' + hi
+		} else {
+			dst[j] = 'a' + hi - 10
+		}
+
+		lo := src[i] & 0x0f
+		if lo < 10 {
+			dst[j+1] = '0' + lo
+		} else {
+			dst[j+1] = 'a' + lo - 10
+		}
+	}
+}
+
+func decodeHex64To32Bytes_Naive(dst *[32]byte, src *[64]byte) bool {
+	for i, j := 0, 0; i < 32; i, j = i+1, j+2 {
+		hi, ok := benchNaiveHexNibble(src[j])
+		if !ok {
+			return false
+		}
+		lo, ok := benchNaiveHexNibble(src[j+1])
+		if !ok {
+			return false
+		}
+		dst[i] = (hi << 4) | lo
+	}
+	return true
+}
+
+func decodeHex64To32Bytes_UnrolledLUT(dst *[32]byte, src *[64]byte) bool {
+	v0 := hexPairByteLUT[int(src[0])<<8|int(src[1])]
+	if v0 > 0xff {
+		return false
+	}
+	dst[0] = byte(v0)
+	v1 := hexPairByteLUT[int(src[2])<<8|int(src[3])]
+	if v1 > 0xff {
+		return false
+	}
+	dst[1] = byte(v1)
+	v2 := hexPairByteLUT[int(src[4])<<8|int(src[5])]
+	if v2 > 0xff {
+		return false
+	}
+	dst[2] = byte(v2)
+	v3 := hexPairByteLUT[int(src[6])<<8|int(src[7])]
+	if v3 > 0xff {
+		return false
+	}
+	dst[3] = byte(v3)
+	v4 := hexPairByteLUT[int(src[8])<<8|int(src[9])]
+	if v4 > 0xff {
+		return false
+	}
+	dst[4] = byte(v4)
+	v5 := hexPairByteLUT[int(src[10])<<8|int(src[11])]
+	if v5 > 0xff {
+		return false
+	}
+	dst[5] = byte(v5)
+	v6 := hexPairByteLUT[int(src[12])<<8|int(src[13])]
+	if v6 > 0xff {
+		return false
+	}
+	dst[6] = byte(v6)
+	v7 := hexPairByteLUT[int(src[14])<<8|int(src[15])]
+	if v7 > 0xff {
+		return false
+	}
+	dst[7] = byte(v7)
+	v8 := hexPairByteLUT[int(src[16])<<8|int(src[17])]
+	if v8 > 0xff {
+		return false
+	}
+	dst[8] = byte(v8)
+	v9 := hexPairByteLUT[int(src[18])<<8|int(src[19])]
+	if v9 > 0xff {
+		return false
+	}
+	dst[9] = byte(v9)
+	v10 := hexPairByteLUT[int(src[20])<<8|int(src[21])]
+	if v10 > 0xff {
+		return false
+	}
+	dst[10] = byte(v10)
+	v11 := hexPairByteLUT[int(src[22])<<8|int(src[23])]
+	if v11 > 0xff {
+		return false
+	}
+	dst[11] = byte(v11)
+	v12 := hexPairByteLUT[int(src[24])<<8|int(src[25])]
+	if v12 > 0xff {
+		return false
+	}
+	dst[12] = byte(v12)
+	v13 := hexPairByteLUT[int(src[26])<<8|int(src[27])]
+	if v13 > 0xff {
+		return false
+	}
+	dst[13] = byte(v13)
+	v14 := hexPairByteLUT[int(src[28])<<8|int(src[29])]
+	if v14 > 0xff {
+		return false
+	}
+	dst[14] = byte(v14)
+	v15 := hexPairByteLUT[int(src[30])<<8|int(src[31])]
+	if v15 > 0xff {
+		return false
+	}
+	dst[15] = byte(v15)
+	v16 := hexPairByteLUT[int(src[32])<<8|int(src[33])]
+	if v16 > 0xff {
+		return false
+	}
+	dst[16] = byte(v16)
+	v17 := hexPairByteLUT[int(src[34])<<8|int(src[35])]
+	if v17 > 0xff {
+		return false
+	}
+	dst[17] = byte(v17)
+	v18 := hexPairByteLUT[int(src[36])<<8|int(src[37])]
+	if v18 > 0xff {
+		return false
+	}
+	dst[18] = byte(v18)
+	v19 := hexPairByteLUT[int(src[38])<<8|int(src[39])]
+	if v19 > 0xff {
+		return false
+	}
+	dst[19] = byte(v19)
+	v20 := hexPairByteLUT[int(src[40])<<8|int(src[41])]
+	if v20 > 0xff {
+		return false
+	}
+	dst[20] = byte(v20)
+	v21 := hexPairByteLUT[int(src[42])<<8|int(src[43])]
+	if v21 > 0xff {
+		return false
+	}
+	dst[21] = byte(v21)
+	v22 := hexPairByteLUT[int(src[44])<<8|int(src[45])]
+	if v22 > 0xff {
+		return false
+	}
+	dst[22] = byte(v22)
+	v23 := hexPairByteLUT[int(src[46])<<8|int(src[47])]
+	if v23 > 0xff {
+		return false
+	}
+	dst[23] = byte(v23)
+	v24 := hexPairByteLUT[int(src[48])<<8|int(src[49])]
+	if v24 > 0xff {
+		return false
+	}
+	dst[24] = byte(v24)
+	v25 := hexPairByteLUT[int(src[50])<<8|int(src[51])]
+	if v25 > 0xff {
+		return false
+	}
+	dst[25] = byte(v25)
+	v26 := hexPairByteLUT[int(src[52])<<8|int(src[53])]
+	if v26 > 0xff {
+		return false
+	}
+	dst[26] = byte(v26)
+	v27 := hexPairByteLUT[int(src[54])<<8|int(src[55])]
+	if v27 > 0xff {
+		return false
+	}
+	dst[27] = byte(v27)
+	v28 := hexPairByteLUT[int(src[56])<<8|int(src[57])]
+	if v28 > 0xff {
+		return false
+	}
+	dst[28] = byte(v28)
+	v29 := hexPairByteLUT[int(src[58])<<8|int(src[59])]
+	if v29 > 0xff {
+		return false
+	}
+	dst[29] = byte(v29)
+	v30 := hexPairByteLUT[int(src[60])<<8|int(src[61])]
+	if v30 > 0xff {
+		return false
+	}
+	dst[30] = byte(v30)
+	v31 := hexPairByteLUT[int(src[62])<<8|int(src[63])]
+	if v31 > 0xff {
+		return false
+	}
+	dst[31] = byte(v31)
+	return true
+}
+
+func TestHex32FixedBenchmarkHelpersAgree(t *testing.T) {
+	src := benchEncodeInputs[17]
+	var fastHex, naiveHex [64]byte
+	encode32ToHex64LowerUnrolled(&fastHex, &src)
+	encode32ToHex64Lower_Naive(&naiveHex, &src)
+	if fastHex != naiveHex {
+		t.Fatalf("encode mismatch: fast=%q naive=%q", string(fastHex[:]), string(naiveHex[:]))
+	}
+
+	var fastBin, naiveBin [32]byte
+	if !decodeHex64To32Bytes_UnrolledLUT(&fastBin, &fastHex) {
+		t.Fatal("fast decode failed")
+	}
+	if !decodeHex64To32Bytes_Naive(&naiveBin, &fastHex) {
+		t.Fatal("naive decode failed")
+	}
+	if fastBin != src {
+		t.Fatalf("fast decode mismatch: got=%x want=%x", fastBin, src)
+	}
+	if naiveBin != src {
+		t.Fatalf("naive decode mismatch: got=%x want=%x", naiveBin, src)
+	}
 }
 
 func BenchmarkDecodeHexToFixedBytesBytes_32_SingleLUT(b *testing.B) {
@@ -256,7 +490,62 @@ func BenchmarkEncodeBytesToFixedHex_32_Std(b *testing.B) {
 }
 
 var benchHexEncodeSink [64]byte
+var benchHexDecodeSink [32]byte
 var benchHexEncodeStringSink string
+
+func BenchmarkHex32Fixed_BinaryToHex_UnrolledLUT(b *testing.B) {
+	var out [64]byte
+	b.ReportAllocs()
+	b.SetBytes(32)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		src := &benchEncodeInputs[i&1023]
+		encode32ToHex64LowerUnrolled(&out, src)
+	}
+	benchHexEncodeSink = out
+}
+
+func BenchmarkHex32Fixed_BinaryToHex_Naive(b *testing.B) {
+	var out [64]byte
+	b.ReportAllocs()
+	b.SetBytes(32)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		src := &benchEncodeInputs[i&1023]
+		encode32ToHex64Lower_Naive(&out, src)
+	}
+	benchHexEncodeSink = out
+}
+
+func BenchmarkHex32Fixed_HexToBinary_UnrolledLUT(b *testing.B) {
+	var src [64]byte
+	copy(src[:], "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+	var out [32]byte
+	b.ReportAllocs()
+	b.SetBytes(32)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if !decodeHex64To32Bytes_UnrolledLUT(&out, &src) {
+			b.Fatal("decode failed")
+		}
+	}
+	benchHexDecodeSink = out
+}
+
+func BenchmarkHex32Fixed_HexToBinary_Naive(b *testing.B) {
+	var src [64]byte
+	copy(src[:], "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
+	var out [32]byte
+	b.ReportAllocs()
+	b.SetBytes(32)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if !decodeHex64To32Bytes_Naive(&out, &src) {
+			b.Fatal("decode failed")
+		}
+	}
+	benchHexDecodeSink = out
+}
 
 func encode32ToHex64Lower_LUTLoop(dst *[64]byte, src *[32]byte) {
 	for i, j := 0, 0; i < 32; i, j = i+1, j+2 {
