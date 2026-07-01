@@ -3,6 +3,7 @@ data/*.pem
 data/*.toml
 data/config/*.toml
 data/config/*.toml.bak
+data/certbot-webroot/
 data/state/
 data/logs/
 

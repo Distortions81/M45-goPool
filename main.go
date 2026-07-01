@@ -587,6 +587,14 @@ func main() {
 	mux.HandleFunc("/stats/", func(w http.ResponseWriter, r *http.Request) {
 		statusServer.handleWorkerLookupByWallet(w, r, "/stats")
 	})
+	acmeWebroot, err := ensureACMEWebroot(cfg.DataDir)
+	if err != nil {
+		fatal("acme webroot", err)
+	}
+	acmeHandler := newACMEChallengeHandler(acmeWebroot)
+	mux.Handle(acmeChallengeURLPrefix, acmeHandler)
+	logger.Info("ACME HTTP-01 webroot enabled", "component", "http", "kind", "acme", "path", acmeWebroot)
+
 	// Catch-all: try embedded static files first, fall back to status server.
 	staticFiles, err := newEmbeddedStaticFileServer(statusServer)
 	if err != nil {
@@ -637,7 +645,7 @@ func main() {
 		httpLogMsg := "status page listening (http)"
 		httpLogFields := []any{"addr", httpAddr}
 		if needStatusTLS {
-			httpHandler = http.HandlerFunc(statusServer.redirectToHTTPS)
+			httpHandler = serveACMEOrFallback(acmeHandler, http.HandlerFunc(statusServer.redirectToHTTPS))
 			httpLogMsg = "status http listener redirecting to https"
 			httpLogFields = append(httpLogFields, "https_addr", httpsAddr)
 		}

@@ -131,6 +131,7 @@ Counts above were collected on March 1, 2026.
 
 - `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.
 - TLS on the status UI is driven by `server.status_tls_listen` (default `:443`). Leave it empty (`""`) to disable HTTPS and rely solely on `server.status_listen` for HTTP; leaving `server.status_listen` empty disables HTTP entirely.
+- `data/certbot-webroot/.well-known/acme-challenge/` is served on the status HTTP listener before HTTP-to-HTTPS redirects, so certbot HTTP-01 webroot validation can run while goPool is up. The bundled UI files under `data/www` are embedded into release builds and are separate from this runtime certbot webroot.
 - `data/config/config.toml` also covers bitcoind settings such as `node.rpc_url`, `node.rpc_cookie_path`, and ZMQ addresses (`node.zmq_hashblock_addr`/`node.zmq_rawblock_addr`; leave empty to disable ZMQ and rely on RPC/longpoll). First run writes helper examples to `data/config/examples/`.
 - Optional split files:
   - `data/config/services.toml` for service/integration settings (`auth`, `backblaze_backup`, `discord`, `status` links).

@@ -15,7 +15,7 @@ What it does:
        <data-dir>/tls_key.pem   (from privkey.pem)
 
 Options:
-  --www-dir PATH        webroot dir for ACME (default: ./data/www)
+  --www-dir PATH        webroot dir for ACME (default: ./data/certbot-webroot)
   -d, --domain DOMAIN   domain name (repeatable; first domain is the default cert name)
   --cert-name NAME      certbot "cert-name" (default: first --domain)
 
@@ -37,6 +37,8 @@ Options:
 Notes:
   - For HTTP-01, the domain must reach your server on port 80. If goPool isn't
     directly on :80, put a reverse proxy in front or use a different challenge.
+  - goPool serves /.well-known/acme-challenge/* from ./data/certbot-webroot
+    before HTTP-to-HTTPS redirects.
   - goPool reads ./data/tls_cert.pem and ./data/tls_key.pem.
 EOF
 }
@@ -97,7 +99,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${WWW_DIR}" ]]; then
-  WWW_DIR="${DATA_DIR%/}/www"
+  WWW_DIR="${DATA_DIR%/}/certbot-webroot"
 fi
 
 if [[ "${SYNC_ONLY}" -eq 0 ]]; then
