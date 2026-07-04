@@ -1,0 +1,89 @@
+# Rendered by open-pool-benchmark. The same file is copied to config.toml,
+# policy.toml, tuning.toml, and secrets.toml inside the goPool benchmark image.
+
+rpc_user = "${RPC_USER}"
+rpc_pass = "${RPC_PASS}"
+
+[branding]
+  status_brand_name = "goPool openbench"
+  status_tagline = "open-pool-benchmark"
+
+[logging]
+  debug = false
+  net_debug = false
+
+[mining]
+  pool_fee_percent = 0.0
+  pooltag_prefix = "openbench"
+  share_check_duplicate = false
+  share_check_ntime_window = false
+  share_check_param_format = false
+  share_check_version_rolling = false
+  share_job_freshness_mode = 0
+  share_require_authorized_connection = false
+  share_require_worker_match = false
+  submit_process_inline = true
+
+[node]
+  payout_address = "${ADDRESS}"
+  rpc_cookie_path = ""
+  rpc_url = "http://${RPC_HOST}:${RPC_PORT}"
+  zmq_hashblock_addr = "tcp://${RPC_HOST}:28332"
+  zmq_rawblock_addr = "tcp://${RPC_HOST}:28332"
+
+[server]
+  pool_listen = ":3333"
+  status_listen = ":3334"
+  status_public_url = "http://openbench-pool:3334"
+  status_tls_listen = ""
+
+[stratum]
+  ckpool_emulate = true
+  safe_mode = false
+  stratum_password = ""
+  stratum_password_enabled = false
+  stratum_password_public = false
+  stratum_tls_listen = ""
+  tcp_read_buffer_bytes = 4096
+  tcp_write_buffer_bytes = 4096
+
+[difficulty]
+  default_difficulty = 0.001
+  enforce_suggested_difficulty_limits = false
+  lock_suggested_difficulty = false
+  max_difficulty = 1000000.0
+  min_difficulty = ${MIN_DIFFICULTY}
+  target_shares_per_min = 120.0
+  vardiff_enabled = false
+
+[rate_limits]
+  auto_accept_rate_limits = false
+  disable_connect_rate_limits = true
+  max_accept_burst = 100000
+  max_accepts_per_second = 100000
+  max_conns = 200000
+  stratum_messages_per_minute = 0
+
+[hashrate]
+  hashrate_cumulative_enabled = false
+  hashrate_ema_tau_seconds = 30.0
+  hashrate_recent_cumulative_enabled = false
+  saved_worker_history_flush_interval_seconds = 86400
+  share_ntime_max_forward_seconds = 7000
+
+[peer_cleaning]
+  enabled = false
+
+[timeouts]
+  connection_timeout_seconds = 600
+
+[bans]
+  ban_invalid_submissions_after = 0
+  clean_expired_on_startup = false
+  reconnect_ban_threshold = 0
+
+[version]
+  bip110_enabled = false
+  min_version_bits = 1
+  share_allow_degraded_version_bits = true
+  share_allow_out_of_mask_version_bits = true

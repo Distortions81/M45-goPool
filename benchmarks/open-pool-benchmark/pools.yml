@@ -1,0 +1,76 @@
+# open-pool-benchmark registry for goPool comparison runs.
+#
+# This overlay keeps the comparison intentionally focused on goPool, pogolo, and
+# ckpool. It is copied over the upstream harness by scripts/open-pool-benchmark.sh.
+
+regtest:
+  rpc_user: openbench
+  rpc_pass: openbenchpass
+  rpc_port: 18443
+  bitcoind_container: bitcoind
+  network: openbench-regtest_default
+  compose_project: openbench-regtest
+  address: bcrt1qlk935ze2fsu86zjp395uvtegztrkaezawxx0wf
+
+pinning:
+  enabled: true
+  bitcoind_cpus: "0"
+  pool_cpus: "1"
+  bench_cpus: "2"
+
+profiles:
+  validation:
+    difficulty: 0.001
+    min_difficulty: 0.0001
+    max_difficulty: 1000000
+    coinbase_tag: /openbench/
+  mine:
+    difficulty: 1
+    min_difficulty: 0.0001
+    max_difficulty: 1000000
+    coinbase_tag: /openbench/
+
+pools:
+  gopool:
+    description: Distortions81/M45-Core-goPool (Go solo pool, low-latency config)
+    source: build
+    build_context: pools/gopool/src
+    dockerfile: pools/gopool/Dockerfile
+    stratum_port: 3333
+    config:
+      format: toml
+      template: pools/gopool/bench.toml
+      mount: /openbench/gopool.toml
+    readiness:
+      kind: tcp
+      timeout_seconds: 90
+
+  pogolo:
+    description: 0xf0xx0/pogolo (Go solo pool)
+    source: image
+    image: 0xf0xx0/pogolo:testing
+    stratum_port: 5661
+    api_port: 5662
+    config:
+      format: toml
+      template: pools/pogolo/bench.toml
+      mount: /config/pogolo.toml
+    readiness:
+      kind: http
+      url: http://${POOL_HOST}:${API_PORT}/api/v1/info
+      status: 200
+      timeout_seconds: 40
+
+  ckpool:
+    description: ckolivas/ckpool (C solo pool, BTCSOLO mode)
+    source: build
+    build_context: pools/ckpool
+    dockerfile: Dockerfile
+    stratum_port: 3333
+    config:
+      format: json
+      template: pools/ckpool/bench.conf
+      mount: /config/ckpool.conf
+    readiness:
+      kind: tcp
+      timeout_seconds: 120

@@ -70,6 +70,35 @@ Stratum notes:
 - goPool accepts both `mining.authorize` and CKPool-style `mining.auth`, and tolerates authorize-before-subscribe (work starts after subscribe completes).
 - On startup and during runtime, Stratum is gated only when the node/job feed reports errors or the node is in a non-usable syncing/indexing state: new connections are refused and existing miners are disconnected to avoid wasted hashing.
 
+## open-pool-benchmark results
+
+The table below was generated with [`eandersson/open-pool-benchmark`](https://github.com/eandersson/open-pool-benchmark) on regtest using the repo wrapper:
+
+```bash
+./scripts/open-pool-benchmark-report.sh
+```
+
+For the goPool run, benchmark-only overhead was minimized: status HTTP, status TLS, Stratum TLS, and JSON endpoints were disabled; readiness used the Stratum TCP socket; and the benchmark config used the lean submit path.
+
+```text
+  pool  connections  workers  pipeline  val/s  p50_ms  p95_ms  p99_ms  cpu_pct  rss_mib
+gopool            1        1         1  21208   0.037   0.045   0.075       29       29
+gopool            1        4        16  96710   0.099   0.159   0.192       74       27
+gopool            4        4        16  95190   0.103   0.933   9.147       73       29
+gopool           16        4        16  95416   0.515   9.558  10.696       71       36
+gopool           64        4        16  99523  10.170  12.433  14.437       74       65
+pogolo            1        1         1  22016   0.036   0.043   0.078       31       10
+pogolo            1        4        16  78296   0.128   0.206   0.264       71       10
+pogolo            4        4        16  79476   0.128   2.866  10.215       71       10
+pogolo           16        4        16  89409   0.608   9.614  11.577       82       12
+pogolo           64        4        16  96822  10.135  15.968  33.960       85       14
+ckpool            1        1         1   4250   0.217   0.258   0.284       72        6
+ckpool            1        4        16  23862   0.605   1.089   1.335       83        7
+ckpool            4        4        16  41056   1.433   2.320   2.822       83        8
+ckpool           16        4        16  59816   3.886   6.169   7.243       83       11
+ckpool           64        4        16  62422  15.477  22.035  25.109       25       15
+```
+
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
 </p>

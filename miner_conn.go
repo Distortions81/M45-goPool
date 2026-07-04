@@ -514,7 +514,12 @@ func (mc *MinerConn) scheduleInitialWork() {
 	}
 	mc.initialWorkScheduled = true
 	mc.initialWorkDue = time.Now().Add(defaultInitialDifficultyDelay)
+	due := mc.initialWorkDue
 	mc.initWorkMu.Unlock()
+
+	time.AfterFunc(time.Until(due), func() {
+		mc.maybeSendInitialWorkDue(time.Now())
+	})
 }
 
 func (mc *MinerConn) maybeSendInitialWork() {

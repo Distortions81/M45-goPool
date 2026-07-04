@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+func listenerOverrideValue(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	switch strings.ToLower(trimmed) {
+	case "":
+		return "", false
+	case "off", "none", "disabled":
+		return "", true
+	default:
+		return trimmed, true
+	}
+}
+
 type runtimeOverrides struct {
 	bind                string
 	listenAddr          string
@@ -117,14 +129,14 @@ func applyRuntimeOverrides(cfg *Config, overrides runtimeOverrides) error {
 	if strings.TrimSpace(overrides.listenAddr) != "" {
 		cfg.ListenAddr = strings.TrimSpace(overrides.listenAddr)
 	}
-	if strings.TrimSpace(overrides.statusAddr) != "" {
-		cfg.StatusAddr = strings.TrimSpace(overrides.statusAddr)
+	if addr, ok := listenerOverrideValue(overrides.statusAddr); ok {
+		cfg.StatusAddr = addr
 	}
-	if strings.TrimSpace(overrides.statusTLSAddr) != "" {
-		cfg.StatusTLSAddr = strings.TrimSpace(overrides.statusTLSAddr)
+	if addr, ok := listenerOverrideValue(overrides.statusTLSAddr); ok {
+		cfg.StatusTLSAddr = addr
 	}
-	if strings.TrimSpace(overrides.stratumTLSListen) != "" {
-		cfg.StratumTLSListen = strings.TrimSpace(overrides.stratumTLSListen)
+	if addr, ok := listenerOverrideValue(overrides.stratumTLSListen); ok {
+		cfg.StratumTLSListen = addr
 	}
 	if overrides.ckpoolEmulate != nil {
 		cfg.CKPoolEmulate = *overrides.ckpoolEmulate

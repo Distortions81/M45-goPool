@@ -17,4 +17,5 @@ documentation/reference-miners/
 documentation/sv2-apps
 documentation/sv2-spec
 vendor/
-
+.benchmarks/
+reports/open-pool-benchmark/
