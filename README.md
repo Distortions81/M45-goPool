@@ -73,7 +73,20 @@ Stratum notes:
 ## Benchmarks
 
 Current `mining.submit` and `mining.notify` results for `100`, `1000`, and
-`10000` miners are in [`benchmarks/go/`](benchmarks/go/).
+`10000` miners are in [`benchmarks/go/`](benchmarks/go/). The heat map below is
+from the July 6, 2026 rerun.
+
+The goPool benchmark profile keeps normal submit-validation checks and vardiff
+enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
+`10000`-miner reject-load runs can complete.
+
+![Benchmark heat map](benchmarks/go/heatmap.svg)
+
+Reproduce the benchmark and regenerate the SVG with:
+
+```bash
+./scripts/run-go-benchmarks.sh
+```
 
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">

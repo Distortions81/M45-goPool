@@ -21,11 +21,6 @@ exec /app/goPool \
   -network regtest \
   -allow-rpc-creds \
   -secrets "$config_dir/secrets.toml" \
-  -status off \
   -status-tls off \
   -stratum-tls off \
-  -no-json \
-  -stdout \
-  -pool-log /dev/null \
-  -debug-log /dev/null \
-  -net-debug-log /dev/null
+  -stdout

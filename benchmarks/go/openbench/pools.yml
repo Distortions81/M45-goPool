@@ -32,7 +32,7 @@ profiles:
 
 pools:
   gopool:
-    description: Distortions81/M45-Core-goPool (Go solo pool, low-latency config)
+    description: Distortions81/M45-Core-goPool (Go solo pool)
     source: build
     build_context: pools/gopool/src
     dockerfile: pools/gopool/Dockerfile

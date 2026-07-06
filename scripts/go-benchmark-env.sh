@@ -24,6 +24,7 @@ if [ ! -d "${bench_dir}/.git" ]; then
 else
   git -C "$bench_dir" fetch --depth 1 origin "$ref"
   git -C "$bench_dir" checkout --detach FETCH_HEAD >/dev/null
+  git -C "$bench_dir" reset --hard FETCH_HEAD >/dev/null
 fi
 
 cp "${overlay}/pools.yml" "${bench_dir}/pools.yml"
@@ -31,6 +32,19 @@ mkdir -p "${bench_dir}/pools/gopool"
 cp "${overlay}/pools/gopool/bench.toml" "${bench_dir}/pools/gopool/bench.toml"
 cp "${overlay}/pools/gopool/Dockerfile" "${bench_dir}/pools/gopool/Dockerfile"
 cp "${overlay}/pools/gopool/entrypoint.sh" "${bench_dir}/pools/gopool/entrypoint.sh"
+
+if [ "${GO_BENCHMARK_NO_ZMQ:-0}" = "1" ]; then
+  sed -i \
+    -e 's#^  zmq_hashblock_addr = .*#  zmq_hashblock_addr = ""#' \
+    -e 's#^  zmq_rawblock_addr = .*#  zmq_rawblock_addr = ""#' \
+    "${bench_dir}/pools/gopool/bench.toml"
+  sed -i \
+    -e "s#^zmq_host = .*#zmq_host = 'tcp://127.0.0.1:1'#" \
+    "${bench_dir}/pools/pogolo/bench.toml"
+  sed -i \
+    -e 's#"zmqblock": .*#"zmqblock": "tcp://127.0.0.1:1",#' \
+    "${bench_dir}/pools/ckpool/bench.conf"
+fi
 
 # Keep hashblock and rawblock on separate ZMQ sockets. ckpool's ZMQ block
 # watcher expects the hashblock stream and logs size errors if rawblock frames

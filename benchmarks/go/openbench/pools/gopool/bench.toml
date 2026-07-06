@@ -15,14 +15,14 @@ rpc_pass = "${RPC_PASS}"
 [mining]
   pool_fee_percent = 0.0
   pooltag_prefix = "openbench"
-  share_check_duplicate = false
-  share_check_ntime_window = false
-  share_check_param_format = false
-  share_check_version_rolling = false
+  share_check_duplicate = true
+  share_check_ntime_window = true
+  share_check_param_format = true
+  share_check_version_rolling = true
   share_job_freshness_mode = 0
-  share_require_authorized_connection = false
-  share_require_worker_match = false
-  submit_process_inline = true
+  share_require_authorized_connection = true
+  share_require_worker_match = true
+  submit_process_inline = false
 
 [node]
   payout_address = "${ADDRESS}"
@@ -54,7 +54,7 @@ rpc_pass = "${RPC_PASS}"
   max_difficulty = 1000000.0
   min_difficulty = ${MIN_DIFFICULTY}
   target_shares_per_min = 120.0
-  vardiff_enabled = false
+  vardiff_enabled = true
 
 [rate_limits]
   auto_accept_rate_limits = false

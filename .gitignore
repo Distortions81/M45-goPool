@@ -19,3 +19,4 @@ documentation/sv2-spec
 vendor/
 .benchmarks/
 reports/open-pool-benchmark/
+reports/go-benchmarks/
