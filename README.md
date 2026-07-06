@@ -99,6 +99,35 @@ ckpool           16        4        16  59816   3.886   6.169   7.243       83  
 ckpool           64        4        16  62422  15.477  22.035  25.109       25       15
 ```
 
+### Go submit hot path
+
+The table below uses the Go submit probe at
+[`benchmarks/open-pool-benchmark/tools/go-submit-bench/main.go`](benchmarks/open-pool-benchmark/tools/go-submit-bench/main.go).
+It measures the post-handshake Stratum `mining.submit` round trip: each probe
+connection subscribes, authorizes, receives work, then submits above-network-target
+nonces so the pool validates and rejects shares without submitting blocks.
+
+Unpinned run on the same 32-logical-CPU host:
+
+```text
+  pool  conns  pipeline  validated/s  p50_ms  p95_ms  p99_ms  max_ms
+gopool      1         1        38025   0.021   0.026   0.035   1.514
+gopool      1        16       108958   0.103   0.164   0.212   3.688
+gopool      4        16       340431   0.153   0.206   0.336   3.809
+gopool     16        16       749352   0.163   0.548   0.930   4.300
+gopool     64        16       917377   0.587   2.793   5.084  21.292
+pogolo      1         1        42903   0.018   0.022   0.030   1.120
+pogolo      1        16        91598   0.143   0.208   0.344   2.979
+pogolo      4        16       232024   0.224   0.382   0.734  17.260
+pogolo     16        16       298483   0.554   2.129   3.035  12.300
+pogolo     64        16       296070   1.522  13.667  40.047 275.111
+ckpool      1         1        11654   0.079   0.094   0.105   0.800
+ckpool      1        16        76169   0.165   0.249   0.296   2.485
+ckpool      4        16       123340   0.476   0.773   0.946   2.219
+ckpool     16        16       131062   1.938   2.414   2.849   5.131
+ckpool     64        16       127200   8.057   8.874   9.471  14.011
+```
+
 ### New-block notify fanout
 
 The table below measures the ZMQ fast-block path from a regtest block trigger to
@@ -120,9 +149,9 @@ same local regtest setup:
 
 ```text
 miners  avg_ms  p50_ms  p95_ms  p99_ms  max_ms
-   100     2.3     2.4     2.5     2.7     2.7
-  1000     3.1     3.0     3.7     3.7     3.7
- 10000     9.1     9.4    15.5    15.7    15.8
+   100     2.4     2.4     2.7     2.7     2.8
+  1000     3.0     3.0     3.5     3.6     3.6
+ 10000     8.9     8.7    14.7    14.9    15.0
 ```
 
 The probe source lives at
@@ -150,6 +179,21 @@ ckpool   10000   282.6   283.9   335.6   340.0   341.3
 
 For ckpool, the probe uses exact-address usernames and waits for the subscribe
 response before authorizing, matching ckpool's stricter Stratum handshake.
+
+With pool-side ZMQ disabled for all three pools, the same Go fanout probe reports:
+
+```text
+  pool  miners   avg_ms   p50_ms   p95_ms   p99_ms   max_ms
+gopool     100      2.4      2.4      2.7      2.7      2.8
+gopool    1000      3.0      3.0      3.5      3.6      3.6
+gopool   10000      8.9      8.7     14.7     14.9     15.0
+pogolo     100     99.2     99.0     99.8     99.9     99.9
+pogolo    1000     93.1     93.1     93.9     93.9     93.9
+pogolo   10000     69.2     69.2     75.6     76.2     76.4
+ckpool     100  13968.0  13968.0  13968.5  13968.6  13968.6
+ckpool    1000  14075.6  14075.7  14080.8  14081.2  14081.2
+ckpool   10000  13600.0  13597.9  13656.4  13660.6  13661.8
+```
 
 ```go
 for round := 1; round <= *rounds; round++ {

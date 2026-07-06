@@ -34,6 +34,34 @@ docker compose run --rm openbench "$@"
 
 Results are written under `.benchmarks/open-pool-benchmark/results/`.
 
+## Go submit hot path
+
+The tracked Go probe in `tools/go-submit-bench/` measures post-handshake
+`mining.submit` round-trip latency and throughput. It subscribes, authorizes,
+receives work, then submits above-network-target nonces so pools validate and
+reject shares without submitting blocks.
+
+Latest unpinned run on a 32-logical-CPU host:
+
+```text
+  pool  conns  pipeline  validated/s  p50_ms  p95_ms  p99_ms  max_ms
+gopool      1         1        38025   0.021   0.026   0.035   1.514
+gopool      1        16       108958   0.103   0.164   0.212   3.688
+gopool      4        16       340431   0.153   0.206   0.336   3.809
+gopool     16        16       749352   0.163   0.548   0.930   4.300
+gopool     64        16       917377   0.587   2.793   5.084  21.292
+pogolo      1         1        42903   0.018   0.022   0.030   1.120
+pogolo      1        16        91598   0.143   0.208   0.344   2.979
+pogolo      4        16       232024   0.224   0.382   0.734  17.260
+pogolo     16        16       298483   0.554   2.129   3.035  12.300
+pogolo     64        16       296070   1.522  13.667  40.047 275.111
+ckpool      1         1        11654   0.079   0.094   0.105   0.800
+ckpool      1        16        76169   0.165   0.249   0.296   2.485
+ckpool      4        16       123340   0.476   0.773   0.946   2.219
+ckpool     16        16       131062   1.938   2.414   2.849   5.131
+ckpool     64        16       127200   8.057   8.874   9.471  14.011
+```
+
 ## New-block notify fanout
 
 The tracked Go probe in `tools/go-notify-fanout/` measures the ZMQ/new-block
@@ -55,9 +83,9 @@ same local regtest setup:
 
 ```text
 miners  avg_ms  p50_ms  p95_ms  p99_ms  max_ms
-   100     2.3     2.4     2.5     2.7     2.7
-  1000     3.1     3.0     3.7     3.7     3.7
- 10000     9.1     9.4    15.5    15.7    15.8
+   100     2.4     2.4     2.7     2.7     2.8
+  1000     3.0     3.0     3.5     3.6     3.6
+ 10000     8.9     8.7    14.7    14.9    15.0
 ```
 
 Using the same Go probe against the open-pool-benchmark pool set with ZMQ
@@ -79,6 +107,21 @@ ckpool   10000   282.6   283.9   335.6   340.0   341.3
 For ckpool, run the probe with `--worker-suffix=false --ordered-handshake`
 because ckpool expects an exact payout-address username and rejects authorize
 requests sent before the subscribe response.
+
+With pool-side ZMQ disabled for all three pools:
+
+```text
+  pool  miners   avg_ms   p50_ms   p95_ms   p99_ms   max_ms
+gopool     100      2.4      2.4      2.7      2.7      2.8
+gopool    1000      3.0      3.0      3.5      3.6      3.6
+gopool   10000      8.9      8.7     14.7     14.9     15.0
+pogolo     100     99.2     99.0     99.8     99.9     99.9
+pogolo    1000     93.1     93.1     93.9     93.9     93.9
+pogolo   10000     69.2     69.2     75.6     76.2     76.4
+ckpool     100  13968.0  13968.0  13968.5  13968.6  13968.6
+ckpool    1000  14075.6  14075.7  14080.8  14081.2  14081.2
+ckpool   10000  13600.0  13597.9  13656.4  13660.6  13661.8
+```
 
 One way to reproduce it is to start an unpinned goPool benchmark environment and
 leave it running:
