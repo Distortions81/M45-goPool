@@ -1,4 +1,4 @@
-# Rendered by open-pool-benchmark. The same file is copied to config.toml,
+# Rendered by the local benchmark harness. The same file is copied to config.toml,
 # policy.toml, tuning.toml, and secrets.toml inside the goPool benchmark image.
 
 rpc_user = "${RPC_USER}"
@@ -6,7 +6,7 @@ rpc_pass = "${RPC_PASS}"
 
 [branding]
   status_brand_name = "goPool openbench"
-  status_tagline = "open-pool-benchmark"
+  status_tagline = "go benchmarks"
 
 [logging]
   debug = false
@@ -29,7 +29,7 @@ rpc_pass = "${RPC_PASS}"
   rpc_cookie_path = ""
   rpc_url = "http://${RPC_HOST}:${RPC_PORT}"
   zmq_hashblock_addr = "tcp://${RPC_HOST}:28332"
-  zmq_rawblock_addr = "tcp://${RPC_HOST}:28332"
+  zmq_rawblock_addr = "tcp://${RPC_HOST}:28333"
 
 [server]
   pool_listen = ":3333"

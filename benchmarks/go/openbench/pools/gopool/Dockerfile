@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /out/goPool /app/goPool
 COPY data /app/data
-COPY benchmarks/open-pool-benchmark/pools/gopool/entrypoint.sh /usr/local/bin/gopool-openbench
+COPY benchmarks/go/openbench/pools/gopool/entrypoint.sh /usr/local/bin/gopool-openbench
 
 RUN chmod +x /usr/local/bin/gopool-openbench
 

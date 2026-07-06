@@ -1,7 +1,7 @@
-# open-pool-benchmark registry for goPool comparison runs.
+# Go benchmark pool registry for local comparison runs.
 #
 # This overlay keeps the comparison intentionally focused on goPool, pogolo, and
-# ckpool. It is copied over the upstream harness by scripts/open-pool-benchmark.sh.
+# ckpool. It is copied over the upstream harness by scripts/go-benchmark-env.sh.
 
 regtest:
   rpc_user: openbench

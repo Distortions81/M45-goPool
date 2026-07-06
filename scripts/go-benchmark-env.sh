@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-bench_dir="${OPEN_POOL_BENCHMARK_DIR:-${repo_root}/.benchmarks/open-pool-benchmark}"
-upstream="${OPEN_POOL_BENCHMARK_REPO:-https://github.com/eandersson/open-pool-benchmark.git}"
-ref="${OPEN_POOL_BENCHMARK_REF:-main}"
-overlay="${repo_root}/benchmarks/open-pool-benchmark"
+bench_dir="${GO_BENCHMARK_ENV_DIR:-${repo_root}/.benchmarks/go-benchmark-env}"
+upstream="${GO_BENCHMARK_ENV_REPO:-https://github.com/eandersson/open-pool-benchmark.git}"
+ref="${GO_BENCHMARK_ENV_REF:-main}"
+overlay="${repo_root}/benchmarks/go/openbench"
 src_dir="${bench_dir}/pools/gopool/src"
 
 if ! command -v git >/dev/null 2>&1; then
@@ -32,6 +32,22 @@ cp "${overlay}/pools/gopool/bench.toml" "${bench_dir}/pools/gopool/bench.toml"
 cp "${overlay}/pools/gopool/Dockerfile" "${bench_dir}/pools/gopool/Dockerfile"
 cp "${overlay}/pools/gopool/entrypoint.sh" "${bench_dir}/pools/gopool/entrypoint.sh"
 
+# Keep hashblock and rawblock on separate ZMQ sockets. ckpool's ZMQ block
+# watcher expects the hashblock stream and logs size errors if rawblock frames
+# are published on the same endpoint.
+if [ -f "${bench_dir}/regtest/bitcoin.conf" ]; then
+  sed -i \
+    -e 's#^zmqpubhashblock=.*#zmqpubhashblock=tcp://0.0.0.0:28332#' \
+    -e 's#^zmqpubrawblock=.*#zmqpubrawblock=tcp://0.0.0.0:28333#' \
+    "${bench_dir}/regtest/bitcoin.conf"
+fi
+if [ -f "${bench_dir}/regtest/Dockerfile.bitcoind" ]; then
+  sed -i \
+    -e 's/# 18443 = regtest RPC, 28332 = zmq hashblock.*/# 18443 = regtest RPC, 28332 = zmq hashblock, 28333 = zmq rawblock/' \
+    -e 's/^EXPOSE 18443 28332.*/EXPOSE 18443 28332 28333/' \
+    "${bench_dir}/regtest/Dockerfile.bitcoind"
+fi
+
 rm -rf "$src_dir"
 mkdir -p "$src_dir"
 tar -C "$repo_root" \
@@ -50,7 +66,7 @@ tar -C "$repo_root" \
 cd "$bench_dir"
 
 if [ "$#" -eq 0 ]; then
-  set -- suite --pools gopool,pogolo,ckpool
+  set -- list
 fi
 
 exec docker compose run --rm openbench "$@"
