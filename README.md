@@ -99,6 +99,77 @@ ckpool           16        4        16  59816   3.886   6.169   7.243       83  
 ckpool           64        4        16  62422  15.477  22.035  25.109       25       15
 ```
 
+### New-block notify fanout
+
+The table below measures the ZMQ fast-block path from a regtest block trigger to
+connected Stratum clients receiving fresh `mining.notify` work. The run used the
+same open-pool-benchmark goPool profile, with CPU pinning disabled so bitcoind,
+goPool, and the probe could use the host scheduler normally. The client side was
+a Go probe using one goroutine per miner socket, avoiding the Python asyncio
+reader bottleneck seen in earlier exploratory runs.
+
+```text
+miners  avg_ms  p50_ms  p95_ms  p99_ms  max_ms
+   100     2.3     2.2     2.7     2.7     2.7
+  1000     2.9     3.0     3.5     3.6     3.6
+ 10000     9.1     8.4    15.0    15.3    15.3
+```
+
+With ZMQ disabled and goPool using RPC `getblocktemplate` longpoll only on the
+same local regtest setup:
+
+```text
+miners  avg_ms  p50_ms  p95_ms  p99_ms  max_ms
+   100     2.3     2.4     2.5     2.7     2.7
+  1000     3.1     3.0     3.7     3.7     3.7
+ 10000     9.1     9.4    15.5    15.7    15.8
+```
+
+The probe source lives at
+[`benchmarks/open-pool-benchmark/tools/go-notify-fanout/main.go`](benchmarks/open-pool-benchmark/tools/go-notify-fanout/main.go).
+Its hot path is intentionally simple: each miner connection has a reader
+goroutine, records an atomic timestamp when a new job id arrives, and the round
+loop triggers one regtest block through Bitcoin Core RPC before aggregating
+p50/p95/p99/max.
+
+Using the same Go probe against the open-pool-benchmark pool set with ZMQ
+enabled:
+
+```text
+  pool  miners  avg_ms  p50_ms  p95_ms  p99_ms  max_ms
+gopool     100     2.3     2.2     2.7     2.7     2.7
+gopool    1000     2.9     3.0     3.5     3.6     3.6
+gopool   10000     9.1     8.4    15.0    15.3    15.3
+pogolo     100    61.4    61.6    61.8    61.8    61.8
+pogolo    1000    61.7    61.7    62.4    62.6    62.6
+pogolo   10000    69.7    69.7    75.7    76.3    76.4
+ckpool     100    61.5    61.5    62.0    62.1    62.1
+ckpool    1000   173.9   174.0   179.3   179.8   179.9
+ckpool   10000   282.6   283.9   335.6   340.0   341.3
+```
+
+For ckpool, the probe uses exact-address usernames and waits for the subscribe
+response before authorizing, matching ckpool's stricter Stratum handshake.
+
+```go
+for round := 1; round <= *rounds; round++ {
+	for _, c := range clients {
+		c.resetRound()
+	}
+
+	time.Sleep(400 * time.Millisecond)
+	t0 := time.Now()
+	_, err := rpcCall(ctx, *rpcURL, *rpcUser, *rpcPass,
+		"generatetoaddress", []any{1, genAddr})
+	if err != nil {
+		os.Exit(1)
+	}
+
+	// Each client reader goroutine stores notifyNano when it sees a fresh
+	// mining.notify job id. The collector sorts notifyNano - t0 latencies.
+}
+```
+
 <p align="center">
   <img src="Screenshot_20260215_055225.png" alt="goPool status dashboard" width="720">
 </p>
