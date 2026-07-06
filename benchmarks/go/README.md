@@ -7,6 +7,11 @@ Benchmarks for `mining.submit` and `mining.notify`. Use
 
 Unpinned results from a 32-logical-CPU host.
 
+![Benchmark heat map](heatmap.svg)
+
+Every numeric value is a colored tile. Each metric column is scaled
+independently; green is better and red is worse.
+
 ### mining.submit
 
 Post-handshake submit validation with one in-flight submit per miner.
