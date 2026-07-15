@@ -105,8 +105,30 @@ type bannedSubmitPolicy struct {
 	err    []any
 }
 
+// preparedSubmissionTask contains the exact header interpretation selected
+// before queue admission together with the difficulty values used to select
+// it. Queue workers must not rebuild or rehash a submission: doing so would put
+// a winning block back behind the ordinary-share FIFO.
+type preparedSubmissionTask struct {
+	task          submissionTask
+	ctx           shareContext
+	assignedDiff  float64
+	currentDiff   float64
+	creditedDiff  float64
+	thresholdDiff float64
+	meetsAssigned bool
+}
+
+type submissionAdmission uint8
+
+const (
+	submissionAdmissionAccepted submissionAdmission = iota
+	submissionAdmissionFull
+	submissionAdmissionClosed
+)
+
 type submissionWorkerPool struct {
-	tasks chan submissionTask
+	tasks chan preparedSubmissionTask
 
 	// submitMu keeps sends and channel closure mutually exclusive. A read lock
 	// is held across each send so a task accepted before shutdown is always
@@ -125,7 +147,7 @@ func newSubmissionWorkerPool(workerCount int) *submissionWorkerPool {
 	}
 	queueDepth := max(workerCount*submissionWorkerQueueMultiplier, submissionWorkerQueueMinDepth)
 	pool := &submissionWorkerPool{
-		tasks: make(chan submissionTask, queueDepth),
+		tasks: make(chan preparedSubmissionTask, queueDepth),
 	}
 	pool.workerWg.Add(workerCount)
 	for i := 0; i < workerCount; i++ {
@@ -134,19 +156,25 @@ func newSubmissionWorkerPool(workerCount int) *submissionWorkerPool {
 	return pool
 }
 
-// submit queues task unless shutdown has already closed the pool. Holding the
-// read lock through the send prevents a concurrent close from racing the send.
-func (p *submissionWorkerPool) submit(task submissionTask) bool {
+// trySubmit queues a proven non-block without waiting behind the bounded FIFO.
+// Holding the read lock through the non-blocking send prevents a concurrent
+// close from racing the send while still allowing shutdown to drain every task
+// accepted before closure.
+func (p *submissionWorkerPool) trySubmit(task preparedSubmissionTask) submissionAdmission {
 	if p == nil || p.tasks == nil {
-		return false
+		return submissionAdmissionClosed
 	}
 	p.submitMu.RLock()
 	defer p.submitMu.RUnlock()
 	if p.closed {
-		return false
+		return submissionAdmissionClosed
 	}
-	p.tasks <- task
-	return true
+	select {
+	case p.tasks <- task:
+		return submissionAdmissionAccepted
+	default:
+		return submissionAdmissionFull
+	}
 }
 
 // drainAndClose stops new submissions and waits until every task accepted by
@@ -169,13 +197,13 @@ func (p *submissionWorkerPool) drainAndClose() {
 func (p *submissionWorkerPool) worker(id int) {
 	defer p.workerWg.Done()
 	for task := range p.tasks {
-		func(t submissionTask) {
+		func(t preparedSubmissionTask) {
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Error("submission worker panic", "worker", id, "error", r)
 				}
 			}()
-			t.mc.processSubmissionTask(t)
+			t.task.mc.processPreparedSubmissionTask(t)
 		}(task)
 	}
 }

@@ -19,6 +19,8 @@ func newSubmitReadyMinerConnForModesTest(t *testing.T) (*MinerConn, *Job) {
 	authorizedWorker := "authorized.worker"
 	mc.stats.Worker = authorizedWorker
 	mc.stats.WorkerSHA256 = workerNameHash(authorizedWorker)
+	_, authorizedWallet, authorizedScript := generateTestWorker(t)
+	mc.setWorkerWallet(authorizedWorker, authorizedWallet, authorizedScript)
 
 	job := benchmarkSubmitJobForTest(t)
 	jobID := job.JobID
@@ -144,22 +146,24 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 		submissionWorkers = oldWorkers
 	})
 
-	submissionWorkers = &submissionWorkerPool{tasks: make(chan submissionTask, 1)}
+	submissionWorkers = &submissionWorkerPool{tasks: make(chan preparedSubmissionTask, 1)}
 
 	t.Run("disabled queues to worker pool", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.SubmitProcessInline = false
+		conn := &recordConn{}
+		mc.conn = conn
 
 		req := testSubmitRequestForJob(job, mc.currentWorker())
 		mc.handleSubmit(req)
 
 		select {
 		case task := <-submissionWorkers.tasks:
-			if task.mc != mc {
+			if task.task.mc != mc {
 				t.Fatalf("queued task miner mismatch")
 			}
 		default:
-			t.Fatalf("expected task to be queued when direct processing is disabled")
+			t.Fatalf("expected task to be queued when direct processing is disabled; output=%q", conn.String())
 		}
 	})
 
@@ -190,7 +194,7 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 		conn := &recordConn{}
 		mc.conn = conn
 		submissionWorkers = &submissionWorkerPool{
-			tasks:  make(chan submissionTask, 1),
+			tasks:  make(chan preparedSubmissionTask, 1),
 			closed: true,
 		}
 

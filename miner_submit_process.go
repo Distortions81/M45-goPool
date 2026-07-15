@@ -7,14 +7,32 @@ import (
 )
 
 func (mc *MinerConn) processSubmissionTask(task submissionTask) {
+	defer mc.recordSubmissionTaskRTT(task)
+	mc.logSubmissionTask(task)
+	prepared, ok := mc.prepareSubmissionForProcessing(task)
+	if !ok {
+		return
+	}
+	mc.processPreparedShare(prepared)
+}
+
+// processPreparedSubmissionTask completes a submission whose exact header and
+// every plausible version interpretation were already hashed before ordinary
+// queue admission.
+func (mc *MinerConn) processPreparedSubmissionTask(prepared preparedSubmissionTask) {
+	defer mc.recordSubmissionTaskRTT(prepared.task)
+	mc.processPreparedShare(prepared)
+}
+
+func (mc *MinerConn) recordSubmissionTaskRTT(task submissionTask) {
 	start := task.receivedAt
 	if start.IsZero() {
 		start = time.Now()
 	}
-	defer func() {
-		mc.recordSubmitRTT(time.Since(start))
-	}()
+	mc.recordSubmitRTT(time.Since(start))
+}
 
+func (mc *MinerConn) logSubmissionTask(task submissionTask) {
 	workerName := task.workerName
 	jobID := task.jobID
 	extranonce2 := task.extranonce2
@@ -35,26 +53,23 @@ func (mc *MinerConn) processSubmissionTask(task submissionTask) {
 			"version", versionHex,
 		)
 	}
-
-	ctx, ok := mc.prepareShareContext(task)
-	if !ok {
-		return
-	}
-	mc.processShare(task, ctx)
 }
 
-func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
-	job := task.job
-	workerName := task.workerName
-	jobID := task.jobID
-	policyReject := task.policyReject
-	reqID := task.reqID
-	now := task.receivedAt
-	extranonce2 := task.extranonce2
-	ntime := task.ntime
-	nonce := task.nonce
-	versionHex := task.versionHex
+func (mc *MinerConn) prepareSubmissionForProcessing(task submissionTask) (preparedSubmissionTask, bool) {
+	ctx, ok := mc.prepareShareContext(task)
+	if !ok {
+		return preparedSubmissionTask{}, false
+	}
+	return mc.resolveSubmissionContext(task, ctx), true
+}
 
+// resolveSubmissionContext selects the same ordinary-share primary/alternate
+// interpretation as before, then hashes every retained block-only rescue
+// version. It runs before queue admission so a network-target block can never
+// sit behind ordinary work.
+func (mc *MinerConn) resolveSubmissionContext(task submissionTask, ctx shareContext) preparedSubmissionTask {
+	jobID := task.jobID
+	now := task.receivedAt
 	assignedDiff := task.assignedDifficulty
 	if assignedDiff <= 0 {
 		assignedDiff = mc.assignedDifficulty(jobID)
@@ -64,7 +79,6 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 	if creditedDiff <= 0 {
 		creditedDiff = currentDiff
 	}
-
 	thresholdDiff := assignedDiff
 	if thresholdDiff <= 0 {
 		thresholdDiff = currentDiff
@@ -80,8 +94,6 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 			if preferAlternateSubmissionContext(ctx, altCtx, primaryAcceptable, alternateAcceptable) {
 				task = altTask
 				ctx = altCtx
-				policyReject = task.policyReject
-				versionHex = task.versionHex
 			}
 		}
 	}
@@ -103,12 +115,52 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 			if rescueCtx, ok := mc.prepareVersionShareContext(rescueTask, ctx); ok && rescueCtx.isBlock {
 				task = rescueTask
 				ctx = rescueCtx
-				policyReject = task.policyReject
-				versionHex = task.versionHex
 				break
 			}
 		}
 	}
+
+	if !ctx.isBlock {
+		// Rescue data is only needed while testing alternate headers. Proven
+		// non-blocks keep cbTx separately when verbose share detail is enabled.
+		ctx.rescueCoinbase = nil
+		ctx.rescueMerkleRoot = [32]byte{}
+	}
+	return preparedSubmissionTask{
+		task:          task,
+		ctx:           ctx,
+		assignedDiff:  assignedDiff,
+		currentDiff:   currentDiff,
+		creditedDiff:  creditedDiff,
+		thresholdDiff: thresholdDiff,
+		meetsAssigned: mc.submissionMeetsAssignedDifficulty(ctx, thresholdDiff, now),
+	}
+}
+
+// processShare remains the direct/test entry point for an already-built
+// primary context. Production asynchronous admission resolves the same context
+// synchronously and calls processPreparedShare from the worker.
+func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
+	mc.processPreparedShare(mc.resolveSubmissionContext(task, ctx))
+}
+
+func (mc *MinerConn) processPreparedShare(prepared preparedSubmissionTask) {
+	task := prepared.task
+	ctx := prepared.ctx
+	job := task.job
+	workerName := task.workerName
+	jobID := task.jobID
+	policyReject := task.policyReject
+	reqID := task.reqID
+	now := task.receivedAt
+	extranonce2 := task.extranonce2
+	ntime := task.ntime
+	nonce := task.nonce
+	versionHex := task.versionHex
+	assignedDiff := prepared.assignedDiff
+	currentDiff := prepared.currentDiff
+	creditedDiff := prepared.creditedDiff
+	thresholdDiff := prepared.thresholdDiff
 
 	// A miner that was already banned when this submit arrived may still have
 	// been hashing work we advertised while it was authorized. Preserve the ban
@@ -164,7 +216,7 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		return
 	}
 
-	lowDiff := !mc.submissionMeetsAssignedDifficulty(ctx, thresholdDiff, now)
+	lowDiff := !prepared.meetsAssigned
 	if lowDiff {
 		if debugLogging || verboseRuntimeLogging {
 			logger.Info("share rejected",

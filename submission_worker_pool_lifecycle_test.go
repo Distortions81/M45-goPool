@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-func newLifecycleTestSubmissionPool(queueDepth int, process func(submissionTask)) *submissionWorkerPool {
+func newLifecycleTestSubmissionPool(queueDepth int, process func(preparedSubmissionTask)) *submissionWorkerPool {
 	if queueDepth <= 0 {
 		queueDepth = 1
 	}
-	pool := &submissionWorkerPool{tasks: make(chan submissionTask, queueDepth)}
+	pool := &submissionWorkerPool{tasks: make(chan preparedSubmissionTask, queueDepth)}
 	pool.workerWg.Add(1)
 	go func() {
 		defer pool.workerWg.Done()
@@ -26,13 +26,14 @@ func TestSubmissionWorkerPoolDrainWaitsForQueuedAndInFlightTasks(t *testing.T) {
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 	var processed atomic.Int32
-	pool := newLifecycleTestSubmissionPool(2, func(submissionTask) {
+	pool := newLifecycleTestSubmissionPool(2, func(preparedSubmissionTask) {
 		started <- struct{}{}
 		<-release
 		processed.Add(1)
 	})
 
-	if !pool.submit(submissionTask{}) || !pool.submit(submissionTask{}) {
+	if pool.trySubmit(preparedSubmissionTask{}) != submissionAdmissionAccepted ||
+		pool.trySubmit(preparedSubmissionTask{}) != submissionAdmissionAccepted {
 		t.Fatal("expected both pre-shutdown tasks to be accepted")
 	}
 
@@ -62,7 +63,7 @@ func TestSubmissionWorkerPoolDrainWaitsForQueuedAndInFlightTasks(t *testing.T) {
 	if got := processed.Load(); got != 2 {
 		t.Fatalf("processed tasks = %d, want 2", got)
 	}
-	if pool.submit(submissionTask{}) {
+	if pool.trySubmit(preparedSubmissionTask{}) != submissionAdmissionClosed {
 		t.Fatal("closed pool accepted a new task")
 	}
 
@@ -72,7 +73,7 @@ func TestSubmissionWorkerPoolDrainWaitsForQueuedAndInFlightTasks(t *testing.T) {
 
 func TestSubmissionWorkerPoolConcurrentSubmitAndDrain(t *testing.T) {
 	var processed atomic.Int32
-	pool := newLifecycleTestSubmissionPool(4, func(submissionTask) {
+	pool := newLifecycleTestSubmissionPool(4, func(preparedSubmissionTask) {
 		processed.Add(1)
 	})
 
@@ -85,7 +86,7 @@ func TestSubmissionWorkerPoolConcurrentSubmitAndDrain(t *testing.T) {
 		go func() {
 			defer submitters.Done()
 			<-start
-			if pool.submit(submissionTask{}) {
+			if pool.trySubmit(preparedSubmissionTask{}) == submissionAdmissionAccepted {
 				accepted.Add(1)
 			}
 		}()
@@ -111,7 +112,7 @@ func TestSubmissionWorkerPoolConcurrentSubmitAndDrain(t *testing.T) {
 func TestSubmissionWorkerPoolCreatedWorkersExitOnDrain(t *testing.T) {
 	pool := newSubmissionWorkerPool(2)
 	pool.drainAndClose()
-	if pool.submit(submissionTask{}) {
+	if pool.trySubmit(preparedSubmissionTask{}) != submissionAdmissionClosed {
 		t.Fatal("drained production pool accepted a task")
 	}
 }
