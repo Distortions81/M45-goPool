@@ -40,9 +40,12 @@ const (
 	defaultAcceptSteadyStateReconnectWindow  = 60
 	defaultStratumMessagesPerMinute          = 0
 
-	defaultJobEntropy                = 4
-	maxJobEntropy                    = 16
-	defaultCoinbaseScriptSigMaxBytes = 100
+	defaultJobEntropy = 4
+	maxJobEntropy     = 16
+	// Consensus requires the coinbase input scriptSig to be 2..100 bytes.
+	minCoinbaseScriptSigBytes        = 2
+	maxCoinbaseScriptSigBytes        = 100
+	defaultCoinbaseScriptSigMaxBytes = maxCoinbaseScriptSigBytes
 
 	defaultMaxConns = 50000
 

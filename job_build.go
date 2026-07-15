@@ -56,16 +56,21 @@ func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateRe
 		}
 		coinbaseMsg = msg
 	}
-	if jm.cfg.CoinbaseScriptSigMaxBytes > 0 {
-		trimmed, truncated, err := clampCoinbaseMessage(coinbaseMsg, jm.cfg.CoinbaseScriptSigMaxBytes, tpl.Height, scriptTime, tpl.CoinbaseAux.Flags, jm.cfg.Extranonce2Size, jm.cfg.TemplateExtraNonce2Size)
-		if err != nil {
-			return nil, fmt.Errorf("coinbase scriptsig limit: %w", err)
-		}
-		if truncated {
-			logger.Debug("clamped coinbase message to meet scriptSig limit", "limit", jm.cfg.CoinbaseScriptSigMaxBytes, "message", trimmed)
-		}
-		coinbaseMsg = trimmed
+	coinbaseScriptSigMaxBytes := jm.cfg.CoinbaseScriptSigMaxBytes
+	if coinbaseScriptSigMaxBytes == 0 {
+		// Config validation rejects an explicit zero. Keep direct/internal
+		// JobManager construction safe by treating an omitted zero value as the
+		// consensus maximum instead of disabling the limit.
+		coinbaseScriptSigMaxBytes = maxCoinbaseScriptSigBytes
 	}
+	trimmed, truncated, err := clampCoinbaseMessage(coinbaseMsg, coinbaseScriptSigMaxBytes, tpl.Height, scriptTime, tpl.CoinbaseAux.Flags, jm.cfg.Extranonce2Size, jm.cfg.TemplateExtraNonce2Size)
+	if err != nil {
+		return nil, fmt.Errorf("coinbase scriptsig limit: %w", err)
+	}
+	if truncated {
+		logger.Debug("clamped coinbase message to meet scriptSig limit", "limit", coinbaseScriptSigMaxBytes, "message", trimmed)
+	}
+	coinbaseMsg = trimmed
 
 	var prevBytes [32]byte
 	if len(tpl.Previous) != 64 {
@@ -127,7 +132,7 @@ func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateRe
 		coinbaseFlagsBytes:        flagsBytes,
 		witnessCommitScript:       commitScript,
 		TemplateExtraNonce2Size:   jm.cfg.TemplateExtraNonce2Size,
-		CoinbaseScriptSigMaxBytes: jm.cfg.CoinbaseScriptSigMaxBytes,
+		CoinbaseScriptSigMaxBytes: coinbaseScriptSigMaxBytes,
 	}
 
 	return job, nil

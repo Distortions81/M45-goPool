@@ -828,6 +828,9 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if next.CoinbaseScriptSigMaxBytes, err = parseInt("coinbase_scriptsig_max_bytes", next.CoinbaseScriptSigMaxBytes); err != nil {
 		return err
 	}
+	if next.CoinbaseScriptSigMaxBytes < minCoinbaseScriptSigBytes || next.CoinbaseScriptSigMaxBytes > maxCoinbaseScriptSigBytes {
+		return fmt.Errorf("coinbase_scriptsig_max_bytes must be between %d and %d", minCoinbaseScriptSigBytes, maxCoinbaseScriptSigBytes)
+	}
 	if next.MinVersionBits, err = parseInt("min_version_bits", next.MinVersionBits); err != nil {
 		return err
 	}

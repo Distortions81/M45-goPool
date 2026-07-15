@@ -1222,35 +1222,43 @@ func (mc *MinerConn) jobForSession(job *Job) (*Job, error) {
 	if templateExtranonce2Size < extranonce2Size {
 		templateExtranonce2Size = extranonce2Size
 	}
-	if job.Extranonce2Size == extranonce2Size && job.TemplateExtraNonce2Size == templateExtranonce2Size {
+	coinbaseScriptSigMaxBytes := job.CoinbaseScriptSigMaxBytes
+	if coinbaseScriptSigMaxBytes == 0 {
+		// Jobs constructed directly in tests or by older in-memory callers may
+		// omit the field. Apply the consensus maximum; never interpret zero as
+		// disabling scriptSig protection.
+		coinbaseScriptSigMaxBytes = maxCoinbaseScriptSigBytes
+	}
+	message, truncated, err := clampCoinbaseMessage(
+		job.CoinbaseMsg,
+		coinbaseScriptSigMaxBytes,
+		job.Template.Height,
+		job.ScriptTime,
+		job.Template.CoinbaseAux.Flags,
+		extranonce2Size,
+		templateExtranonce2Size,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("adapt coinbase message to session extranonce2: %w", err)
+	}
+	if job.Extranonce2Size == extranonce2Size &&
+		job.TemplateExtraNonce2Size == templateExtranonce2Size &&
+		message == job.CoinbaseMsg {
 		return job, nil
 	}
 
 	sessionJob := *job
 	sessionJob.Extranonce2Size = extranonce2Size
 	sessionJob.TemplateExtraNonce2Size = templateExtranonce2Size
-	if job.CoinbaseScriptSigMaxBytes > 0 {
-		message, truncated, err := clampCoinbaseMessage(
-			job.CoinbaseMsg,
-			job.CoinbaseScriptSigMaxBytes,
-			job.Template.Height,
-			job.ScriptTime,
-			job.Template.CoinbaseAux.Flags,
-			extranonce2Size,
-			templateExtranonce2Size,
+	sessionJob.CoinbaseScriptSigMaxBytes = coinbaseScriptSigMaxBytes
+	sessionJob.CoinbaseMsg = message
+	if truncated {
+		logger.Debug("clamped coinbase message for session extranonce2",
+			"remote", mc.id,
+			"limit", coinbaseScriptSigMaxBytes,
+			"extranonce2_size", extranonce2Size,
+			"template_extranonce2_size", templateExtranonce2Size,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("adapt coinbase message to session extranonce2: %w", err)
-		}
-		sessionJob.CoinbaseMsg = message
-		if truncated {
-			logger.Debug("clamped coinbase message for session extranonce2",
-				"remote", mc.id,
-				"limit", job.CoinbaseScriptSigMaxBytes,
-				"extranonce2_size", extranonce2Size,
-				"template_extranonce2_size", templateExtranonce2Size,
-			)
-		}
 	}
 	return &sessionJob, nil
 }

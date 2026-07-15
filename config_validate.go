@@ -66,8 +66,8 @@ func validateConfig(cfg Config) error {
 			return fmt.Errorf("pool_entropy must only contain alphanumeric characters")
 		}
 	}
-	if cfg.CoinbaseScriptSigMaxBytes < 0 {
-		return fmt.Errorf("coinbase_scriptsig_max_bytes cannot be negative")
+	if cfg.CoinbaseScriptSigMaxBytes < minCoinbaseScriptSigBytes || cfg.CoinbaseScriptSigMaxBytes > maxCoinbaseScriptSigBytes {
+		return fmt.Errorf("coinbase_scriptsig_max_bytes must be between %d and %d, got %d", minCoinbaseScriptSigBytes, maxCoinbaseScriptSigBytes, cfg.CoinbaseScriptSigMaxBytes)
 	}
 	if cfg.ConnectionTimeout < 0 {
 		return fmt.Errorf("connection_timeout_seconds cannot be negative")

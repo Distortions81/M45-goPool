@@ -25,7 +25,7 @@
 # - extranonce2_size: Per-share extranonce2 byte length used for submit parsing and validation; 4 is the broadest compatibility default, and 2-16 is the supported compatibility range (requires restart).
 # - template_extra_nonce2_size: Template extranonce2 byte length used in generated jobs (requires restart).
 # - job_entropy: Entropy bytes added to per-job coinbase tags (requires restart).
-# - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (requires restart).
+# - coinbase_scriptsig_max_bytes: Maximum allowed coinbase scriptSig size in bytes (2-100; requires restart).
 #
 # Hashrate ([hashrate])
 # - hashrate_ema_tau_seconds: EMA time constant for per-connection hashrate smoothing (seconds; requires restart).

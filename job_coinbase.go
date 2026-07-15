@@ -212,6 +212,9 @@ func serializeCoinbaseTxPayoutsPredecoded(height int64, extranonce1, extranonce2
 	msg := normalizeCoinbaseMessage(coinbaseMsg)
 	scriptSigPart2 := serializeStringScript(msg)
 	scriptSigLen := len(scriptSigPart1) + padLen + len(extranonce1) + len(extranonce2) + len(scriptSigPart2)
+	if err := validateCoinbaseScriptSigLen(scriptSigLen); err != nil {
+		return nil, nil, err
+	}
 
 	var vin bytes.Buffer
 	writeVarInt(&vin, 1)
@@ -391,17 +394,26 @@ func coinbaseScriptSigFixedLen(height int64, scriptTime int64, coinbaseFlags str
 	return partLen + padLen + coinbaseExtranonce1Size + extranonce2Size, nil
 }
 
+func validateCoinbaseScriptSigLen(length int) error {
+	if length < minCoinbaseScriptSigBytes || length > maxCoinbaseScriptSigBytes {
+		return fmt.Errorf("coinbase scriptSig length must be between %d and %d bytes, got %d", minCoinbaseScriptSigBytes, maxCoinbaseScriptSigBytes, length)
+	}
+	return nil
+}
+
 func clampCoinbaseMessage(message string, limit int, height int64, scriptTime int64, coinbaseFlags string, extranonce2Size int, templateExtraNonce2Size int) (string, bool, error) {
-	if limit <= 0 {
-		return message, false, nil
+	if limit < minCoinbaseScriptSigBytes || limit > maxCoinbaseScriptSigBytes {
+		return "", false, fmt.Errorf("limit must be between %d and %d bytes, got %d", minCoinbaseScriptSigBytes, maxCoinbaseScriptSigBytes, limit)
 	}
 	fixedLen, err := coinbaseScriptSigFixedLen(height, scriptTime, coinbaseFlags, extranonce2Size, templateExtraNonce2Size)
 	if err != nil {
 		return "", false, err
 	}
 	allowed := limit - fixedLen
-	if allowed <= 0 {
-		return "", true, nil
+	smallestNormalized := normalizeCoinbaseMessage("/")
+	smallestEncodedLen := len(serializeStringScript(smallestNormalized))
+	if allowed < smallestEncodedLen {
+		return "", false, fmt.Errorf("fixed fields require %d bytes, leaving %d for the smallest encoded tag (%d bytes)", fixedLen, allowed, smallestEncodedLen)
 	}
 
 	normalized := normalizeCoinbaseMessage(message)
@@ -409,21 +421,24 @@ func clampCoinbaseMessage(message string, limit int, height int64, scriptTime in
 	// so body is the message without the leading delimiter.
 	body := strings.TrimPrefix(normalized, "/")
 	if len(serializeStringScript(normalized)) <= allowed {
+		if body == "" {
+			return "/", false, nil
+		}
 		return body, false, nil
 	}
 	for len(body) > 0 {
 		body = body[:len(body)-1]
 		candidate := "/" + body
 		if len(serializeStringScript(candidate)) <= allowed {
+			if body == "" {
+				return "/", true, nil
+			}
 			return body, true, nil
 		}
 	}
-	// Fallback to the default tag if we trimmed everything.
-	defaultNormalized := normalizeCoinbaseMessage("")
-	if len(serializeStringScript(defaultNormalized)) <= allowed {
-		return "", true, nil
-	}
-	return "", true, nil
+	// The smallest tag was checked above, so this is only reachable if the
+	// normalization or string encoding rules change without the loop changing.
+	return "", false, fmt.Errorf("smallest encoded coinbase tag does not fit within %d-byte limit", limit)
 }
 
 // buildCoinbaseParts constructs coinb1/coinb2 for Stratum notify.
@@ -460,6 +475,10 @@ func buildCoinbasePartsPayouts(height int64, extranonce1 []byte, extranonce2Size
 	}, nil)
 	msg := normalizeCoinbaseMessage(coinbaseMsg)
 	scriptSigPart2 := serializeStringScript(msg)
+	scriptSigLen := len(scriptSigPart1) + len(extraNoncePlaceholder) + len(scriptSigPart2)
+	if err := validateCoinbaseScriptSigLen(scriptSigLen); err != nil {
+		return "", "", err
+	}
 
 	// p1: version || input count || prevout || scriptsig length || scriptsig_part1
 	var p1 bytes.Buffer
@@ -467,7 +486,7 @@ func buildCoinbasePartsPayouts(height int64, extranonce1 []byte, extranonce2Size
 	writeVarInt(&p1, 1)
 	p1.Write(bytes.Repeat([]byte{0x00}, 32))
 	writeUint32LE(&p1, 0xffffffff)
-	writeVarInt(&p1, uint64(len(scriptSigPart1)+len(extraNoncePlaceholder)+len(scriptSigPart2)))
+	writeVarInt(&p1, uint64(scriptSigLen))
 	p1.Write(scriptSigPart1)
 
 	// Outputs
