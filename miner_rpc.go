@@ -9,8 +9,10 @@ import (
 
 // submitBlockWithFastRetry aggressively retries submitblock without backoff
 // to maximize the chance of winning the propagation race. It retries every
-// 100ms until either submitblock succeeds, a newer job height is observed,
-// or a safety window elapses.
+// 100ms until either submitblock succeeds or a safety window elapses.
+//
+// A newer template must not cancel delivery: a block extending a displaced
+// branch can add enough work to make that branch the best chain again.
 func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blockHex string, submitRes *any) error {
 	const (
 		retryInterval = 100 * time.Millisecond
@@ -20,9 +22,8 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 		// confirmTimeout bounds getblockheader checks used to detect cases where
 		// submitblock may have succeeded but the RPC response timed out.
 		confirmTimeout = 2 * time.Second
-		// maxRetryWindow is a final safety cap; in practice we expect to
-		// stop much sooner when a new block is seen. Using a full block
-		// interval keeps us racing hard for rare finds.
+		// maxRetryWindow is a final safety cap. Using a full block interval
+		// keeps us racing hard for rare finds through transient RPC failures.
 		maxRetryWindow = 10 * time.Minute
 	)
 
@@ -103,20 +104,6 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 			)
 		}
 
-		// If we've already seen a newer template height, there's no point
-		// continuing to spam submitblock for this block.
-		if mc.jobMgr != nil && job != nil {
-			if cur := mc.jobMgr.CurrentJob(); submissionJobSuperseded(job, cur) {
-				logger.Warn("submitblock giving up after new block seen",
-					"original_height", job.Template.Height,
-					"current_height", cur.Template.Height,
-					"attempts", attempt,
-					"error", err,
-				)
-				return err
-			}
-		}
-
 		// Safety stop: avoid spinning forever if the node is persistently
 		// unreachable or rejects the block.
 		if time.Since(start) >= maxRetryWindow {
@@ -130,22 +117,6 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 
 		time.Sleep(retryInterval)
 	}
-}
-
-func submissionJobSuperseded(submitted, current *Job) bool {
-	if submitted == nil || current == nil {
-		return false
-	}
-	if current.Template.Height > submitted.Template.Height {
-		return true
-	}
-	// A reorg can replace the chain tip without increasing height, and can even
-	// temporarily reduce it. A newer pool generation with a different chain
-	// parent supersedes the old submission in all of those cases.
-	return submitted.Generation > 0 &&
-		current.Generation > submitted.Generation &&
-		(current.Template.Previous != submitted.Template.Previous ||
-			current.Template.Height != submitted.Template.Height)
 }
 
 func submitBlockResultError(submitRes *any) error {

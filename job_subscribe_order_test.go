@@ -44,20 +44,3 @@ func TestMiningJobOrderingUsesGenerationNotHeight(t *testing.T) {
 		t.Fatal("timestamp fallback did not classify an older manual job")
 	}
 }
-
-func TestSubmissionJobSupersededByReorgGeneration(t *testing.T) {
-	submitted := &Job{Generation: 10, Template: GetBlockTemplateResult{Height: 100, Previous: "old-parent"}}
-	reorgSameHeight := &Job{Generation: 11, Template: GetBlockTemplateResult{Height: 100, Previous: "new-parent"}}
-	reorgLowerHeight := &Job{Generation: 12, Template: GetBlockTemplateResult{Height: 99, Previous: "lower-parent"}}
-	txUpdate := &Job{Generation: 13, Template: GetBlockTemplateResult{Height: 100, Previous: "old-parent"}}
-
-	if !submissionJobSuperseded(submitted, reorgSameHeight) {
-		t.Fatal("same-height reorg did not supersede old block submission")
-	}
-	if !submissionJobSuperseded(submitted, reorgLowerHeight) {
-		t.Fatal("lower-height reorg did not supersede old block submission")
-	}
-	if submissionJobSuperseded(submitted, txUpdate) {
-		t.Fatal("same-chain transaction update incorrectly superseded block submission")
-	}
-}
