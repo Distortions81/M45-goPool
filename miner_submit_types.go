@@ -7,6 +7,7 @@ type submitParams struct {
 	ntime            string
 	nonce            string
 	submittedVersion uint32
+	versionProvided  bool
 }
 
 type shareContext struct {

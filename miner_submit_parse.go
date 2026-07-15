@@ -92,8 +92,8 @@ type submittedVersionResolution struct {
 
 // resolveSubmittedVersion prefers BIP310 replacement-bits semantics while
 // retaining a legacy XOR-delta alternate for miners that historically used it.
-func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, allowMaskMismatch bool) submittedVersionResolution {
-	if submittedVersion == 0 {
+func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, allowMaskMismatch, versionProvided bool) submittedVersionResolution {
+	if !versionProvided {
 		return submittedVersionResolution{useVersion: baseVersion}
 	}
 
@@ -206,7 +206,9 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	}
 
 	submittedVersion := uint32(0)
+	versionProvided := false
 	if len(req.Params) == 6 {
+		versionProvided = true
 		verStr, ok := req.Params[5].(string)
 		if !ok {
 			mc.recordShare(worker, false, 0, 0, "invalid version", "", nil, now)
@@ -242,6 +244,7 @@ func (mc *MinerConn) parseSubmitParams(req *StratumRequest, now time.Time) (subm
 	out.ntime = ntime
 	out.nonce = nonce
 	out.submittedVersion = submittedVersion
+	out.versionProvided = versionProvided
 	return out, true
 }
 
@@ -267,6 +270,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	ntime := params.ntime
 	nonce := params.nonce
 	submittedVersion := params.submittedVersion
+	versionProvided := params.versionProvided
 	validateFields := mc.cfg.ShareCheckParamFormat
 
 	if mc.cfg.ShareRequireAuthorizedConnection && !mc.authorized {
@@ -394,7 +398,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 
 	// BIP320: reject version rolls outside the negotiated mask (docs/protocols/bip-0320.mediawiki).
 	baseVersion := uint32(job.Template.Version)
-	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, mc.versionMask, mc.cfg.ShareAllowOutOfMaskVersionBits)
+	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, mc.versionMask, mc.cfg.ShareAllowOutOfMaskVersionBits, versionProvided)
 	useVersion := versionResolution.useVersion
 	versionDiff := versionResolution.versionDiff
 

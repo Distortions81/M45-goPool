@@ -658,7 +658,7 @@ func TestPrepareSubmissionTask_VersionRollingPolicyBoundaries(t *testing.T) {
 func TestResolveSubmittedVersionPrefersBIP310WithLegacyAlternate(t *testing.T) {
 	base := uint32(0x20002000)
 	mask := uint32(0x0000e000)
-	got := resolveSubmittedVersion(base, 0x00004000, mask, false)
+	got := resolveSubmittedVersion(base, 0x00004000, mask, false, true)
 
 	if got.useVersion != 0x20004000 {
 		t.Fatalf("BIP310 useVersion=%08x want 20004000", got.useVersion)
@@ -671,6 +671,27 @@ func TestResolveSubmittedVersionPrefersBIP310WithLegacyAlternate(t *testing.T) {
 	}
 	if got.alternateUseVersion != 0x20006000 {
 		t.Fatalf("alternateUseVersion=%08x want 20006000", got.alternateUseVersion)
+	}
+}
+
+func TestResolveSubmittedVersionExplicitZeroClearsNegotiatedBits(t *testing.T) {
+	const (
+		base = uint32(0x20100000)
+		mask = uint32(0x1fffe000)
+	)
+
+	omitted := resolveSubmittedVersion(base, 0, mask, false, false)
+	if omitted.useVersion != base {
+		t.Fatalf("omitted version = %08x, want base %08x", omitted.useVersion, base)
+	}
+
+	explicitZero := resolveSubmittedVersion(base, 0, mask, false, true)
+	want := base &^ mask
+	if explicitZero.useVersion != want {
+		t.Fatalf("explicit zero version = %08x, want %08x", explicitZero.useVersion, want)
+	}
+	if explicitZero.versionDiff != base^want {
+		t.Fatalf("explicit zero diff = %08x, want %08x", explicitZero.versionDiff, base^want)
 	}
 }
 
