@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -466,21 +465,6 @@ func (b *banStore) snapshot(now time.Time) []banEntry {
 		out = append(out, entry)
 	}
 	return out
-}
-
-func syncFileIfExists(path string) error {
-	if path == "" {
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	defer f.Close()
-	return f.Sync()
 }
 
 func NewAccountStore(cfg Config, enableShareLog bool, cleanBans bool) (*AccountStore, error) {

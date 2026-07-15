@@ -993,31 +993,13 @@ func run() (exitCode int) {
 
 	// Best-effort checkpoint to flush WAL into the main DB on shutdown.
 	checkpointSharedStateDB()
-	// Best-effort sync of log files on shutdown so buffered OS writes are
-	// forced to disk.
 	logger.Info("shutdown complete", "component", "startup", "kind", "shutdown", "uptime", time.Since(startTime))
+	// Closing the active rolling writers syncs their actual dated files. The
+	// network log has a separate writer from the primary logger.
+	if err := setNetLogRuntime(false, nil); err != nil {
+		logger.Warn("close net log", "component", "startup", "kind", "log_sync", "error", err)
+	}
 	logger.Stop()
-
-	// Best-effort sync of log files on shutdown so buffered OS writes are
-	// forced to disk.
-	if err := syncFileIfExists(logPath); err != nil {
-		logger.Error("sync pool log", "component", "startup", "kind", "log_sync", "error", err)
-	}
-	if debugLogPath != "" {
-		if err := syncFileIfExists(debugLogPath); err != nil {
-			logger.Error("sync debug log", "component", "startup", "kind", "log_sync", "error", err)
-		}
-	}
-	if debugEnabled() && netLogPath != "" {
-		if err := syncFileIfExists(netLogPath); err != nil {
-			logger.Error("sync net log", "component", "startup", "kind", "log_sync", "error", err)
-		}
-	}
-	if errorLogPath != "" {
-		if err := syncFileIfExists(errorLogPath); err != nil {
-			logger.Error("sync error log", "component", "startup", "kind", "log_sync", "error", err)
-		}
-	}
 
 	select {
 	case <-statusServeErrCh:

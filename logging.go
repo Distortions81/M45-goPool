@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -268,8 +269,14 @@ type dailyRollingFileWriter struct {
 	name        string
 	ext         string
 	mu          sync.Mutex
-	f           *os.File
+	f           syncWriteCloser
 	currentDate string
+}
+
+type syncWriteCloser interface {
+	io.Writer
+	Sync() error
+	Close() error
 }
 
 func (w *dailyRollingFileWriter) ensureFile(now time.Time) error {
@@ -281,8 +288,8 @@ func (w *dailyRollingFileWriter) ensureFile(now time.Time) error {
 		return nil
 	}
 	if w.f != nil {
-		_ = w.f.Close()
-		w.f = nil
+		// A date rollover is also a durability boundary for the completed file.
+		_ = w.closeCurrentFile()
 	}
 	filename := fmt.Sprintf("%s-%s%s", w.name, date, w.ext)
 	target := filepath.Join(w.dir, filename)
@@ -350,12 +357,17 @@ func (w *dailyRollingFileWriter) Write(p []byte) (int, error) {
 func (w *dailyRollingFileWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.closeCurrentFile()
+}
+
+func (w *dailyRollingFileWriter) closeCurrentFile() error {
 	if w.f == nil {
 		return nil
 	}
-	err := w.f.Close()
+	syncErr := w.f.Sync()
+	closeErr := w.f.Close()
 	w.f = nil
-	return err
+	return errors.Join(syncErr, closeErr)
 }
 
 func setLogLevel(level logLevel) {
