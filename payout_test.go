@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,96 @@ func TestDualPayoutParams_DifferentWalletEnablesDualPayout(t *testing.T) {
 	}
 	if gotFeePct != 2.0 {
 		t.Fatalf("fee percent mismatch: got %v, want 2.0", gotFeePct)
+	}
+}
+
+func TestDualPayoutParams_CaseFoldedLabelsUseScriptIdentity(t *testing.T) {
+	const (
+		poolLabel   = "1CaseSensitiveBeneficiary"
+		workerLabel = "1casesensitivebeneficiary"
+	)
+	if !strings.EqualFold(poolLabel, workerLabel) || poolLabel == workerLabel {
+		t.Fatal("test labels must differ only by case")
+	}
+	poolScript := []byte{0x51}
+	workerScript := []byte{0x52}
+	workerName := workerLabel + ".rig"
+	job := &Job{
+		PayoutScript:         poolScript,
+		CoinbaseValue:        1000,
+		PayoutPolicyCaptured: true,
+		PoolFeePercent:       2,
+		PayoutAddress:        poolLabel,
+	}
+	mc := &MinerConn{}
+	mc.setWorkerWallet(workerName, workerLabel, workerScript)
+
+	gotPool, gotWorker, _, _, ok := mc.dualPayoutParams(job, workerName)
+	if !ok {
+		t.Fatal("case-fold-equal labels with distinct scripts disabled dual payout")
+	}
+	if !bytes.Equal(gotPool, poolScript) || !bytes.Equal(gotWorker, workerScript) {
+		t.Fatalf("dual scripts = (%x, %x), want (%x, %x)", gotPool, gotWorker, poolScript, workerScript)
+	}
+}
+
+func TestDualPayoutParams_DifferentLabelsWithSameScriptUseSingleBeneficiary(t *testing.T) {
+	poolScript := []byte{0x51}
+	workerName := "worker-label.rig"
+	job := &Job{
+		PayoutScript:         poolScript,
+		CoinbaseValue:        1000,
+		PayoutPolicyCaptured: true,
+		PoolFeePercent:       2,
+		PayoutAddress:        "pool-label",
+	}
+	mc := &MinerConn{}
+	mc.setWorkerWallet(workerName, "different-worker-label", poolScript)
+
+	if _, _, _, _, ok := mc.dualPayoutParams(job, workerName); ok {
+		t.Fatal("identical beneficiary scripts should disable redundant dual payout")
+	}
+}
+
+func TestNotifyCaseFoldedLabelsStillAdvertisesBothPayoutScripts(t *testing.T) {
+	mc, conn := minerConnForNotifyTest(t)
+	mc.cfg.Extranonce2Size = 4
+	mc.cfg.TemplateExtraNonce2Size = 8
+	worker := mc.currentWorker()
+	poolScript := []byte{0x51}
+	workerScript := []byte{0x52}
+	poolLabel := "1CaseSensitiveBeneficiary"
+	workerLabel := "1casesensitivebeneficiary"
+	mc.setWorkerWallet(worker, workerLabel, workerScript)
+
+	job := benchmarkSubmitJobForTest(t)
+	job.PayoutScript = poolScript
+	job.PayoutPolicyCaptured = true
+	job.PoolFeePercent = 2
+	job.PayoutAddress = poolLabel
+	mc.sendNotifyFor(job, true)
+	notifies := notifyMessagesFromOutput(t, conn.String())
+	if len(notifies) != 1 {
+		t.Fatalf("notify count = %d, want 1", len(notifies))
+	}
+	params := notifies[0].Params
+	coinbaseHex := params[2].(string) + hex.EncodeToString(mc.extranonce1) + strings.Repeat("00", mc.cfg.Extranonce2Size) + params[3].(string)
+	coinbase, err := hex.DecodeString(coinbaseHex)
+	if err != nil {
+		t.Fatalf("decode notified coinbase: %v", err)
+	}
+	outputs := parseCoinbaseOutputs(t, coinbase)
+	if len(outputs) != 2 {
+		t.Fatalf("notified payout outputs = %d, want 2", len(outputs))
+	}
+	foundPool := false
+	foundWorker := false
+	for _, output := range outputs {
+		foundPool = foundPool || bytes.Equal(output.PkScript, poolScript)
+		foundWorker = foundWorker || bytes.Equal(output.PkScript, workerScript)
+	}
+	if !foundPool || !foundWorker {
+		t.Fatalf("notified scripts missing: pool=%v worker=%v", foundPool, foundWorker)
 	}
 }
 

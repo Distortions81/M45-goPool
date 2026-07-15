@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 )
 
@@ -344,20 +343,14 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 	workerAmt := total - poolFee
 	// If dual payout is disabled, treat the full reward as a worker payout
 	// ("Single" mode = miner only). When dual payout is enabled but the
-	// worker has no cached script or the worker wallet equals the pool
-	// payout address, treat this block as pool-only and record the full
+	// worker has no cached script or the worker and pool scripts resolve to
+	// the same beneficiary, treat this block as pool-only and record the full
 	// amount as pool_fee_sats with dual_payout_fallback=true.
 	dualFallback := false
-	workerAddr := ""
-	if worker != "" {
-		raw := strings.TrimSpace(worker)
-		if parts := strings.SplitN(raw, ".", 2); len(parts) > 1 {
-			raw = parts[0]
-		}
-		workerAddr = sanitizePayoutAddress(raw)
-	}
-	// Check if we fell back to single-output coinbase (worker wallet matches pool wallet)
-	if len(mc.workerPayoutScript(worker)) == 0 || (workerAddr != "" && strings.EqualFold(workerAddr, payoutAddress)) {
+	workerScript := mc.workerPayoutScript(worker)
+	// Check if we fell back to a single-output coinbase because no worker
+	// script was available or both outputs had the same decoded beneficiary.
+	if len(workerScript) == 0 || bytes.Equal(workerScript, job.PayoutScript) {
 		poolFee = total
 		workerAmt = 0
 		dualFallback = true

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -143,6 +144,7 @@ func TestLogFoundBlockFallback_SameWorkerAddress(t *testing.T) {
 		t.Fatalf("scriptForAddress error: %v", err)
 	}
 	mc.setWorkerWallet(addr, addr, script)
+	job.PayoutScript = script
 
 	mc.logFoundBlock(job, addr, "deadbeef", 1.0)
 
@@ -164,6 +166,48 @@ func TestLogFoundBlockFallback_SameWorkerAddress(t *testing.T) {
 	}
 	if !fallback {
 		t.Fatalf("expected dual_payout_fallback=true when worker address equals pool payout address")
+	}
+}
+
+func TestLogFoundBlockCaseFoldedLabelsUseDistinctScripts(t *testing.T) {
+	dir := t.TempDir()
+	setupTestStateDB(t, dir)
+	poolScript := []byte{0x51}
+	workerScript := []byte{0x52}
+	poolLabel := "1CaseSensitiveBeneficiary"
+	workerLabel := "1casesensitivebeneficiary"
+	if !strings.EqualFold(poolLabel, workerLabel) || poolLabel == workerLabel {
+		t.Fatal("test labels must differ only by case")
+	}
+	job := &Job{
+		JobID: "log-test-case-sensitive-beneficiary",
+		Template: GetBlockTemplateResult{
+			Height:        103,
+			CoinbaseValue: 1000,
+		},
+		PayoutScript: poolScript,
+	}
+	mc := &MinerConn{cfg: Config{
+		DataDir:        dir,
+		PayoutAddress:  poolLabel,
+		PoolFeePercent: 2,
+	}}
+	mc.setWorkerWallet(workerLabel, workerLabel, workerScript)
+
+	mc.logFoundBlock(job, workerLabel, "deadbeef", 1)
+	rec := readLastFoundBlockRecord(t, dir)
+	fallback, ok := rec["dual_payout_fallback"].(bool)
+	if !ok {
+		t.Fatal("dual_payout_fallback missing or not bool")
+	}
+	if fallback {
+		t.Fatal("case-fold-equal labels with distinct scripts were logged as one beneficiary")
+	}
+	if got := int64(rec["pool_fee_sats"].(float64)); got != 20 {
+		t.Fatalf("pool fee = %d, want 20", got)
+	}
+	if got := int64(rec["worker_payout_sats"].(float64)); got != 980 {
+		t.Fatalf("worker payout = %d, want 980", got)
 	}
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"time"
 )
@@ -368,18 +369,18 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	}
 	// If the pool fee is 0%, there's no need for dual-payout since the entire
 	// block reward goes to the worker. Use single-output coinbase.
-	feePercent, payoutAddress := mc.jobPayoutPolicy(job)
+	feePercent, _ = mc.jobPayoutPolicy(job)
 	if feePercent <= 0 {
 		return nil, nil, 0, 0, false
 	}
-	addr, script, ok := mc.workerWalletDataRef(worker)
+	_, script, ok := mc.workerWalletDataRef(worker)
 	if !ok || len(script) == 0 {
 		return nil, nil, 0, 0, false
 	}
-	// If the worker's wallet address is the same as the pool payout address,
-	// there is no benefit to building a dual-payout coinbase; treat it as a
-	// single-output payout to that address.
-	if addr != "" && strings.EqualFold(addr, payoutAddress) {
+	// Beneficiary identity is determined by the decoded scripts committed to
+	// the coinbase. Address text is not safe here because Base58 is
+	// case-sensitive while other address encodings have different case rules.
+	if bytes.Equal(script, job.PayoutScript) {
 		return nil, nil, 0, 0, false
 	}
 
