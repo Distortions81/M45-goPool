@@ -139,6 +139,7 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 		return true, true
 	}
 	prev := cur.Template
+	effectiveVersion := applyConfiguredVersionBits(tpl.Version, jm.cfg)
 
 	// Header/consensus and coinbase metadata changes require miners to discard
 	// the previously advertised work.
@@ -146,7 +147,7 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 		tpl.Height != prev.Height ||
 		tpl.Bits != prev.Bits ||
 		tpl.Target != prev.Target ||
-		tpl.Version != prev.Version ||
+		effectiveVersion != prev.Version ||
 		tpl.CoinbaseValue != prev.CoinbaseValue ||
 		tpl.DefaultWitnessCommitment != prev.DefaultWitnessCommitment ||
 		tpl.CoinbaseAux.Flags != prev.CoinbaseAux.Flags ||

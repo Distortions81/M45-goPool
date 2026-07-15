@@ -63,3 +63,91 @@ func TestTemplateChangedIncludesMiningPayloadFields(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateChangedComparesEffectiveVersion(t *testing.T) {
+	const baseVersion = int32(0x20000000)
+
+	tests := []struct {
+		name        string
+		currentCfg  Config
+		nextCfg     Config
+		currentRaw  int32
+		nextRaw     int32
+		wantChanged bool
+		wantClean   bool
+	}{
+		{
+			name:       "BIP110 forced on does not churn identical raw template",
+			currentCfg: Config{BIP110Enabled: true},
+			nextCfg:    Config{BIP110Enabled: true},
+			currentRaw: baseVersion,
+			nextRaw:    baseVersion,
+		},
+		{
+			name: "forced off node bit does not churn",
+			currentCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: false,
+			}},
+			nextCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: false,
+			}},
+			currentRaw: baseVersion | 1<<5,
+			nextRaw:    baseVersion | 1<<5,
+		},
+		{
+			name: "explicit override remains final across BIP110 toggle",
+			currentCfg: Config{VersionBitOverrides: map[uint32]bool{
+				bip110VersionBit: false,
+			}},
+			nextCfg: Config{
+				BIP110Enabled: true,
+				VersionBitOverrides: map[uint32]bool{
+					bip110VersionBit: false,
+				},
+			},
+			currentRaw: baseVersion,
+			nextRaw:    baseVersion,
+		},
+		{
+			name:        "non-overridden node version change remains clean",
+			currentCfg:  Config{BIP110Enabled: true},
+			nextCfg:     Config{BIP110Enabled: true},
+			currentRaw:  baseVersion,
+			nextRaw:     baseVersion | 1<<6,
+			wantChanged: true,
+			wantClean:   true,
+		},
+		{
+			name:        "runtime version policy change creates clean job",
+			currentCfg:  Config{},
+			nextCfg:     Config{BIP110Enabled: true},
+			currentRaw:  baseVersion,
+			nextRaw:     baseVersion,
+			wantChanged: true,
+			wantClean:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			current := GetBlockTemplateResult{
+				Previous: "prev",
+				Height:   100,
+				Bits:     "1d00ffff",
+				Target:   "target",
+				Version:  applyConfiguredVersionBits(tc.currentRaw, tc.currentCfg),
+			}
+			next := current
+			next.Version = tc.nextRaw
+			jm := &JobManager{
+				cfg:    tc.nextCfg,
+				curJob: &Job{Template: current},
+			}
+
+			changed, clean := jm.templateChanged(next)
+			if changed != tc.wantChanged || clean != tc.wantClean {
+				t.Fatalf("templateChanged = (%v, %v), want (%v, %v)", changed, clean, tc.wantChanged, tc.wantClean)
+			}
+		})
+	}
+}
