@@ -338,9 +338,19 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	mc, notifyConn := minerConnForNotifyTest(t)
 	mc.cfg.DataDir = t.TempDir()
+	setupTestStateDB(t, mc.cfg.DataDir)
 	mc.cfg.SubmitProcessInline = true
+	mc.cfg.ShareRequireAuthorizedConnection = true
+	mc.cfg.ShareRequireWorkerMatch = true
+	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobID
+	mc.cfg.ShareCheckParamFormat = true
 	rpc := &countingSubmitRPC{}
 	mc.rpc = rpc
+	workerA := mc.currentWorker()
+	walletA, _, ok := mc.workerWalletData(workerA)
+	if !ok {
+		t.Fatalf("missing wallet A data")
+	}
 
 	job := benchmarkSubmitJobForTest(t)
 	job.Target = new(big.Int).Set(maxUint256)
@@ -403,10 +413,21 @@ func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 		t.Fatalf("build expected header: %v", err)
 	}
 
+	// Reauthorize the connection to wallet B after wallet A's work was sent.
+	// Also overwrite A's live cache entry so only the immutable advertised
+	// coinbase can reproduce the solved block.
+	workerB, walletB, scriptB := generateTestWorker(t)
+	mc.setWorkerWallet(workerB, walletB, scriptB)
+	mc.handleAuthorizeID(2, workerB, "")
+	mc.setWorkerWallet(workerA, walletA, scriptB)
+
 	mc.handleSubmit(&StratumRequest{
 		ID:     1,
 		Method: "mining.submit",
-		Params: []any{mc.currentWorker(), stratumJobID, en2Hex, ntimeHex, nonceHex},
+		// The label says B, but this retained job was advertised for A. Strict
+		// worker policy must not suppress a network-target block, and payout and
+		// attribution must remain bound to A.
+		Params: []any{workerB, stratumJobID, en2Hex, ntimeHex, nonceHex},
 	})
 	flushFoundBlockLog(t)
 
@@ -432,6 +453,13 @@ func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	expectedPayload.Write(rawTx)
 	if !bytes.Equal(blockBytes[80:], expectedPayload.Bytes()) {
 		t.Fatalf("submitted block payload does not match notify coinbase plus job transactions")
+	}
+	if got := mc.currentWorker(); got != workerB {
+		t.Fatalf("late wallet A block changed current worker to %q, want wallet B %q", got, workerB)
+	}
+	found := readLastFoundBlockRecord(t, mc.cfg.DataDir)
+	if got, _ := found["worker"].(string); got != workerA {
+		t.Fatalf("found block worker = %q, want advertised wallet A %q", got, workerA)
 	}
 }
 

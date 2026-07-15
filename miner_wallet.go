@@ -127,7 +127,9 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	if hash == "" {
 		return nil
 	}
+	mc.savedWorkerMu.Lock()
 	if mc.registeredWorkerHash == hash {
+		mc.savedWorkerMu.Unlock()
 		return nil
 	}
 	if mc.registeredWorkerHash != "" {
@@ -140,12 +142,20 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	prev := mc.workerRegistry.register(hash, walletHash, mc)
 	mc.registeredWorker = worker
 	mc.registeredWorkerHash = hash
+	mc.savedWorkerTracked = false
+	mc.savedWorkerBestDiff = 0
+	mc.savedWorkerMu.Unlock()
 	mc.syncSavedWorkerState(hash)
 	return prev
 }
 
 func (mc *MinerConn) unregisterRegisteredWorker() {
-	if mc.workerRegistry == nil || mc.registeredWorkerHash == "" {
+	if mc.workerRegistry == nil {
+		return
+	}
+	mc.savedWorkerMu.Lock()
+	defer mc.savedWorkerMu.Unlock()
+	if mc.registeredWorkerHash == "" {
 		return
 	}
 	wallet := workerBaseAddress(mc.registeredWorker)
@@ -161,13 +171,19 @@ func (mc *MinerConn) syncSavedWorkerState(hash string) {
 	if mc == nil {
 		return
 	}
-	mc.savedWorkerTracked = false
-	mc.savedWorkerBestDiff = 0
-	if mc.savedWorkerStore == nil {
-		return
-	}
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
+		return
+	}
+	mc.savedWorkerMu.Lock()
+	if mc.registeredWorkerHash != hash {
+		mc.savedWorkerMu.Unlock()
+		return
+	}
+	mc.savedWorkerTracked = false
+	mc.savedWorkerBestDiff = 0
+	mc.savedWorkerMu.Unlock()
+	if mc.savedWorkerStore == nil {
 		return
 	}
 	best, ok, err := mc.savedWorkerStore.BestDifficultyForHash(hash)
@@ -175,43 +191,99 @@ func (mc *MinerConn) syncSavedWorkerState(hash string) {
 		logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
 		return
 	}
+	mc.savedWorkerMu.Lock()
+	defer mc.savedWorkerMu.Unlock()
+	if mc.registeredWorkerHash != hash {
+		return
+	}
 	mc.savedWorkerBestDiff = best
 	mc.savedWorkerTracked = ok
 }
 
 func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
-	if mc == nil || mc.savedWorkerStore == nil {
+	if mc == nil {
 		return
 	}
+	mc.savedWorkerMu.Lock()
 	hash := mc.registeredWorkerHash
-	if hash == "" {
+	mc.savedWorkerMu.Unlock()
+	mc.maybeUpdateSavedWorkerBestDiffHash(hash, diff)
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerBestDiffFor(worker string, diff float64) {
+	if mc == nil {
 		return
 	}
-	if !mc.savedWorkerTracked {
+	mc.maybeUpdateSavedWorkerBestDiffHash(workerNameHash(worker), diff)
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerBestDiffHash(hash string, diff float64) {
+	if mc == nil || mc.savedWorkerStore == nil || hash == "" || diff <= 0 {
 		return
 	}
-	if diff <= mc.savedWorkerBestDiff {
+	mc.savedWorkerMu.Lock()
+	isCurrent := mc.registeredWorkerHash == hash
+	tracked := mc.savedWorkerTracked
+	best := mc.savedWorkerBestDiff
+	mc.savedWorkerMu.Unlock()
+	if !isCurrent {
+		var err error
+		best, tracked, err = mc.savedWorkerStore.BestDifficultyForHash(hash)
+		if err != nil {
+			logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
+			return
+		}
+	}
+	if !tracked || diff <= best {
 		return
 	}
 	if _, err := mc.savedWorkerStore.UpdateSavedWorkerBestDifficulty(hash, diff); err != nil {
 		logger.Warn("saved worker best difficulty update failed", "error", err, "hash", hash)
 		return
 	}
-	mc.savedWorkerBestDiff = diff
+	mc.savedWorkerMu.Lock()
+	if mc.registeredWorkerHash == hash && diff > mc.savedWorkerBestDiff {
+		mc.savedWorkerBestDiff = diff
+	}
+	mc.savedWorkerMu.Unlock()
 }
 
 func (mc *MinerConn) maybeUpdateSavedWorkerMinuteBestDiff(diff float64, now time.Time) {
-	if mc == nil || mc.savedWorkerStore == nil || diff <= 0 {
+	if mc == nil {
 		return
 	}
-	hash := strings.TrimSpace(mc.registeredWorkerHash)
-	if hash == "" {
+	mc.savedWorkerMu.Lock()
+	hash := mc.registeredWorkerHash
+	mc.savedWorkerMu.Unlock()
+	mc.maybeUpdateSavedWorkerMinuteBestDiffHash(hash, diff, now)
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerMinuteBestDiffFor(worker string, diff float64, now time.Time) {
+	if mc == nil {
 		return
 	}
-	if !mc.savedWorkerTracked {
+	mc.maybeUpdateSavedWorkerMinuteBestDiffHash(workerNameHash(worker), diff, now)
+}
+
+func (mc *MinerConn) maybeUpdateSavedWorkerMinuteBestDiffHash(hash string, diff float64, now time.Time) {
+	if mc == nil || mc.savedWorkerStore == nil || hash == "" || diff <= 0 {
 		return
 	}
-	mc.savedWorkerStore.UpdateSavedWorkerMinuteBestDifficulty(hash, diff, now)
+	mc.savedWorkerMu.Lock()
+	isCurrent := mc.registeredWorkerHash == hash
+	tracked := mc.savedWorkerTracked
+	mc.savedWorkerMu.Unlock()
+	if !isCurrent {
+		var err error
+		_, tracked, err = mc.savedWorkerStore.BestDifficultyForHash(hash)
+		if err != nil {
+			logger.Warn("saved worker minute lookup failed", "error", err, "hash", hash)
+			return
+		}
+	}
+	if tracked {
+		mc.savedWorkerStore.UpdateSavedWorkerMinuteBestDifficulty(hash, diff, now)
+	}
 }
 
 // singlePayoutScript selects the output script for single-output coinbase

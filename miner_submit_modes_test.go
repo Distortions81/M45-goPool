@@ -85,7 +85,7 @@ func runPrepareSubmission(
 }
 
 func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) {
-	t.Run("authorization check rejects mismatched worker", func(t *testing.T) {
+	t.Run("authorization check defers mismatched worker until after PoW", func(t *testing.T) {
 		mc, job := newSubmitReadyMinerConnForModesTest(t)
 		mc.cfg.ShareRequireAuthorizedConnection = true
 		mc.cfg.ShareRequireWorkerMatch = true
@@ -94,11 +94,15 @@ func TestPrepareSubmissionTask_WorkerMismatch_AuthorizationToggle(t *testing.T) 
 		mc.conn = conn
 
 		req := testSubmitRequestForJob(job, "other.worker")
-		if _, ok := mc.prepareSubmissionTask(req, time.Now()); ok {
-			t.Fatalf("expected submit to reject mismatched worker")
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("worker mismatch must remain processable for block safety")
 		}
-		if out := conn.String(); out == "" {
-			t.Fatalf("expected rejection response to be written")
+		if task.policyReject.reason != rejectUnauthorizedWorker {
+			t.Fatalf("policy reason=%v, want unauthorized worker", task.policyReject.reason)
+		}
+		if out := conn.String(); out != "" {
+			t.Fatalf("worker policy was rejected before PoW validation: %q", out)
 		}
 	})
 

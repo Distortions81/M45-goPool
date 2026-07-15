@@ -13,7 +13,7 @@ import (
 // builds the full block (reusing any dual-payout header/coinbase when
 // available), submits it via RPC, logs the reward split and found-block
 // record, and sends the final Stratum response.
-func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, scriptTime int64, hashHex string, shareDiff float64, now time.Time) {
+func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, workerName string, en2 []byte, ntime string, nonce string, useVersion uint32, scriptTime int64, solvedHeader, solvedCoinbase []byte, hashHex string, shareDiff float64, now time.Time) {
 	var (
 		blockHex  string
 		submitRes any
@@ -22,71 +22,85 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 	if scriptTime == 0 {
 		scriptTime = mc.scriptTimeForJob(stratumJobID, job.ScriptTime)
 	}
+	if len(solvedHeader) > 0 || len(solvedCoinbase) > 0 {
+		blockHex, err = assembleSolvedBlock(job, solvedHeader, solvedCoinbase)
+		if err != nil {
+			if mc.metrics != nil {
+				mc.metrics.RecordBlockSubmission("error")
+				mc.metrics.RecordErrorEvent("submitblock", err.Error(), now)
+			}
+			logger.Error("assemble solved block", "remote", mc.id, "error", err)
+			mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
+			return
+		}
+	}
 
 	// Only construct the full block (including all non-coinbase transactions)
 	// when the share actually satisfies the network target.
-	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		var cbTx, cbTxid []byte
-		var err error
-		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
-			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
-				job.Template.Height,
-				mc.extranonce1,
-				en2,
-				job.TemplateExtraNonce2Size,
-				poolScript,
-				job.DonationScript,
-				workerScript,
-				totalValue,
-				feePercent,
-				job.OperatorDonationPercent,
-				job.witnessCommitScript,
-				job.coinbaseFlagsBytes,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
-		} else {
-			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
-				job.Template.Height,
-				mc.extranonce1,
-				en2,
-				job.TemplateExtraNonce2Size,
-				poolScript,
-				workerScript,
-				totalValue,
-				feePercent,
-				job.witnessCommitScript,
-				job.coinbaseFlagsBytes,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
-		}
-		if err == nil && len(cbTxid) == 32 {
-			var merkleRoot [32]byte
-			var merkleOK bool
-			if job.merkleBranchesBytes != nil {
-				merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+	if blockHex == "" {
+		if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
+			var cbTx, cbTxid []byte
+			var err error
+			if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+				cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+					job.Template.Height,
+					mc.extranonce1,
+					en2,
+					job.TemplateExtraNonce2Size,
+					poolScript,
+					job.DonationScript,
+					workerScript,
+					totalValue,
+					feePercent,
+					job.OperatorDonationPercent,
+					job.witnessCommitScript,
+					job.coinbaseFlagsBytes,
+					job.CoinbaseMsg,
+					scriptTime,
+				)
 			} else {
-				merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+				cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+					job.Template.Height,
+					mc.extranonce1,
+					en2,
+					job.TemplateExtraNonce2Size,
+					poolScript,
+					workerScript,
+					totalValue,
+					feePercent,
+					job.witnessCommitScript,
+					job.coinbaseFlagsBytes,
+					job.CoinbaseMsg,
+					scriptTime,
+				)
 			}
-			if merkleOK {
-				header, err := job.buildBlockHeader(merkleRoot[:], ntime, nonce, int32(useVersion))
-				if err == nil {
-					var buf bytes.Buffer
-
-					buf.Write(header)
-					writeVarInt(&buf, uint64(1+len(job.Transactions)))
-					buf.Write(cbTx)
-					for _, tx := range job.Transactions {
-						raw, derr := hex.DecodeString(tx.Data)
-						if derr != nil {
-							err = fmt.Errorf("decode tx data: %w", derr)
-							break
-						}
-						buf.Write(raw)
-					}
+			if err == nil && len(cbTxid) == 32 {
+				var merkleRoot [32]byte
+				var merkleOK bool
+				if job.merkleBranchesBytes != nil {
+					merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+				} else {
+					merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+				}
+				if merkleOK {
+					header, err := job.buildBlockHeader(merkleRoot[:], ntime, nonce, int32(useVersion))
 					if err == nil {
-						blockHex = hex.EncodeToString(buf.Bytes())
+						var buf bytes.Buffer
+
+						buf.Write(header)
+						writeVarInt(&buf, uint64(1+len(job.Transactions)))
+						buf.Write(cbTx)
+						for _, tx := range job.Transactions {
+							raw, derr := hex.DecodeString(tx.Data)
+							if derr != nil {
+								err = fmt.Errorf("decode tx data: %w", derr)
+								break
+							}
+							buf.Write(raw)
+						}
+						if err == nil {
+							blockHex = hex.EncodeToString(buf.Bytes())
+						}
 					}
 				}
 			}
@@ -177,6 +191,31 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 		)
 	}
 	mc.writeTrueResponse(reqID)
+}
+
+func assembleSolvedBlock(job *Job, header, coinbase []byte) (string, error) {
+	if job == nil {
+		return "", fmt.Errorf("missing job for solved block")
+	}
+	if len(header) != 80 {
+		return "", fmt.Errorf("solved block header must be 80 bytes, got %d", len(header))
+	}
+	if len(coinbase) == 0 {
+		return "", fmt.Errorf("solved block coinbase is empty")
+	}
+
+	var buf bytes.Buffer
+	buf.Write(header)
+	writeVarInt(&buf, uint64(1+len(job.Transactions)))
+	buf.Write(coinbase)
+	for _, tx := range job.Transactions {
+		raw, err := hex.DecodeString(tx.Data)
+		if err != nil {
+			return "", fmt.Errorf("decode tx data: %w", err)
+		}
+		buf.Write(raw)
+	}
+	return hex.EncodeToString(buf.Bytes()), nil
 }
 
 // logFoundBlock appends a JSON line describing a found block to a log file in

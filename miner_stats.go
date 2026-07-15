@@ -17,14 +17,7 @@ func (mc *MinerConn) statsWorker() {
 		mc.ensureWindowLocked(update.timestamp)
 		mc.ensureVardiffWindowLocked(update.timestamp)
 
-		if update.worker != "" {
-			if mc.stats.Worker != update.worker {
-				mc.stats.Worker = update.worker
-				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
-			} else if mc.stats.WorkerSHA256 == "" {
-				mc.stats.WorkerSHA256 = workerNameHash(update.worker)
-			}
-		}
+		mc.setInitialWorkerFromShareLocked(update.worker)
 
 		mc.stats.WindowSubmissions++
 		mc.vardiffWindowSubmissions++
@@ -57,14 +50,14 @@ func (mc *MinerConn) statsWorker() {
 }
 
 func (mc *MinerConn) minerName(fallback string) string {
+	if fallback != "" {
+		return fallback
+	}
 	mc.statsMu.Lock()
 	worker := mc.stats.Worker
 	mc.statsMu.Unlock()
 	if worker != "" {
 		return worker
-	}
-	if fallback != "" {
-		return fallback
 	}
 	return mc.id
 }
@@ -109,6 +102,23 @@ func (mc *MinerConn) updateWorker(worker string) string {
 	}
 	mc.statsMu.Unlock()
 	return worker
+}
+
+// setInitialWorkerFromShareLocked supports configurations that accept submits
+// without prior authorization. Once a connection has an identity, late shares
+// from retained jobs must not replace a newer reauthorization.
+func (mc *MinerConn) setInitialWorkerFromShareLocked(worker string) {
+	if worker == "" {
+		return
+	}
+	if mc.stats.Worker == "" {
+		mc.stats.Worker = worker
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
+		return
+	}
+	if mc.stats.Worker == worker && mc.stats.WorkerSHA256 == "" {
+		mc.stats.WorkerSHA256 = workerNameHash(worker)
+	}
 }
 
 func (mc *MinerConn) ensureWindowLocked(now time.Time) {
@@ -253,14 +263,7 @@ func (mc *MinerConn) recordShareSync(update statsUpdate) {
 	mc.statsMu.Lock()
 	mc.ensureWindowLocked(update.timestamp)
 	mc.ensureVardiffWindowLocked(update.timestamp)
-	if update.worker != "" {
-		if mc.stats.Worker != update.worker {
-			mc.stats.Worker = update.worker
-			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
-		} else if mc.stats.WorkerSHA256 == "" {
-			mc.stats.WorkerSHA256 = workerNameHash(update.worker)
-		}
-	}
+	mc.setInitialWorkerFromShareLocked(update.worker)
 	mc.stats.WindowSubmissions++
 	mc.vardiffWindowSubmissions++
 	if update.accepted {

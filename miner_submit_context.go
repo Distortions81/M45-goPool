@@ -1,5 +1,18 @@
 package main
 
+import "fmt"
+
+func buildNotifiedCoinbaseTx(parts notifiedCoinbaseParts, extranonce2 []byte) ([]byte, []byte, error) {
+	if len(parts.prefix) == 0 || len(parts.suffix) == 0 {
+		return nil, nil, fmt.Errorf("notified coinbase parts missing")
+	}
+	coinbase := make([]byte, 0, len(parts.prefix)+len(extranonce2)+len(parts.suffix))
+	coinbase = append(coinbase, parts.prefix...)
+	coinbase = append(coinbase, extranonce2...)
+	coinbase = append(coinbase, parts.suffix...)
+	return coinbase, doubleSHA256(coinbase), nil
+}
+
 func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, bool) {
 	job := task.job
 	workerName := task.workerName
@@ -32,40 +45,8 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 		err              error
 	)
 
-	if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
-		if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
-			cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
-				job.Template.Height,
-				mc.extranonce1,
-				en2,
-				job.TemplateExtraNonce2Size,
-				poolScript,
-				job.DonationScript,
-				workerScript,
-				totalValue,
-				feePercent,
-				job.OperatorDonationPercent,
-				job.witnessCommitScript,
-				job.coinbaseFlagsBytes,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
-		} else {
-			cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
-				job.Template.Height,
-				mc.extranonce1,
-				en2,
-				job.TemplateExtraNonce2Size,
-				poolScript,
-				workerScript,
-				totalValue,
-				feePercent,
-				job.witnessCommitScript,
-				job.coinbaseFlagsBytes,
-				job.CoinbaseMsg,
-				scriptTime,
-			)
-		}
+	if task.hasNotifiedCoinbase {
+		cbTx, cbTxid, err = buildNotifiedCoinbaseTx(task.notifiedCoinbase, en2)
 		if err == nil && len(cbTxid) == 32 {
 			if job.merkleBranchesBytes != nil {
 				merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
@@ -75,13 +56,72 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 			if merkleOK {
 				header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
 			}
-			if err == nil {
-				usedDualCoinbase = true
+		}
+	}
+
+	if !task.hasNotifiedCoinbase {
+		if poolScript, workerScript, totalValue, feePercent, ok := mc.dualPayoutParams(job, workerName); ok {
+			if job.OperatorDonationPercent > 0 && len(job.DonationScript) > 0 {
+				cbTx, cbTxid, err = serializeTripleCoinbaseTxPredecoded(
+					job.Template.Height,
+					mc.extranonce1,
+					en2,
+					job.TemplateExtraNonce2Size,
+					poolScript,
+					job.DonationScript,
+					workerScript,
+					totalValue,
+					feePercent,
+					job.OperatorDonationPercent,
+					job.witnessCommitScript,
+					job.coinbaseFlagsBytes,
+					job.CoinbaseMsg,
+					scriptTime,
+				)
+			} else {
+				cbTx, cbTxid, err = serializeDualCoinbaseTxPredecoded(
+					job.Template.Height,
+					mc.extranonce1,
+					en2,
+					job.TemplateExtraNonce2Size,
+					poolScript,
+					workerScript,
+					totalValue,
+					feePercent,
+					job.witnessCommitScript,
+					job.coinbaseFlagsBytes,
+					job.CoinbaseMsg,
+					scriptTime,
+				)
+			}
+			if err == nil && len(cbTxid) == 32 {
+				if job.merkleBranchesBytes != nil {
+					merkleRoot, merkleOK = computeMerkleRootFromBranchesBytes32(cbTxid, job.merkleBranchesBytes)
+				} else {
+					merkleRoot, merkleOK = computeMerkleRootFromBranches32(cbTxid, job.MerkleBranches)
+				}
+				if merkleOK {
+					header, err = job.buildBlockHeaderU32(merkleRoot[:], ntimeVal, nonceVal, int32(useVersion))
+				}
+				if err == nil {
+					usedDualCoinbase = true
+				}
 			}
 		}
 	}
 
-	if header == nil || !merkleOK || err != nil || len(cbTxid) != 32 {
+	if task.hasNotifiedCoinbase && (header == nil || !merkleOK || err != nil || len(cbTxid) != 32) {
+		logger.Warn("submit notified coinbase rebuild failed", "remote", mc.id, "job", jobID, "error", err)
+		mc.recordShare(workerName, false, 0, 0, rejectInvalidCoinbase.String(), "", nil, now)
+		mc.writeResponse(StratumResponse{
+			ID:     reqID,
+			Result: false,
+			Error:  newStratumError(stratumErrCodeInvalidRequest, "invalid notified coinbase"),
+		})
+		return shareContext{}, false
+	}
+
+	if !task.hasNotifiedCoinbase && (header == nil || !merkleOK || err != nil || len(cbTxid) != 32) {
 		if err != nil && usedDualCoinbase {
 			logger.Warn("dual-payout header build failed, falling back to single-output header",
 				"error", err,
@@ -155,8 +195,9 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 		shareDiff: difficultyFromHash(headerHashArray[:]),
 		isBlock:   isBlock,
 	}
-	// Only keep large buffers when detail logging is enabled.
-	if debugLogging || verboseRuntimeLogging {
+	// A block must be assembled from the exact header and coinbase that passed
+	// PoW. Non-block shares retain large buffers only for detail logging.
+	if isBlock || debugLogging || verboseRuntimeLogging {
 		hashLE := make([]byte, len(headerHashLE))
 		copy(hashLE, headerHashLE[:])
 		ctx.header = header

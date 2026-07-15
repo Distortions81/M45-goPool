@@ -49,6 +49,8 @@ type submissionTask struct {
 	alternateVersionHex string
 	alternateUseVersion uint32
 	hasAlternateVersion bool
+	notifiedCoinbase    notifiedCoinbaseParts
+	hasNotifiedCoinbase bool
 	scriptTime          int64
 	assignedDifficulty  float64
 	policyReject        submitPolicyReject

@@ -168,10 +168,10 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 
 	if ctx.isBlock {
 		mc.noteValidSubmit(now)
-		mc.handleBlockShare(reqID, job, task.jobID, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, task.scriptTime, ctx.hashHex, ctx.shareDiff, now)
+		mc.handleBlockShare(reqID, job, task.jobID, workerName, (&task).extranonce2Decoded(), uint32ToHex8Lower(task.ntimeVal), uint32ToHex8Lower(task.nonceVal), task.useVersion, task.scriptTime, ctx.header, ctx.cbTx, ctx.hashHex, ctx.shareDiff, now)
 		mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
-		mc.maybeUpdateSavedWorkerMinuteBestDiff(ctx.shareDiff, now)
-		mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
+		mc.maybeUpdateSavedWorkerMinuteBestDiffFor(workerName, ctx.shareDiff, now)
+		mc.maybeUpdateSavedWorkerBestDiffFor(workerName, ctx.shareDiff)
 		return
 	}
 
@@ -183,8 +183,8 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 	mc.writeTrueResponse(reqID)
 
 	mc.trackBestShare(workerName, shareHash, ctx.shareDiff, now)
-	mc.maybeUpdateSavedWorkerMinuteBestDiff(ctx.shareDiff, now)
-	mc.maybeUpdateSavedWorkerBestDiff(ctx.shareDiff)
+	mc.maybeUpdateSavedWorkerMinuteBestDiffFor(workerName, ctx.shareDiff, now)
+	mc.maybeUpdateSavedWorkerBestDiffFor(workerName, ctx.shareDiff)
 
 	if mc.maybeAdjustDifficulty(now) {
 		mc.sendNotifyFor(job, true)

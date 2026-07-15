@@ -292,7 +292,11 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		return
 	}
 
-	workerName := mc.updateWorker(worker)
+	workerName := worker
+	// Authorization and job emission form one ordering boundary. If a notify
+	// already started, let it finish before publishing this authorization; once
+	// the success response is sent, no later notify may use the old worker.
+	mc.notifyMu.Lock()
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style
 	// address so we can construct dual-payout coinbases. Invalid workers are
@@ -314,13 +318,10 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 				Error:  newStratumError(stratumErrCodeInvalidRequest, "worker name has no valid bitcoin wallet"),
 			}
 			mc.writeResponse(resp)
+			mc.notifyMu.Unlock()
 			mc.Close("wallet validation failed")
 			return
 		}
-		// Assign a connection sequence before registering so the saved-workers
-		// dashboard can look up active connections via the worker registry.
-		mc.assignConnectionSeq()
-		mc.registerWorker(workerName)
 	}
 
 	passwordDiff, hasPasswordDiff := parsePasswordDifficultyHint(pass)
@@ -356,6 +357,7 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 				Result: false,
 				Error:  mc.bannedStratumError(),
 			})
+			mc.notifyMu.Unlock()
 			mc.Close(reason)
 			return
 		}
@@ -369,12 +371,24 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		}
 	}
 
+	if workerName != "" {
+		// Publish the new connection identity only after the complete authorize
+		// request has passed validation. Otherwise a concurrently emitted job
+		// could be bound to an authorization that is about to fail.
+		mc.updateWorker(workerName)
+		// Assign a connection sequence before registering so the saved-workers
+		// dashboard can look up active connections via the worker registry.
+		mc.assignConnectionSeq()
+		mc.registerWorker(workerName)
+	}
+
 	// Force difficulty to the configured min on authorize so new connections
 	// always start at the lowest target we allow.
 
 	mc.authorized = true
 
 	mc.writeTrueResponse(id)
+	mc.notifyMu.Unlock()
 
 	// If the miner hasn't subscribed yet, accept authorization but don't start
 	// the job listener or send any pool->miner notifications until subscribe.
@@ -1282,11 +1296,28 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		logger.Error("notify coinbase parts", "component", "miner", "kind", "coinbase", "error", err)
 		return
 	}
+	coinbasePrefix, err := hex.DecodeString(coinb1)
+	if err != nil {
+		logger.Error("notify coinbase1 decode", "component", "miner", "kind", "coinbase", "error", err)
+		return
+	}
+	coinbaseSuffix, err := hex.DecodeString(coinb2)
+	if err != nil {
+		logger.Error("notify coinbase2 decode", "component", "miner", "kind", "coinbase", "error", err)
+		return
+	}
+	coinbasePrefix = append(coinbasePrefix, mc.extranonce1...)
 	mc.jobMu.Lock()
 	if mc.jobNotifyCoinbase == nil {
 		mc.jobNotifyCoinbase = make(map[string]notifiedCoinbaseParts, mc.maxRecentJobs)
 	}
-	mc.jobNotifyCoinbase[stratumJobID] = notifiedCoinbaseParts{coinb1: coinb1, coinb2: coinb2}
+	mc.jobNotifyCoinbase[stratumJobID] = notifiedCoinbaseParts{
+		coinb1: coinb1,
+		coinb2: coinb2,
+		worker: worker,
+		prefix: coinbasePrefix,
+		suffix: coinbaseSuffix,
+	}
 	mc.jobMu.Unlock()
 
 	prevhashLE := hexToLEHex(job.PrevHash)

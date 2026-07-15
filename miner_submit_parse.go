@@ -285,16 +285,6 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 
 	authorizedWorker := mc.currentWorker()
 	submitWorker := worker
-	if mc.cfg.ShareRequireAuthorizedConnection && mc.cfg.ShareRequireWorkerMatch && authorizedWorker != "" && submitWorker != authorizedWorker {
-		logger.Warn("submit rejected: worker mismatch", "remote", mc.id, "authorized", authorizedWorker, "submitted", submitWorker)
-		mc.recordShare(authorizedWorker, false, 0, 0, "unauthorized worker", "", nil, now)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("worker_mismatch")
-		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeUnauthorized, "unauthorized")})
-		return submissionTask{}, false
-	}
-
 	workerName := authorizedWorker
 	if workerName == "" {
 		workerName = worker
@@ -309,7 +299,10 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		return submissionTask{}, false
 	}
 
-	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, ok := mc.jobForIDWithLast(jobID)
+	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, notifiedCoinbase, coinbaseOK, ok := mc.jobForIDWithLast(jobID)
+	if coinbaseOK && notifiedCoinbase.worker != "" {
+		workerName = notifiedCoinbase.worker
+	}
 	usedFallbackJob := false
 	if !ok || job == nil {
 		if shareJobFreshnessChecksJobID(mc.cfg.ShareJobFreshnessMode) {
@@ -341,6 +334,22 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
 		logger.Warn("submit: stale job mismatch (policy)", "remote", mc.id, "job", jobID, "expected_prev", job.Template.Previous, "expected_height", job.Template.Height, "current_prev", curPrevHash, "current_height", curHeight)
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
+	}
+	if mc.cfg.ShareRequireAuthorizedConnection && mc.cfg.ShareRequireWorkerMatch && workerName != "" && submitWorker != workerName {
+		logger.Warn("submit worker mismatch (policy)",
+			"remote", mc.id,
+			"job", jobID,
+			"expected", workerName,
+			"submitted", submitWorker,
+		)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("worker_mismatch")
+		}
+		if policyReject.reason == rejectUnknown {
+			// Keep validating PoW so a real block is never discarded solely for
+			// a worker-label policy mismatch.
+			policyReject = submitPolicyReject{reason: rejectUnauthorizedWorker, errCode: stratumErrCodeUnauthorized, errMsg: "unauthorized"}
+		}
 	}
 
 	extranonce2, err := normalizeSubmitExtranonce2Hex(extranonce2, job.Extranonce2Size)
@@ -454,6 +463,8 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		alternateVersionHex: uint32ToHex8Lower(versionResolution.alternateUseVersion),
 		alternateUseVersion: versionResolution.alternateUseVersion,
 		hasAlternateVersion: versionResolution.hasAlternateVersion,
+		notifiedCoinbase:    notifiedCoinbase,
+		hasNotifiedCoinbase: coinbaseOK && len(notifiedCoinbase.prefix) > 0 && len(notifiedCoinbase.suffix) > 0,
 		scriptTime:          notifiedScriptTime,
 		assignedDifficulty:  mc.assignedDifficulty(jobID),
 		policyReject:        policyReject,

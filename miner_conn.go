@@ -470,13 +470,13 @@ func (mc *MinerConn) handleGetTransactions(req *StratumRequest) {
 
 	var job *Job
 	if jobID != "" {
-		j, _, _, _, _, _, ok := mc.jobForIDWithLast(jobID)
+		j, _, _, _, _, _, _, _, ok := mc.jobForIDWithLast(jobID)
 		if ok {
 			job = j
 		}
 	} else {
 		// No job id provided: use the last job notified to this connection when available.
-		_, last, _, _, _, _, _ := mc.jobForIDWithLast("")
+		_, last, _, _, _, _, _, _, _ := mc.jobForIDWithLast("")
 		if last != nil {
 			job = last
 		} else if mc.jobMgr != nil {

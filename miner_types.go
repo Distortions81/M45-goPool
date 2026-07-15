@@ -95,6 +95,9 @@ type workerWalletState struct {
 type notifiedCoinbaseParts struct {
 	coinb1 string
 	coinb2 string
+	worker string
+	prefix []byte
+	suffix []byte
 }
 
 var defaultVarDiff = VarDiffConfig{
@@ -139,6 +142,7 @@ type MinerConn struct {
 	workerRegistry       *workerConnectionRegistry
 	savedWorkerStore     *workerListStore
 	discordNotifier      *discordNotifier
+	savedWorkerMu        sync.Mutex
 	savedWorkerTracked   bool
 	savedWorkerBestDiff  float64
 	registeredWorker     string
