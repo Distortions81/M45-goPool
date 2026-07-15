@@ -214,6 +214,7 @@ type MinerConn struct {
 	subscribed                   bool
 	authorized                   bool
 	cleanupOnce                  sync.Once
+	closed                       atomic.Bool
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
 	lockDifficulty bool

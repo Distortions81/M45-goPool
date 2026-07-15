@@ -18,6 +18,15 @@ var nextConnectionID uint64
 
 func (mc *MinerConn) cleanup() {
 	mc.cleanupOnce.Do(func() {
+		// Publish the terminal state before closing subscriptions or the socket.
+		// A closed buffered job channel may still be drained by listenJobs, and
+		// concurrent notify callers may already be waiting on notifyMu.
+		mc.closed.Store(true)
+		// Break transport I/O promptly. Registry and stats cleanup can involve
+		// storage work and must not leave a failed session writable meanwhile.
+		if mc.conn != nil {
+			_ = mc.conn.Close()
+		}
 		mc.unregisterRegisteredWorker()
 
 		// Close stats channel and wait for worker to finish processing.
@@ -49,9 +58,6 @@ func (mc *MinerConn) cleanup() {
 		mc.statsMu.Unlock()
 		if mc.jobMgr != nil && mc.jobCh != nil {
 			mc.jobMgr.Unsubscribe(mc.jobCh)
-		}
-		if mc.conn != nil {
-			_ = mc.conn.Close()
 		}
 	})
 }
@@ -543,7 +549,9 @@ func (mc *MinerConn) sendInitialWork() {
 			mc.setDifficulty(mc.startupPrimedDifficulty(diff))
 		}
 	}
-	mc.sendPendingStratumSetup()
+	if !mc.sendPendingStratumSetup() {
+		return
+	}
 
 	// First job always has clean_jobs=true so the miner starts fresh.
 	if job := mc.jobMgr.CurrentJob(); job != nil {

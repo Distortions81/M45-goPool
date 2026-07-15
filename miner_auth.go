@@ -62,6 +62,9 @@ func (mc *MinerConn) handleSubscribe(req *StratumRequest) {
 }
 
 func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID bool, sessionID string, haveSessionID bool) {
+	if mc.closed.Load() {
+		return
+	}
 	// Ignore duplicate subscribe requests - should only subscribe once
 	if mc.subscribed {
 		logger.Debug("subscribe rejected: already subscribed", "component", "miner", "kind", "protocol", "remote", mc.id)
@@ -161,7 +164,10 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		}
 	}
 
-	mc.writeSubscribeResponse(id, ex1, en2Size, mc.currentSessionID())
+	if !mc.writeSubscribeResponse(id, ex1, en2Size, mc.currentSessionID()) {
+		mc.Close("mining.subscribe response write failed")
+		return
+	}
 
 	// Support authorize-before-subscribe: if the miner already authorized,
 	// start the listener and schedule initial work now that subscribe is done.
@@ -170,7 +176,10 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 			if mc.jobCh != nil {
 				for {
 					select {
-					case <-mc.jobCh:
+					case _, ok := <-mc.jobCh:
+						if !ok {
+							return
+						}
 					default:
 						goto drained
 					}
@@ -302,6 +311,10 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 	// already started, let it finish before publishing this authorization; once
 	// the success response is sent, no later notify may use the old worker.
 	mc.notifyMu.Lock()
+	if mc.closed.Load() {
+		mc.notifyMu.Unlock()
+		return
+	}
 
 	// Before allowing hashing, ensure the worker name is a valid wallet-style
 	// address so we can construct dual-payout coinbases. Invalid workers are
@@ -385,6 +398,14 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		// dashboard can look up active connections via the worker registry.
 		mc.assignConnectionSeq()
 		mc.registerWorker(workerName)
+		// cleanup does not take notifyMu for every close source (for example,
+		// an admin disconnect). If it passed its unregister step while this
+		// authorization was registering, remove the late registration here.
+		if mc.closed.Load() {
+			mc.unregisterRegisteredWorker()
+			mc.notifyMu.Unlock()
+			return
+		}
 	}
 
 	// Force difficulty to the configured min on authorize so new connections
@@ -392,7 +413,11 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 
 	mc.authorized = true
 
-	mc.writeTrueResponse(id)
+	if !mc.writeTrueResponse(id) {
+		mc.notifyMu.Unlock()
+		mc.Close("mining.authorize response write failed")
+		return
+	}
 	mc.notifyMu.Unlock()
 
 	// If the miner hasn't subscribed yet, accept authorization but don't start
@@ -407,7 +432,10 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		// subscribe and authorize; we'll send the current job explicitly below.
 		for {
 			select {
-			case <-mc.jobCh:
+			case _, ok := <-mc.jobCh:
+				if !ok {
+					return
+				}
 			default:
 				goto drained
 			}
@@ -1022,6 +1050,10 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	// connection. Serialize it with mining.notify and mining.set_version_mask so
 	// no work notification can be interleaved between the response and its mask.
 	mc.notifyMu.Lock()
+	if mc.closed.Load() {
+		mc.notifyMu.Unlock()
+		return
+	}
 
 	result := make(map[string]any)
 	shouldSendVersionMask := false
@@ -1145,9 +1177,14 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		return
 	}
 
-	mc.writeResponse(StratumResponse{ID: req.ID, Result: result, Error: nil})
-	if shouldSendVersionMask {
-		mc.sendVersionMask()
+	if !mc.writeResponse(StratumResponse{ID: req.ID, Result: result, Error: nil}) {
+		mc.notifyMu.Unlock()
+		mc.Close("mining.configure response write failed")
+		return
+	}
+	if shouldSendVersionMask && !mc.sendVersionMask() {
+		mc.notifyMu.Unlock()
+		return
 	}
 	if shouldSendExtranonce {
 		ex1 := mc.extranonce1Hex
@@ -1155,7 +1192,10 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		if en2Size <= 0 {
 			en2Size = 4
 		}
-		mc.sendSetExtranonce(ex1, en2Size)
+		if !mc.sendSetExtranonce(ex1, en2Size) {
+			mc.notifyMu.Unlock()
+			return
+		}
 	}
 	mc.notifyMu.Unlock()
 	mc.maybeApplyMinimumDifficultyFloor(shouldApplyMinDifficulty)
@@ -1221,6 +1261,9 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	}
 	mc.notifyMu.Lock()
 	defer mc.notifyMu.Unlock()
+	if mc.closed.Load() {
+		return
+	}
 	if !mc.subscribed {
 		return
 	}
@@ -1254,13 +1297,18 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	if mc.maybeAdjustDifficulty(time.Now()) {
 		forceClean = true
 	}
+	if mc.closed.Load() {
+		return
+	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
 	versionRollingActive, notifiedVersionMask := mc.versionRollingPolicySnapshot()
-	if maskChanged && versionRollingActive {
-		mc.sendVersionMask()
+	if maskChanged && versionRollingActive && !mc.sendVersionMask() {
+		return
 	}
-	mc.sendPendingStratumSetup()
+	if !mc.sendPendingStratumSetup() {
+		return
+	}
 
 	// Generate unique scriptTime for this send to prevent duplicate work.
 	// Each notification produces a different coinbase, ensuring miners can't
@@ -1437,6 +1485,12 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		Params: params,
 	}); err != nil {
 		logger.Error("notify write error", "component", "miner", "kind", "notify", "remote", mc.id, "error", err)
+		// The write may have partially succeeded, so rolling back the binding is
+		// unsafe: the miner might have received complete work even though the
+		// socket reported an error. Close the session instead. cleanup marks the
+		// connection closed before unsubscribing, preventing buffered/concurrent
+		// notifies from churning the advertised block-rescue history afterward.
+		mc.Close("mining.notify write failed")
 		return
 	}
 	mc.recordNotifySent(time.Now())

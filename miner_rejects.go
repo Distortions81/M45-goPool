@@ -1575,10 +1575,13 @@ func (mc *MinerConn) setDifficulty(diff float64) {
 	mc.sendDifficultyNotification(diff)
 }
 
-func (mc *MinerConn) sendDifficultyNotification(diff float64) {
+func (mc *MinerConn) sendDifficultyNotification(diff float64) bool {
+	if mc.closed.Load() {
+		return false
+	}
 	if !mc.subscribed {
 		mc.pendingDifficulty = true
-		return
+		return true
 	}
 	mc.pendingDifficulty = false
 	msg := map[string]any{
@@ -1588,7 +1591,10 @@ func (mc *MinerConn) sendDifficultyNotification(diff float64) {
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("difficulty write error", "remote", mc.id, "error", err)
+		mc.Close("mining.set_difficulty write failed")
+		return false
 	}
+	return true
 }
 
 type stratumDifficulty float64
@@ -1635,19 +1641,22 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 	return primed
 }
 
-func (mc *MinerConn) sendVersionMask() {
+func (mc *MinerConn) sendVersionMask() bool {
+	if mc.closed.Load() {
+		return false
+	}
 	mc.versionMu.Lock()
 	if !mc.subscribed {
 		if mc.versionRoll {
 			mc.pendingVersionMask = true
 		}
 		mc.versionMu.Unlock()
-		return
+		return true
 	}
 	if !mc.versionRoll {
 		mc.pendingVersionMask = false
 		mc.versionMu.Unlock()
-		return
+		return true
 	}
 	mask := mc.versionMask
 	mc.pendingVersionMask = false
@@ -1659,22 +1668,33 @@ func (mc *MinerConn) sendVersionMask() {
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("version mask write error", "remote", mc.id, "error", err)
+		mc.Close("mining.set_version_mask write failed")
+		return false
 	}
+	return true
 }
 
-func (mc *MinerConn) sendPendingStratumSetup() {
+func (mc *MinerConn) sendPendingStratumSetup() bool {
+	if mc.closed.Load() {
+		return false
+	}
 	if !mc.subscribed {
-		return
+		return true
 	}
 	if mc.pendingDifficulty {
-		mc.sendDifficultyNotification(mc.currentDifficulty())
+		if !mc.sendDifficultyNotification(mc.currentDifficulty()) {
+			return false
+		}
 	}
 	mc.versionMu.Lock()
 	pendingVersionMask := mc.pendingVersionMask && mc.versionRoll
 	mc.versionMu.Unlock()
 	if pendingVersionMask {
-		mc.sendVersionMask()
+		if !mc.sendVersionMask() {
+			return false
+		}
 	}
+	return !mc.closed.Load()
 }
 
 // versionRollingPolicySnapshot returns the current connection-wide BIP310
@@ -1819,9 +1839,12 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 	return changed
 }
 
-func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
+func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) bool {
+	if mc.closed.Load() {
+		return false
+	}
 	if !mc.subscribed {
-		return
+		return true
 	}
 	msg := map[string]any{
 		"id":     nil,
@@ -1830,12 +1853,18 @@ func (mc *MinerConn) sendSetExtranonce(ex1 string, en2Size int) {
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("set_extranonce write error", "remote", mc.id, "error", err)
+		mc.Close("mining.set_extranonce write failed")
+		return false
 	}
+	return true
 }
 
 func (mc *MinerConn) handleExtranonceSubscribe(req *StratumRequest) {
 	mc.extranonceSubscribed = true
-	mc.writeTrueResponse(req.ID)
+	if !mc.writeTrueResponse(req.ID) {
+		mc.Close("mining.extranonce.subscribe response write failed")
+		return
+	}
 
 	ex1 := hex.EncodeToString(mc.extranonce1)
 	en2Size := mc.cfg.Extranonce2Size

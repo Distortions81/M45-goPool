@@ -42,13 +42,15 @@ func (mc *MinerConn) writeBytesLocked(b []byte) error {
 	return nil
 }
 
-func (mc *MinerConn) writeResponse(resp StratumResponse) {
+func (mc *MinerConn) writeResponse(resp StratumResponse) bool {
 	if resp.ID == nil {
-		return
+		return true
 	}
 	if err := mc.writeJSON(resp); err != nil {
 		logger.Error("write error", "remote", mc.id, "error", err)
+		return false
 	}
+	return true
 }
 
 func (mc *MinerConn) sendClientShowMessage(message string) {
@@ -103,20 +105,20 @@ func (mc *MinerConn) writeEmptySliceResponse(id any) {
 	})
 }
 
-func (mc *MinerConn) writeTrueResponse(id any) {
-	mc.writeResponse(StratumResponse{
+func (mc *MinerConn) writeTrueResponse(id any) bool {
+	return mc.writeResponse(StratumResponse{
 		ID:     id,
 		Result: true,
 		Error:  nil,
 	})
 }
 
-func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int, subID string) {
+func (mc *MinerConn) writeSubscribeResponse(id any, extranonce1Hex string, extranonce2Size int, subID string) bool {
 	if strings.TrimSpace(subID) == "" {
 		subID = "1"
 	}
 	subs := subscribeMethodTuples(subID, mc.cfg.CKPoolEmulate)
-	mc.writeResponse(StratumResponse{
+	return mc.writeResponse(StratumResponse{
 		ID: id,
 		Result: []any{
 			subs,
