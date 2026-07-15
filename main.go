@@ -422,9 +422,14 @@ func run() (exitCode int) {
 	}
 	rpcClient := NewRPCClient(cfg, metrics)
 	rpcClient.StartCookieWatcher(ctx)
-	// Best-effort replay of any blocks that failed submitblock while the
-	// node RPC was unavailable in previous runs.
-	startPendingSubmissionReplayer(ctx, rpcClient)
+	// Recover and replay any blocks that failed submitblock while the node RPC
+	// was unavailable in previous runs. Startup cannot admit miners until stale
+	// in-flight rows are safely replayable.
+	pendingReplayDone, replayErr := startPendingSubmissionReplayer(ctx, rpcClient)
+	if replayErr != nil {
+		logger.Error("pending block startup recovery interrupted", "component", "startup", "kind", "block_recovery", "error", replayErr)
+		return 1
+	}
 
 	accounting, err := NewAccountStore(cfg, debugEnabled(), cleanBansOnStartup)
 	if err != nil {
@@ -966,6 +971,9 @@ func run() (exitCode int) {
 	// before flushing state or stopping the database and logger they depend on.
 	logger.Info("draining submission workers", "component", "stratum", "kind", "shutdown")
 	submissionPool.drainAndClose()
+	if pendingReplayDone != nil {
+		<-pendingReplayDone
+	}
 
 	if accounting != nil {
 		if err := accounting.Flush(); err != nil {

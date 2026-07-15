@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -302,5 +303,106 @@ func TestReplayPendingSubmissionsDuplicateMarksSubmitted(t *testing.T) {
 	}
 	if status != pendingSubmissionStatusSubmitted {
 		t.Fatalf("duplicate status = %q, want %q", status, pendingSubmissionStatusSubmitted)
+	}
+}
+
+func TestStartPendingSubmissionReplayerReplaysImmediately(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    104,
+		Hash:      "immediate-replay-hash",
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusPending,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append pending submission: %v", err)
+	}
+
+	called := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	previousInterval := pendingReplayInterval
+	pendingReplayInterval = time.Hour
+	defer func() { pendingReplayInterval = previousInterval }()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done, err := startPendingSubmissionReplayer(ctx, rpc)
+	if err != nil {
+		t.Fatalf("start pending replayer: %v", err)
+	}
+	defer func() {
+		cancel()
+		<-done
+	}()
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("pending block waited for the periodic replay ticker")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		var status string
+		if err := db.QueryRow(`SELECT status FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status); err == nil && status == pendingSubmissionStatusSubmitted {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("immediate replay did not mark block submitted")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestPendingSubmissionPeriodicReplayDoesNotReclaimLiveSubmittingRow(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	var submitCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		submitCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	previousInterval := pendingReplayInterval
+	pendingReplayInterval = 5 * time.Millisecond
+	defer func() { pendingReplayInterval = previousInterval }()
+	ctx, cancel := context.WithCancel(context.Background())
+	done, err := startPendingSubmissionReplayer(ctx, rpc)
+	if err != nil {
+		t.Fatalf("start pending replayer: %v", err)
+	}
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    105,
+		Hash:      "live-submitting-hash",
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusSubmitting,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append live submitting row: %v", err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if calls := submitCalls.Load(); calls != 0 {
+		t.Fatalf("live submitting row replay calls = %d, want 0", calls)
+	}
+	var status string
+	if err := db.QueryRow(`SELECT status FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status); err != nil {
+		t.Fatalf("query live submitting row: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitting {
+		t.Fatalf("live row status = %q, want submitting", status)
 	}
 }

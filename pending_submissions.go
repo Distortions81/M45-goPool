@@ -32,10 +32,12 @@ const (
 )
 
 var (
-	pendingReplayBaseDelay  = 5 * time.Second
-	pendingReplayMaxDelay   = 5 * time.Minute
-	pendingReplayJitterFrac = 0.2
-	pendingReplayBackoff    = newPendingReplayBackoff()
+	pendingReplayBaseDelay           = 5 * time.Second
+	pendingReplayMaxDelay            = 5 * time.Minute
+	pendingReplayJitterFrac          = 0.2
+	pendingReplayBackoff             = newPendingReplayBackoff()
+	pendingReplayInterval            = 5 * time.Second
+	pendingStartupRecoveryRetryDelay = time.Second
 )
 
 type pendingReplayState struct {
@@ -119,20 +121,32 @@ func (b *pendingReplayBackoffState) reset(key string) {
 // pending. On successful submitblock, it marks the row as "submitted" so
 // future scans skip that block. This is best-effort and does not guarantee
 // eventual submission, but provides a recovery path when the node RPC was down.
-func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) {
+func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) (<-chan struct{}, error) {
 	if rpc == nil {
-		return
+		done := make(chan struct{})
+		close(done)
+		return done, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	// Mining listeners are not started until after this function returns. Any
 	// submitting row found here therefore belongs to a process that stopped
 	// before recording the outcome of its initial submitblock attempt.
-	reclaimSubmittingPendingSubmissions()
-	// Use a short but modest interval; blocks are rare and we don't want to
-	// hammer the node when it's unhealthy, but we also want to resubmit
-	// quickly once RPC is back.
-	const interval = 5 * time.Second
+	if err := retryPendingSubmissionStartupRecovery(ctx, pendingStartupRecoveryRetryDelay, reclaimSubmittingPendingSubmissions); err != nil {
+		return nil, err
+	}
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
+		// Do not sacrifice a fixed ticker interval after safely reclaiming a
+		// block interrupted by the previous process.
+		replayPendingSubmissions(ctx, rpc)
+		interval := pendingReplayInterval
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -144,6 +158,42 @@ func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) {
 			}
 		}
 	}()
+	return done, nil
+}
+
+func retryPendingSubmissionStartupRecovery(ctx context.Context, retryDelay time.Duration, recoverFn func(context.Context) error) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if recoverFn == nil {
+		return fmt.Errorf("pending submission startup recovery function is nil")
+	}
+	if retryDelay <= 0 {
+		retryDelay = time.Second
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := recoverFn(ctx); err == nil {
+			return nil
+		} else {
+			logger.Error("pending submission startup recovery failed; retrying before mining", "error", err)
+		}
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
@@ -389,13 +439,15 @@ func transitionPendingSubmissionStatus(key, fromStatus, toStatus, rpcError strin
 // reclaimSubmittingPendingSubmissions makes initial submissions interrupted by
 // a previous process eligible for replay. It must run before mining listeners
 // can create submitting rows for the current process.
-func reclaimSubmittingPendingSubmissions() {
+func reclaimSubmittingPendingSubmissions(ctx context.Context) error {
 	db := getSharedStateDB()
 	if db == nil {
-		logger.Warn("pending block: shared state db not initialized")
-		return
+		return fmt.Errorf("shared state db not initialized")
 	}
-	if _, err := db.Exec(`
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, err := db.ExecContext(ctx, `
 		UPDATE pending_submissions
 		SET status = 'pending',
 			rpc_error = CASE
@@ -404,6 +456,7 @@ func reclaimSubmittingPendingSubmissions() {
 			END
 		WHERE LOWER(TRIM(status)) = 'submitting'
 	`); err != nil {
-		logger.Warn("pending submission startup recovery failed", "error", err)
+		return err
 	}
+	return nil
 }

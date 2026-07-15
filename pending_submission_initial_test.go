@@ -514,9 +514,9 @@ func TestPendingSubmissionStartupReclaimsSubmittingRows(t *testing.T) {
 		t.Fatalf("append submitting record: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	startPendingSubmissionReplayer(ctx, &RPCClient{})
+	if err := reclaimSubmittingPendingSubmissions(context.Background()); err != nil {
+		t.Fatalf("reclaim submitting rows: %v", err)
+	}
 
 	var status, rpcError string
 	if err := db.QueryRow(`SELECT status, rpc_error FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status, &rpcError); err != nil {
@@ -527,6 +527,72 @@ func TestPendingSubmissionStartupReclaimsSubmittingRows(t *testing.T) {
 	}
 	if !strings.Contains(rpcError, "process exit") {
 		t.Fatalf("startup recovery error = %q", rpcError)
+	}
+}
+
+func TestPendingSubmissionStartupRecoveryRetriesThenSucceeds(t *testing.T) {
+	var calls atomic.Int32
+	err := retryPendingSubmissionStartupRecovery(context.Background(), time.Millisecond, func(context.Context) error {
+		if calls.Add(1) == 1 {
+			return errors.New("transient recovery failure")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("retry startup recovery: %v", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("recovery calls = %d, want 2", got)
+	}
+}
+
+func TestPendingSubmissionStartupRecoveryCancellationStopsRetries(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var calls atomic.Int32
+	err := retryPendingSubmissionStartupRecovery(ctx, time.Hour, func(context.Context) error {
+		calls.Add(1)
+		cancel()
+		return errors.New("persistent recovery failure")
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("recovery error = %v, want context canceled", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("recovery calls after cancellation = %d, want 1", got)
+	}
+}
+
+func TestPendingSubmissionStartupReclaimReturnsSQLiteError(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    840_005,
+		Hash:      strings.Repeat("c", 64),
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusSubmitting,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append submitting record: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_pending_startup_reclaim
+		BEFORE UPDATE OF status ON pending_submissions
+		WHEN OLD.submission_key = '` + rec.Hash + `'
+		BEGIN
+			SELECT RAISE(FAIL, 'forced reclaim failure');
+		END
+	`); err != nil {
+		t.Fatalf("create reclaim failure trigger: %v", err)
+	}
+	if err := reclaimSubmittingPendingSubmissions(context.Background()); err == nil {
+		t.Fatal("expected reclaim SQLite error")
+	}
+	var status string
+	if err := db.QueryRow(`SELECT status FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status); err != nil {
+		t.Fatalf("query failed reclaim row: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitting {
+		t.Fatalf("failed reclaim status = %q, want submitting", status)
 	}
 }
 
