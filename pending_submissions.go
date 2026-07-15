@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
@@ -23,6 +24,12 @@ type pendingSubmissionRecord struct {
 	PayoutAddr string    `json:"payout_addr,omitempty"`
 	Status     string    `json:"status,omitempty"`
 }
+
+const (
+	pendingSubmissionStatusPending    = "pending"
+	pendingSubmissionStatusSubmitting = "submitting"
+	pendingSubmissionStatusSubmitted  = "submitted"
+)
 
 var (
 	pendingReplayBaseDelay  = 5 * time.Second
@@ -116,6 +123,10 @@ func startPendingSubmissionReplayer(ctx context.Context, rpc *RPCClient) {
 	if rpc == nil {
 		return
 	}
+	// Mining listeners are not started until after this function returns. Any
+	// submitting row found here therefore belongs to a process that stopped
+	// before recording the outcome of its initial submitblock attempt.
+	reclaimSubmittingPendingSubmissions()
 	// Use a short but modest interval; blocks are rare and we don't want to
 	// hammer the node when it's unhealthy, but we also want to resubmit
 	// quickly once RPC is back.
@@ -146,6 +157,7 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 	rows, err := db.Query(`
 		SELECT submission_key, timestamp_unix, height, hash, worker, block_hex, rpc_error, rpc_url, payout_addr, status
 		FROM pending_submissions
+		WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('', 'pending')
 	`)
 	if err != nil {
 		logger.Warn("pending block sqlite query", "error", err)
@@ -172,9 +184,6 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 			status   string
 		)
 		if err := rows.Scan(&key, &tsUnix, &height, &hash, &worker, &blockHex, &rpcError, &rpcURL, &payout, &status); err != nil {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(status), "submitted") {
 			continue
 		}
 		blockHex = strings.TrimSpace(blockHex)
@@ -215,71 +224,113 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 	}
 
 	for _, item := range pending {
-		rec := item.Rec
-		// Respect shutdown signals between attempts.
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		now := time.Now()
-		if !pendingReplayBackoff.allow(item.Key, now) {
-			continue
-		}
-
-		var submitRes any
-		// Bound each submitblock call so a slow or unresponsive node
-		// doesn't block shutdown or delay retries for other entries.
-		parent := ctx
-		if parent == nil {
-			parent = context.Background()
-		}
-		callCtx, cancel := context.WithTimeout(parent, 30*time.Second)
-		err := rpc.callCtx(callCtx, "submitblock", []any{rec.BlockHex}, &submitRes)
-		cancel()
-		if err == nil {
-			err = submitBlockResultError(&submitRes)
-		}
-		if err != nil {
-			retryIn := pendingReplayBackoff.fail(item.Key, now)
-			logger.Error("pending submitblock error", "height", rec.Height, "hash", rec.Hash, "error", err, "retry_in", retryIn)
-			if rpc.metrics != nil {
-				rpc.metrics.RecordErrorEvent("pending_submit", err.Error(), time.Now())
+		// Keep the claim cleanup scoped to one row. If a future early return or
+		// an unexpected panic exits this attempt, the row becomes replayable
+		// again instead of remaining submitting until process restart.
+		func() {
+			rec := item.Rec
+			// Respect shutdown signals between attempts.
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
-			continue
-		}
-		logger.Info("pending block submitted", "height", rec.Height, "hash", rec.Hash)
-		pendingReplayBackoff.reset(item.Key)
-		if _, err := db.Exec("UPDATE pending_submissions SET status = 'submitted', rpc_error = '' WHERE submission_key = ?", item.Key); err != nil {
-			logger.Warn("pending submission status update failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", err)
-		}
+
+			now := time.Now()
+			if !pendingReplayBackoff.allow(item.Key, now) {
+				return
+			}
+			// Atomically claim the row before making the RPC call. This prevents
+			// overlapping replay scans from submitting the same block and makes the
+			// durable submitting state unavailable to the periodic scanner.
+			claimed, err := transitionPendingSubmissionStatus(item.Key, pendingSubmissionStatusPending, pendingSubmissionStatusSubmitting, rec.RPCError)
+			if err != nil {
+				logger.Warn("pending submission claim failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", err)
+				return
+			}
+			if !claimed {
+				return
+			}
+			attemptFinished := false
+			defer func() {
+				if attemptFinished {
+					return
+				}
+				if changed, updateErr := transitionPendingSubmissionStatus(item.Key, pendingSubmissionStatusSubmitting, pendingSubmissionStatusPending, "pending submitblock replay interrupted"); updateErr != nil {
+					logger.Warn("pending submission interrupted replay state update failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", updateErr)
+				} else if !changed {
+					logger.Warn("pending submission interrupted replay state changed unexpectedly", "key", item.Key, "height", rec.Height, "hash", rec.Hash)
+				}
+			}()
+
+			var submitRes any
+			// Bound each submitblock call so a slow or unresponsive node
+			// doesn't block shutdown or delay retries for other entries.
+			parent := ctx
+			if parent == nil {
+				parent = context.Background()
+			}
+			callCtx, cancel := context.WithTimeout(parent, 30*time.Second)
+			err = rpc.callCtx(callCtx, "submitblock", []any{rec.BlockHex}, &submitRes)
+			cancel()
+			if err == nil {
+				err = submitBlockResultError(&submitRes)
+			}
+			if err != nil {
+				changed, updateErr := transitionPendingSubmissionStatus(item.Key, pendingSubmissionStatusSubmitting, pendingSubmissionStatusPending, err.Error())
+				attemptFinished = updateErr == nil && changed
+				if updateErr != nil {
+					logger.Warn("pending submission retry state update failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", updateErr)
+				} else if !changed {
+					logger.Warn("pending submission retry state changed unexpectedly", "key", item.Key, "height", rec.Height, "hash", rec.Hash)
+				}
+				retryIn := pendingReplayBackoff.fail(item.Key, time.Now())
+				logger.Error("pending submitblock error", "height", rec.Height, "hash", rec.Hash, "error", err, "retry_in", retryIn)
+				if rpc.metrics != nil {
+					rpc.metrics.RecordErrorEvent("pending_submit", err.Error(), time.Now())
+				}
+				return
+			}
+			logger.Info("pending block submitted", "height", rec.Height, "hash", rec.Hash)
+			pendingReplayBackoff.reset(item.Key)
+			changed, updateErr := transitionPendingSubmissionStatus(item.Key, pendingSubmissionStatusSubmitting, pendingSubmissionStatusSubmitted, "")
+			attemptFinished = updateErr == nil && changed
+			if updateErr != nil {
+				logger.Warn("pending submission status update failed", "key", item.Key, "height", rec.Height, "hash", rec.Hash, "error", updateErr)
+			} else if !changed {
+				logger.Warn("pending submission status changed unexpectedly", "key", item.Key, "height", rec.Height, "hash", rec.Hash)
+			}
+		}()
 	}
 }
 
-func appendPendingSubmissionRecord(rec pendingSubmissionRecord) {
-	// Use the shared state database connection
-	db := getSharedStateDB()
-	if db == nil {
-		logger.Warn("pending block: shared state db not initialized")
-		return
-	}
-
+func pendingSubmissionKey(rec pendingSubmissionRecord) string {
 	key := strings.TrimSpace(rec.Hash)
 	if key == "" {
 		key = strings.TrimSpace(rec.BlockHex)
 	}
-	key = strings.TrimSpace(key)
+	return strings.TrimSpace(key)
+}
+
+func appendPendingSubmissionRecord(rec pendingSubmissionRecord) error {
+	// Use the shared state database connection
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("pending block: shared state db not initialized")
+		return fmt.Errorf("shared state db not initialized")
+	}
+
+	key := pendingSubmissionKey(rec)
 	if key == "" {
-		return
+		return fmt.Errorf("pending submission key is empty")
 	}
 	blockHex := strings.TrimSpace(rec.BlockHex)
 	if blockHex == "" {
-		return
+		return fmt.Errorf("pending submission block is empty")
 	}
 	status := strings.TrimSpace(rec.Status)
 	if status == "" {
-		status = "pending"
+		status = pendingSubmissionStatusPending
 	}
 	if _, err := db.Exec(`
 		INSERT INTO pending_submissions (
@@ -298,5 +349,61 @@ func appendPendingSubmissionRecord(rec pendingSubmissionRecord) {
 	`, key, unixOrZero(rec.Timestamp), rec.Height, strings.TrimSpace(rec.Hash), strings.TrimSpace(rec.Worker), blockHex,
 		strings.TrimSpace(rec.RPCError), strings.TrimSpace(rec.RPCURL), strings.TrimSpace(rec.PayoutAddr), status); err != nil {
 		logger.Warn("pending block sqlite upsert", "error", err)
+		return err
+	}
+	return nil
+}
+
+// transitionPendingSubmissionStatus performs a compare-and-transition update.
+// The comparison keeps the initial submitter and the periodic replayer from
+// overwriting one another's terminal state.
+func transitionPendingSubmissionStatus(key, fromStatus, toStatus, rpcError string) (bool, error) {
+	db := getSharedStateDB()
+	if db == nil {
+		return false, fmt.Errorf("shared state db not initialized")
+	}
+	key = strings.TrimSpace(key)
+	fromStatus = strings.TrimSpace(fromStatus)
+	toStatus = strings.TrimSpace(toStatus)
+	if key == "" || fromStatus == "" || toStatus == "" {
+		return false, fmt.Errorf("invalid pending submission state transition")
+	}
+	res, err := db.Exec(`
+		UPDATE pending_submissions
+		SET status = ?, rpc_error = ?
+		WHERE submission_key = ? AND (
+			LOWER(TRIM(COALESCE(status, ''))) = LOWER(?)
+			OR (LOWER(?) = 'pending' AND TRIM(COALESCE(status, '')) = '')
+		)
+	`, toStatus, strings.TrimSpace(rpcError), key, fromStatus, fromStatus)
+	if err != nil {
+		return false, err
+	}
+	changed, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return changed == 1, nil
+}
+
+// reclaimSubmittingPendingSubmissions makes initial submissions interrupted by
+// a previous process eligible for replay. It must run before mining listeners
+// can create submitting rows for the current process.
+func reclaimSubmittingPendingSubmissions() {
+	db := getSharedStateDB()
+	if db == nil {
+		logger.Warn("pending block: shared state db not initialized")
+		return
+	}
+	if _, err := db.Exec(`
+		UPDATE pending_submissions
+		SET status = 'pending',
+			rpc_error = CASE
+				WHEN TRIM(COALESCE(rpc_error, '')) = '' THEN 'initial submitblock outcome interrupted by process exit'
+				ELSE rpc_error
+			END
+		WHERE LOWER(TRIM(status)) = 'submitting'
+	`); err != nil {
+		logger.Warn("pending submission startup recovery failed", "error", err)
 	}
 }

@@ -1,0 +1,384 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func openPendingSubmissionTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := openStateDB(filepath.Join(t.TempDir(), "state", "workers.db"))
+	if err != nil {
+		t.Fatalf("open state db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	cleanup := setSharedStateDBForTest(db)
+	t.Cleanup(cleanup)
+	return db
+}
+
+func solvedBlockPersistenceTestJob() *Job {
+	return &Job{
+		JobID: "persisted-solved-job",
+		Template: GetBlockTemplateResult{
+			Height:        840_001,
+			CoinbaseValue: 50 * 1e8,
+		},
+		Transactions:         []GBTTransaction{{Data: "aabbcc"}},
+		CoinbaseValue:        50 * 1e8,
+		PayoutPolicyCaptured: true,
+		PoolFeePercent:       1.5,
+		PayoutAddress:        "wallet-from-advertised-job",
+	}
+}
+
+func runSolvedBlockPersistenceTest(mc *MinerConn, job *Job, header, coinbase []byte, hash string) {
+	mc.handleBlockShare(
+		1,
+		job,
+		job.JobID,
+		"wallet-from-advertised-job.rig-1",
+		nil,
+		"00000000",
+		"00000000",
+		0x20000000,
+		job.ScriptTime,
+		header,
+		coinbase,
+		hash,
+		1,
+		time.Now(),
+	)
+}
+
+func TestSolvedBlockPersistedBeforeRPCAndNotReplayedConcurrently(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	for i := range header {
+		header[i] = byte(i)
+	}
+	coinbase := []byte{0x01, 0x02, 0x03, 0x04}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+	hash := strings.Repeat("1", 64)
+
+	type observation struct {
+		status string
+		block  string
+		worker string
+		payout string
+		err    error
+	}
+	observed := make(chan observation, 1)
+	releaseRPC := make(chan struct{})
+	var submitCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(r.Body)
+		var req rpcRequest
+		if readErr == nil {
+			readErr = json.Unmarshal(body, &req)
+		}
+		if readErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if req.Method != "submitblock" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"result":null,"error":{"code":-5,"message":"not found"},"id":1}`))
+			return
+		}
+		call := submitCalls.Add(1)
+		if call == 1 {
+			var got observation
+			got.err = db.QueryRow(`
+				SELECT status, block_hex, worker, payout_addr
+				FROM pending_submissions WHERE submission_key = ?
+			`, hash).Scan(&got.status, &got.block, &got.worker, &got.payout)
+			observed <- got
+			<-releaseRPC
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{
+		id:   "persist-before-rpc",
+		conn: nopConn{},
+		rpc:  rpc,
+		cfg: Config{
+			RPCURL:        server.URL,
+			PayoutAddress: "wallet-from-new-config",
+		},
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+	}()
+
+	var got observation
+	select {
+	case got = <-observed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("submitblock RPC was not reached")
+	}
+	if got.err != nil {
+		t.Fatalf("query persisted block from RPC handler: %v", got.err)
+	}
+	if got.status != pendingSubmissionStatusSubmitting {
+		t.Fatalf("status at first RPC = %q, want %q", got.status, pendingSubmissionStatusSubmitting)
+	}
+	if got.block != expectedBlock {
+		t.Fatalf("persisted block differs from exact reconstructed block\ngot:  %s\nwant: %s", got.block, expectedBlock)
+	}
+	if got.worker != "wallet-from-advertised-job.rig-1" {
+		t.Fatalf("persisted worker = %q", got.worker)
+	}
+	if got.payout != job.PayoutAddress {
+		t.Fatalf("persisted payout = %q, want advertised job payout %q", got.payout, job.PayoutAddress)
+	}
+
+	// A periodic scan while the initial RPC is in flight must not submit the
+	// same durable row a second time.
+	replayPendingSubmissions(context.Background(), rpc)
+	if calls := submitCalls.Load(); calls != 1 {
+		t.Fatalf("submitblock calls while initial submission active = %d, want 1", calls)
+	}
+	close(releaseRPC)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("initial block submission did not finish")
+	}
+	flushFoundBlockLog(t)
+
+	var status, storedBlock string
+	if err := db.QueryRow(`SELECT status, block_hex FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&status, &storedBlock); err != nil {
+		t.Fatalf("query completed submission: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitted {
+		t.Fatalf("completed status = %q, want %q", status, pendingSubmissionStatusSubmitted)
+	}
+	if storedBlock != expectedBlock {
+		t.Fatal("terminal state update changed the persisted block bytes")
+	}
+}
+
+func TestSolvedBlockRejectionTransitionsToPending(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	coinbase := []byte{0x01}
+	hash := strings.Repeat("2", 64)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req rpcRequest
+		_ = json.Unmarshal(body, &req)
+		w.Header().Set("Content-Type", "application/json")
+		if req.Method == "submitblock" {
+			_, _ = w.Write([]byte(`{"result":"bad-cb-amount","error":null,"id":1}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"result":null,"error":{"code":-5,"message":"not found"},"id":1}`))
+	}))
+	defer server.Close()
+
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "rejected-solved-block", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL}}
+	runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+
+	var status, rpcError, blockHex string
+	if err := db.QueryRow(`
+		SELECT status, rpc_error, block_hex FROM pending_submissions WHERE submission_key = ?
+	`, hash).Scan(&status, &rpcError, &blockHex); err != nil {
+		t.Fatalf("query rejected submission: %v", err)
+	}
+	if status != pendingSubmissionStatusPending {
+		t.Fatalf("rejected status = %q, want %q", status, pendingSubmissionStatusPending)
+	}
+	if !strings.Contains(rpcError, "bad-cb-amount") {
+		t.Fatalf("pending RPC error = %q", rpcError)
+	}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+	if blockHex != expectedBlock {
+		t.Fatal("rejection transition did not preserve exact block bytes")
+	}
+}
+
+func TestSolvedBlockSubmissionContinuesWhenPersistenceFails(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_solved_block_persistence
+		BEFORE INSERT ON pending_submissions
+		BEGIN
+			SELECT RAISE(FAIL, 'forced persistence failure');
+		END
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	var submitCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req rpcRequest
+		_ = json.Unmarshal(body, &req)
+		if req.Method == "submitblock" {
+			submitCalls.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "persistence-failure", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL}}
+	runSolvedBlockPersistenceTest(mc, solvedBlockPersistenceTestJob(), make([]byte, 80), []byte{0x01}, strings.Repeat("3", 64))
+	flushFoundBlockLog(t)
+	if calls := submitCalls.Load(); calls != 1 {
+		t.Fatalf("submitblock calls after persistence failure = %d, want 1", calls)
+	}
+}
+
+type panickingSubmitRPC struct{}
+
+func (panickingSubmitRPC) callCtx(context.Context, string, any, any) error {
+	panic("forced submitblock panic")
+}
+
+func TestSolvedBlockPanicDoesNotStrandSubmittingRow(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	hash := strings.Repeat("4", 64)
+	mc := &MinerConn{id: "panic-after-persist", conn: nopConn{}, rpc: panickingSubmitRPC{}}
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected forced RPC panic")
+			}
+		}()
+		runSolvedBlockPersistenceTest(mc, solvedBlockPersistenceTestJob(), make([]byte, 80), []byte{0x01}, hash)
+	}()
+
+	var status, rpcError string
+	if err := db.QueryRow(`SELECT status, rpc_error FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&status, &rpcError); err != nil {
+		t.Fatalf("query interrupted submission: %v", err)
+	}
+	if status != pendingSubmissionStatusPending {
+		t.Fatalf("panic status = %q, want %q", status, pendingSubmissionStatusPending)
+	}
+	if !strings.Contains(rpcError, "interrupted") {
+		t.Fatalf("panic RPC error = %q", rpcError)
+	}
+}
+
+func TestPendingSubmissionStartupReclaimsSubmittingRows(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    840_002,
+		Hash:      strings.Repeat("5", 64),
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusSubmitting,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append submitting record: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	startPendingSubmissionReplayer(ctx, &RPCClient{})
+
+	var status, rpcError string
+	if err := db.QueryRow(`SELECT status, rpc_error FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status, &rpcError); err != nil {
+		t.Fatalf("query reclaimed submission: %v", err)
+	}
+	if status != pendingSubmissionStatusPending {
+		t.Fatalf("startup status = %q, want %q", status, pendingSubmissionStatusPending)
+	}
+	if !strings.Contains(rpcError, "process exit") {
+		t.Fatalf("startup recovery error = %q", rpcError)
+	}
+}
+
+func TestPendingSubmissionTransitionRequiresExpectedState(t *testing.T) {
+	_ = openPendingSubmissionTestDB(t)
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    840_003,
+		Hash:      strings.Repeat("6", 64),
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusSubmitted,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append submitted record: %v", err)
+	}
+	changed, err := transitionPendingSubmissionStatus(rec.Hash, pendingSubmissionStatusPending, pendingSubmissionStatusSubmitting, errors.New("unused").Error())
+	if err != nil {
+		t.Fatalf("compare-and-transition: %v", err)
+	}
+	if changed {
+		t.Fatal("transition changed a row whose state did not match")
+	}
+}
+
+func TestPendingSubmissionReplayTreatsLegacyEmptyStatusAsPending(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    840_004,
+		Hash:      strings.Repeat("7", 64),
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusPending,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append legacy record: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE pending_submissions SET status = '' WHERE submission_key = ?`, rec.Hash); err != nil {
+		t.Fatalf("clear legacy status: %v", err)
+	}
+
+	var submitCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req rpcRequest
+		_ = json.Unmarshal(body, &req)
+		if req.Method == "submitblock" {
+			submitCalls.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+
+	replayPendingSubmissions(context.Background(), rpc)
+	if calls := submitCalls.Load(); calls != 1 {
+		t.Fatalf("legacy empty-status submitblock calls = %d, want 1", calls)
+	}
+	var status string
+	if err := db.QueryRow(`SELECT status FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status); err != nil {
+		t.Fatalf("query legacy replay status: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitted {
+		t.Fatalf("legacy replay status = %q, want %q", status, pendingSubmissionStatusSubmitted)
+	}
+}

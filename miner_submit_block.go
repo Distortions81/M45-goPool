@@ -122,12 +122,60 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 		}
 	}
 
+	// Persist the exact bytes reconstructed from the advertised job before the
+	// first submitblock attempt. The submitting state is deliberately excluded
+	// from periodic replay; if this process exits mid-attempt, startup changes it
+	// back to pending. Persistence is a recovery aid and must never delay an RPC
+	// attempt beyond the synchronous SQLite write or prevent submission when the
+	// state database is unavailable.
+	pendingRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, "", pendingSubmissionStatusSubmitting)
+	pendingKey := pendingSubmissionKey(pendingRec)
+	persistErr := appendPendingSubmissionRecord(pendingRec)
+	pendingPersisted := persistErr == nil
+	if !pendingPersisted {
+		logger.Warn("solved block persistence failed; submitting immediately",
+			"height", job.Template.Height,
+			"hash", hashHex,
+			"error", persistErr,
+		)
+	}
+	submissionFinished := false
+	if pendingPersisted {
+		defer func() {
+			if submissionFinished {
+				return
+			}
+			// This also runs if an unexpected panic or future early return exits
+			// the path after persistence but before an RPC outcome is recorded.
+			if changed, updateErr := transitionPendingSubmissionStatus(pendingKey, pendingSubmissionStatusSubmitting, pendingSubmissionStatusPending, "initial submitblock path interrupted"); updateErr != nil {
+				logger.Warn("pending submission interruption state update failed", "key", pendingKey, "height", job.Template.Height, "hash", hashHex, "error", updateErr)
+			} else if !changed {
+				logger.Warn("pending submission interruption state changed unexpectedly", "key", pendingKey, "height", job.Template.Height, "hash", hashHex)
+			}
+		}()
+	}
+
 	// Submit the block via RPC using an aggressive, no-backoff retry loop
 	// so we race the rest of the network as hard as possible. This path is
 	// intentionally not tied to the miner or process context so shutdown
 	// signals do not cancel in-flight submissions.
 	err = mc.submitBlockWithFastRetry(job, workerName, hashHex, blockHex, &submitRes)
 	if err != nil {
+		if pendingPersisted {
+			changed, updateErr := transitionPendingSubmissionStatus(pendingKey, pendingSubmissionStatusSubmitting, pendingSubmissionStatusPending, err.Error())
+			submissionFinished = updateErr == nil && changed
+			if updateErr != nil || !changed {
+				logger.Warn("pending submission failure state update failed", "key", pendingKey, "height", job.Template.Height, "hash", hashHex, "changed", changed, "error", updateErr)
+				// Retry the durable write with the complete record in case the
+				// compare-and-transition failed for a transient database reason.
+				fallbackRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, err.Error(), pendingSubmissionStatusPending)
+				if fallbackErr := appendPendingSubmissionRecord(fallbackRec); fallbackErr != nil {
+					logger.Warn("pending submission failure fallback write failed", "key", pendingKey, "height", job.Template.Height, "hash", hashHex, "error", fallbackErr)
+				} else {
+					submissionFinished = true
+				}
+			}
+		}
 		if mc.metrics != nil {
 			mc.metrics.RecordBlockSubmission("error")
 			mc.metrics.RecordErrorEvent("submitblock", err.Error(), time.Now())
@@ -137,9 +185,28 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 		// node RPC is unavailable or submitblock fails. This does not imply
 		// that the block was accepted; it only preserves the data needed for
 		// a later submitblock attempt.
-		mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
+		if !pendingPersisted {
+			mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
+		}
 		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 		return
+	}
+	if pendingPersisted {
+		changed, updateErr := transitionPendingSubmissionStatus(pendingKey, pendingSubmissionStatusSubmitting, pendingSubmissionStatusSubmitted, "")
+		submissionFinished = updateErr == nil && changed
+		if updateErr != nil {
+			logger.Warn("pending submission success state update failed", "key", pendingKey, "height", job.Template.Height, "hash", hashHex, "error", updateErr)
+		} else if !changed {
+			logger.Warn("pending submission success state changed unexpectedly", "key", pendingKey, "height", job.Template.Height, "hash", hashHex)
+		}
+		if !submissionFinished {
+			fallbackRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, "", pendingSubmissionStatusSubmitted)
+			if fallbackErr := appendPendingSubmissionRecord(fallbackRec); fallbackErr != nil {
+				logger.Warn("pending submission success fallback write failed", "key", pendingKey, "height", job.Template.Height, "hash", hashHex, "error", fallbackErr)
+			} else {
+				submissionFinished = true
+			}
+		}
 	}
 	if mc.metrics != nil {
 		mc.metrics.RecordBlockSubmission("accepted")
@@ -312,17 +379,21 @@ func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex st
 	if job == nil || blockHex == "" {
 		return
 	}
+	rec := mc.pendingSubmissionRecord(job, worker, hashHex, blockHex, submitErr.Error(), pendingSubmissionStatusPending)
+	_ = appendPendingSubmissionRecord(rec)
+}
+
+func (mc *MinerConn) pendingSubmissionRecord(job *Job, worker, hashHex, blockHex, rpcError, status string) pendingSubmissionRecord {
 	_, payoutAddress := mc.jobPayoutPolicy(job)
-	rec := pendingSubmissionRecord{
+	return pendingSubmissionRecord{
 		Timestamp:  time.Now().UTC(),
 		Height:     job.Template.Height,
 		Hash:       hashHex,
 		Worker:     mc.minerName(worker),
 		BlockHex:   blockHex,
-		RPCError:   submitErr.Error(),
+		RPCError:   rpcError,
 		RPCURL:     mc.cfg.RPCURL,
 		PayoutAddr: payoutAddress,
-		Status:     "pending",
+		Status:     status,
 	}
-	appendPendingSubmissionRecord(rec)
 }
