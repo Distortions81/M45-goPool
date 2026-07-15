@@ -107,6 +107,7 @@ type JobManager struct {
 	metrics             *PoolMetrics
 	mu                  sync.RWMutex
 	curJob              *Job
+	longPollID          string // Latest accepted opaque cursor; independent of published job identity.
 	payoutScript        []byte
 	donationScript      []byte
 	extraID             uint32

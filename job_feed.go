@@ -108,7 +108,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		job := jm.CurrentJob()
+		job, longPollID := jm.currentJobAndLongPollID()
 		if job == nil {
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("longpoll refresh (no job) error", "component", "rpc", "kind", "longpoll", "error", err)
@@ -120,7 +120,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			continue
 		}
 
-		if job.Template.LongPollID == "" {
+		if longPollID == "" {
 			logger.Warn("longpollid missing; refreshing job normally", "component", "rpc", "kind", "longpoll")
 			if err := jm.refreshJobCtx(ctx); err != nil {
 				logger.Error("job refresh error", "component", "rpc", "kind", "template_refresh", "error", err)
@@ -133,7 +133,7 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 
 		params := map[string]any{
 			"rules":      []string{"segwit"},
-			"longpollid": job.Template.LongPollID,
+			"longpollid": longPollID,
 		}
 		tpl, err := jm.fetchTemplateCtx(ctx, params, true)
 		if err != nil {

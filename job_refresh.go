@@ -56,6 +56,9 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
 	// This avoids unnecessary job churn and duplicate JobIDs for the same work.
 	if !needsNewJob {
+		jm.mu.Lock()
+		jm.longPollID = tpl.LongPollID
+		jm.mu.Unlock()
 		// Heartbeat: the node responded successfully, even if the template was unchanged.
 		jm.recordJobSuccess(nil)
 		jm.updateBlockTipFromTemplate(tpl)
@@ -71,6 +74,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 
 	jm.mu.Lock()
 	jm.curJob = job
+	jm.longPollID = tpl.LongPollID
 	jm.mu.Unlock()
 
 	prevHeight := jm.blockTipHeight()

@@ -12,6 +12,12 @@ func (jm *JobManager) CurrentJob() *Job {
 	return jm.curJob
 }
 
+func (jm *JobManager) currentJobAndLongPollID() (*Job, string) {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+	return jm.curJob, jm.longPollID
+}
+
 func (jm *JobManager) Ready() bool {
 	jm.mu.RLock()
 	defer jm.mu.RUnlock()
