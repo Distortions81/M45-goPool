@@ -222,7 +222,8 @@ func (mc *MinerConn) singlePayoutScript(job *Job, worker string) []byte {
 	if job == nil || len(job.PayoutScript) == 0 {
 		return nil
 	}
-	if mc == nil || mc.cfg.PoolFeePercent > 0 {
+	feePercent, _ := mc.jobPayoutPolicy(job)
+	if mc == nil || feePercent > 0 {
 		return job.PayoutScript
 	}
 	_, script, ok := mc.workerWalletDataRef(worker)
@@ -230,6 +231,19 @@ func (mc *MinerConn) singlePayoutScript(job *Job, worker string) []byte {
 		return nil
 	}
 	return script
+}
+
+// jobPayoutPolicy returns the payout settings captured when a production job
+// was built. The fallback preserves compatibility with lightweight Jobs built
+// directly by tests and older internal helpers.
+func (mc *MinerConn) jobPayoutPolicy(job *Job) (feePercent float64, payoutAddress string) {
+	if job != nil && job.PayoutPolicyCaptured {
+		return job.PoolFeePercent, job.PayoutAddress
+	}
+	if mc == nil {
+		return 0, ""
+	}
+	return mc.cfg.PoolFeePercent, mc.cfg.PayoutAddress
 }
 
 // dualPayoutParams returns the pool and worker payout scripts and fee
@@ -250,7 +264,8 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	}
 	// If the pool fee is 0%, there's no need for dual-payout since the entire
 	// block reward goes to the worker. Use single-output coinbase.
-	if mc.cfg.PoolFeePercent <= 0 {
+	feePercent, payoutAddress := mc.jobPayoutPolicy(job)
+	if feePercent <= 0 {
 		return nil, nil, 0, 0, false
 	}
 	addr, script, ok := mc.workerWalletDataRef(worker)
@@ -260,9 +275,9 @@ func (mc *MinerConn) dualPayoutParams(job *Job, worker string) (poolScript []byt
 	// If the worker's wallet address is the same as the pool payout address,
 	// there is no benefit to building a dual-payout coinbase; treat it as a
 	// single-output payout to that address.
-	if addr != "" && strings.EqualFold(addr, mc.cfg.PayoutAddress) {
+	if addr != "" && strings.EqualFold(addr, payoutAddress) {
 		return nil, nil, 0, 0, false
 	}
 
-	return job.PayoutScript, script, job.CoinbaseValue, mc.cfg.PoolFeePercent, true
+	return job.PayoutScript, script, job.CoinbaseValue, feePercent, true
 }

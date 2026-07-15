@@ -55,6 +55,9 @@ type Job struct {
 	Transactions            []GBTTransaction
 	TransactionIDs          [][]byte
 	PayoutScript            []byte
+	PayoutAddress           string
+	PoolFeePercent          float64
+	PayoutPolicyCaptured    bool
 	DonationScript          []byte
 	OperatorDonationPercent float64
 	VersionMask             uint32

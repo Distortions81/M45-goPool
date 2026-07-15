@@ -136,7 +136,7 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 	// the pool fee and worker payout for logging purposes.
 	if logger.Enabled(logLevelInfo) && workerName != "" && job != nil && job.CoinbaseValue > 0 {
 		total := job.CoinbaseValue
-		feePct := mc.cfg.PoolFeePercent
+		feePct, _ := mc.jobPayoutPolicy(job)
 		if feePct < 0 {
 			feePct = 0
 		}
@@ -195,7 +195,7 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 	// treated as a worker payout in single mode, or sent to the pool in
 	// dual-payout fallback cases.
 	total := job.Template.CoinbaseValue
-	feePct := mc.cfg.PoolFeePercent
+	feePct, payoutAddress := mc.jobPayoutPolicy(job)
 	if feePct < 0 {
 		feePct = 0
 	}
@@ -222,7 +222,7 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 		workerAddr = sanitizePayoutAddress(raw)
 	}
 	// Check if we fell back to single-output coinbase (worker wallet matches pool wallet)
-	if len(mc.workerPayoutScript(worker)) == 0 || (workerAddr != "" && strings.EqualFold(workerAddr, mc.cfg.PayoutAddress)) {
+	if len(mc.workerPayoutScript(worker)) == 0 || (workerAddr != "" && strings.EqualFold(workerAddr, payoutAddress)) {
 		poolFee = total
 		workerAmt = 0
 		dualFallback = true
@@ -235,7 +235,7 @@ func (mc *MinerConn) logFoundBlock(job *Job, worker, hashHex string, shareDiff f
 		"worker":               workerName,
 		"share_diff":           shareDiff,
 		"job_id":               job.JobID,
-		"payout_address":       mc.cfg.PayoutAddress,
+		"payout_address":       payoutAddress,
 		"coinbase_value_sats":  total,
 		"pool_fee_sats":        poolFee,
 		"worker_payout_sats":   workerAmt,
@@ -273,6 +273,7 @@ func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex st
 	if job == nil || blockHex == "" {
 		return
 	}
+	_, payoutAddress := mc.jobPayoutPolicy(job)
 	rec := pendingSubmissionRecord{
 		Timestamp:  time.Now().UTC(),
 		Height:     job.Template.Height,
@@ -281,7 +282,7 @@ func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex st
 		BlockHex:   blockHex,
 		RPCError:   submitErr.Error(),
 		RPCURL:     mc.cfg.RPCURL,
-		PayoutAddr: mc.cfg.PayoutAddress,
+		PayoutAddr: payoutAddress,
 		Status:     "pending",
 	}
 	appendPendingSubmissionRecord(rec)
