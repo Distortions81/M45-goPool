@@ -153,7 +153,7 @@ The required `data/config/config.toml` is the primary interface for pool behavio
 - `[mining]`: Pool fee, donation settings, and `pooltag_prefix`.
 - `[logging]`: `debug` enables verbose runtime logging, and `net_debug` enables raw network tracing (`net-debug.log`) when debug logging is active.
 
-Set numeric values explicitly (do not rely on automation), and trim whitespace (goPool trims internally but a clean config is easier to audit). After editing, restart goPool or send `SIGUSR2` (see below).
+Set numeric values explicitly (do not rely on automation), and trim whitespace (goPool trims internally but a clean config is easier to audit). Restart goPool after changing mining, payout, listener, node, storage, service, or connection-policy settings. `SIGUSR2` is only a partial runtime reload and is not a substitute for a restart; see the warning under [Runtime operations](#runtime-operations).
 
 ### Split Override Files
 
@@ -245,7 +245,7 @@ Set `status_tls_listen = ""` to disable HTTPS and keep only the HTTP listener. S
 
 For Let's Encrypt HTTP-01, goPool creates and serves `data/certbot-webroot/.well-known/acme-challenge/` on the status HTTP listener before HTTP-to-HTTPS redirects. Use `scripts/certbot-gopool.sh --webroot` with the default webroot, or point certbot at the same directory manually. The bundled UI files under `data/www` are embedded into the goPool binary and are separate from this runtime certbot webroot.
 
-goPool also auto-creates `/stats/` and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails) and `SIGUSR2` to reload the configuration files without stopping the daemon.
+goPool also auto-creates `/stats/` and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails). `SIGUSR2` re-reads the configuration files without stopping the daemon, but only publishes part of the new configuration at runtime; see the warning under [Runtime operations](#runtime-operations).
 
 ## Admin Control Panel
 
@@ -343,9 +343,11 @@ Each override value logs when set, so goPool operators can audit what changed vi
 ## Runtime operations
 
 - **SIGUSR1** re-parses the embedded HTML templates and refreshes the embedded static cache. Errors are logged but the previous template set remains active so the site keeps serving—check `pool.log` if pages look odd after a reload.
-- **SIGUSR2** reloads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, `tuning.toml`, and `version_bits.toml`, reapplies overrides, and updates the status server with the new config.
+- **SIGUSR2** re-reads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, `tuning.toml`, and `version_bits.toml`, reapplies overrides, updates the status server's configuration snapshot, and reapplies runtime logging controls. Future miner connections consume parts of that new snapshot.
 - **Shutdown** occurs on `SIGINT`/`SIGTERM`. goPool stops the status servers, Stratum listener, and pending replayers gracefully.
 - **TLS cert reloading** uses `certReloader` to monitor `data/tls_cert.pem`/`tls_key.pem` hourly. Certificate renewals (e.g., via certbot) are picked up without restarts.
+
+> **Warning — `SIGUSR2` is a partial reload.** It does not rebuild the job manager or replace its payout and job-building policy, reconfigure listeners or node/ZMQ clients, update the reconnect limiter, rebuild long-lived services, or change already-connected miner sessions. After `SIGUSR2`, the status UI and future connections can therefore reflect new settings while active sessions and generated jobs still use old settings. This mixed state is especially unsafe to rely on for payout-address, fee, donation, coinbase, extranonce, version-bit, or other mining-policy changes. Restart goPool to apply those changes coherently. Use `SIGUSR2` only when that partial behavior is understood and acceptable.
 
 ## Monitoring APIs
 
