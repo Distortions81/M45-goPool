@@ -363,11 +363,18 @@ func pendingSubmissionKey(rec pendingSubmissionRecord) string {
 }
 
 func appendPendingSubmissionRecord(rec pendingSubmissionRecord) error {
+	return appendPendingSubmissionRecordCtx(context.Background(), rec)
+}
+
+func appendPendingSubmissionRecordCtx(ctx context.Context, rec pendingSubmissionRecord) error {
 	// Use the shared state database connection
 	db := getSharedStateDB()
 	if db == nil {
 		logger.Warn("pending block: shared state db not initialized")
 		return fmt.Errorf("shared state db not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	key := pendingSubmissionKey(rec)
@@ -382,7 +389,7 @@ func appendPendingSubmissionRecord(rec pendingSubmissionRecord) error {
 	if status == "" {
 		status = pendingSubmissionStatusPending
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO pending_submissions (
 			submission_key, timestamp_unix, height, hash, worker, block_hex, rpc_error, rpc_url, payout_addr, status
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

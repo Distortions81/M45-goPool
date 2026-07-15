@@ -181,6 +181,97 @@ func TestSolvedBlockPersistedBeforeRPCAndNotReplayedConcurrently(t *testing.T) {
 	}
 }
 
+func TestSolvedBlockSQLiteContentionSpoolsBeforeRPC(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	coinbase := []byte{0x41, 0x42}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+
+	// Hold the singleton database connection. An unbounded initial upsert would
+	// prevent submitblock from being called until this connection is released.
+	heldConn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("hold state db connection: %v", err)
+	}
+	t.Cleanup(func() { _ = heldConn.Close() })
+	var one int
+	if err := heldConn.QueryRowContext(context.Background(), `SELECT 1`).Scan(&one); err != nil || one != 1 {
+		t.Fatalf("verify held state db connection: value=%d error=%v", one, err)
+	}
+
+	type rpcObservation struct {
+		elapsed time.Duration
+		err     error
+	}
+	var started time.Time
+	var submitCalls atomic.Int32
+	observed := make(chan rpcObservation, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		submitCalls.Add(1)
+		observeErr := observeExactEmergencySpool(dataDir, expectedBlock)
+		if closeErr := heldConn.Close(); observeErr == nil && closeErr != nil {
+			observeErr = fmt.Errorf("release held state db connection: %w", closeErr)
+		}
+		observed <- rpcObservation{elapsed: time.Since(started), err: observeErr}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	hash := strings.Repeat("d", 64)
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "sqlite-contention", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL, DataDir: dataDir}}
+	done := make(chan struct{})
+	started = time.Now()
+	go func() {
+		defer close(done)
+		runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+	}()
+
+	select {
+	case got := <-observed:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if maxWait := solvedBlockPersistenceTimeout + 250*time.Millisecond; got.elapsed > maxWait {
+			t.Fatalf("submitblock reached after %s, want no more than %s", got.elapsed, maxWait)
+		}
+	case <-time.After(2 * time.Second):
+		_ = heldConn.Close()
+		t.Fatal("submitblock remained blocked behind the state database connection")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("solved block path did not finish after releasing database contention")
+	}
+	flushFoundBlockLog(t)
+	if calls := submitCalls.Load(); calls != 1 {
+		t.Fatalf("submitblock calls = %d, want 1", calls)
+	}
+
+	var status, storedBlock string
+	if err := db.QueryRow(`SELECT status, block_hex FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&status, &storedBlock); err != nil {
+		t.Fatalf("query terminal submission: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitted || storedBlock != expectedBlock {
+		t.Fatalf("terminal submission = (%q, %q), want submitted exact block", status, storedBlock)
+	}
+	spoolPath, err := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if err != nil {
+		t.Fatalf("emergency spool path: %v", err)
+	}
+	if _, err := os.Stat(spoolPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("accepted emergency spool was not removed after SQLite recovery: %v", err)
+	}
+}
+
 func TestSolvedBlockRejectionTransitionsToPending(t *testing.T) {
 	db := openPendingSubmissionTestDB(t)
 	job := solvedBlockPersistenceTestJob()

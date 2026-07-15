@@ -2,11 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"time"
 )
+
+// A winning block must not wait behind unrelated users of the singleton state
+// database connection. On expiry, the exact block is fsynced to the emergency
+// spool before submitblock is attempted.
+const solvedBlockPersistenceTimeout = 50 * time.Millisecond
 
 // handleBlockShare processes a share that satisfies the network target. It
 // builds the full block (reusing any dual-payout header/coinbase when
@@ -124,12 +130,14 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 	// Persist the exact bytes reconstructed from the advertised job before the
 	// first submitblock attempt. The submitting state is deliberately excluded
 	// from periodic replay; if this process exits mid-attempt, startup changes it
-	// back to pending. Persistence is a recovery aid and must never delay an RPC
-	// attempt beyond the synchronous SQLite write or prevent submission when the
-	// state database is unavailable.
+	// back to pending. The SQLite attempt is bounded; on timeout or failure the
+	// exact block is fsynced to the emergency spool instead. Persistence is a
+	// recovery aid and must never prevent submission when storage is unavailable.
 	pendingRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, "", pendingSubmissionStatusSubmitting)
 	pendingKey := pendingSubmissionKey(pendingRec)
-	persistErr := appendPendingSubmissionRecord(pendingRec)
+	persistCtx, cancelPersist := context.WithTimeout(context.Background(), solvedBlockPersistenceTimeout)
+	persistErr := appendPendingSubmissionRecordCtx(persistCtx, pendingRec)
+	cancelPersist()
 	pendingPersisted := persistErr == nil
 	if !pendingPersisted {
 		spoolRec := pendingRec

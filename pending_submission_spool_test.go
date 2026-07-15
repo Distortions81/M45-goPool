@@ -96,6 +96,41 @@ func TestPendingSubmissionSpoolDoesNotDowngradeSubmittedRow(t *testing.T) {
 	}
 }
 
+func TestPendingSubmissionSpoolPreservesAmbiguousSubmittingRowForReclaim(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
+	rec := testPendingSubmissionSpoolRecord("0708090a")
+	submitting := rec
+	submitting.Status = pendingSubmissionStatusSubmitting
+	if err := appendPendingSubmissionRecord(submitting); err != nil {
+		t.Fatalf("append ambiguously committed row: %v", err)
+	}
+	if err := writePendingSubmissionSpool(dataDir, rec); err != nil {
+		t.Fatalf("write duplicate emergency spool: %v", err)
+	}
+
+	if recovered, err := recoverPendingSubmissionSpool(dataDir); err != nil || recovered != 1 {
+		t.Fatalf("recover ambiguous duplicate = (%d, %v), want (1, nil)", recovered, err)
+	}
+	var status, blockHex string
+	if err := db.QueryRow(`SELECT status, block_hex FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status, &blockHex); err != nil {
+		t.Fatalf("query ambiguous row: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitting || blockHex != rec.BlockHex {
+		t.Fatalf("ambiguous row after spool import = (%q, %q)", status, blockHex)
+	}
+
+	if err := reclaimSubmittingPendingSubmissions(context.Background()); err != nil {
+		t.Fatalf("reclaim ambiguous submitting row: %v", err)
+	}
+	if err := db.QueryRow(`SELECT status, block_hex FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status, &blockHex); err != nil {
+		t.Fatalf("query reclaimed ambiguous row: %v", err)
+	}
+	if status != pendingSubmissionStatusPending || blockHex != rec.BlockHex {
+		t.Fatalf("ambiguous row after startup reclaim = (%q, %q)", status, blockHex)
+	}
+}
+
 func TestPendingSubmissionSpoolRefusesDifferentBlockForSameKey(t *testing.T) {
 	_ = openPendingSubmissionTestDB(t)
 	dataDir := t.TempDir()
