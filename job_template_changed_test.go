@@ -35,11 +35,11 @@ func TestTemplateChangedIncludesMiningPayloadFields(t *testing.T) {
 		{"coinbase value", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseValue-- }, true, false},
 		{"witness commitment", func(tpl *GetBlockTemplateResult) { tpl.DefaultWitnessCommitment = "commitment-b" }, true, false},
 		{"coinbase flags", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseAux.Flags = "flags-b" }, true, false},
-		{"inactive vbavailable metadata", func(tpl *GetBlockTemplateResult) { tpl.VbAvailable["deployment"] = 14 }, false, false},
+		{"vbavailable mask policy", func(tpl *GetBlockTemplateResult) { tpl.VbAvailable["deployment"] = 14 }, true, true},
 		{"vbrequired", func(tpl *GetBlockTemplateResult) { tpl.VbRequired++ }, true, true},
 		{"irrelevant mutable metadata", func(tpl *GetBlockTemplateResult) { tpl.Mutable = append(tpl.Mutable, "transactions") }, false, false},
 		{"irrelevant rule metadata", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "new-rule") }, false, false},
-		{"version mask policy", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "deployment") }, true, true},
+		{"active rules metadata", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "deployment") }, false, false},
 		{"transaction witness hash", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Hash = "wtxid-b" }, true, false},
 		{"transaction data", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Data = "data-b" }, true, false},
 	}

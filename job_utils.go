@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 )
 
 var (
@@ -373,13 +372,4 @@ func hexToLEHex(src string) string {
 		buf[j+3] = byte(v >> 24)
 	}
 	return hex.EncodeToString(reverseBytes(buf[:]))
-}
-
-func versionMutable(mutable []string) bool {
-	for _, m := range mutable {
-		if strings.HasPrefix(m, "version/") {
-			return true
-		}
-	}
-	return false
 }

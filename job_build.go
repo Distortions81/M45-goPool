@@ -164,44 +164,26 @@ func buildPoolSuffix(poolEntropy string, jobEntropy int) (string, error) {
 }
 
 func computePoolMask(tpl GetBlockTemplateResult, cfg Config) uint32 {
-	base := defaultVersionMask
-	if cfg.VersionMaskConfigured {
-		base = cfg.VersionMask
+	base := cfg.VersionMask
+	if base == 0 && !cfg.VersionMaskConfigured {
+		base = defaultVersionMask
 	}
-	if base == 0 {
-		return 0
-	}
-
-	// Keep version rolling available to miners even when the template does not
-	// advertise version mutability, since some bitcoind templates omit that
-	// flag. Falling back to the configured base mask avoids sending a zero mask
-	// (which would disable ASIC rolling on miners like ESP-Miner).
-	if !versionMutable(tpl.Mutable) {
-		return base
-	}
-
 	mask := base
-	mask &^= uint32(tpl.VbRequired)
 
-	active := make(map[string]struct{})
-	for _, rule := range tpl.Rules {
-		active[rule] = struct{}{}
-	}
-	for name, bit := range tpl.VbAvailable {
-		if _, ok := active[name]; !ok {
-			continue
-		}
+	// Version-rolling is useful even though Bitcoin Core commonly omits
+	// version/* from mutable. Regardless of that metadata, never delegate bits
+	// whose values are controlled by the node or by pool policy.
+	mask &^= uint32(tpl.VbRequired)
+	for _, bit := range tpl.VbAvailable {
 		if bit < 0 || bit >= 32 {
 			continue
 		}
 		mask &^= uint32(1) << uint(bit)
 	}
-
-	if mask == 0 {
-		// Avoid broadcasting a zero mask that would turn off version rolling on
-		// miners which assume a non-zero range (e.g., ESP-Miner). Fall back to the
-		// configured base mask in that rare case.
-		return base
+	for bit := range cfg.VersionBitOverrides {
+		if bit <= 31 {
+			mask &^= uint32(1) << bit
+		}
 	}
 
 	return mask
