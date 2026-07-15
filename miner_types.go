@@ -165,6 +165,8 @@ type MinerConn struct {
 	savedWorkerMu        sync.Mutex
 	savedWorkerTracked   bool
 	savedWorkerBestDiff  float64
+	savedWorkerSyncing   bool
+	savedWorkerSyncGen   uint64
 	registeredWorker     string
 	registeredWorkerHash string
 	jobMu                sync.Mutex

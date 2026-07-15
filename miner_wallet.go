@@ -142,29 +142,29 @@ func (mc *MinerConn) registerWorker(worker string) *MinerConn {
 	prev := mc.workerRegistry.register(hash, walletHash, mc)
 	mc.registeredWorker = worker
 	mc.registeredWorkerHash = hash
-	mc.savedWorkerTracked = false
-	mc.savedWorkerBestDiff = 0
+	generation := mc.beginSavedWorkerSyncLocked()
 	mc.savedWorkerMu.Unlock()
-	mc.syncSavedWorkerState(hash)
+	mc.lookupSavedWorkerState(hash, generation)
 	return prev
 }
 
 func (mc *MinerConn) unregisterRegisteredWorker() {
-	if mc.workerRegistry == nil {
+	if mc == nil {
 		return
 	}
 	mc.savedWorkerMu.Lock()
 	defer mc.savedWorkerMu.Unlock()
-	if mc.registeredWorkerHash == "" {
-		return
+	if mc.registeredWorkerHash != "" && mc.workerRegistry != nil {
+		wallet := workerBaseAddress(mc.registeredWorker)
+		walletHash := workerNameHash(wallet)
+		mc.workerRegistry.unregister(mc.registeredWorkerHash, walletHash, mc)
 	}
-	wallet := workerBaseAddress(mc.registeredWorker)
-	walletHash := workerNameHash(wallet)
-	mc.workerRegistry.unregister(mc.registeredWorkerHash, walletHash, mc)
 	mc.registeredWorker = ""
 	mc.registeredWorkerHash = ""
 	mc.savedWorkerTracked = false
 	mc.savedWorkerBestDiff = 0
+	mc.savedWorkerSyncing = false
+	mc.savedWorkerSyncGen++
 }
 
 func (mc *MinerConn) syncSavedWorkerState(hash string) {
@@ -180,24 +180,54 @@ func (mc *MinerConn) syncSavedWorkerState(hash string) {
 		mc.savedWorkerMu.Unlock()
 		return
 	}
+	generation := mc.beginSavedWorkerSyncLocked()
+	mc.savedWorkerMu.Unlock()
+	mc.lookupSavedWorkerState(hash, generation)
+}
+
+// beginSavedWorkerSyncLocked publishes an incomplete cache generation before
+// its store lookup starts. Callers must hold savedWorkerMu and must have
+// already installed the registered worker identity for this generation.
+func (mc *MinerConn) beginSavedWorkerSyncLocked() uint64 {
+	mc.savedWorkerSyncGen++
+	mc.savedWorkerSyncing = true
 	mc.savedWorkerTracked = false
 	mc.savedWorkerBestDiff = 0
-	mc.savedWorkerMu.Unlock()
+	return mc.savedWorkerSyncGen
+}
+
+func (mc *MinerConn) lookupSavedWorkerState(hash string, generation uint64) {
 	if mc.savedWorkerStore == nil {
+		mc.completeSavedWorkerSync(hash, generation, 0, false, false)
 		return
 	}
 	best, ok, err := mc.savedWorkerStore.BestDifficultyForHash(hash)
 	if err != nil {
 		logger.Warn("saved worker best difficulty lookup failed", "error", err, "hash", hash)
+		mc.completeSavedWorkerSync(hash, generation, 0, false, false)
 		return
 	}
+	mc.completeSavedWorkerSync(hash, generation, best, ok, true)
+}
+
+// completeSavedWorkerSync applies a lookup only to the exact identity
+// generation that started it. The generation check matters when a connection
+// reauthorizes A -> B -> A while the first A lookup is still in flight.
+func (mc *MinerConn) completeSavedWorkerSync(hash string, generation uint64, best float64, tracked, apply bool) bool {
 	mc.savedWorkerMu.Lock()
 	defer mc.savedWorkerMu.Unlock()
-	if mc.registeredWorkerHash != hash {
-		return
+	if mc.registeredWorkerHash != hash || mc.savedWorkerSyncGen != generation || !mc.savedWorkerSyncing {
+		return false
 	}
-	mc.savedWorkerBestDiff = best
-	mc.savedWorkerTracked = ok
+	if apply {
+		if tracked && mc.savedWorkerBestDiff > best {
+			best = mc.savedWorkerBestDiff
+		}
+		mc.savedWorkerBestDiff = best
+		mc.savedWorkerTracked = tracked
+	}
+	mc.savedWorkerSyncing = false
+	return true
 }
 
 func (mc *MinerConn) maybeUpdateSavedWorkerBestDiff(diff float64) {
@@ -225,8 +255,9 @@ func (mc *MinerConn) maybeUpdateSavedWorkerBestDiffHash(hash string, diff float6
 	isCurrent := mc.registeredWorkerHash == hash
 	tracked := mc.savedWorkerTracked
 	best := mc.savedWorkerBestDiff
+	syncing := isCurrent && mc.savedWorkerSyncing
 	mc.savedWorkerMu.Unlock()
-	if !isCurrent {
+	if !isCurrent || syncing {
 		var err error
 		best, tracked, err = mc.savedWorkerStore.BestDifficultyForHash(hash)
 		if err != nil {
@@ -272,8 +303,9 @@ func (mc *MinerConn) maybeUpdateSavedWorkerMinuteBestDiffHash(hash string, diff 
 	mc.savedWorkerMu.Lock()
 	isCurrent := mc.registeredWorkerHash == hash
 	tracked := mc.savedWorkerTracked
+	syncing := isCurrent && mc.savedWorkerSyncing
 	mc.savedWorkerMu.Unlock()
-	if !isCurrent {
+	if !isCurrent || syncing {
 		var err error
 		_, tracked, err = mc.savedWorkerStore.BestDifficultyForHash(hash)
 		if err != nil {
