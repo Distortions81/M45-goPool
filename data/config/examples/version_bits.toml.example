@@ -3,8 +3,7 @@
 # This file is READ ONLY from goPool's perspective:
 # - goPool never rewrites version_bits.toml.
 # - Entries are applied in order; later entries for the same bit win.
-# - Overrides here are applied after policy.toml [version].bip110_enabled.
-#   If both touch bit 4, this file wins.
+# - Overrides here are applied directly to the node's template version.
 #
 # Format:
 # [[bits]]

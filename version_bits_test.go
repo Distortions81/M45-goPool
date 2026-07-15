@@ -6,50 +6,19 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
-func TestDefaultConfigBIP110NotEnabledByDefault(t *testing.T) {
-	cfg := defaultConfig()
-	if cfg.BIP110Enabled {
-		t.Fatalf("expected BIP-110 mode to be disabled by default")
-	}
-}
-
-func TestBIP110ActivatedRule(t *testing.T) {
-	tpl := GetBlockTemplateResult{
-		Rules: []string{"segwit", "BIP-110"},
-	}
-	if !bip110Activated(tpl) {
-		t.Fatalf("expected activation detection for BIP-110 rule")
-	}
-}
-
 func TestApplyConfiguredVersionBits(t *testing.T) {
-	base := int32(0x20000000)
+	base := int32(0x20000020)
 	cfg := Config{
-		BIP110Enabled: true,
 		VersionBitOverrides: map[uint32]bool{
-			1: true, // force bit 1 on
+			1: true,
+			5: false,
 		},
 	}
-	got := applyConfiguredVersionBits(base, cfg)
-	if uint32(got)&bip110VersionMask == 0 {
-		t.Fatalf("expected BIP-110 bit set by override, got %#x", got)
-	}
-	if uint32(got)&(uint32(1)<<1) == 0 {
-		t.Fatalf("expected bit 1 forced on, got %#x", got)
-	}
-}
 
-func TestApplyConfiguredVersionBits_OverrideCanDisableBIP110(t *testing.T) {
-	base := int32(0x20000000)
-	cfg := Config{
-		BIP110Enabled: true,
-		VersionBitOverrides: map[uint32]bool{
-			bip110VersionBit: false,
-		},
-	}
 	got := applyConfiguredVersionBits(base, cfg)
-	if uint32(got)&bip110VersionMask != 0 {
-		t.Fatalf("expected BIP-110 bit cleared by explicit override, got %#x", got)
+	want := int32(0x20000002)
+	if got != want {
+		t.Fatalf("applyConfiguredVersionBits()=%#x want %#x", got, want)
 	}
 }
 
@@ -57,14 +26,14 @@ func TestVersionBitToggleBitAndByteOrder(t *testing.T) {
 	base := int32(0x20000000)
 	cfg := Config{
 		VersionBitOverrides: map[uint32]bool{
-			0:  true,  // LSB
-			4:  true,  // BIP-110 bit
-			31: false, // clear MSB if present
+			0:  true,
+			4:  true,
+			31: false,
 		},
 	}
 
 	got := applyConfiguredVersionBits(base, cfg)
-	want := int32(0x20000011) // bit 4 + bit 0 set on top of 0x20000000
+	want := int32(0x20000011)
 	if got != want {
 		t.Fatalf("unexpected toggled version: got %#x want %#x", got, want)
 	}

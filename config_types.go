@@ -137,7 +137,6 @@ type Config struct {
 	MinVersionBits                 int
 	ShareAllowOutOfMaskVersionBits bool
 	ShareAllowDegradedVersionBits  bool
-	BIP110Enabled                  bool
 	VersionBitOverrides            map[uint32]bool
 	VersionMaskConfigured          bool
 	MaxDifficulty                  float64
@@ -253,7 +252,6 @@ type EffectiveConfig struct {
 	MinVersionBits                    int      `json:"min_version_bits,omitempty"`
 	ShareAllowOutOfMaskVersionBits    bool     `json:"share_allow_out_of_mask_version_bits,omitempty"`
 	ShareAllowDegradedVersionBits     bool     `json:"share_allow_degraded_version_bits,omitempty"`
-	BIP110Enabled                     bool     `json:"bip110_enabled,omitempty"`
 	MaxDifficulty                     float64  `json:"max_difficulty,omitempty"`
 	MinDifficulty                     float64  `json:"min_difficulty,omitempty"`
 	TargetSharesPerMin                float64  `json:"target_shares_per_min,omitempty"`

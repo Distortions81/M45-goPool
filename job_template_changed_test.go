@@ -117,9 +117,13 @@ func TestTemplateChangedComparesEffectiveVersion(t *testing.T) {
 		wantClean   bool
 	}{
 		{
-			name:       "BIP110 forced on does not churn identical raw template",
-			currentCfg: Config{BIP110Enabled: true},
-			nextCfg:    Config{BIP110Enabled: true},
+			name: "forced on bit does not churn identical raw template",
+			currentCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: true,
+			}},
+			nextCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: true,
+			}},
 			currentRaw: baseVersion,
 			nextRaw:    baseVersion,
 		},
@@ -135,32 +139,37 @@ func TestTemplateChangedComparesEffectiveVersion(t *testing.T) {
 			nextRaw:    baseVersion | 1<<5,
 		},
 		{
-			name: "explicit override remains final across BIP110 toggle",
+			name: "non-overridden node version change remains clean",
 			currentCfg: Config{VersionBitOverrides: map[uint32]bool{
-				bip110VersionBit: false,
+				5: true,
 			}},
-			nextCfg: Config{
-				BIP110Enabled: true,
-				VersionBitOverrides: map[uint32]bool{
-					bip110VersionBit: false,
-				},
-			},
-			currentRaw: baseVersion,
-			nextRaw:    baseVersion,
-		},
-		{
-			name:        "non-overridden node version change remains clean",
-			currentCfg:  Config{BIP110Enabled: true},
-			nextCfg:     Config{BIP110Enabled: true},
+			nextCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: true,
+			}},
 			currentRaw:  baseVersion,
 			nextRaw:     baseVersion | 1<<6,
 			wantChanged: true,
 			wantClean:   true,
 		},
 		{
-			name:        "runtime version policy change creates clean job",
-			currentCfg:  Config{},
-			nextCfg:     Config{BIP110Enabled: true},
+			name:       "runtime version override creates clean job",
+			currentCfg: Config{},
+			nextCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: true,
+			}},
+			currentRaw:  baseVersion,
+			nextRaw:     baseVersion,
+			wantChanged: true,
+			wantClean:   true,
+		},
+		{
+			name: "runtime override polarity change creates clean job",
+			currentCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: true,
+			}},
+			nextCfg: Config{VersionBitOverrides: map[uint32]bool{
+				5: false,
+			}},
 			currentRaw:  baseVersion,
 			nextRaw:     baseVersion,
 			wantChanged: true,

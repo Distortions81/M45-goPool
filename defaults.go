@@ -64,7 +64,6 @@ func defaultConfig() Config {
 		MinVersionBits:                      defaultMinVersionBits,
 		ShareAllowOutOfMaskVersionBits:      true,
 		ShareAllowDegradedVersionBits:       true,
-		BIP110Enabled:                       false,
 		VersionBitOverrides:                 nil,
 		MaxDifficulty:                       defaultMaxDifficulty,
 		MinDifficulty:                       defaultMinDifficulty,

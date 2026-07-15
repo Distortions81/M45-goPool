@@ -187,7 +187,6 @@ type AdminSettingsData struct {
 	MinVersionBits                      int
 	ShareAllowOutOfMaskVersionBits      bool
 	ShareAllowDegradedVersionBits       bool
-	BIP110Enabled                       bool
 }
 
 type AdminMinerRow struct {

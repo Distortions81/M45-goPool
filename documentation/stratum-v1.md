@@ -27,9 +27,9 @@ Code pointers:
   - Standard 5 params plus an optional 6th `version` field (used for version-rolling support).
   - `ntime`, `nonce`, and optional `version` submit fields may be sent as 1-8 hex characters; goPool treats omitted leading zeroes as left padding.
   - For CKPool compatibility, `extranonce2` is normalized to the advertised size by right-padding short values and truncating long values after hex validation, and overlong `nonce` is truncated to 8 hex characters after hex validation. Empty and non-hex values are still rejected.
-  - Version policy allows unnegotiated or out-of-mask version bits by default for compatibility (for example BIP-110 bit 4 signaling). Set `policy.toml [version].share_allow_out_of_mask_version_bits = false` for strict mask enforcement.
+  - Version policy allows unnegotiated or out-of-mask version bits by default for legacy compatibility. Set `policy.toml [version].share_allow_out_of_mask_version_bits = false` for strict mask enforcement.
   - Submit parsing prefers BIP310 replacement-bit semantics for the optional `version` value, accepts full rolled versions when they differ from the job version only inside the negotiated mask, and keeps a legacy XOR-delta fallback for ambiguous in-mask submits.
-  - With `share_allow_out_of_mask_version_bits = true`, unnegotiated and out-of-mask signaling remains available for legacy delta-style miners (for example `0x00000010` for bit 4).
+  - With `share_allow_out_of_mask_version_bits = true`, unnegotiated and out-of-mask signaling remains available for legacy delta-style miners.
 - `mining.term`
   - Acknowledged when an ID is present, then the connection is closed.
 - `mining.ping` (and `client.ping`)

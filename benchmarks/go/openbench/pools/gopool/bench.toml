@@ -83,7 +83,6 @@ rpc_pass = "${RPC_PASS}"
   reconnect_ban_threshold = 0
 
 [version]
-  bip110_enabled = false
   min_version_bits = 1
   share_allow_degraded_version_bits = true
   share_allow_out_of_mask_version_bits = true

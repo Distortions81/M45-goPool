@@ -321,7 +321,6 @@ func buildAdminSettingsData(cfg Config) AdminSettingsData {
 		MinVersionBits:                       cfg.MinVersionBits,
 		ShareAllowOutOfMaskVersionBits:       cfg.ShareAllowOutOfMaskVersionBits,
 		ShareAllowDegradedVersionBits:        cfg.ShareAllowDegradedVersionBits,
-		BIP110Enabled:                        cfg.BIP110Enabled,
 	}
 }
 
@@ -806,7 +805,6 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	next.ShareCheckDuplicate = getBool("share_check_duplicate")
 	next.ShareAllowOutOfMaskVersionBits = getBool("share_allow_out_of_mask_version_bits")
 	next.ShareAllowDegradedVersionBits = getBool("share_allow_degraded_version_bits")
-	next.BIP110Enabled = getBool("bip110_enabled")
 	next.VarDiffEnabled = getBool("vardiff_enabled")
 
 	if next.Extranonce2Size, err = parseInt("extranonce2_size", next.Extranonce2Size); err != nil {

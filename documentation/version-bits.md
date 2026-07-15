@@ -12,7 +12,7 @@ Use this when you want strict operator control of individual bits (for example f
 
 - Do not flip version bits unless you have a very specific, validated reason.
 - In normal operation, you should leave node-provided version bits unchanged.
-- `version_bits.toml` modifies bits from the node's `getblocktemplate` version after policy-level defaults are applied.
+- `version_bits.toml` modifies bits from the node's `getblocktemplate` version.
 - Changing these bits incorrectly can make signaling invalid for your node/network policy.
 - Flipping bits improperly can cause a found (winning) block to be rejected by the network/node.
 
@@ -50,8 +50,7 @@ Rules:
 goPool applies version changes in this order:
 
 1. Base template version from node (`getblocktemplate`)
-2. `policy.toml [version].bip110_enabled` (sets bit 4 when enabled)
-3. `version_bits.toml` overrides
+2. `version_bits.toml` overrides
 
 `version_bits.toml` has final authority for any bit you list.
 
@@ -61,8 +60,7 @@ goPool applies version changes in this order:
 goPool rejects miner-submitted version changes that were not negotiated or are
 outside the negotiated version-rolling mask:
 
-- `true` (default): allow unnegotiated or out-of-mask submits for compatibility (for example
-  miners signaling BIP-110 bit 4).
+- `true` (default): allow unnegotiated or out-of-mask submits for legacy miner compatibility.
 - `false`: strict mask enforcement (`invalid version` or `invalid version mask` policy reject on
   non-block shares).
 
@@ -79,11 +77,6 @@ goPool prefers BIP310 replacement-bit semantics for submit `version` values.
 - When `share_allow_out_of_mask_version_bits = true`, out-of-mask values are
   treated as legacy XOR deltas for compatibility.
 
-Practical implication when `share_allow_out_of_mask_version_bits = true`:
-
-- Out-of-mask signaling (for example BIP-110 bit 4) should be sent as a delta
-  (example: `0x00000010`).
-
 ## Bitcoin version bits reference
 
 | Bit Range | Value/Use | Description |
@@ -98,8 +91,7 @@ Practical implication when `share_allow_out_of_mask_version_bits = true`:
 
 | Bit | Known use in goPool | Default behavior |
 |-----|----------------------|------------------|
-| 4 | BIP-110 signaling bit | Controlled by `policy.toml [version].bip110_enabled` (default `false`); `version_bits.toml` can still force on/off |
-| 0..3, 5..31 | No goPool-specific meaning currently assigned | Passed through from template unless overridden |
+| 0..31 | No goPool-specific meaning currently assigned | Passed through from template unless overridden |
 
 Notes:
 

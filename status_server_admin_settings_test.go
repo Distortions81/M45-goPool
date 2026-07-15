@@ -132,41 +132,6 @@ func TestApplyAdminSettingsForm_DisableConnectRateLimitsToggle(t *testing.T) {
 	}
 }
 
-func TestApplyAdminSettingsForm_BIP110EnabledToggle(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.BIP110Enabled = false
-
-	form := url.Values{}
-	form.Set("status_tagline", cfg.StatusTagline)
-	form.Set("bip110_enabled", "1")
-	r := httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err := r.ParseForm(); err != nil {
-		t.Fatalf("ParseForm: %v", err)
-	}
-	if err := applyAdminSettingsForm(&cfg, r); err != nil {
-		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
-	}
-	if !cfg.BIP110Enabled {
-		t.Fatalf("expected bip110_enabled to be enabled")
-	}
-
-	form = url.Values{}
-	form.Set("status_tagline", cfg.StatusTagline)
-	// Omitted checkbox means disabled.
-	r = httptest.NewRequest("POST", "/admin/apply", strings.NewReader(form.Encode()))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err := r.ParseForm(); err != nil {
-		t.Fatalf("ParseForm: %v", err)
-	}
-	if err := applyAdminSettingsForm(&cfg, r); err != nil {
-		t.Fatalf("applyAdminSettingsForm returned error: %v", err)
-	}
-	if cfg.BIP110Enabled {
-		t.Fatalf("expected bip110_enabled to be disabled when omitted")
-	}
-}
-
 func TestApplyAdminSettingsForm_ShareAllowOutOfMaskVersionBitsToggle(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ShareAllowOutOfMaskVersionBits = false

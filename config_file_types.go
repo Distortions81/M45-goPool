@@ -199,7 +199,6 @@ type versionTuning struct {
 	MinVersionBits                 *int  `toml:"min_version_bits"`
 	ShareAllowOutOfMaskVersionBits *bool `toml:"share_allow_out_of_mask_version_bits"`
 	ShareAllowDegradedVersionBits  *bool `toml:"share_allow_degraded_version_bits"`
-	BIP110Enabled                  *bool `toml:"bip110_enabled"`
 }
 
 // fileOverrideConfig groups override sections used internally when applying
