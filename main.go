@@ -22,10 +22,15 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() (exitCode int) {
 	// Top-level panic handler: ensure any unexpected panic is captured to
 	// panic.log with a stack trace so operators can inspect it.
 	defer func() {
 		if r := recover(); r != nil {
+			exitCode = 1
 			path := "panic.log"
 			if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 				defer f.Close()
@@ -157,6 +162,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	statusServeErrCh := make(chan error, 1)
 
 	// Set up SIGUSR1/SIGUSR2 handler for template/config reloading
 	reloadChan := make(chan os.Signal, 1)
@@ -662,7 +668,7 @@ func main() {
 			httpLogFields = append([]any{"component", "http", "kind", "listen"}, httpLogFields...)
 			logger.Info(httpLogMsg, httpLogFields...)
 			if err := statusHTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				fatal("status server error", err)
+				reportStatusServeError(err, stop, statusServeErrCh)
 			}
 		}()
 	}
@@ -684,7 +690,7 @@ func main() {
 		go func() {
 			logger.Info("status page listening (https)", "component", "http", "kind", "listen", "addr", httpsAddr, "cert", certPath)
 			if err := statusHTTPSServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				fatal("status server error", err)
+				reportStatusServeError(err, stop, statusServeErrCh)
 			}
 		}()
 	}
@@ -997,6 +1003,22 @@ func main() {
 			logger.Error("sync error log", "component", "startup", "kind", "log_sync", "error", err)
 		}
 	}
+
+	select {
+	case <-statusServeErrCh:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func reportStatusServeError(err error, stop context.CancelFunc, errCh chan<- error) {
+	logger.Error("status server error", "component", "http", "kind", "serve", "error", err)
+	select {
+	case errCh <- err:
+	default:
+	}
+	stop()
 }
 
 func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *MinerRegistry, statusServer *StatusServer, start time.Time) {
