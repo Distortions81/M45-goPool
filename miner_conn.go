@@ -232,49 +232,6 @@ func versionRollingPolicyFromConfig(cfg Config) (uint32, int) {
 	return mask, minBits
 }
 
-// ApplyRuntimeConfig updates runtime-safe Stratum policy settings for an
-// already-connected miner. Some structural settings still only apply fully on
-// reconnect (for example listener-level throttles and cache preallocation).
-func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
-	if mc == nil {
-		return
-	}
-	mc.stateMu.Lock()
-	defer mc.stateMu.Unlock()
-
-	mc.cfg = cfg
-	mc.vardiff = buildVarDiffConfig(cfg)
-	// Keep the effective BIP310 pool mask and miner-requested minimum stable for
-	// already-advertised work. A subsequent Job carries the new pool mask through
-	// sendNotifyFor, while new connections start from the updated config.
-	if cfg.MaxRecentJobs > 0 {
-		mc.maxRecentJobs = cfg.MaxRecentJobs
-	}
-
-	if cfg.ShareCheckDuplicate && mc.shareCache == nil {
-		capHint := mc.maxRecentJobs
-		if capHint <= 0 {
-			capHint = defaultRecentJobs
-		}
-		mc.shareCache = make(map[string]*duplicateShareSet, capHint)
-		mc.evictedShareCache = make(map[string]*evictedCacheEntry, capHint)
-	}
-	if cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds == nil {
-		capHint := mc.maxRecentJobs
-		if capHint <= 0 {
-			capHint = defaultRecentJobs
-		}
-		mc.jobNTimeBounds = make(map[string]jobNTimeBounds, capHint)
-	}
-
-	curDiff := atomicLoadFloat64(&mc.difficulty)
-	clamped := mc.clampDifficulty(curDiff)
-	if clamped > 0 && clamped != curDiff {
-		atomicStoreFloat64(&mc.difficulty, clamped)
-		mc.shareTarget.Store(targetFromDifficulty(clamped))
-	}
-}
-
 func (mc *MinerConn) handle() {
 	defer mc.cleanup()
 	if debugLogging || verboseRuntimeLogging {

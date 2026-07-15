@@ -10,6 +10,14 @@ import (
 )
 
 func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) (*Job, error) {
+	jm.applyMu.Lock()
+	defer jm.applyMu.Unlock()
+	return jm.buildJobLocked(ctx, tpl)
+}
+
+// buildJobLocked builds from one coherent runtime configuration snapshot.
+// The caller must hold jm.applyMu.
+func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateResult) (*Job, error) {
 	if len(jm.payoutScript) == 0 {
 		return nil, fmt.Errorf("payout script not configured")
 	}
@@ -91,34 +99,35 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 	}
 
 	job := &Job{
-		JobID:                   jm.nextJobID(),
-		Generation:              atomic.AddUint64(&jm.jobGeneration, 1),
-		Template:                tpl,
-		Target:                  target,
-		targetBE:                uint256BEFromBigInt(target),
-		CreatedAt:               time.Now(),
-		ScriptTime:              scriptTime,
-		Extranonce2Size:         jm.cfg.Extranonce2Size,
-		CoinbaseValue:           tpl.CoinbaseValue,
-		WitnessCommitment:       tpl.DefaultWitnessCommitment,
-		CoinbaseMsg:             coinbaseMsg,
-		MerkleBranches:          merkleBranches,
-		merkleBranchesBytes:     merkleBranchesBytes,
-		Transactions:            tpl.Transactions,
-		TransactionIDs:          transactionIDs(transactions),
-		PayoutScript:            append([]byte(nil), jm.payoutScript...),
-		PayoutAddress:           jm.cfg.PayoutAddress,
-		PoolFeePercent:          jm.cfg.PoolFeePercent,
-		PayoutPolicyCaptured:    true,
-		DonationScript:          append([]byte(nil), jm.donationScript...),
-		OperatorDonationPercent: jm.cfg.OperatorDonationPercent,
-		VersionMask:             computePoolMask(tpl, jm.cfg),
-		PrevHash:                tpl.Previous,
-		prevHashBytes:           prevBytes,
-		bitsBytes:               bitsBytes,
-		coinbaseFlagsBytes:      flagsBytes,
-		witnessCommitScript:     commitScript,
-		TemplateExtraNonce2Size: jm.cfg.TemplateExtraNonce2Size,
+		JobID:                     jm.nextJobID(),
+		Generation:                atomic.AddUint64(&jm.jobGeneration, 1),
+		Template:                  tpl,
+		Target:                    target,
+		targetBE:                  uint256BEFromBigInt(target),
+		CreatedAt:                 time.Now(),
+		ScriptTime:                scriptTime,
+		Extranonce2Size:           jm.cfg.Extranonce2Size,
+		CoinbaseValue:             tpl.CoinbaseValue,
+		WitnessCommitment:         tpl.DefaultWitnessCommitment,
+		CoinbaseMsg:               coinbaseMsg,
+		MerkleBranches:            merkleBranches,
+		merkleBranchesBytes:       merkleBranchesBytes,
+		Transactions:              tpl.Transactions,
+		TransactionIDs:            transactionIDs(transactions),
+		PayoutScript:              append([]byte(nil), jm.payoutScript...),
+		PayoutAddress:             jm.cfg.PayoutAddress,
+		PoolFeePercent:            jm.cfg.PoolFeePercent,
+		PayoutPolicyCaptured:      true,
+		DonationScript:            append([]byte(nil), jm.donationScript...),
+		OperatorDonationPercent:   jm.cfg.OperatorDonationPercent,
+		VersionMask:               computePoolMask(tpl, jm.cfg),
+		PrevHash:                  tpl.Previous,
+		prevHashBytes:             prevBytes,
+		bitsBytes:                 bitsBytes,
+		coinbaseFlagsBytes:        flagsBytes,
+		witnessCommitScript:       commitScript,
+		TemplateExtraNonce2Size:   jm.cfg.TemplateExtraNonce2Size,
+		CoinbaseScriptSigMaxBytes: jm.cfg.CoinbaseScriptSigMaxBytes,
 	}
 
 	return job, nil

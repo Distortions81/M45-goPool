@@ -160,7 +160,7 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 		lastSuccess = cur.CreatedAt
 	}
 
-	zmqEnabled := jm.cfg.ZMQHashBlockAddr != "" || jm.cfg.ZMQRawBlockAddr != ""
+	zmqEnabled := jm.zmqHashBlockAddr != "" || jm.zmqRawBlockAddr != ""
 	zmqHealthy := false
 	if zmqEnabled {
 		zmqHealthy = jm.zmqHashblockHealthy.Load() || jm.zmqRawblockHealthy.Load()

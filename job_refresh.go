@@ -60,7 +60,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.mu.RLock()
 	previousJob := jm.curJob
 	jm.mu.RUnlock()
-	needsNewJob, clean := jm.templateChanged(tpl)
+	needsNewJob, clean := jm.templateChangedLocked(tpl)
 
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
 	// This avoids unnecessary job churn and duplicate JobIDs for the same work.
@@ -74,7 +74,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 		return nil
 	}
 
-	job, err := jm.buildJob(ctx, tpl)
+	job, err := jm.buildJobLocked(ctx, tpl)
 	if err != nil {
 		jm.recordJobError(err)
 		return err

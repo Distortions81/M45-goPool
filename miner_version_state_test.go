@@ -419,27 +419,3 @@ func TestSubmitWaitsForVersionMaskWrite(t *testing.T) {
 		t.Fatal("submit remained blocked after the mask write")
 	}
 }
-
-func TestApplyRuntimeConfigKeepsEffectiveVersionPolicy(t *testing.T) {
-	mc := &MinerConn{
-		cfg:         Config{},
-		versionRoll: true,
-		poolMask:    0x0000e000,
-		minerMask:   0x00006000,
-		versionMask: 0x00006000,
-		minVerBits:  2,
-	}
-
-	mc.ApplyRuntimeConfig(Config{
-		VersionMaskConfigured: true,
-		VersionMask:           0x00008000,
-		MinVersionBits:        1,
-	})
-
-	mc.versionMu.Lock()
-	defer mc.versionMu.Unlock()
-	if mc.poolMask != 0x0000e000 || mc.versionMask != 0x00006000 || mc.minVerBits != 2 || !mc.versionRoll {
-		t.Fatalf("runtime config changed effective BIP310 state: active=%v pool=%08x mask=%08x min=%d",
-			mc.versionRoll, mc.poolMask, mc.versionMask, mc.minVerBits)
-	}
-}

@@ -14,7 +14,7 @@ import (
 )
 
 func (jm *JobManager) zmqEnabled() bool {
-	return jm.cfg.ZMQHashBlockAddr != "" || jm.cfg.ZMQRawBlockAddr != ""
+	return jm.zmqHashBlockAddr != "" || jm.zmqRawBlockAddr != ""
 }
 
 func (jm *JobManager) zmqAnyHealthy() bool {
@@ -268,8 +268,8 @@ func (jm *JobManager) startZMQLoops(ctx context.Context) {
 		addr string
 	}
 	specs := []topicSpec{
-		{name: "hashblock", addr: jm.cfg.ZMQHashBlockAddr},
-		{name: "rawblock", addr: jm.cfg.ZMQRawBlockAddr},
+		{name: "hashblock", addr: jm.zmqHashBlockAddr},
+		{name: "rawblock", addr: jm.zmqRawBlockAddr},
 	}
 
 	addrTopics := make(map[string][]string)

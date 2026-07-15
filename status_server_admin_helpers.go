@@ -216,7 +216,7 @@ func (s *StatusServer) renderAdminPageTemplate(w http.ResponseWriter, r *http.Re
 func adminNoticeMessage(key string) string {
 	switch key {
 	case "settings_applied":
-		return "Live settings applied in memory."
+		return "Settings applied in memory. Job and payout settings apply on the next published job; existing miner-session settings apply after reconnect; listener, node, and storage settings require a process restart."
 	case "saved_to_disk":
 		return "Saved current in-memory settings to config.toml, services.toml, policy.toml, and tuning.toml."
 	case "reboot_requested":

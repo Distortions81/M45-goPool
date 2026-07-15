@@ -123,6 +123,9 @@ type MinerConn struct {
 	reader               *bufio.Reader
 	jobMgr               *JobManager
 	rpc                  rpcCaller
+	// cfg is the immutable policy negotiated for this miner session. Admin
+	// updates are applied to newly connected miners; advertised jobs carry any
+	// future-job policy that can safely change without rewriting session state.
 	cfg                  Config
 	extranonce1          []byte
 	extranonce1Hex       string

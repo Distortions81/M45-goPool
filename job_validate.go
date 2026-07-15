@@ -129,6 +129,14 @@ func validateBits(bitsStr, targetStr string) (*big.Int, error) {
 // invalidate the prior header search space; payload-only updates keep old work
 // valid while advertising a new candidate.
 func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, clean bool) {
+	jm.applyMu.Lock()
+	defer jm.applyMu.Unlock()
+	return jm.templateChangedLocked(tpl)
+}
+
+// templateChangedLocked compares against one coherent runtime configuration
+// snapshot. The caller must hold jm.applyMu.
+func (jm *JobManager) templateChangedLocked(tpl GetBlockTemplateResult) (needsNewJob, clean bool) {
 	jm.mu.RLock()
 	cur := jm.curJob
 	jm.mu.RUnlock()

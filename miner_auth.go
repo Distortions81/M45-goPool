@@ -1167,6 +1167,54 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 	mc.maybeSendInitialWork()
 }
 
+// jobForSession returns an immutable per-connection view of a manager job.
+// Extranonce2 size is fixed by the subscribe response for the lifetime of a
+// connection, so live configuration changes must not alter it on later jobs.
+func (mc *MinerConn) jobForSession(job *Job) (*Job, error) {
+	if job == nil {
+		return nil, nil
+	}
+	extranonce2Size := mc.cfg.Extranonce2Size
+	if extranonce2Size <= 0 {
+		extranonce2Size = defaultExtranonce2Size
+	}
+	templateExtranonce2Size := job.TemplateExtraNonce2Size
+	if templateExtranonce2Size < extranonce2Size {
+		templateExtranonce2Size = extranonce2Size
+	}
+	if job.Extranonce2Size == extranonce2Size && job.TemplateExtraNonce2Size == templateExtranonce2Size {
+		return job, nil
+	}
+
+	sessionJob := *job
+	sessionJob.Extranonce2Size = extranonce2Size
+	sessionJob.TemplateExtraNonce2Size = templateExtranonce2Size
+	if job.CoinbaseScriptSigMaxBytes > 0 {
+		message, truncated, err := clampCoinbaseMessage(
+			job.CoinbaseMsg,
+			job.CoinbaseScriptSigMaxBytes,
+			job.Template.Height,
+			job.ScriptTime,
+			job.Template.CoinbaseAux.Flags,
+			extranonce2Size,
+			templateExtranonce2Size,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("adapt coinbase message to session extranonce2: %w", err)
+		}
+		sessionJob.CoinbaseMsg = message
+		if truncated {
+			logger.Debug("clamped coinbase message for session extranonce2",
+				"remote", mc.id,
+				"limit", job.CoinbaseScriptSigMaxBytes,
+				"extranonce2_size", extranonce2Size,
+				"template_extranonce2_size", templateExtranonce2Size,
+			)
+		}
+	}
+	return &sessionJob, nil
+}
+
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	if job == nil {
 		return
@@ -1176,6 +1224,14 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	if !mc.subscribed {
 		return
 	}
+	sessionJob, adaptErr := mc.jobForSession(job)
+	if adaptErr != nil {
+		logger.Error("adapt job for miner session", "component", "miner", "kind", "notify", "remote", mc.id, "error", adaptErr)
+		mc.sendClientShowMessage("Pool configuration changed; reconnecting for compatible work.")
+		mc.Close("job incompatible with negotiated extranonce size")
+		return
+	}
+	job = sessionJob
 
 	// Never let an older queued template replace newer work on this connection.
 	// Equal jobs remain eligible because vardiff changes intentionally re-notify

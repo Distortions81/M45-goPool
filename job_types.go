@@ -40,35 +40,36 @@ type GBTTransaction struct {
 }
 
 type Job struct {
-	JobID                   string
-	Generation              uint64
-	Template                GetBlockTemplateResult
-	Target                  *big.Int
-	targetBE                [32]byte
-	CreatedAt               time.Time
-	Clean                   bool
-	Extranonce2Size         int
-	CoinbaseValue           int64
-	WitnessCommitment       string
-	CoinbaseMsg             string
-	MerkleBranches          []string
-	merkleBranchesBytes     [][32]byte
-	Transactions            []GBTTransaction
-	TransactionIDs          [][]byte
-	PayoutScript            []byte
-	PayoutAddress           string
-	PoolFeePercent          float64
-	PayoutPolicyCaptured    bool
-	DonationScript          []byte
-	OperatorDonationPercent float64
-	VersionMask             uint32
-	PrevHash                string
-	prevHashBytes           [32]byte
-	bitsBytes               [4]byte
-	coinbaseFlagsBytes      []byte
-	witnessCommitScript     []byte
-	ScriptTime              int64
-	TemplateExtraNonce2Size int
+	JobID                     string
+	Generation                uint64
+	Template                  GetBlockTemplateResult
+	Target                    *big.Int
+	targetBE                  [32]byte
+	CreatedAt                 time.Time
+	Clean                     bool
+	Extranonce2Size           int
+	CoinbaseValue             int64
+	WitnessCommitment         string
+	CoinbaseMsg               string
+	MerkleBranches            []string
+	merkleBranchesBytes       [][32]byte
+	Transactions              []GBTTransaction
+	TransactionIDs            [][]byte
+	PayoutScript              []byte
+	PayoutAddress             string
+	PoolFeePercent            float64
+	PayoutPolicyCaptured      bool
+	DonationScript            []byte
+	OperatorDonationPercent   float64
+	VersionMask               uint32
+	PrevHash                  string
+	prevHashBytes             [32]byte
+	bitsBytes                 [4]byte
+	coinbaseFlagsBytes        []byte
+	witnessCommitScript       []byte
+	ScriptTime                int64
+	TemplateExtraNonce2Size   int
+	CoinbaseScriptSigMaxBytes int
 }
 
 const (
@@ -104,6 +105,8 @@ const jobFeedErrorHistorySize = 3
 type JobManager struct {
 	rpc                 *RPCClient
 	cfg                 Config
+	zmqHashBlockAddr    string
+	zmqRawBlockAddr     string
 	metrics             *PoolMetrics
 	mu                  sync.RWMutex
 	curJob              *Job
@@ -154,6 +157,8 @@ func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScrip
 	return &JobManager{
 		rpc:               rpc,
 		cfg:               cfg,
+		zmqHashBlockAddr:  cfg.ZMQHashBlockAddr,
+		zmqRawBlockAddr:   cfg.ZMQRawBlockAddr,
 		metrics:           metrics,
 		payoutScript:      append([]byte(nil), payoutScript...),
 		donationScript:    append([]byte(nil), donationScript...),

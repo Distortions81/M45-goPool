@@ -266,31 +266,14 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 		s.renderAdminPage(w, r, data)
 		return
 	}
-	s.UpdateConfig(cfg)
-	if s.registry != nil {
-		for _, mc := range s.registry.Snapshot() {
-			mc.ApplyRuntimeConfig(cfg)
-		}
+
+	if err := s.publishRuntimeConfig(cfg); err != nil {
+		data.AdminApplyError = err.Error()
+		data.Settings = buildAdminSettingsData(cfg)
+		s.renderAdminPage(w, r, data)
+		return
 	}
 	if s.jobMgr != nil {
-		payoutScript, err := fetchPayoutScript(nil, cfg.PayoutAddress)
-		if err != nil {
-			data.AdminApplyError = fmt.Sprintf("Payout script error: %v", err)
-			data.Settings = buildAdminSettingsData(cfg)
-			s.renderAdminPage(w, r, data)
-			return
-		}
-		var donationScript []byte
-		if cfg.OperatorDonationPercent > 0 && strings.TrimSpace(cfg.OperatorDonationAddress) != "" {
-			donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
-			if err != nil {
-				data.AdminApplyError = fmt.Sprintf("Donation script error: %v", err)
-				data.Settings = buildAdminSettingsData(cfg)
-				s.renderAdminPage(w, r, data)
-				return
-			}
-		}
-		s.jobMgr.ApplyRuntimeConfig(cfg, payoutScript, donationScript)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -306,8 +289,43 @@ func (s *StatusServer) handleAdminApplySettings(w http.ResponseWriter, r *http.R
 	}
 	debugLogging = debugEnabled()
 	verboseRuntimeLogging = verboseRuntimeEnabled()
-	logger.Info("admin applied live settings (in memory)", "component", "admin", "kind", "config_apply", "active_miners", s.registry.Count())
+	activeMiners := 0
+	if s.registry != nil {
+		activeMiners = s.registry.Count()
+	}
+	logger.Info("admin applied settings in memory",
+		"component", "admin",
+		"kind", "config_apply",
+		"active_miners", activeMiners,
+		"existing_miner_sessions", "apply_on_reconnect",
+		"job_and_payout_policy", "apply_on_next_job",
+		"listener_node_storage_settings", "apply_on_restart",
+	)
 	http.Redirect(w, r, "/admin?notice=settings_applied", http.StatusSeeOther)
+}
+
+// publishRuntimeConfig validates all fallible job-policy dependencies before
+// publishing anything. Future-job policy is installed first and the Status
+// config follows immediately; per-connection job adaptation makes this tiny
+// ordering window safe for sessions opened with the previous extranonce size.
+func (s *StatusServer) publishRuntimeConfig(cfg Config) error {
+	var payoutScript, donationScript []byte
+	if s.jobMgr != nil {
+		var err error
+		payoutScript, err = fetchPayoutScript(nil, cfg.PayoutAddress)
+		if err != nil {
+			return fmt.Errorf("Payout script error: %w", err)
+		}
+		if cfg.OperatorDonationPercent > 0 && strings.TrimSpace(cfg.OperatorDonationAddress) != "" {
+			donationScript, err = fetchPayoutScript(nil, cfg.OperatorDonationAddress)
+			if err != nil {
+				return fmt.Errorf("Donation script error: %w", err)
+			}
+		}
+		s.jobMgr.ApplyRuntimeConfig(cfg, payoutScript, donationScript)
+	}
+	s.UpdateConfig(cfg)
+	return nil
 }
 
 func (s *StatusServer) handleAdminReloadUI(w http.ResponseWriter, r *http.Request) {
