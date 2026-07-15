@@ -238,6 +238,9 @@ func replayPendingSubmissions(ctx context.Context, rpc *RPCClient) {
 		callCtx, cancel := context.WithTimeout(parent, 30*time.Second)
 		err := rpc.callCtx(callCtx, "submitblock", []any{rec.BlockHex}, &submitRes)
 		cancel()
+		if err == nil {
+			err = submitBlockResultError(&submitRes)
+		}
 		if err != nil {
 			retryIn := pendingReplayBackoff.fail(item.Key, now)
 			logger.Error("pending submitblock error", "height", rec.Height, "hash", rec.Hash, "error", err, "retry_in", retryIn)

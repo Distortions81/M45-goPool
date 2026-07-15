@@ -169,3 +169,94 @@ func TestReplayPendingSubmissionsFailureBackoff(t *testing.T) {
 		t.Fatalf("expected status=pending, got %q", status)
 	}
 }
+
+// A non-null BIP22 result means submitblock rejected the block even though the
+// JSON-RPC request itself succeeded. Keep the record pending and retry it after
+// backoff so transient results such as "inconclusive" do not end recovery.
+func TestReplayPendingSubmissionsInconclusiveResultRetries(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	dbPath := filepath.Join(tmpDir, "state", "workers.db")
+	db, err := openStateDB(dbPath)
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	cleanup := setSharedStateDBForTest(db)
+	defer cleanup()
+
+	prevBase := pendingReplayBaseDelay
+	prevMax := pendingReplayMaxDelay
+	prevJitter := pendingReplayJitterFrac
+	prevBackoff := pendingReplayBackoff
+	pendingReplayBaseDelay = 10 * time.Millisecond
+	pendingReplayMaxDelay = 50 * time.Millisecond
+	pendingReplayJitterFrac = 0
+	pendingReplayBackoff = newPendingReplayBackoff()
+	defer func() {
+		pendingReplayBaseDelay = prevBase
+		pendingReplayMaxDelay = prevMax
+		pendingReplayJitterFrac = prevJitter
+		pendingReplayBackoff = prevBackoff
+	}()
+
+	appendPendingSubmissionRecord(pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    102,
+		Hash:      "inconclusive-hash",
+		Worker:    "worker3",
+		BlockHex:  "deadbeef",
+		RPCError:  "initial error",
+		Status:    "pending",
+	})
+
+	var submitCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		submitCalls++
+		w.Header().Set("Content-Type", "application/json")
+		if submitCalls == 1 {
+			_, _ = w.Write([]byte(`{"result":"inconclusive","error":null,"id":1}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	rpc := &RPCClient{
+		url:    server.URL,
+		client: server.Client(),
+		lp:     server.Client(),
+		nextID: 1,
+	}
+	ctx := context.Background()
+
+	replayPendingSubmissions(ctx, rpc)
+	if submitCalls != 1 {
+		t.Fatalf("expected 1 submit attempt, got %d", submitCalls)
+	}
+	var status string
+	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", "inconclusive-hash").Scan(&status); err != nil {
+		t.Fatalf("query status after inconclusive result: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("expected status=pending after inconclusive result, got %q", status)
+	}
+
+	// The result rejection participates in the same backoff as RPC failures.
+	replayPendingSubmissions(ctx, rpc)
+	if submitCalls != 1 {
+		t.Fatalf("expected immediate retry to be backed off, got %d calls", submitCalls)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	replayPendingSubmissions(ctx, rpc)
+	if submitCalls != 2 {
+		t.Fatalf("expected retry after backoff, got %d calls", submitCalls)
+	}
+	if err := db.QueryRow("SELECT status FROM pending_submissions WHERE submission_key = ?", "inconclusive-hash").Scan(&status); err != nil {
+		t.Fatalf("query status after successful retry: %v", err)
+	}
+	if status != "submitted" {
+		t.Fatalf("expected status=submitted after successful retry, got %q", status)
+	}
+}
