@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// foundBlockLogEntry represents a single JSONL line to append to the
-// found_blocks.jsonl log. Writes are serialized by a background goroutine
-// so the submit hot path never blocks on filesystem I/O.
+// foundBlockLogEntry represents a single found-block audit record. Writes are
+// serialized by a background goroutine so the submit hot path never blocks on
+// SQLite I/O.
 type foundBlockLogEntry struct {
 	Dir  string
 	Line []byte
@@ -47,4 +47,12 @@ func startFoundBlockLogger() {
 			}
 		}
 	}()
+}
+
+// drainFoundBlockLogger waits until every record queued before the barrier has
+// completed its SQLite write attempt. Callers must first stop all producers.
+func drainFoundBlockLogger() {
+	done := make(chan struct{})
+	foundBlockLogCh <- foundBlockLogEntry{Done: done}
+	<-done
 }

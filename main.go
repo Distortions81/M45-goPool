@@ -974,6 +974,9 @@ func run() (exitCode int) {
 	if pendingReplayDone != nil {
 		<-pendingReplayDone
 	}
+	// All miner and submission producers are stopped, so this barrier ensures
+	// accepted-block audit rows reach SQLite before checkpoint and close.
+	drainFoundBlockLogger()
 
 	if accounting != nil {
 		if err := accounting.Flush(); err != nil {
