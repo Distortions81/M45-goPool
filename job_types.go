@@ -153,8 +153,8 @@ func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScrip
 		rpc:            rpc,
 		cfg:            cfg,
 		metrics:        metrics,
-		payoutScript:   payoutScript,
-		donationScript: donationScript,
+		payoutScript:   append([]byte(nil), payoutScript...),
+		donationScript: append([]byte(nil), donationScript...),
 		subs:           make(map[chan *Job]struct{}),
 		notifyQueue:    make(chan *Job, 100), // Buffered queue for async notifications
 	}

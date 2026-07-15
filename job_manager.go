@@ -410,8 +410,10 @@ func (jm *JobManager) ApplyRuntimeConfig(cfg Config, payoutScript, donationScrip
 	}
 	jm.applyMu.Lock()
 	jm.cfg = cfg
-	jm.payoutScript = append(jm.payoutScript[:0], payoutScript...)
-	jm.donationScript = append(jm.donationScript[:0], donationScript...)
+	// Allocate new backing arrays so outstanding jobs can continue using the
+	// exact payout policy under which their coinbases were advertised.
+	jm.payoutScript = append([]byte(nil), payoutScript...)
+	jm.donationScript = append([]byte(nil), donationScript...)
 	jm.applyMu.Unlock()
 }
 
