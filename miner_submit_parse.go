@@ -134,37 +134,64 @@ func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, 
 	}
 }
 
-// historicalBlockRescueVersions returns notify-time version interpretations
-// that are not already covered by the current connection-wide BIP310 policy.
-// The legacy XOR interpretation is mask-independent, so there can be at most
-// two additional versions and at most three unique versions overall.
-func historicalBlockRescueVersions(current, historical submittedVersionResolution) ([2]uint32, uint8) {
-	inputs := [2]uint32{historical.useVersion, historical.alternateUseVersion}
-	inputCount := 1
-	if historical.hasAlternateVersion {
-		inputCount = 2
-	}
+type submittedVersionMaskPolicy struct {
+	active bool
+	mask   uint32
+}
 
-	var versions [2]uint32
-	var count uint8
-	for _, candidate := range inputs[:inputCount] {
-		if candidate == current.useVersion || (current.hasAlternateVersion && candidate == current.alternateUseVersion) {
-			continue
+// blockOnlyRescueVersions returns every retained plausible supplied-version
+// header not already covered by ordinary-share primary/alternate resolution.
+// In addition to current and notify-time BIP310 replacement semantics, a miner
+// can have used an intermediate connection-wide mask, a complete header
+// version, or a legacy XOR delta. The common four-interpretation case stays in
+// the inline array; retained intermediate masks spill into the extra slice.
+func blockOnlyRescueVersions(
+	baseVersion, submittedVersion uint32,
+	ordinary submittedVersionResolution,
+	current submittedVersionMaskPolicy,
+	notified *submittedVersionMaskPolicy,
+	historicalMasks []uint32,
+) ([3]uint32, []uint32, int) {
+	var versions [3]uint32
+	var extra []uint32
+	var count int
+	candidateAt := func(index int) uint32 {
+		if index < len(versions) {
+			return versions[index]
 		}
-		duplicate := false
-		for i := 0; i < int(count); i++ {
-			if versions[i] == candidate {
-				duplicate = true
-				break
+		return extra[index-len(versions)]
+	}
+	appendCandidate := func(candidate uint32) {
+		if candidate == ordinary.useVersion || (ordinary.hasAlternateVersion && candidate == ordinary.alternateUseVersion) {
+			return
+		}
+		for i := 0; i < count; i++ {
+			if candidateAt(i) == candidate {
+				return
 			}
 		}
-		if duplicate {
-			continue
+		if count < len(versions) {
+			versions[count] = candidate
+		} else {
+			extra = append(extra, candidate)
 		}
-		versions[count] = candidate
 		count++
 	}
-	return versions, count
+
+	if current.active {
+		appendCandidate((baseVersion &^ current.mask) | (submittedVersion & current.mask))
+	}
+	if notified != nil && notified.active &&
+		(notified.active != current.active || notified.mask != current.mask) {
+		appendCandidate((baseVersion &^ notified.mask) | (submittedVersion & notified.mask))
+	}
+	for _, mask := range historicalMasks {
+		appendCandidate((baseVersion &^ mask) | (submittedVersion & mask))
+	}
+	appendCandidate(submittedVersion)
+	appendCandidate(baseVersion ^ submittedVersion)
+
+	return versions, extra, count
 }
 
 // parseSubmitParams validates and extracts the core fields from a mining.submit
@@ -446,24 +473,33 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	// mining.set_version_mask. Synchronize with that wire sequence so a submit
 	// cannot observe the new mask until the miner could have received it.
 	mc.notifyMu.Lock()
-	versionRollingActive, versionMask := mc.versionRollingPolicySnapshot()
+	var versionMaskHistoryBuffer [defaultRecentJobs]uint32
+	versionRollingActive, versionMask, versionMaskHistory := mc.versionRollingPolicyHistorySnapshot(versionMaskHistoryBuffer[:0])
 	mc.notifyMu.Unlock()
 	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, versionMask, versionRollingActive, mc.cfg.ShareAllowOutOfMaskVersionBits, versionProvided)
 	useVersion := versionResolution.useVersion
 	versionDiff := versionResolution.versionDiff
-	var blockRescueVersions [2]uint32
-	var blockRescueCount uint8
-	if versionProvided && coinbaseOK && notifiedCoinbase.versionRollingActive &&
-		(notifiedCoinbase.versionMask != versionMask || notifiedCoinbase.versionRollingActive != versionRollingActive) {
-		historicalResolution := resolveSubmittedVersion(
+	var blockRescueVersions [3]uint32
+	var blockRescueExtra []uint32
+	var blockRescueCount int
+	if versionProvided {
+		currentPolicy := submittedVersionMaskPolicy{active: versionRollingActive, mask: versionMask}
+		var notifiedPolicy *submittedVersionMaskPolicy
+		if coinbaseOK && notifiedCoinbase.versionRollingActive &&
+			(notifiedCoinbase.versionMask != versionMask || notifiedCoinbase.versionRollingActive != versionRollingActive) {
+			notifiedPolicy = &submittedVersionMaskPolicy{
+				active: notifiedCoinbase.versionRollingActive,
+				mask:   notifiedCoinbase.versionMask,
+			}
+		}
+		blockRescueVersions, blockRescueExtra, blockRescueCount = blockOnlyRescueVersions(
 			baseVersion,
 			submittedVersion,
-			notifiedCoinbase.versionMask,
-			notifiedCoinbase.versionRollingActive,
-			mc.cfg.ShareAllowOutOfMaskVersionBits,
-			versionProvided,
+			versionResolution,
+			currentPolicy,
+			notifiedPolicy,
+			versionMaskHistory,
 		)
-		blockRescueVersions, blockRescueCount = historicalBlockRescueVersions(versionResolution, historicalResolution)
 	}
 
 	versionHex := ""
@@ -537,6 +573,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		alternateUseVersion: versionResolution.alternateUseVersion,
 		hasAlternateVersion: versionResolution.hasAlternateVersion,
 		blockRescueVersions: blockRescueVersions,
+		blockRescueExtra:    blockRescueExtra,
 		blockRescueCount:    blockRescueCount,
 		notifiedCoinbase:    notifiedCoinbase,
 		hasNotifiedCoinbase: coinbaseOK && len(notifiedCoinbase.prefix) > 0 && len(notifiedCoinbase.suffix) > 0,

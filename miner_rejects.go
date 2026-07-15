@@ -1563,6 +1563,50 @@ func (mc *MinerConn) versionRollingPolicySnapshot() (active bool, mask uint32) {
 	return active, mask
 }
 
+func (mc *MinerConn) versionRollingPolicyHistorySnapshot(dst []uint32) (active bool, mask uint32, history []uint32) {
+	mc.versionMu.Lock()
+	active = mc.versionRoll
+	mask = mc.versionMask
+	history = append(dst, mc.versionMaskHistory...)
+	mc.versionMu.Unlock()
+	return active, mask, history
+}
+
+func (mc *MinerConn) rememberVersionMaskLocked(mask uint32) {
+	limit := mc.maxRecentJobs
+	if limit <= 0 {
+		limit = defaultRecentJobs
+	}
+	// Cover both active jobs and the equally sized block-only retirement tier.
+	limit *= 2
+	if limit > maxVersionMaskRescueHistory {
+		limit = maxVersionMaskRescueHistory
+	}
+	for i, existing := range mc.versionMaskHistory {
+		if existing != mask {
+			continue
+		}
+		// Move a repeated mask to the newest position so the bounded history
+		// follows transition recency rather than first appearance.
+		copy(mc.versionMaskHistory[i:], mc.versionMaskHistory[i+1:])
+		mc.versionMaskHistory = mc.versionMaskHistory[:len(mc.versionMaskHistory)-1]
+		break
+	}
+	mc.versionMaskHistory = append(mc.versionMaskHistory, mask)
+	if len(mc.versionMaskHistory) > limit {
+		overflow := len(mc.versionMaskHistory) - limit
+		copy(mc.versionMaskHistory, mc.versionMaskHistory[overflow:])
+		mc.versionMaskHistory = mc.versionMaskHistory[:limit]
+		if !mc.versionMaskHistoryOverflowed {
+			mc.versionMaskHistoryOverflowed = true
+			logger.Warn("version-mask rescue history full; discarded oldest policy",
+				"remote", mc.id,
+				"limit", limit,
+			)
+		}
+	}
+}
+
 func (mc *MinerConn) queueVersionMaskIfActive() {
 	mc.versionMu.Lock()
 	if mc.versionRoll {
@@ -1610,6 +1654,7 @@ func (mc *MinerConn) negotiateVersionRolling(requestMask uint32, maskProvided bo
 	mc.minVerBits = requestedMinBits
 	mc.versionRoll = true
 	mc.versionMask = mask
+	mc.rememberVersionMaskLocked(mask)
 	return mask, requestedMinBits, true
 }
 
@@ -1645,6 +1690,7 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 		changed = true
 	}
 	mc.versionMask = finalMask
+	mc.rememberVersionMaskLocked(finalMask)
 	return changed
 }
 

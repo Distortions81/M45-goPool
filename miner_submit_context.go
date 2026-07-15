@@ -191,9 +191,11 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 	hashHex := hexEncode32LowerString(&headerHashLE)
 
 	ctx := shareContext{
-		hashHex:   hashHex,
-		shareDiff: difficultyFromHash(headerHashArray[:]),
-		isBlock:   isBlock,
+		hashHex:          hashHex,
+		shareDiff:        difficultyFromHash(headerHashArray[:]),
+		isBlock:          isBlock,
+		rescueCoinbase:   cbTx,
+		rescueMerkleRoot: merkleRoot,
 	}
 	// A block must be assembled from the exact header and coinbase that passed
 	// PoW. Non-block shares retain large buffers only for detail logging.
@@ -203,6 +205,53 @@ func (mc *MinerConn) prepareShareContext(task submissionTask) (shareContext, boo
 		ctx.header = header
 		ctx.cbTx = cbTx
 		ctx.merkleRoot = append([]byte(nil), merkleRoot[:]...)
+		ctx.hashLE = hashLE
+	}
+	return ctx, true
+}
+
+// prepareVersionShareContext reuses the primary submission's exact coinbase
+// and merkle root. Version rescue is on the untrusted hot path, so each extra
+// interpretation should cost only one header hash rather than another complete
+// coinbase serialization and merkle walk.
+func (mc *MinerConn) prepareVersionShareContext(task submissionTask, base shareContext) (shareContext, bool) {
+	job := task.job
+	if job == nil || len(base.rescueCoinbase) == 0 {
+		return shareContext{}, false
+	}
+	header, err := job.buildBlockHeaderU32(
+		base.rescueMerkleRoot[:],
+		task.ntimeVal,
+		task.nonceVal,
+		int32(task.useVersion),
+	)
+	if err != nil {
+		logger.Warn("submit version-rescue header build failed", "remote", mc.id, "job", task.jobID, "error", err)
+		return shareContext{}, false
+	}
+
+	headerHashArray := doubleSHA256Array(header)
+	var headerHashLE [32]byte
+	copy(headerHashLE[:], headerHashArray[:])
+	reverseBytes32(&headerHashLE)
+	targetBE := job.targetBE
+	if targetBE == ([32]byte{}) && job.Target != nil && job.Target.Sign() != 0 {
+		targetBE = uint256BEFromBigInt(job.Target)
+	}
+	isBlock := uint256BELessOrEqual(headerHashLE, targetBE)
+	ctx := shareContext{
+		hashHex:          hexEncode32LowerString(&headerHashLE),
+		shareDiff:        difficultyFromHash(headerHashArray[:]),
+		isBlock:          isBlock,
+		rescueCoinbase:   base.rescueCoinbase,
+		rescueMerkleRoot: base.rescueMerkleRoot,
+	}
+	if isBlock || debugLogging || verboseRuntimeLogging {
+		hashLE := make([]byte, len(headerHashLE))
+		copy(hashLE, headerHashLE[:])
+		ctx.header = header
+		ctx.cbTx = base.rescueCoinbase
+		ctx.merkleRoot = append([]byte(nil), base.rescueMerkleRoot[:]...)
 		ctx.hashLE = hashLE
 	}
 	return ctx, true

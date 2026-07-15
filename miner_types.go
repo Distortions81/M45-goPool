@@ -113,16 +113,16 @@ var defaultVarDiff = VarDiffConfig{
 }
 
 type MinerConn struct {
-	id                   string
-	ctx                  context.Context
-	conn                 net.Conn
-	writeMu              sync.Mutex
-	notifyMu             sync.Mutex
-	versionMu            sync.Mutex
-	writeScratch         []byte
-	reader               *bufio.Reader
-	jobMgr               *JobManager
-	rpc                  rpcCaller
+	id           string
+	ctx          context.Context
+	conn         net.Conn
+	writeMu      sync.Mutex
+	notifyMu     sync.Mutex
+	versionMu    sync.Mutex
+	writeScratch []byte
+	reader       *bufio.Reader
+	jobMgr       *JobManager
+	rpc          rpcCaller
 	// cfg is the immutable policy negotiated for this miner session. Admin
 	// updates are applied to newly connected miners; advertised jobs carry any
 	// future-job policy that can safely change without rewriting session state.
@@ -178,21 +178,26 @@ type MinerConn struct {
 	// versionRoll records whether BIP310 version rolling was successfully
 	// negotiated for this connection. It remains true when versionMask is zero;
 	// a zero mask disables rolling bits without deactivating the extension.
-	versionRoll         bool
-	versionMask         uint32
-	poolMask            uint32
-	minerMask           uint32
-	minVerBits          int
-	lastShareHash       string
-	lastShareAccepted   bool
-	lastShareDifficulty float64
-	lastShareDetail     *ShareDetail
-	lastRejectReason    string
-	walletMu            sync.Mutex
-	workerWallets       map[string]workerWalletState
-	subscribed          bool
-	authorized          bool
-	cleanupOnce         sync.Once
+	versionRoll bool
+	versionMask uint32
+	poolMask    uint32
+	minerMask   uint32
+	minVerBits  int
+	// versionMaskHistory retains recently authoritative BIP310 masks so a
+	// delayed share can be reconstructed after one or more immediate
+	// mining.set_version_mask transitions. It is guarded by versionMu.
+	versionMaskHistory           []uint32
+	versionMaskHistoryOverflowed bool
+	lastShareHash                string
+	lastShareAccepted            bool
+	lastShareDifficulty          float64
+	lastShareDetail              *ShareDetail
+	lastRejectReason             string
+	walletMu                     sync.Mutex
+	workerWallets                map[string]workerWalletState
+	subscribed                   bool
+	authorized                   bool
+	cleanupOnce                  sync.Once
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
 	lockDifficulty bool

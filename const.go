@@ -26,6 +26,7 @@ const (
 	defaultTemplateExtraNonce2Size = 8
 	defaultPoolFeePercent          = 2.0
 	defaultRecentJobs              = 10
+	maxVersionMaskRescueHistory    = 64
 	defaultConnectionTimeout       = 3 * time.Minute
 
 	// Accept rate limiting defaults.

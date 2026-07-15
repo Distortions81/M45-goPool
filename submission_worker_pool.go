@@ -49,8 +49,9 @@ type submissionTask struct {
 	alternateVersionHex string
 	alternateUseVersion uint32
 	hasAlternateVersion bool
-	blockRescueVersions [2]uint32
-	blockRescueCount    uint8
+	blockRescueVersions [3]uint32
+	blockRescueExtra    []uint32
+	blockRescueCount    int
 	notifiedCoinbase    notifiedCoinbaseParts
 	hasNotifiedCoinbase bool
 	scriptTime          int64
@@ -58,6 +59,20 @@ type submissionTask struct {
 	policyReject        submitPolicyReject
 	banPolicy           *bannedSubmitPolicy
 	receivedAt          time.Time
+}
+
+func (t *submissionTask) blockRescueVersion(index int) (uint32, bool) {
+	if t == nil || index < 0 || index >= t.blockRescueCount {
+		return 0, false
+	}
+	if index < len(t.blockRescueVersions) {
+		return t.blockRescueVersions[index], true
+	}
+	extraIndex := index - len(t.blockRescueVersions)
+	if extraIndex < 0 || extraIndex >= len(t.blockRescueExtra) {
+		return 0, false
+	}
+	return t.blockRescueExtra[extraIndex], true
 }
 
 func (t *submissionTask) extranonce2Decoded() []byte {

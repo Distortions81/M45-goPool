@@ -74,7 +74,7 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		altTask := task
 		altTask.useVersion = task.alternateUseVersion
 		altTask.versionHex = task.alternateVersionHex
-		if altCtx, ok := mc.prepareShareContext(altTask); ok {
+		if altCtx, ok := mc.prepareVersionShareContext(altTask, ctx); ok {
 			primaryAcceptable := mc.submissionMeetsAssignedDifficulty(ctx, thresholdDiff, now)
 			alternateAcceptable := mc.submissionMeetsAssignedDifficulty(altCtx, thresholdDiff, now)
 			if preferAlternateSubmissionContext(ctx, altCtx, primaryAcceptable, alternateAcceptable) {
@@ -87,15 +87,20 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 	}
 
 	// BIP310 makes the latest connection-wide mask authoritative even for old
-	// job IDs. Still test the mask that accompanied this notify so an in-flight
-	// header found just before mining.set_version_mask is not lost. Historical
-	// interpretations are block-only and can never make an ordinary share valid.
+	// job IDs. For block safety, also test retained intermediate and notify-time
+	// masks plus the raw-full and legacy-XOR interpretations of the supplied
+	// value. Rescue candidates are block-only and can never make an ordinary
+	// share valid.
 	if !ctx.isBlock {
-		for i := 0; i < int(task.blockRescueCount); i++ {
+		for i := 0; i < task.blockRescueCount; i++ {
+			rescueVersion, ok := task.blockRescueVersion(i)
+			if !ok {
+				break
+			}
 			rescueTask := task
-			rescueTask.useVersion = task.blockRescueVersions[i]
+			rescueTask.useVersion = rescueVersion
 			rescueTask.versionHex = uint32ToHex8Lower(rescueTask.useVersion)
-			if rescueCtx, ok := mc.prepareShareContext(rescueTask); ok && rescueCtx.isBlock {
+			if rescueCtx, ok := mc.prepareVersionShareContext(rescueTask, ctx); ok && rescueCtx.isBlock {
 				task = rescueTask
 				ctx = rescueCtx
 				policyReject = task.policyReject

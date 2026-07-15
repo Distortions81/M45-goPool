@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestHistoricalBlockRescueVersions(t *testing.T) {
+func TestBlockOnlyRescueVersions(t *testing.T) {
 	const (
 		baseVersion   = uint32(0x20006000)
 		submittedBits = uint32(0x00004000)
@@ -19,8 +19,17 @@ func TestHistoricalBlockRescueVersions(t *testing.T) {
 
 	t.Run("keeps distinct notify-time BIP310 and XOR candidates", func(t *testing.T) {
 		current := resolveSubmittedVersion(baseVersion, submittedBits, currentMask, true, false, true)
-		historical := resolveSubmittedVersion(baseVersion, submittedBits, notifiedMask, true, false, true)
-		got, count := historicalBlockRescueVersions(current, historical)
+		got, extra, count := blockOnlyRescueVersions(
+			baseVersion,
+			submittedBits,
+			current,
+			submittedVersionMaskPolicy{active: true, mask: currentMask},
+			&submittedVersionMaskPolicy{active: true, mask: notifiedMask},
+			nil,
+		)
+		if len(extra) != 0 {
+			t.Fatalf("unexpected overflow candidates: %08x", extra)
+		}
 
 		if current.useVersion != 0x00004000 {
 			t.Fatalf("current version = %08x, want 00004000", current.useVersion)
@@ -28,34 +37,123 @@ func TestHistoricalBlockRescueVersions(t *testing.T) {
 		if count != 2 {
 			t.Fatalf("candidate count = %d, want 2: %08x", count, got)
 		}
-		want := [2]uint32{0x20004000, 0x20002000}
+		want := [3]uint32{0x20004000, 0x20002000}
 		if got != want {
 			t.Fatalf("candidates = %08x, want %08x", got, want)
 		}
 	})
 
-	t.Run("deduplicates mask-independent XOR candidate", func(t *testing.T) {
+	t.Run("adds raw full version without changing compatibility primary", func(t *testing.T) {
 		current := resolveSubmittedVersion(baseVersion, submittedBits, currentMask, true, true, true)
-		historical := resolveSubmittedVersion(baseVersion, submittedBits, notifiedMask, true, true, true)
-		got, count := historicalBlockRescueVersions(current, historical)
+		got, extra, count := blockOnlyRescueVersions(
+			baseVersion,
+			submittedBits,
+			current,
+			submittedVersionMaskPolicy{active: true, mask: currentMask},
+			&submittedVersionMaskPolicy{active: true, mask: notifiedMask},
+			nil,
+		)
+		if len(extra) != 0 {
+			t.Fatalf("unexpected overflow candidates: %08x", extra)
+		}
 
 		if current.useVersion != 0x20002000 {
 			t.Fatalf("current compatibility version = %08x, want XOR version 20002000", current.useVersion)
 		}
-		if count != 1 || got[0] != 0x20004000 {
-			t.Fatalf("candidates = %08x count=%d, want only 20004000", got, count)
+		want := [3]uint32{0x20004000, submittedBits}
+		if count != 2 || got != want {
+			t.Fatalf("candidates = %08x count=%d, want %08x", got, count, want)
 		}
 	})
 
 	t.Run("active zero mask remains distinguishable", func(t *testing.T) {
 		current := resolveSubmittedVersion(baseVersion, 0, 0, false, false, true)
-		historical := resolveSubmittedVersion(baseVersion, 0, 0, true, false, true)
-		got, count := historicalBlockRescueVersions(current, historical)
+		got, extra, count := blockOnlyRescueVersions(
+			baseVersion,
+			0,
+			current,
+			submittedVersionMaskPolicy{},
+			&submittedVersionMaskPolicy{active: true},
+			nil,
+		)
+		if len(extra) != 0 {
+			t.Fatalf("unexpected overflow candidates: %08x", extra)
+		}
 
 		if count != 1 || got[0] != baseVersion {
 			t.Fatalf("active-zero candidates = %08x count=%d, want base %08x", got, count, baseVersion)
 		}
 	})
+
+	t.Run("active zero mask can require all three rescue slots", func(t *testing.T) {
+		current := resolveSubmittedVersion(baseVersion, submittedBits, 0, true, false, true)
+		got, extra, count := blockOnlyRescueVersions(
+			baseVersion,
+			submittedBits,
+			current,
+			submittedVersionMaskPolicy{active: true},
+			&submittedVersionMaskPolicy{active: true, mask: notifiedMask},
+			nil,
+		)
+		if len(extra) != 0 {
+			t.Fatalf("unexpected overflow candidates: %08x", extra)
+		}
+
+		if current.useVersion != submittedBits {
+			t.Fatalf("strict primary = %08x, want raw version %08x", current.useVersion, submittedBits)
+		}
+		want := [3]uint32{baseVersion, 0x20004000, 0x20002000}
+		if count != 3 || got != want {
+			t.Fatalf("active-zero candidates = %08x count=%d, want %08x", got, count, want)
+		}
+	})
+
+	t.Run("intermediate masks overflow without truncation", func(t *testing.T) {
+		const wideBase = uint32(0x2000f000)
+		current := resolveSubmittedVersion(wideBase, 0, 0, true, false, true)
+		got, extra, count := blockOnlyRescueVersions(
+			wideBase,
+			0,
+			current,
+			submittedVersionMaskPolicy{active: true},
+			nil,
+			[]uint32{0x00001000, 0x00002000, 0x00004000, 0x00008000},
+		)
+		wantInline := [3]uint32{0x2000e000, 0x2000d000, 0x2000b000}
+		wantExtra := []uint32{0x20007000, 0x00000000}
+		if count != 5 || got != wantInline || len(extra) != len(wantExtra) ||
+			extra[0] != wantExtra[0] || extra[1] != wantExtra[1] {
+			t.Fatalf("overflow candidates = %08x extra=%08x count=%d, want %08x extra=%08x count=5",
+				got, extra, count, wantInline, wantExtra)
+		}
+		task := submissionTask{
+			blockRescueVersions: got,
+			blockRescueExtra:    extra,
+			blockRescueCount:    count,
+		}
+		wantAll := []uint32{wantInline[0], wantInline[1], wantInline[2], wantExtra[0], wantExtra[1]}
+		for i, want := range wantAll {
+			candidate, ok := task.blockRescueVersion(i)
+			if !ok || candidate != want {
+				t.Fatalf("task candidate %d = %08x ok=%v, want %08x", i, candidate, ok, want)
+			}
+		}
+	})
+}
+
+func TestVersionMaskHistoryIsBoundedAndRecencyOrdered(t *testing.T) {
+	mc := &MinerConn{maxRecentJobs: 1}
+	mc.versionMu.Lock()
+	mc.rememberVersionMaskLocked(0x00002000)
+	mc.rememberVersionMaskLocked(0x00004000)
+	mc.rememberVersionMaskLocked(0x00002000)
+	mc.rememberVersionMaskLocked(0x00008000)
+	got := append([]uint32(nil), mc.versionMaskHistory...)
+	mc.versionMu.Unlock()
+	want := []uint32{0x00002000, 0x00008000}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("version mask history = %08x, want %08x", got, want)
+	}
 }
 
 func TestNotifyVersionMaskBindingSurvivesReorgUntilJobEviction(t *testing.T) {
@@ -286,7 +384,7 @@ func TestHistoricalVersionMaskRescuesBlockAcrossReorg(t *testing.T) {
 			if task.useVersion != currentVersion {
 				t.Fatalf("authoritative version = %08x, want current-mask version %08x", task.useVersion, currentVersion)
 			}
-			if task.blockRescueCount != 2 || task.blockRescueVersions != [2]uint32{historicalBIP, historicalXOR} {
+			if task.blockRescueCount != 2 || task.blockRescueVersions != [3]uint32{historicalBIP, historicalXOR} {
 				t.Fatalf("block rescue candidates = %08x count=%d", task.blockRescueVersions, task.blockRescueCount)
 			}
 			if task.policyReject.reason != rejectStaleJob {
