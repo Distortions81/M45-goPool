@@ -134,6 +134,39 @@ func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, 
 	}
 }
 
+// historicalBlockRescueVersions returns notify-time version interpretations
+// that are not already covered by the current connection-wide BIP310 policy.
+// The legacy XOR interpretation is mask-independent, so there can be at most
+// two additional versions and at most three unique versions overall.
+func historicalBlockRescueVersions(current, historical submittedVersionResolution) ([2]uint32, uint8) {
+	inputs := [2]uint32{historical.useVersion, historical.alternateUseVersion}
+	inputCount := 1
+	if historical.hasAlternateVersion {
+		inputCount = 2
+	}
+
+	var versions [2]uint32
+	var count uint8
+	for _, candidate := range inputs[:inputCount] {
+		if candidate == current.useVersion || (current.hasAlternateVersion && candidate == current.alternateUseVersion) {
+			continue
+		}
+		duplicate := false
+		for i := 0; i < int(count); i++ {
+			if versions[i] == candidate {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		versions[count] = candidate
+		count++
+	}
+	return versions, count
+}
+
 // parseSubmitParams validates and extracts the core fields from a mining.submit
 // request, recording and responding to any parameter errors. It returns params
 // and ok=false when a response has already been sent.
@@ -419,6 +452,20 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, versionMask, versionRollingActive, mc.cfg.ShareAllowOutOfMaskVersionBits, versionProvided)
 	useVersion := versionResolution.useVersion
 	versionDiff := versionResolution.versionDiff
+	var blockRescueVersions [2]uint32
+	var blockRescueCount uint8
+	if versionProvided && coinbaseOK && notifiedCoinbase.versionRollingActive &&
+		(notifiedCoinbase.versionMask != versionMask || notifiedCoinbase.versionRollingActive != versionRollingActive) {
+		historicalResolution := resolveSubmittedVersion(
+			baseVersion,
+			submittedVersion,
+			notifiedCoinbase.versionMask,
+			notifiedCoinbase.versionRollingActive,
+			mc.cfg.ShareAllowOutOfMaskVersionBits,
+			versionProvided,
+		)
+		blockRescueVersions, blockRescueCount = historicalBlockRescueVersions(versionResolution, historicalResolution)
+	}
 
 	versionHex := ""
 	if debugLogging || verboseRuntimeLogging {
@@ -490,6 +537,8 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		alternateVersionHex: uint32ToHex8Lower(versionResolution.alternateUseVersion),
 		alternateUseVersion: versionResolution.alternateUseVersion,
 		hasAlternateVersion: versionResolution.hasAlternateVersion,
+		blockRescueVersions: blockRescueVersions,
+		blockRescueCount:    blockRescueCount,
 		notifiedCoinbase:    notifiedCoinbase,
 		hasNotifiedCoinbase: coinbaseOK && len(notifiedCoinbase.prefix) > 0 && len(notifiedCoinbase.suffix) > 0,
 		scriptTime:          notifiedScriptTime,

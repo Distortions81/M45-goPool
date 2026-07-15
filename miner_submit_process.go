@@ -86,6 +86,25 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		}
 	}
 
+	// BIP310 makes the latest connection-wide mask authoritative even for old
+	// job IDs. Still test the mask that accompanied this notify so an in-flight
+	// header found just before mining.set_version_mask is not lost. Historical
+	// interpretations are block-only and can never make an ordinary share valid.
+	if !ctx.isBlock {
+		for i := 0; i < int(task.blockRescueCount); i++ {
+			rescueTask := task
+			rescueTask.useVersion = task.blockRescueVersions[i]
+			rescueTask.versionHex = uint32ToHex8Lower(rescueTask.useVersion)
+			if rescueCtx, ok := mc.prepareShareContext(rescueTask); ok && rescueCtx.isBlock {
+				task = rescueTask
+				ctx = rescueCtx
+				policyReject = task.policyReject
+				versionHex = task.versionHex
+				break
+			}
+		}
+	}
+
 	if !ctx.isBlock && policyReject.reason != rejectUnknown {
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
 		return

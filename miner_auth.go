@@ -1200,7 +1200,7 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
-	versionRollingActive, _ := mc.versionRollingPolicySnapshot()
+	versionRollingActive, notifiedVersionMask := mc.versionRollingPolicySnapshot()
 	if maskChanged && versionRollingActive {
 		mc.sendVersionMask()
 	}
@@ -1315,11 +1315,13 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		mc.jobNotifyCoinbase = make(map[string]notifiedCoinbaseParts, mc.maxRecentJobs)
 	}
 	mc.jobNotifyCoinbase[stratumJobID] = notifiedCoinbaseParts{
-		coinb1: coinb1,
-		coinb2: coinb2,
-		worker: worker,
-		prefix: coinbasePrefix,
-		suffix: coinbaseSuffix,
+		coinb1:               coinb1,
+		coinb2:               coinb2,
+		worker:               worker,
+		prefix:               coinbasePrefix,
+		suffix:               coinbaseSuffix,
+		versionRollingActive: versionRollingActive,
+		versionMask:          notifiedVersionMask,
 	}
 	mc.jobMu.Unlock()
 

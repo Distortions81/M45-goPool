@@ -93,11 +93,13 @@ type workerWalletState struct {
 }
 
 type notifiedCoinbaseParts struct {
-	coinb1 string
-	coinb2 string
-	worker string
-	prefix []byte
-	suffix []byte
+	coinb1               string
+	coinb2               string
+	worker               string
+	prefix               []byte
+	suffix               []byte
+	versionRollingActive bool
+	versionMask          uint32
 }
 
 var defaultVarDiff = VarDiffConfig{
