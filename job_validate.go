@@ -15,8 +15,18 @@ func (jm *JobManager) ensureTemplateFresh(ctx context.Context, tpl GetBlockTempl
 		return fmt.Errorf("template curtime invalid: %d", tpl.CurTime)
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := jm.refreshRPCTimeout
+	if timeout <= 0 {
+		timeout = jobTemplateRefreshTimeout
+	}
+	verifyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var bestHash string
-	if err := jm.rpc.callCtx(ctx, "getbestblockhash", nil, &bestHash); err != nil {
+	if err := jm.rpc.callCtx(verifyCtx, "getbestblockhash", nil, &bestHash); err != nil {
 		return fmt.Errorf("getbestblockhash: %w", err)
 	}
 

@@ -59,7 +59,7 @@ func TestJobManagerRefreshFromTemplate_UpdatesBlockTip_WithZMQEnabled(t *testing
 	jm := NewJobManager(rpc, Config{ZMQRawBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, nil, []byte{0x51}, nil)
 
 	tpl := GetBlockTemplateResult{
-		Height:                   103,
+		Height:                   104,
 		CurTime:                  t3.Unix(),
 		Bits:                     "1d00ffff",
 		Previous:                 bestHash,
@@ -70,6 +70,7 @@ func TestJobManagerRefreshFromTemplate_UpdatesBlockTip_WithZMQEnabled(t *testing
 	if err := jm.refreshFromTemplate(context.Background(), tpl); err != nil {
 		t.Fatalf("refreshFromTemplate error: %v", err)
 	}
+	waitForHistoryWorker(t, jm)
 
 	jm.zmqPayloadMu.RLock()
 	gotTip := jm.zmqPayload.BlockTip

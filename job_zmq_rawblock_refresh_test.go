@@ -31,7 +31,7 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 			resp.Result = data
 		case "getblocktemplate":
 			tpl := GetBlockTemplateResult{
-				Height:                   2,
+				Height:                   3,
 				CurTime:                  now.Unix(),
 				Bits:                     "1d00ffff",
 				Previous:                 bestHash,
@@ -73,8 +73,8 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 	if job == nil {
 		t.Fatalf("expected job after rawblock notification")
 	}
-	if job.Template.Height != 2 {
-		t.Fatalf("expected job height 2, got %d", job.Template.Height)
+	if job.Template.Height != 3 {
+		t.Fatalf("expected candidate job height 3, got %d", job.Template.Height)
 	}
 	if jm.blockTipHeight() != 2 {
 		t.Fatalf("expected tip height 2, got %d", jm.blockTipHeight())

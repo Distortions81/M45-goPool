@@ -44,7 +44,18 @@ func TestRefreshJobCtxBoundsRetriesAndReleasesSerialization(t *testing.T) {
 			t.Errorf("decode RPC request: %v", err)
 			return
 		}
-		result, err := json.Marshal(tpl)
+		var value any
+		switch req.Method {
+		case "getblocktemplate":
+			value = tpl
+		case "getbestblockhash":
+			value = tpl.Previous
+		default:
+			t.Errorf("unexpected RPC method %q", req.Method)
+			http.Error(w, "unexpected RPC method", http.StatusInternalServerError)
+			return
+		}
+		result, err := json.Marshal(value)
 		if err != nil {
 			t.Errorf("marshal template: %v", err)
 			return

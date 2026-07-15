@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"sync"
@@ -133,8 +134,21 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	refreshRPCTimeout  time.Duration
 	applyMu            sync.Mutex
-	zmqPayload         JobFeedPayloadStatus
-	zmqPayloadMu       sync.RWMutex
+	// historyMu serializes the best-effort block-history worker. At most one
+	// RPC walk is active and one newest request is pending, so template churn
+	// cannot create an unbounded goroutine/RPC backlog.
+	historyMu         sync.Mutex
+	historyRunning    bool
+	historyPending    blockHistoryRefreshRequest
+	historyPendingSet bool
+	historyLatest     uint64
+	historyCtx        context.Context
+	historyRPCTimeout time.Duration
+	// blockTipSequence advances when an authoritative raw-block notification
+	// replaces the payload tip. It is guarded by zmqPayloadMu.
+	blockTipSequence uint64
+	zmqPayload       JobFeedPayloadStatus
+	zmqPayloadMu     sync.RWMutex
 	// nodeSync* tracks whether the node is in a usable state for mining.
 	// When the node reports IBD/syncing, we treat Stratum as degraded to avoid
 	// miners wasting power on stale work.
@@ -165,6 +179,7 @@ func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScrip
 		subs:              make(map[chan *Job]struct{}),
 		notifyQueue:       make(chan *Job, 100), // Buffered queue for async notifications
 		refreshRPCTimeout: jobTemplateRefreshTimeout,
+		historyRPCTimeout: jobBlockHistoryRefreshTimeout,
 	}
 }
 

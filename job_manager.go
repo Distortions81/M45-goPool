@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -127,11 +126,12 @@ func (jm *JobManager) refreshNodeSyncInfo(ctx context.Context) {
 	if err != nil {
 		// Some bitcoind warmup/indexing states can still serve sockets but are not usable.
 		// Treat these as degraded signals.
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			job := jm.CurrentJob()
-			if job == nil || job.CreatedAt.IsZero() {
-				jm.recordJobError(err)
-			}
+		if ctx.Err() != nil {
+			return
+		}
+		job := jm.CurrentJob()
+		if job == nil || job.CreatedAt.IsZero() {
+			jm.recordJobError(err)
 		}
 		return
 	}
@@ -180,19 +180,22 @@ func (jm *JobManager) FeedStatus() JobFeedStatus {
 }
 
 func (jm *JobManager) updateBlockTipFromTemplate(tpl GetBlockTemplateResult) {
+	// GBT height is the candidate block's height; its Previous hash is the
+	// current chain tip one height below it.
 	if tpl.Height <= 0 {
 		return
 	}
+	tipHeight := tpl.Height - 1
 
 	jm.zmqPayloadMu.Lock()
 
 	tip := jm.zmqPayload.BlockTip
 	oldHeight := tip.Height
-	isNewBlock := tip.Height == 0 || tpl.Height > tip.Height
+	isNewBlock := tip.Height == 0 || tipHeight > tip.Height
 	if isNewBlock {
-		tip.Height = tpl.Height
+		tip.Height = tipHeight
 		if debugLogging {
-			logger.Debug("updateBlockTipFromTemplate: height updated", "old", oldHeight, "new", tpl.Height)
+			logger.Debug("updateBlockTipFromTemplate: height updated", "old", oldHeight, "new", tipHeight)
 		}
 	}
 	// Note: tpl.CurTime is template time (node wall-clock), not a block header
@@ -227,20 +230,49 @@ func (jm *JobManager) refreshBlockHistoryFromRPC(ctx context.Context) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if jm.rpc == nil {
+	timeout := jm.historyRPCTimeout
+	if timeout <= 0 {
+		timeout = jobBlockHistoryRefreshTimeout
+	}
+	historyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	tip, recentTimes, ok := jm.fetchBlockHistoryFromRPC(historyCtx, "")
+	if !ok {
 		return false
+	}
+	jm.storeBlockHistory(tip, recentTimes)
+	return true
+}
+
+type blockHistoryRefreshRequest struct {
+	generation  uint64
+	prevHash    string
+	tipSequence uint64
+}
+
+func (jm *JobManager) fetchBlockHistoryFromRPC(ctx context.Context, expectedHash string) (ZMQBlockTip, []time.Time, bool) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if jm.rpc == nil {
+		return ZMQBlockTip{}, nil, false
 	}
 
 	hash, err := jm.rpc.GetBestBlockHash(ctx)
 	if err != nil {
 		logger.Warn("failed to fetch best block hash for block history", "error", err)
-		return false
+		return ZMQBlockTip{}, nil, false
+	}
+	if expectedHash != "" && hash != expectedHash {
+		logger.Debug("skipping superseded block history refresh", "expected_tip", expectedHash, "rpc_tip", hash)
+		return ZMQBlockTip{}, nil, false
 	}
 
 	header, err := jm.rpc.GetBlockHeader(ctx, hash)
 	if err != nil {
 		logger.Warn("failed to fetch best block header for block history", "error", err)
-		return false
+		return ZMQBlockTip{}, nil, false
 	}
 
 	tip := ZMQBlockTip{
@@ -267,11 +299,114 @@ func (jm *JobManager) refreshBlockHistoryFromRPC(ctx context.Context) bool {
 		recentTimes = recentTimes[len(recentTimes)-4:]
 	}
 
+	return tip, recentTimes, true
+}
+
+func (jm *JobManager) storeBlockHistory(tip ZMQBlockTip, recentTimes []time.Time) {
 	jm.zmqPayloadMu.Lock()
 	jm.zmqPayload.BlockTip = tip
 	jm.zmqPayload.RecentBlockTimes = recentTimes
 	jm.zmqPayload.BlockTimerActive = true
 	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) scheduleBlockHistoryRefresh(job *Job) {
+	if jm == nil || jm.rpc == nil || job == nil || job.Generation == 0 || job.Template.Previous == "" {
+		return
+	}
+	jm.zmqPayloadMu.RLock()
+	tipSequence := jm.blockTipSequence
+	jm.zmqPayloadMu.RUnlock()
+	req := blockHistoryRefreshRequest{
+		generation:  job.Generation,
+		prevHash:    job.Template.Previous,
+		tipSequence: tipSequence,
+	}
+
+	jm.historyMu.Lock()
+	if req.generation < jm.historyLatest {
+		jm.historyMu.Unlock()
+		return
+	}
+	jm.historyLatest = req.generation
+	if jm.historyRunning {
+		// Only the newest request matters. Generation is monotonically assigned
+		// when jobs are built, including across lower-height reorgs.
+		if !jm.historyPendingSet || req.generation >= jm.historyPending.generation {
+			jm.historyPending = req
+			jm.historyPendingSet = true
+		}
+		jm.historyMu.Unlock()
+		return
+	}
+	jm.historyRunning = true
+	jm.historyMu.Unlock()
+
+	go jm.runBlockHistoryRefreshes(req)
+}
+
+func (jm *JobManager) runBlockHistoryRefreshes(req blockHistoryRefreshRequest) {
+	for {
+		timeout := jm.historyRPCTimeout
+		if timeout <= 0 {
+			timeout = jobBlockHistoryRefreshTimeout
+		}
+		jm.historyMu.Lock()
+		baseCtx := jm.historyCtx
+		jm.historyMu.Unlock()
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, timeout)
+		tip, recentTimes, ok := jm.fetchBlockHistoryFromRPC(ctx, req.prevHash)
+		cancel()
+
+		if ok {
+			jm.commitBlockHistoryIfCurrent(req, tip, recentTimes)
+		}
+
+		jm.historyMu.Lock()
+		if jm.historyPendingSet {
+			req = jm.historyPending
+			jm.historyPending = blockHistoryRefreshRequest{}
+			jm.historyPendingSet = false
+			jm.historyMu.Unlock()
+			continue
+		}
+		jm.historyRunning = false
+		jm.historyMu.Unlock()
+		return
+	}
+}
+
+func (jm *JobManager) commitBlockHistoryIfCurrent(req blockHistoryRefreshRequest, tip ZMQBlockTip, recentTimes []time.Time) bool {
+	// Keep the current-parent check and payload commit in one read-side critical
+	// section. Otherwise a reorg job can become current after the check while an
+	// older history walk is still storing its result.
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+	cur := jm.curJob
+	// Transaction/coinbase-only churn creates a newer job generation on the same
+	// parent without scheduling another history walk. That history remains valid,
+	// so parent identity, rather than exact generation, is authoritative here.
+	if cur == nil || cur.Template.Previous != req.prevHash {
+		return false
+	}
+
+	jm.zmqPayloadMu.Lock()
+	defer jm.zmqPayloadMu.Unlock()
+	// A raw-block notification may lead the GBT refresh. Do not roll that newer
+	// authoritative tip back to this request's parent while the new template is
+	// still being fetched. A same-hash raw notification is safe and history can
+	// still backfill its preceding timestamps.
+	if jm.blockTipSequence != req.tipSequence &&
+		jm.zmqPayload.BlockTip.Hash != "" &&
+		jm.zmqPayload.BlockTip.Hash != req.prevHash {
+		return false
+	}
+	jm.zmqPayload.BlockTip = tip
+	jm.zmqPayload.RecentBlockTimes = recentTimes
+	jm.zmqPayload.BlockTimerActive = true
 	return true
 }
 
@@ -284,6 +419,7 @@ func (jm *JobManager) recordRawBlockPayload(size int) {
 
 func (jm *JobManager) recordBlockTip(tip ZMQBlockTip) {
 	jm.zmqPayloadMu.Lock()
+	jm.blockTipSequence++
 
 	// Check if this is a new block (different from current block tip)
 	isNewBlock := jm.zmqPayload.BlockTip.Height == 0 ||
@@ -316,68 +452,13 @@ func (jm *JobManager) payloadStatus() JobFeedPayloadStatus {
 	return jm.zmqPayload
 }
 
-// fetchInitialBlockInfo queries the node for the current block header and previous 3 blocks
-// to initialize the block tip with blockchain timestamp data and historical block times.
-func (jm *JobManager) fetchInitialBlockInfo(ctx context.Context) {
-	if jm.rpc == nil {
-		return
-	}
-
-	// Get the current best block hash
-	hash, err := jm.rpc.GetBestBlockHash(ctx)
-	if err != nil {
-		logger.Warn("failed to fetch best block hash on startup", "error", err)
-		return
-	}
-
-	// Get the block header for the current tip
-	header, err := jm.rpc.GetBlockHeader(ctx, hash)
-	if err != nil {
-		logger.Warn("failed to fetch block header on startup", "error", err)
-		return
-	}
-
-	// Convert to ZMQBlockTip format
-	tip := ZMQBlockTip{
-		Hash:       header.Hash,
-		Height:     header.Height,
-		Time:       time.Unix(header.Time, 0).UTC(),
-		Bits:       header.Bits,
-		Difficulty: header.Difficulty,
-	}
-
-	// Fetch the previous 3 block times for historical data
-	recentTimes := []time.Time{tip.Time}
-	prevHash := header.PreviousBlockHash
-	for i := 0; i < 3 && prevHash != ""; i++ {
-		prevHeader, err := jm.rpc.GetBlockHeader(ctx, prevHash)
-		if err != nil {
-			logger.Warn("failed to fetch previous block header", "height", header.Height-int64(i+1), "error", err)
-			break
-		}
-		recentTimes = append([]time.Time{time.Unix(prevHeader.Time, 0).UTC()}, recentTimes...)
-		prevHash = prevHeader.PreviousBlockHash
-	}
-
-	// Keep only the last 4 timestamps (current + up to 3 previous)
-	if len(recentTimes) > 4 {
-		recentTimes = recentTimes[len(recentTimes)-4:]
-	}
-
-	// Record this as the initial block tip and activate the timer
-	jm.zmqPayloadMu.Lock()
-	jm.zmqPayload.BlockTip = tip
-	jm.zmqPayload.RecentBlockTimes = recentTimes
-	jm.zmqPayload.BlockTimerActive = true
-	jm.zmqPayloadMu.Unlock()
-
-	logger.Info("initialized block tip from blockchain", "height", tip.Height, "hash", tip.Hash[:16]+"...", "historical_blocks", len(recentTimes)-1)
-}
-
 func (jm *JobManager) Start(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	jm.historyMu.Lock()
+	jm.historyCtx = ctx
+	jm.historyMu.Unlock()
 
 	// A single dispatcher preserves FIFO job order. Parallel consumers can
 	// receive consecutive templates in order but acquire the subscriber lock in
@@ -389,10 +470,6 @@ func (jm *JobManager) Start(ctx context.Context) {
 		go jm.notificationWorker(ctx, i)
 	}
 	logger.Info("started async notification workers", "count", numWorkers)
-
-	// Fetch initial block info from the blockchain so the UI has a tip/time even
-	// if ZMQ isn't providing rawblock updates (or before the first ZMQ message).
-	jm.fetchInitialBlockInfo(ctx)
 
 	if err := jm.refreshJobCtx(ctx); err != nil {
 		logger.Error("initial job refresh error", "error", err)

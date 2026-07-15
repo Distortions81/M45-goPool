@@ -30,7 +30,23 @@ func TestLongPollCursorAdvancesWithoutJobChurn(t *testing.T) {
 		Template:    currentTemplate,
 		VersionMask: computePoolMask(currentTemplate, cfg),
 	}
-	jm := NewJobManager(nil, cfg, nil, nil, nil)
+	verifyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode verification request: %v", err)
+			return
+		}
+		if req.Method != "getbestblockhash" {
+			t.Errorf("verification RPC method = %q, want getbestblockhash", req.Method)
+			return
+		}
+		result, _ := json.Marshal(currentTemplate.Previous)
+		_ = json.NewEncoder(w).Encode(rpcResponse{Result: result, ID: req.ID})
+	}))
+	t.Cleanup(verifyServer.Close)
+	verifyCfg := cfg
+	verifyCfg.RPCURL = verifyServer.URL
+	jm := NewJobManager(NewRPCClient(verifyCfg, nil), cfg, nil, nil, nil)
 	jm.curJob = current
 	jm.longPollID = currentTemplate.LongPollID
 	atomic.StoreUint64(&jm.jobGeneration, current.Generation)
@@ -69,13 +85,22 @@ func TestLongPollCursorAdvancesWithoutJobChurn(t *testing.T) {
 			cancel()
 			return
 		}
-		params, _ := req.Params.([]any)
-		options, _ := params[0].(map[string]any)
-		longPollID, _ := options["longpollid"].(string)
-		requestedCursor <- longPollID
-		result, _ := json.Marshal(next)
-		_ = json.NewEncoder(w).Encode(rpcResponse{Result: result, ID: req.ID})
-		cancel()
+		switch req.Method {
+		case "getblocktemplate":
+			params, _ := req.Params.([]any)
+			options, _ := params[0].(map[string]any)
+			longPollID, _ := options["longpollid"].(string)
+			requestedCursor <- longPollID
+			result, _ := json.Marshal(next)
+			_ = json.NewEncoder(w).Encode(rpcResponse{Result: result, ID: req.ID})
+		case "getbestblockhash":
+			result, _ := json.Marshal(currentTemplate.Previous)
+			_ = json.NewEncoder(w).Encode(rpcResponse{Result: result, ID: req.ID})
+			cancel()
+		default:
+			t.Errorf("unexpected RPC method %q", req.Method)
+			cancel()
+		}
 	}))
 	t.Cleanup(server.Close)
 	jm.rpc = NewRPCClient(Config{RPCURL: server.URL}, nil)
