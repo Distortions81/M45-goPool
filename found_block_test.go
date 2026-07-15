@@ -308,12 +308,19 @@ func TestFoundBlockSubmission_DualPayout(t *testing.T) {
 // testing that the block structure, merkle branches, and coinbase construction
 // match what pogolo would produce.
 func TestFoundBlockSubmission_PogoloCompat(t *testing.T) {
-	// Create a job similar to what pogolo would create
-	txid1, _ := hex.DecodeString("1111111111111111111111111111111111111111111111111111111111111111")
-	txid2, _ := hex.DecodeString("2222222222222222222222222222222222222222222222222222222222222222")
-	txids := [][]byte{txid1, txid2}
-
-	merkleBranches := buildMerkleBranches(txids)
+	transactions := makeMerkleTestTransactions(2)
+	merkleBranches := buildMerkleBranches(transactions)
+	gbtTransactions := make([]GBTTransaction, len(transactions))
+	for i, tx := range transactions {
+		var serialized bytes.Buffer
+		if err := tx.MsgTx().Serialize(&serialized); err != nil {
+			t.Fatalf("serialize transaction %d: %v", i, err)
+		}
+		gbtTransactions[i] = GBTTransaction{
+			Data: hex.EncodeToString(serialized.Bytes()),
+			Txid: tx.Hash().String(),
+		}
+	}
 
 	job := &Job{
 		JobID: "pogolo-compat-test",
@@ -330,7 +337,7 @@ func TestFoundBlockSubmission_PogoloCompat(t *testing.T) {
 		WitnessCommitment:       "",
 		CoinbaseMsg:             "goPool",
 		ScriptTime:              0,
-		Transactions:            nil, // Would contain actual txs
+		Transactions:            gbtTransactions,
 		MerkleBranches:          merkleBranches,
 		CoinbaseValue:           50 * 1e8,
 	}
@@ -355,6 +362,13 @@ func TestFoundBlockSubmission_PogoloCompat(t *testing.T) {
 	var msgBlock wire.MsgBlock
 	if err := msgBlock.Deserialize(bytes.NewReader(raw)); err != nil {
 		t.Fatalf("btcd deserialize error: %v", err)
+	}
+	if len(msgBlock.Transactions) != 1+len(transactions) {
+		t.Fatalf("block transaction count=%d, want %d", len(msgBlock.Transactions), 1+len(transactions))
+	}
+	wantMerkleRoot := merkleRootFromBtcdTxs(msgBlock.Transactions)
+	if !bytes.Equal(msgBlock.Header.MerkleRoot[:], wantMerkleRoot) {
+		t.Fatalf("block merkle root mismatch: header=%x transactions=%x", msgBlock.Header.MerkleRoot[:], wantMerkleRoot)
 	}
 
 	// Verify header is exactly 80 bytes

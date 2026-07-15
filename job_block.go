@@ -5,36 +5,48 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/wire"
 )
 
-func buildMerkleBranches(txids [][]byte) []string {
-	if len(txids) == 0 {
+func buildMerkleBranches(transactions []*btcutil.Tx) []string {
+	if len(transactions) == 0 {
 		return []string{}
 	}
-	// Pre-allocate with exact size: nil placeholder + all txids
-	layer := make([][]byte, 1+len(txids))
-	layer[0] = nil
-	copy(layer[1:], txids)
 
-	// Pre-allocate steps slice - merkle tree depth is log2(txcount)
-	// For 4000 txs, depth is ~12. Pre-allocate 16 to be safe.
-	steps := make([]string, 0, 16)
-	L := len(layer)
-	for L > 1 {
-		steps = append(steps, hex.EncodeToString(layer[1]))
-		if L%2 == 1 {
-			layer = append(layer, layer[L-1])
-			L++
-		}
-		next := make([][]byte, 0, L/2)
-		for i := 1; i+1 < L; i += 2 {
-			joined := append(append([]byte{}, layer[i]...), layer[i+1]...)
-			next = append(next, doubleSHA256(joined))
-		}
-		layer = append([][]byte{nil}, next...)
-		L = len(layer)
+	// The coinbase value does not affect its merkle siblings.
+	allTransactions := make([]*btcutil.Tx, len(transactions)+1)
+	allTransactions[0] = btcutil.NewTx(wire.NewMsgTx(1))
+	copy(allTransactions[1:], transactions)
+
+	tree := blockchain.BuildMerkleTreeStore(allTransactions, false)
+	leafWidth := 1
+	for leafWidth < len(allTransactions) {
+		leafWidth <<= 1
 	}
-	return steps
+
+	branches := make([]string, 0, 16)
+	levelOffset := 0
+	for width := leafWidth; width > 1; width >>= 1 {
+		sibling := tree[levelOffset+1]
+		if sibling == nil {
+			return nil
+		}
+		branches = append(branches, hex.EncodeToString(sibling[:]))
+		levelOffset += width
+	}
+	return branches
+}
+
+func transactionIDs(transactions []*btcutil.Tx) [][]byte {
+	txids := make([][]byte, len(transactions))
+	for i, tx := range transactions {
+		hash := tx.Hash()
+		txids[i] = append([]byte(nil), hash[:]...)
+	}
+	return txids
 }
 
 func decodeMerkleBranchesBytes(branches []string) ([][32]byte, error) {

@@ -26,13 +26,13 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		return nil, err
 	}
 
-	txids, err := validateTransactions(tpl.Transactions)
+	transactions, err := validateTransactions(tpl.Transactions)
 	if err != nil {
 		return nil, err
 	}
 	tpl.Version = applyConfiguredVersionBits(tpl.Version, jm.cfg)
 
-	merkleBranches := buildMerkleBranches(txids)
+	merkleBranches := buildMerkleBranches(transactions)
 	merkleBranchesBytes, err := decodeMerkleBranchesBytes(merkleBranches)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 		MerkleBranches:          merkleBranches,
 		merkleBranchesBytes:     merkleBranchesBytes,
 		Transactions:            tpl.Transactions,
-		TransactionIDs:          txids,
+		TransactionIDs:          transactionIDs(transactions),
 		PayoutScript:            jm.payoutScript,
 		DonationScript:          jm.donationScript,
 		OperatorDonationPercent: jm.cfg.OperatorDonationPercent,

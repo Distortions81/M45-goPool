@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/btcsuite/btcd/btcutil"
 )
 
 type countingSubmitRPC struct {
@@ -349,9 +351,12 @@ func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode raw tx: %v", err)
 	}
-	txid := reverseBytes(doubleSHA256(rawTx))
-	job.MerkleBranches = buildMerkleBranches([][]byte{txid})
-	job.Transactions = []GBTTransaction{{Data: rawTxHex, Txid: hex.EncodeToString(txid)}}
+	parsedTx, err := btcutil.NewTxFromBytes(rawTx)
+	if err != nil {
+		t.Fatalf("parse raw tx: %v", err)
+	}
+	job.MerkleBranches = buildMerkleBranches([]*btcutil.Tx{parsedTx})
+	job.Transactions = []GBTTransaction{{Data: rawTxHex, Txid: parsedTx.Hash().String()}}
 
 	mc.sendNotifyFor(job, true)
 	notifies := notifyMessagesFromOutput(t, notifyConn.String())

@@ -38,6 +38,23 @@ go test -v .
 go test -race ./...
 ```
 
+### Bitcoin Core Regtest Integration
+
+The opt-in Bitcoin Core integration test starts an isolated `bitcoind` regtest
+node, fetches a real SegWit block template, builds and solves a block through
+goPool's production block path, and requires Bitcoin Core to accept it via
+`submitblock`. The test first creates a native-SegWit spend so the template has
+a witness-bearing non-coinbase transaction rather than only a coinbase:
+
+```bash
+GOPOOL_TEST_BITCOIN_CORE_REGTEST=1 \
+go test -run TestBitcoinCoreRegtestAcceptsGoPoolBlock -v
+```
+
+`bitcoind` must be in `PATH`, or its path can be supplied with
+`GOPOOL_BITCOIND=/path/to/bitcoind`. The test is skipped during the normal
+`go test ./...` suite so unit tests do not depend on an external node.
+
 ## Test Categories
 
 ### Core Pool Logic

@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+
+	"github.com/btcsuite/btcd/btcutil"
 )
 
 func (jm *JobManager) ensureTemplateFresh(ctx context.Context, tpl GetBlockTemplateResult) error {
@@ -48,8 +50,8 @@ func validateWitnessCommitment(commitment string) error {
 	return nil
 }
 
-func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
-	txids := make([][]byte, len(txs)) // Pre-allocate exact size since we know we'll add all txs
+func validateTransactions(txs []GBTTransaction) ([]*btcutil.Tx, error) {
+	transactions := make([]*btcutil.Tx, len(txs))
 	for i, tx := range txs {
 		if len(tx.Txid) != 64 {
 			return nil, fmt.Errorf("tx %d has invalid txid length: %d bytes", i, len(tx.Txid)/2)
@@ -70,18 +72,13 @@ func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
 			return nil, fmt.Errorf("tx %d data empty", i)
 		}
 
-		base, hasWitness, err := stripWitnessData(raw)
+		parsedTx, err := btcutil.NewTxFromBytes(raw)
 		if err != nil {
 			return nil, fmt.Errorf("tx %d decode: %w", i, err)
 		}
 
-		hashInput := raw
-		if hasWitness {
-			hashInput = base
-		}
-
-		computedRaw := doubleSHA256(hashInput)
-		if !bytes.Equal(reverseBytes(computedRaw), txidBytes) && !bytes.Equal(computedRaw, txidBytes) {
+		computedTxID := parsedTx.Hash()
+		if !bytes.Equal(reverseBytes(computedTxID[:]), txidBytes) {
 			return nil, fmt.Errorf("tx %d txid mismatch with provided data", i)
 		}
 
@@ -93,15 +90,15 @@ func validateTransactions(txs []GBTTransaction) ([][]byte, error) {
 			if len(wtxidBytes) != 32 {
 				return nil, fmt.Errorf("tx %d wtxid must be 32 bytes, got %d", i, len(wtxidBytes))
 			}
-			wtxidRaw := doubleSHA256(raw)
-			if !bytes.Equal(reverseBytes(wtxidRaw), wtxidBytes) && !bytes.Equal(wtxidRaw, wtxidBytes) {
+			computedWTxID := parsedTx.MsgTx().WitnessHash()
+			if !bytes.Equal(reverseBytes(computedWTxID[:]), wtxidBytes) {
 				return nil, fmt.Errorf("tx %d wtxid mismatch with provided data", i)
 			}
 		}
 
-		txids[i] = reverseBytes(computedRaw)
+		transactions[i] = parsedTx
 	}
-	return txids, nil
+	return transactions, nil
 }
 
 func validateBits(bitsStr, targetStr string) (*big.Int, error) {
