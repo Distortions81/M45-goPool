@@ -343,7 +343,7 @@ Each override value logs when set, so goPool operators can audit what changed vi
 ## Runtime operations
 
 - **SIGUSR1** re-parses the embedded HTML templates and refreshes the embedded static cache. Errors are logged but the previous template set remains active so the site keeps serving—check `pool.log` if pages look odd after a reload.
-- **SIGUSR2** re-reads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, `tuning.toml`, and `version_bits.toml`, reapplies overrides, updates the status server's configuration snapshot, and reapplies runtime logging controls. Future miner connections consume parts of that new snapshot.
+- **SIGUSR2** re-reads `config.toml`, `secrets.toml`, `services.toml`, `policy.toml`, `tuning.toml`, and `version_bits.toml`, reapplies overrides, updates the status server's configuration snapshot, changes the runtime log level, and toggles network-debug logging. Future miner connections consume parts of that new snapshot.
 - **Shutdown** occurs on `SIGINT`/`SIGTERM`. goPool stops the status servers, Stratum listener, and pending replayers gracefully.
 - **TLS cert reloading** uses `certReloader` to monitor `data/tls_cert.pem`/`tls_key.pem` hourly. Certificate renewals (e.g., via certbot) are picked up without restarts.
 
