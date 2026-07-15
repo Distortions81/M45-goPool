@@ -23,6 +23,7 @@ func TestRuntimeConfigKeepsActiveSessionAndAdaptsNewJobs(t *testing.T) {
 	mc.cfg.ShareRequireWorkerMatch = true
 	mc.cfg.ShareJobFreshnessMode = shareJobFreshnessJobID
 	mc.cfg.ShareCheckParamFormat = true
+	mc.cfg.DataDir = t.TempDir()
 	mc.maxRecentJobs = 10
 	mc.rpc = &countingSubmitRPC{}
 

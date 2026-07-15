@@ -49,6 +49,7 @@ func (nopConn) SetWriteDeadline(time.Time) error { return nil }
 // minimal Job and a timingRPC so the test does not depend on network I/O.
 func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	workerName, workerWallet, workerScript := generateTestWorker(t)
+	dataDir := t.TempDir()
 
 	// Minimal job mirroring the single-coinbase case from block_test.go.
 	job := &Job{
@@ -78,7 +79,7 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 	mc := &MinerConn{
 		id:          "timing-test-miner",
 		rpc:         trpc,
-		cfg:         Config{PoolFeePercent: 0},
+		cfg:         Config{PoolFeePercent: 0, DataDir: dataDir},
 		extranonce1: []byte{0x01, 0x02, 0x03, 0x04},
 	}
 	mc.setWorkerWallet(workerName, workerWallet, workerScript)
@@ -109,10 +110,11 @@ func TestHandleBlockShareSubmitLatency(t *testing.T) {
 
 	t.Logf("handleBlockShare to submitblock took %s", trpc.elapsed)
 
-	// This threshold is intentionally generous so the test does not flap
-	// on slower CI machines; block construction for a single-coinbase
-	// block should be comfortably below this under normal conditions.
-	const maxAllowed = time.Millisecond * 2
+	// This test intentionally has no SQLite state database, so the emergency
+	// file must be atomically written and fsynced before submitblock. Keep a
+	// generous ceiling for slower CI disks while still catching accidental
+	// blocking or retry delays in this last-resort durability path.
+	const maxAllowed = 100 * time.Millisecond
 	if trpc.elapsed > maxAllowed {
 		t.Fatalf("submit path took too long: %s (max %s)", trpc.elapsed, maxAllowed)
 	}

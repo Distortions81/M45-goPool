@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -226,6 +228,7 @@ func TestSolvedBlockRejectionTransitionsToPending(t *testing.T) {
 
 func TestSolvedBlockSubmissionContinuesWhenPersistenceFails(t *testing.T) {
 	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
 	if _, err := db.Exec(`
 		CREATE TRIGGER fail_solved_block_persistence
 		BEFORE INSERT ON pending_submissions
@@ -250,11 +253,219 @@ func TestSolvedBlockSubmissionContinuesWhenPersistenceFails(t *testing.T) {
 	defer server.Close()
 
 	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
-	mc := &MinerConn{id: "persistence-failure", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL}}
-	runSolvedBlockPersistenceTest(mc, solvedBlockPersistenceTestJob(), make([]byte, 80), []byte{0x01}, strings.Repeat("3", 64))
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	coinbase := []byte{0x01}
+	hash := strings.Repeat("3", 64)
+	mc := &MinerConn{id: "persistence-failure", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL, DataDir: dataDir}}
+	runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
 	flushFoundBlockLog(t)
 	if calls := submitCalls.Load(); calls != 1 {
 		t.Fatalf("submitblock calls after persistence failure = %d, want 1", calls)
+	}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+	spoolPath, err := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if err != nil {
+		t.Fatalf("emergency spool path: %v", err)
+	}
+	if _, err := os.Stat(spoolPath); err != nil {
+		t.Fatalf("accepted block was not retained while SQLite remained unavailable: %v", err)
+	}
+}
+
+func TestSolvedBlockSQLiteAndRPCFailureRecoversEmergencySpool(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_solved_block_persistence_and_retry
+		BEFORE INSERT ON pending_submissions
+		BEGIN
+			SELECT RAISE(FAIL, 'forced persistence failure');
+		END
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":"bad-cb-amount","error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	for i := range header {
+		header[i] = byte(255 - i)
+	}
+	coinbase := []byte{0x02, 0x03, 0x04}
+	hash := strings.Repeat("8", 64)
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "double-persistence-failure", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL, DataDir: dataDir}}
+	runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+	spoolPath, err := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if err != nil {
+		t.Fatalf("emergency spool path: %v", err)
+	}
+	data, err := os.ReadFile(spoolPath)
+	if err != nil {
+		t.Fatalf("read emergency spool: %v", err)
+	}
+	spoolRec, err := decodePendingSubmissionSpoolRecord(filepath.Base(spoolPath), data)
+	if err != nil {
+		t.Fatalf("decode emergency spool: %v", err)
+	}
+	if spoolRec.Submission.BlockHex != expectedBlock {
+		t.Fatal("emergency spool did not preserve exact reconstructed block")
+	}
+	if !strings.Contains(spoolRec.Submission.RPCError, "bad-cb-amount") {
+		t.Fatalf("emergency spool RPC error = %q", spoolRec.Submission.RPCError)
+	}
+
+	if _, err := db.Exec(`DROP TRIGGER fail_solved_block_persistence_and_retry`); err != nil {
+		t.Fatalf("drop failure trigger: %v", err)
+	}
+	if recovered, err := recoverPendingSubmissionSpool(dataDir); err != nil || recovered != 1 {
+		t.Fatalf("recover emergency spool = (%d, %v), want (1, nil)", recovered, err)
+	}
+	var blockHex, status string
+	if err := db.QueryRow(`SELECT block_hex, status FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&blockHex, &status); err != nil {
+		t.Fatalf("query recovered block: %v", err)
+	}
+	if blockHex != expectedBlock || status != pendingSubmissionStatusPending {
+		t.Fatalf("recovered block/status = (%q, %q)", blockHex, status)
+	}
+}
+
+func installControllablePendingPersistenceFailure(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`
+		CREATE TABLE pending_persistence_test_control (enabled INTEGER NOT NULL);
+		INSERT INTO pending_persistence_test_control (enabled) VALUES (1);
+		CREATE TRIGGER fail_pending_persistence_while_enabled
+		BEFORE INSERT ON pending_submissions
+		WHEN (SELECT enabled FROM pending_persistence_test_control LIMIT 1) = 1
+		BEGIN
+			SELECT RAISE(FAIL, 'forced first persistence failure');
+		END;
+	`); err != nil {
+		t.Fatalf("install controllable persistence failure: %v", err)
+	}
+}
+
+func observeExactEmergencySpool(dataDir, expectedBlock string) error {
+	path, err := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read final spool before RPC: %w", err)
+	}
+	spoolRec, err := decodePendingSubmissionSpoolRecord(filepath.Base(path), data)
+	if err != nil {
+		return fmt.Errorf("decode final spool before RPC: %w", err)
+	}
+	if spoolRec.Submission.BlockHex != expectedBlock {
+		return fmt.Errorf("spooled block differs from exact RPC block")
+	}
+	return nil
+}
+
+func TestSolvedBlockSpoolPrecedesRPCAndAcceptedCleanupWaitsForSQLite(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
+	installControllablePendingPersistenceFailure(t, db)
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	coinbase := []byte{0x21, 0x22}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+
+	observed := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		observeErr := observeExactEmergencySpool(dataDir, expectedBlock)
+		if _, err := db.Exec(`UPDATE pending_persistence_test_control SET enabled = 0`); observeErr == nil && err != nil {
+			observeErr = fmt.Errorf("allow terminal SQLite write: %w", err)
+		}
+		observed <- observeErr
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":null,"error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	hash := strings.Repeat("9", 64)
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "spool-before-accepted-rpc", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL, DataDir: dataDir}}
+	runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+	if err := <-observed; err != nil {
+		t.Fatal(err)
+	}
+
+	var blockHex, status string
+	if err := db.QueryRow(`SELECT block_hex, status FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&blockHex, &status); err != nil {
+		t.Fatalf("query accepted fallback: %v", err)
+	}
+	if blockHex != expectedBlock || status != pendingSubmissionStatusSubmitted {
+		t.Fatalf("accepted fallback block/status = (%q, %q)", blockHex, status)
+	}
+	spoolPath, _ := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if _, err := os.Stat(spoolPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("accepted spool was not removed after SQLite commit: %v", err)
+	}
+}
+
+func TestSolvedBlockSpoolFailureCleanupWaitsForSQLite(t *testing.T) {
+	db := openPendingSubmissionTestDB(t)
+	dataDir := t.TempDir()
+	installControllablePendingPersistenceFailure(t, db)
+	job := solvedBlockPersistenceTestJob()
+	header := make([]byte, 80)
+	coinbase := []byte{0x31, 0x32}
+	expectedBlock, err := assembleSolvedBlock(job, header, coinbase)
+	if err != nil {
+		t.Fatalf("assemble expected block: %v", err)
+	}
+
+	observed := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		observeErr := observeExactEmergencySpool(dataDir, expectedBlock)
+		if _, err := db.Exec(`UPDATE pending_persistence_test_control SET enabled = 0`); observeErr == nil && err != nil {
+			observeErr = fmt.Errorf("allow pending SQLite write: %w", err)
+		}
+		observed <- observeErr
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":"bad-cb-amount","error":null,"id":1}`))
+	}))
+	defer server.Close()
+
+	hash := strings.Repeat("b", 64)
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+	mc := &MinerConn{id: "spool-before-rejected-rpc", conn: nopConn{}, rpc: rpc, cfg: Config{RPCURL: server.URL, DataDir: dataDir}}
+	runSolvedBlockPersistenceTest(mc, job, header, coinbase, hash)
+	if err := <-observed; err != nil {
+		t.Fatal(err)
+	}
+
+	var blockHex, status, rpcError string
+	if err := db.QueryRow(`SELECT block_hex, status, rpc_error FROM pending_submissions WHERE submission_key = ?`, hash).Scan(&blockHex, &status, &rpcError); err != nil {
+		t.Fatalf("query rejected fallback: %v", err)
+	}
+	if blockHex != expectedBlock || status != pendingSubmissionStatusPending || !strings.Contains(rpcError, "bad-cb-amount") {
+		t.Fatalf("rejected fallback block/status/error = (%q, %q, %q)", blockHex, status, rpcError)
+	}
+	spoolPath, _ := pendingSubmissionSpoolPath(dataDir, expectedBlock)
+	if _, err := os.Stat(spoolPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed spool was not removed after SQLite commit: %v", err)
 	}
 }
 

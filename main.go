@@ -356,6 +356,10 @@ func run() (exitCode int) {
 		fatal("initialize shared state database", err)
 	}
 	defer closeSharedStateDB()
+	if recoverErr := waitForPendingSubmissionSpoolRecovery(ctx, cfg.DataDir); recoverErr != nil {
+		logger.Error("emergency pending block recovery interrupted", "component", "startup", "kind", "block_recovery", "error", recoverErr)
+		return 1
+	}
 
 	startTime := time.Now()
 	metrics := NewPoolMetrics()

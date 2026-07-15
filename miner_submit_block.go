@@ -133,6 +133,17 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 	persistErr := appendPendingSubmissionRecord(pendingRec)
 	pendingPersisted := persistErr == nil
 	if !pendingPersisted {
+		spoolRec := pendingRec
+		spoolRec.Status = pendingSubmissionStatusPending
+		spoolRec.RPCError = persistErr.Error()
+		if spoolErr := writePendingSubmissionSpool(mc.cfg.DataDir, spoolRec); spoolErr != nil {
+			logger.Error("solved block emergency spool failed",
+				"height", job.Template.Height,
+				"hash", hashHex,
+				"sqlite_error", persistErr,
+				"spool_error", spoolErr,
+			)
+		}
 		logger.Warn("solved block persistence failed; submitting immediately",
 			"height", job.Template.Height,
 			"hash", hashHex,
@@ -186,7 +197,15 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 		// that the block was accepted; it only preserves the data needed for
 		// a later submitblock attempt.
 		if !pendingPersisted {
-			mc.logPendingSubmission(job, workerName, hashHex, blockHex, err)
+			spoolRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, err.Error(), pendingSubmissionStatusPending)
+			if spoolErr := writePendingSubmissionSpool(mc.cfg.DataDir, spoolRec); spoolErr != nil {
+				logger.Error("failed block emergency spool update failed", "height", job.Template.Height, "hash", hashHex, "error", spoolErr)
+			}
+			if fallbackErr := mc.logPendingSubmission(job, workerName, hashHex, blockHex, err); fallbackErr == nil {
+				if spoolErr := removePendingSubmissionSpool(mc.cfg.DataDir, blockHex); spoolErr != nil {
+					logger.Warn("failed block emergency spool cleanup failed", "height", job.Template.Height, "hash", hashHex, "error", spoolErr)
+				}
+			}
 		}
 		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: newStratumError(stratumErrCodeInvalidRequest, err.Error())})
 		return
@@ -206,6 +225,16 @@ func (mc *MinerConn) handleBlockShare(reqID any, job *Job, stratumJobID string, 
 			} else {
 				submissionFinished = true
 			}
+		}
+	}
+	if !pendingPersisted {
+		acceptedRec := mc.pendingSubmissionRecord(job, workerName, hashHex, blockHex, "", pendingSubmissionStatusSubmitted)
+		if acceptedPersistErr := appendPendingSubmissionRecord(acceptedRec); acceptedPersistErr != nil {
+			// Keep the pending spool until SQLite owns the exact accepted bytes.
+			// A startup duplicate submission is safe even across a side-chain reorg.
+			logger.Warn("accepted block sqlite fallback failed; retaining emergency spool", "height", job.Template.Height, "hash", hashHex, "error", acceptedPersistErr)
+		} else if spoolErr := removePendingSubmissionSpool(mc.cfg.DataDir, blockHex); spoolErr != nil {
+			logger.Warn("accepted block emergency spool cleanup failed", "height", job.Template.Height, "hash", hashHex, "error", spoolErr)
 		}
 	}
 	if mc.metrics != nil {
@@ -375,12 +404,12 @@ func (mc *MinerConn) notifyDiscordFoundBlock(worker string, height int64, hashHe
 // submitblock to a log file in the data directory. This allows operators to
 // manually retry submission with bitcoin-cli or future tooling when the node
 // RPC is down or returns an error. It is best effort only.
-func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex string, submitErr error) {
+func (mc *MinerConn) logPendingSubmission(job *Job, worker, hashHex, blockHex string, submitErr error) error {
 	if job == nil || blockHex == "" {
-		return
+		return fmt.Errorf("pending submission is missing job or block")
 	}
 	rec := mc.pendingSubmissionRecord(job, worker, hashHex, blockHex, submitErr.Error(), pendingSubmissionStatusPending)
-	_ = appendPendingSubmissionRecord(rec)
+	return appendPendingSubmissionRecord(rec)
 }
 
 func (mc *MinerConn) pendingSubmissionRecord(job *Job, worker, hashHex, blockHex, rpcError, status string) pendingSubmissionRecord {
