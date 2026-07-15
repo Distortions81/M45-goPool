@@ -11,9 +11,9 @@ func TestTemplateChangedIncludesMiningPayloadFields(t *testing.T) {
 		Previous:                 "prev",
 		CoinbaseValue:            50 * 1e8,
 		DefaultWitnessCommitment: "commitment-a",
-		VbAvailable:              map[string]int{"deployment": 12},
+		VbAvailable:              map[string]int{"deployment": 13},
 		VbRequired:               1,
-		Mutable:                  []string{"time"},
+		Mutable:                  []string{"time", "version/force"},
 		Rules:                    []string{"segwit"},
 		Transactions: []GBTTransaction{{
 			Txid: "txid",
@@ -24,43 +24,83 @@ func TestTemplateChangedIncludesMiningPayloadFields(t *testing.T) {
 	base.CoinbaseAux.Flags = "flags-a"
 
 	tests := []struct {
-		name      string
-		mutate    func(*GetBlockTemplateResult)
-		wantClean bool
+		name        string
+		mutate      func(*GetBlockTemplateResult)
+		wantChanged bool
+		wantClean   bool
 	}{
-		{"version", func(tpl *GetBlockTemplateResult) { tpl.Version++ }, true},
-		{"target", func(tpl *GetBlockTemplateResult) { tpl.Target = "different" }, true},
-		{"coinbase value", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseValue-- }, true},
-		{"witness commitment", func(tpl *GetBlockTemplateResult) { tpl.DefaultWitnessCommitment = "commitment-b" }, true},
-		{"coinbase flags", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseAux.Flags = "flags-b" }, true},
-		{"vbavailable", func(tpl *GetBlockTemplateResult) { tpl.VbAvailable["deployment"] = 13 }, true},
-		{"vbrequired", func(tpl *GetBlockTemplateResult) { tpl.VbRequired++ }, true},
-		{"mutable", func(tpl *GetBlockTemplateResult) { tpl.Mutable = append(tpl.Mutable, "transactions") }, true},
-		{"rules", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "new-rule") }, true},
-		{"transaction witness hash", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Hash = "wtxid-b" }, false},
-		{"transaction data", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Data = "data-b" }, false},
+		{"version", func(tpl *GetBlockTemplateResult) { tpl.Version++ }, true, true},
+		{"mintime", func(tpl *GetBlockTemplateResult) { tpl.Mintime++ }, true, true},
+		{"target", func(tpl *GetBlockTemplateResult) { tpl.Target = "different" }, true, true},
+		{"coinbase value", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseValue-- }, true, false},
+		{"witness commitment", func(tpl *GetBlockTemplateResult) { tpl.DefaultWitnessCommitment = "commitment-b" }, true, false},
+		{"coinbase flags", func(tpl *GetBlockTemplateResult) { tpl.CoinbaseAux.Flags = "flags-b" }, true, false},
+		{"inactive vbavailable metadata", func(tpl *GetBlockTemplateResult) { tpl.VbAvailable["deployment"] = 14 }, false, false},
+		{"vbrequired", func(tpl *GetBlockTemplateResult) { tpl.VbRequired++ }, true, true},
+		{"irrelevant mutable metadata", func(tpl *GetBlockTemplateResult) { tpl.Mutable = append(tpl.Mutable, "transactions") }, false, false},
+		{"irrelevant rule metadata", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "new-rule") }, false, false},
+		{"version mask policy", func(tpl *GetBlockTemplateResult) { tpl.Rules = append(tpl.Rules, "deployment") }, true, true},
+		{"transaction witness hash", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Hash = "wtxid-b" }, true, false},
+		{"transaction data", func(tpl *GetBlockTemplateResult) { tpl.Transactions[0].Data = "data-b" }, true, false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			current := base
-			current.VbAvailable = map[string]int{"deployment": 12}
+			current.VbAvailable = map[string]int{"deployment": 13}
 			current.Mutable = append([]string(nil), base.Mutable...)
 			current.Rules = append([]string(nil), base.Rules...)
 			current.Transactions = append([]GBTTransaction(nil), base.Transactions...)
 			next := current
-			next.VbAvailable = map[string]int{"deployment": 12}
+			next.VbAvailable = map[string]int{"deployment": 13}
 			next.Mutable = append([]string(nil), current.Mutable...)
 			next.Rules = append([]string(nil), current.Rules...)
 			next.Transactions = append([]GBTTransaction(nil), current.Transactions...)
 			tc.mutate(&next)
 
-			jm := &JobManager{curJob: &Job{Template: current}}
+			cfg := Config{}
+			jm := &JobManager{cfg: cfg, curJob: &Job{
+				Template:    current,
+				VersionMask: computePoolMask(current, cfg),
+			}}
 			changed, clean := jm.templateChanged(next)
-			if !changed || clean != tc.wantClean {
-				t.Fatalf("templateChanged = (%v, %v), want (true, %v)", changed, clean, tc.wantClean)
+			if changed != tc.wantChanged || clean != tc.wantClean {
+				t.Fatalf("templateChanged = (%v, %v), want (%v, %v)", changed, clean, tc.wantChanged, tc.wantClean)
 			}
 		})
+	}
+}
+
+func TestTemplateChangedKeepsCoinbaseTransactionBundleNonClean(t *testing.T) {
+	current := GetBlockTemplateResult{
+		Previous:                 "prev",
+		Height:                   100,
+		Bits:                     "1d00ffff",
+		Target:                   "target",
+		Version:                  0x20000000,
+		CoinbaseValue:            50 * 1e8,
+		DefaultWitnessCommitment: "commitment-a",
+		Transactions: []GBTTransaction{{
+			Txid: "tx-a",
+			Hash: "wtx-a",
+			Data: "data-a",
+		}},
+	}
+	current.CoinbaseAux.Flags = "flags-a"
+	next := current
+	next.CoinbaseValue--
+	next.DefaultWitnessCommitment = "commitment-b"
+	next.CoinbaseAux.Flags = "flags-b"
+	next.Transactions = []GBTTransaction{{Txid: "tx-b", Hash: "wtx-b", Data: "data-b"}}
+	cfg := Config{}
+	jm := &JobManager{cfg: cfg, curJob: &Job{
+		Template:    current,
+		VersionMask: computePoolMask(current, cfg),
+	}}
+
+	changed, clean := jm.templateChanged(next)
+	if !changed || clean {
+		t.Fatalf("templateChanged = (%v, %v), want (true, false)", changed, clean)
 	}
 }
 
@@ -140,8 +180,11 @@ func TestTemplateChangedComparesEffectiveVersion(t *testing.T) {
 			next := current
 			next.Version = tc.nextRaw
 			jm := &JobManager{
-				cfg:    tc.nextCfg,
-				curJob: &Job{Template: current},
+				cfg: tc.nextCfg,
+				curJob: &Job{
+					Template:    current,
+					VersionMask: computePoolMask(current, tc.currentCfg),
+				},
 			}
 
 			changed, clean := jm.templateChanged(next)

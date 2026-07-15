@@ -793,7 +793,7 @@ func (mc *MinerConn) cleanFlagFor(job *Job) bool {
 	if mc.lastJob == nil {
 		return true
 	}
-	return mc.lastJobPrevHash != job.Template.Previous || mc.lastJobHeight != job.Template.Height
+	return miningTemplateRequiresClean(mc.lastJob.Template, mc.lastJob.VersionMask, job.Template, job.VersionMask)
 }
 
 func (mc *MinerConn) isDuplicateShare(jobID string, extranonce2 []byte, ntime, nonce uint32, version uint32) bool {

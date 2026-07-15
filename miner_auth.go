@@ -1323,9 +1323,10 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	prevhashLE := hexToLEHex(job.PrevHash)
 	shareTarget := mc.shareTargetOrDefault()
 
-	// clean_jobs should only be true when the template actually changed (prevhash/height)
-	// unless we're forcing a clean notify to pair with a difficulty change.
-	cleanJobs := forceClean || (job.Clean && mc.cleanFlagFor(job))
+	// Preserve both manager-classified clean transitions and per-connection
+	// transitions. The latter catches a clean job that subscriber coalescing
+	// skipped before delivering a later non-clean update.
+	cleanJobs := forceClean || job.Clean || mc.cleanFlagFor(job)
 	mc.trackJob(job, stratumJobID, cleanJobs)
 	mc.setJobDifficulty(stratumJobID, mc.currentDifficulty())
 

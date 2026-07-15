@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"maps"
 	"math/big"
-	"slices"
 
 	"github.com/btcsuite/btcd/btcutil"
 )
@@ -126,10 +124,10 @@ func validateBits(bitsStr, targetStr string) (*big.Int, error) {
 }
 
 // templateChanged returns (needsNewJob, clean).
-// needsNewJob is true if any meaningful change occurred (prev/height/bits/transactions).
-// clean is true only if prev/height/bits changed, indicating miners must discard old work.
-// Transaction-only changes require a new job (for updated merkle branches) but not clean=true,
-// allowing miners to continue using their current nonce range.
+// needsNewJob is true when the effective header policy or coherent
+// coinbase/transaction payload changes. clean is reserved for changes that
+// invalidate the prior header search space; payload-only updates keep old work
+// valid while advertising a new candidate.
 func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, clean bool) {
 	jm.mu.RLock()
 	cur := jm.curJob
@@ -139,23 +137,23 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 		return true, true
 	}
 	prev := cur.Template
-	effectiveVersion := applyConfiguredVersionBits(tpl.Version, jm.cfg)
+	next := tpl
+	next.Version = applyConfiguredVersionBits(tpl.Version, jm.cfg)
+	nextVersionMask := computePoolMask(tpl, jm.cfg)
 
-	// Header/consensus and coinbase metadata changes require miners to discard
-	// the previously advertised work.
-	if tpl.Previous != prev.Previous ||
-		tpl.Height != prev.Height ||
-		tpl.Bits != prev.Bits ||
-		tpl.Target != prev.Target ||
-		effectiveVersion != prev.Version ||
-		tpl.CoinbaseValue != prev.CoinbaseValue ||
-		tpl.DefaultWitnessCommitment != prev.DefaultWitnessCommitment ||
-		tpl.CoinbaseAux.Flags != prev.CoinbaseAux.Flags ||
-		tpl.VbRequired != prev.VbRequired ||
-		!maps.Equal(tpl.VbAvailable, prev.VbAvailable) ||
-		!slices.Equal(tpl.Mutable, prev.Mutable) ||
-		!slices.Equal(tpl.Rules, prev.Rules) {
+	// Header and version-policy changes require miners to discard previously
+	// advertised work. Keep this definition aligned with cleanFlagFor so a
+	// coalesced subscriber update cannot hide an intervening clean transition.
+	if miningTemplateRequiresClean(prev, cur.VersionMask, next, nextVersionMask) {
 		return true, true
+	}
+
+	// Coinbase and transaction updates form a new, internally coherent job, but
+	// old work on the same header policy remains valid and need not be discarded.
+	if tpl.CoinbaseValue != prev.CoinbaseValue ||
+		tpl.DefaultWitnessCommitment != prev.DefaultWitnessCommitment ||
+		tpl.CoinbaseAux.Flags != prev.CoinbaseAux.Flags {
+		return true, false
 	}
 
 	// Check if transactions changed - requires new job but not clean.
@@ -171,4 +169,15 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 
 	// No meaningful changes.
 	return false, false
+}
+
+func miningTemplateRequiresClean(prev GetBlockTemplateResult, prevVersionMask uint32, next GetBlockTemplateResult, nextVersionMask uint32) bool {
+	return next.Previous != prev.Previous ||
+		next.Height != prev.Height ||
+		next.Mintime != prev.Mintime ||
+		next.Bits != prev.Bits ||
+		next.Target != prev.Target ||
+		next.Version != prev.Version ||
+		next.VbRequired != prev.VbRequired ||
+		nextVersionMask != prevVersionMask
 }
