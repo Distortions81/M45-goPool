@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 
 	"github.com/btcsuite/btcd/btcutil"
 )
@@ -138,10 +140,20 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 	}
 	prev := cur.Template
 
-	// Check if previousblockhash, height, or bits changed - these require clean=true.
+	// Header/consensus and coinbase metadata changes require miners to discard
+	// the previously advertised work.
 	if tpl.Previous != prev.Previous ||
 		tpl.Height != prev.Height ||
-		tpl.Bits != prev.Bits {
+		tpl.Bits != prev.Bits ||
+		tpl.Target != prev.Target ||
+		tpl.Version != prev.Version ||
+		tpl.CoinbaseValue != prev.CoinbaseValue ||
+		tpl.DefaultWitnessCommitment != prev.DefaultWitnessCommitment ||
+		tpl.CoinbaseAux.Flags != prev.CoinbaseAux.Flags ||
+		tpl.VbRequired != prev.VbRequired ||
+		!maps.Equal(tpl.VbAvailable, prev.VbAvailable) ||
+		!slices.Equal(tpl.Mutable, prev.Mutable) ||
+		!slices.Equal(tpl.Rules, prev.Rules) {
 		return true, true
 	}
 
@@ -150,7 +162,8 @@ func (jm *JobManager) templateChanged(tpl GetBlockTemplateResult) (needsNewJob, 
 		return true, false
 	}
 	for i, tx := range tpl.Transactions {
-		if tx.Txid != prev.Transactions[i].Txid {
+		prevTx := prev.Transactions[i]
+		if tx.Txid != prevTx.Txid || tx.Hash != prevTx.Hash || tx.Data != prevTx.Data {
 			return true, false
 		}
 	}
