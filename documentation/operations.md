@@ -72,7 +72,7 @@ Use `GOOS`/`GOARCH` for cross-compilation and avoid `go install` unless populati
 
 ### Build metadata
 
-Release builds embed two fields via `-ldflags`:
+Builds can embed two fields via `-ldflags`:
 
 - `main.buildTime`: the UTC timestamp recorded when the binary was compiled. The status UI exposes it as `build_time`.
 - `main.buildVersion`: the version label (e.g., `v1.2.3`) and shows up under `build_version`.
@@ -236,7 +236,7 @@ The status UI uses two listeners:
 
 Set `status_tls_listen = ""` to disable HTTPS and keep only the HTTP listener. Set `status_listen = ""` to disable HTTP entirely and rely solely on TLS. The CLI no longer provides an `-http-only` toggle.
 
-For Let's Encrypt HTTP-01, goPool creates and serves `data/certbot-webroot/.well-known/acme-challenge/` on the status HTTP listener before HTTP-to-HTTPS redirects. Use `scripts/certbot-gopool.sh --webroot` with the default webroot, or point certbot at the same directory manually. The bundled UI files under `data/www` are embedded into release builds and are separate from this runtime certbot webroot.
+For Let's Encrypt HTTP-01, goPool creates and serves `data/certbot-webroot/.well-known/acme-challenge/` on the status HTTP listener before HTTP-to-HTTPS redirects. Use `scripts/certbot-gopool.sh --webroot` with the default webroot, or point certbot at the same directory manually. The bundled UI files under `data/www` are embedded into the goPool binary and are separate from this runtime certbot webroot.
 
 goPool also auto-creates `/stats/` and `/api/*` handlers plus optional TLS/cert reloading. Run `systemctl kill -s SIGUSR1 <service>` to reload the templates (the previous template set is kept when parsing fails) and `SIGUSR2` to reload the configuration files without stopping the daemon.
 
