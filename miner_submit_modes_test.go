@@ -182,6 +182,24 @@ func TestHandleSubmit_DirectProcessingModeSelection(t *testing.T) {
 		default:
 		}
 	})
+
+	t.Run("closed pool falls back to inline processing", func(t *testing.T) {
+		mc, job := newSubmitReadyMinerConnForModesTest(t)
+		mc.cfg.SubmitProcessInline = false
+
+		conn := &recordConn{}
+		mc.conn = conn
+		submissionWorkers = &submissionWorkerPool{
+			tasks:  make(chan submissionTask, 1),
+			closed: true,
+		}
+
+		req := testSubmitRequestForJob(job, mc.currentWorker())
+		mc.handleSubmit(req)
+		if out := conn.String(); out == "" {
+			t.Fatal("expected closed-pool fallback to process the submission inline")
+		}
+	})
 }
 
 func TestHandleSubmit_ShareCheckDuplicateMode(t *testing.T) {

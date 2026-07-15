@@ -268,7 +268,7 @@ func main() {
 		}
 	}
 	configureFileLogging(logPath, errorLogPath, debugLogPath, *stdoutLogFlag)
-	ensureSubmissionWorkerPool()
+	submissionPool := ensureSubmissionWorkerPool()
 	defer logger.Stop()
 
 	var netLogPath string
@@ -817,6 +817,7 @@ func main() {
 	}
 
 	var connWg sync.WaitGroup
+	var acceptWg sync.WaitGroup
 
 	go func() {
 		<-ctx.Done()
@@ -908,9 +909,18 @@ func main() {
 	// lifetime is tied to the primary TCP listener. Optional TLS
 	// listener runs in a background goroutine.
 	if tlsLn != nil {
-		go serveStratum("tls", tlsLn)
+		acceptWg.Add(1)
+		go func() {
+			defer acceptWg.Done()
+			serveStratum("tls", tlsLn)
+		}()
 	}
 	serveStratum("tcp", ln)
+	// The primary listener normally returns because ctx was canceled. Also
+	// cancel explicitly for an unexpected listener closure so the TLS accept
+	// loop cannot outlive the primary server or add connections during drain.
+	stop()
+	acceptWg.Wait()
 
 	logger.Info("shutdown requested; draining active miners", "component", "stratum", "kind", "shutdown")
 	shutdownStart := time.Now()
@@ -925,11 +935,27 @@ func main() {
 		close(done)
 	}()
 
+	drainWarning := time.NewTimer(10 * time.Second)
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
-		logger.Warn("timed out waiting for miners to drain", "component", "stratum", "kind", "shutdown", "waited", time.Since(shutdownStart))
+		if !drainWarning.Stop() {
+			select {
+			case <-drainWarning.C:
+			default:
+			}
+		}
+	case <-drainWarning.C:
+		logger.Warn("still waiting for miners to drain", "component", "stratum", "kind", "shutdown", "waited", time.Since(shutdownStart))
+		// Inline block delivery may intentionally retry for up to a full block
+		// interval. Keep waiting so shutdown cannot abandon that winning task.
+		<-done
 	}
+
+	// No accept loop or miner handler can submit after connWg completes. Close
+	// the queue and wait for all queued and in-flight asynchronous submissions
+	// before flushing state or stopping the database and logger they depend on.
+	logger.Info("draining submission workers", "component", "stratum", "kind", "shutdown")
+	submissionPool.drainAndClose()
 
 	if accounting != nil {
 		if err := accounting.Flush(); err != nil {

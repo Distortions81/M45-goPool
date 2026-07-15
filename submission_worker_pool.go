@@ -20,7 +20,7 @@ var (
 	submissionWorkerOnce sync.Once
 )
 
-func ensureSubmissionWorkerPool() {
+func ensureSubmissionWorkerPool() *submissionWorkerPool {
 	submissionWorkerOnce.Do(func() {
 		workers := runtime.NumCPU()
 		if workers <= 0 {
@@ -28,6 +28,7 @@ func ensureSubmissionWorkerPool() {
 		}
 		submissionWorkers = newSubmissionWorkerPool(workers)
 	})
+	return submissionWorkers
 }
 
 type submissionTask struct {
@@ -106,6 +107,16 @@ type bannedSubmitPolicy struct {
 
 type submissionWorkerPool struct {
 	tasks chan submissionTask
+
+	// submitMu keeps sends and channel closure mutually exclusive. A read lock
+	// is held across each send so a task accepted before shutdown is always
+	// present in the channel before drainAndClose closes it. Workers do not need
+	// this lock, so a full queue can continue draining while shutdown waits for
+	// blocked senders to finish.
+	submitMu  sync.RWMutex
+	closed    bool
+	closeOnce sync.Once
+	workerWg  sync.WaitGroup
 }
 
 func newSubmissionWorkerPool(workerCount int) *submissionWorkerPool {
@@ -116,17 +127,47 @@ func newSubmissionWorkerPool(workerCount int) *submissionWorkerPool {
 	pool := &submissionWorkerPool{
 		tasks: make(chan submissionTask, queueDepth),
 	}
+	pool.workerWg.Add(workerCount)
 	for i := 0; i < workerCount; i++ {
 		go pool.worker(i)
 	}
 	return pool
 }
 
-func (p *submissionWorkerPool) submit(task submissionTask) {
+// submit queues task unless shutdown has already closed the pool. Holding the
+// read lock through the send prevents a concurrent close from racing the send.
+func (p *submissionWorkerPool) submit(task submissionTask) bool {
+	if p == nil || p.tasks == nil {
+		return false
+	}
+	p.submitMu.RLock()
+	defer p.submitMu.RUnlock()
+	if p.closed {
+		return false
+	}
 	p.tasks <- task
+	return true
+}
+
+// drainAndClose stops new submissions and waits until every task accepted by
+// the pool has finished processing. It is safe to call more than once.
+func (p *submissionWorkerPool) drainAndClose() {
+	if p == nil {
+		return
+	}
+	p.closeOnce.Do(func() {
+		p.submitMu.Lock()
+		p.closed = true
+		if p.tasks != nil {
+			close(p.tasks)
+		}
+		p.submitMu.Unlock()
+	})
+	p.workerWg.Wait()
 }
 
 func (p *submissionWorkerPool) worker(id int) {
+	defer p.workerWg.Done()
 	for task := range p.tasks {
 		func(t submissionTask) {
 			defer func() {
