@@ -650,8 +650,13 @@ func (s *StatusServer) handleAdminLoginDelete(w http.ResponseWriter, r *http.Req
 			continue
 		}
 		seen[id] = struct{}{}
-		if err := s.workerLists.RemoveUser(id); err != nil {
+		hashes, err := s.workerLists.RemoveUser(id)
+		if err != nil {
 			logger.Warn("delete saved worker", "error", err, "user_id", id)
+			continue
+		}
+		for _, hash := range hashes {
+			s.refreshLiveSavedWorkerTrackingByHash(hash)
 		}
 	}
 	http.Redirect(w, r, "/admin/logins?notice=saved_worker_deleted", http.StatusSeeOther)

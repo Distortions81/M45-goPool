@@ -297,18 +297,63 @@ func (s *workerListStore) Remove(userID, workerHash string) error {
 	return err
 }
 
-func (s *workerListStore) RemoveUser(userID string) error {
+func (s *workerListStore) RemoveUser(userID string) ([]string, error) {
 	if s == nil || s.db == nil {
-		return nil
+		return nil, nil
 	}
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return nil
+		return nil, nil
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
+			logger.Debug("saved workers remove user rollback failed", "error", rbErr, "user_id", userID)
+		}
+	}()
+
+	rows, err := tx.Query(`
+		SELECT COALESCE(worker_hash, '')
+		FROM saved_workers
+		WHERE user_id = ?
+		ORDER BY worker_hash
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	hashes := make([]string, 0, 8)
+	seenHashes := make(map[string]struct{}, 8)
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		hash = strings.ToLower(strings.TrimSpace(hash))
+		if hash == "" {
+			continue
+		}
+		if _, seen := seenHashes[hash]; seen {
+			continue
+		}
+		seenHashes[hash] = struct{}{}
+		hashes = append(hashes, hash)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
 	stmts := []string{
 		"DELETE FROM saved_workers WHERE user_id = ?",
 		"DELETE FROM discord_links WHERE user_id = ?",
@@ -318,11 +363,12 @@ func (s *workerListStore) RemoveUser(userID string) error {
 	}
 	for _, stmt := range stmts {
 		if _, execErr := tx.Exec(stmt, userID); execErr != nil {
-			if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
-				logger.Debug("saved workers remove user rollback failed", "error", rbErr, "user_id", userID)
-			}
-			return execErr
+			return nil, execErr
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	committed = true
+	return hashes, nil
 }
