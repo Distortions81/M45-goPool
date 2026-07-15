@@ -1,12 +1,14 @@
-# <a href="https://github.com/Distortions81/M45-Core-goPool/blob/main/data/www/logo.png"><img src="https://raw.githubusercontent.com/Distortions81/M45-Core-goPool/main/data/www/logo.png" alt="goPool logo" width="32" height="32" style="vertical-align: middle;"></a> M45-goPool
+# <img src="data/www/logo.png" alt="goPool logo" width="32" height="32"> M45-goPool
 
-[![Go CI](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/ci.yml)
-[![Go Vulncheck](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Distortions81/M45-Core-goPool/actions/workflows/govulncheck.yml)
+[![Go CI](https://github.com/Distortions81/M45-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/Distortions81/M45-goPool/actions/workflows/ci.yml)
+[![Go Vulncheck](https://github.com/Distortions81/M45-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Distortions81/M45-goPool/actions/workflows/govulncheck.yml)
 [![Coverage](https://codecov.io/github/Distortions81/M45-goPool/graph/badge.svg)](https://app.codecov.io/github/Distortions81/M45-goPool)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-Core-goPool)](https://go.dev)
-[![License](https://img.shields.io/github/license/Distortions81/M45-Core-goPool)](https://github.com/Distortions81/M45-Core-goPool/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-goPool)](https://goreportcard.com/report/github.com/Distortions81/M45-goPool)
+[![License](https://img.shields.io/github/license/Distortions81/M45-goPool)](LICENSE)
 
-goPool is a **from-scratch Golang solo Bitcoin mining pool**. It connects directly to Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 (with optional TLS), and ships with a status UI + JSON APIs for monitoring.
+goPool is a from-scratch Go solo Bitcoin mining pool. It connects directly to
+Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 with optional TLS, and
+includes a status UI and JSON APIs for monitoring.
 
 ## What this project is
 
@@ -63,9 +65,6 @@ The table below lists direct Go module dependencies from `go.mod` and the licens
 
 Additional third-party asset notices are in `THIRD_PARTY_NOTICES.md`.
 
-GitHub Releases provide source archives only. Build the executable locally as
-described below.
-
 Stratum notes:
 
 - goPool accepts both `mining.authorize` and CKPool-style `mining.auth`, and tolerates authorize-before-subscribe (work starts after subscribe completes).
@@ -99,8 +98,8 @@ Reproduce the benchmark and regenerate the SVG with:
 1. Install Go 1.26 or later and ZeroMQ (`libzmq3-dev` or equivalent depending on your platform).
 2. Clone the repo and build the pool:
     ```bash
-    git clone https://github.com/Distortions81/M45-Core-goPool.git
-    cd M45-Core-goPool
+    git clone https://github.com/Distortions81/M45-goPool.git
+    cd M45-goPool
     go build -o goPool
     ```
 3. Run `./goPool` once to generate example config files under `data/config/examples/`, then copy the base example into `data/config/config.toml` and edit it.
@@ -124,27 +123,15 @@ docker run --rm -it \
 
 ### Using Docker Compose
 
-Edit `.env` or `env.example` to set environment variables as needed. Then:
+Copy `env.example` to `.env` and adjust it as needed. Then:
 
 ```bash
-# Build and start in background
-make up
+docker compose up -d --build
 
-# View logs
-make logs
+docker compose logs -f
 
-# Stop and remove containers
-make down
+docker compose down
 ```
-
-
-## Codebase size
-
-- **Go source (excluding tests):** 35,438 lines across 147 non-test `.go` files.
-- **Go tests:** 17,518 lines across 107 `*_test.go` files.
-- **Go source (total):** 52,956 lines across 254 `.go` files.
-
-Counts above were collected on March 1, 2026.
 
 ## Configuration overview
 
@@ -167,19 +154,21 @@ Flags like `-network`, `-rpc-url`, `-rpc-cookie`, and `-secrets` override the co
 ## Building
 
 - Build directly with `go build -o goPool`. Use hardware-acceleration tags such as `noavx` or `nojsonsimd` only when necessary; see [documentation/operations.md](documentation/operations.md) for guidance.
+- GitHub Releases provide source archives only; build the executable locally.
 - To embed `build_time` and `build_version`, pass them with `-ldflags`:
 
   ```bash
   go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=v0.0.0-dev" -o goPool
   ```
 
-## Documentation & resources
+## Documentation and resources
 
-- **`documentation/README.md`** - Documentation index.
-- **`documentation/operations.md`** – Main reference for configuration options, CLI flags, logging, backup policies, and runtime procedures.
-- **`documentation/version-bits.md`** – Version-bit override file format and known bit usage in goPool.
-- **`documentation/json-apis.md`** – HTTP JSON API reference for the `/api/*` status endpoints.
-- **`documentation/TESTING.md`** – Test suite instructions and how to add or run existing tests.
-- **`LICENSE`** – Legal terms for using goPool.
+- [Documentation index](documentation/README.md)
+- [Operations guide](documentation/operations.md)
+- [Stratum v1 reference](documentation/stratum-v1.md)
+- [Version-bit overrides](documentation/version-bits.md)
+- [JSON API reference](documentation/json-apis.md)
+- [Testing guide](documentation/TESTING.md)
+- [License](LICENSE)
 
 Need help? Open an issue on GitHub or refer to the documentation in `documentation/` before asking for assistance.

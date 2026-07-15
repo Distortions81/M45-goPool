@@ -1,8 +1,11 @@
 # goPool Operations Documentation
 
-> **Quick start reminder:** the [main README](../README.md) gives a concise walk-through; this document expands each section into the operational context needed to run goPool day-to-day.
+For initial setup, start with the [main README](../README.md). This guide covers
+day-to-day operation and configuration.
 
-goPool ships as a self-contained pool daemon that connects directly to Bitcoin Core (JSON-RPC + ZMQ), hosts a Stratum v1 endpoint, and exposes a status UI with JSON APIs. This documentation covers the operational steps teams repeat in production; refer to sibling documents (especially `documentation/TESTING.md`) for testing recipes.
+goPool connects directly to Bitcoin Core over JSON-RPC and ZMQ, hosts a Stratum
+v1 endpoint, and exposes a status UI with JSON APIs. See the
+[testing guide](TESTING.md) for test and profiling workflows.
 
 Operational Stratum notes:
 
@@ -10,7 +13,6 @@ Operational Stratum notes:
 - When the node/job feed is stale, the main status page (`/`) displays a dedicated "node unavailable" page instead of the normal overview.
 - A background heartbeat (`stratumHeartbeatInterval`) performs periodic non-longpoll template refreshes so "quiet mempool / no template churn" does not look like a dead node.
 - When updates are degraded but basic node RPC calls still work, the node-unavailable page will also show common sync/indexing indicators (IBD flag and blocks/headers) to help diagnose "node indexing" situations.
-
 
 ## Containerization (Docker/Compose)
 
@@ -37,7 +39,8 @@ docker run --rm -it \
 
 ### Using Docker Compose
 
-+Edit `.env` or `env.example` to set environment variables (ports, build args, runtime flags). Then:
+Copy `env.example` to `.env`, then adjust ports, build arguments, and runtime
+flags as needed:
 
 ```bash
 docker compose up -d --build
@@ -47,24 +50,27 @@ This will build and start the container, mapping ports and mounting `./data` for
 
 ### Build arguments and environment variables
 
-- `BUILD_TIME` and `BUILD_VERSION` are passed at build time (set automatically by the Makefile and CI).
+- `BUILD_TIME` and `BUILD_VERSION` are passed to the Docker build from `.env`.
 - Runtime environment variables (see `env.example`) control ports, network mode, and extra flags.
 
 ### Persistent data
 
 The `data` directory is mounted into the container at `/app/data` to persist configuration, logs, and state. Always back up this directory.
 
----
+## Native build
 
 Requirements:
-* **Go 1.26.0+** — install from https://go.dev/dl/ for matching ABI guarantees.
-* **ZeroMQ headers** (`libzmq3-dev`, `zeromq`, etc.) to satisfy `github.com/pebbe/zmq4`. On Debian/Ubuntu run `sudo apt install -y libzmq3-dev`; other distros follow their package manager.
+
+- **Go 1.26.0+** — install from [go.dev](https://go.dev/dl/).
+- **ZeroMQ headers** (`libzmq3-dev`, `zeromq`, etc.) for
+  `github.com/pebbe/zmq4`. On Debian or Ubuntu, run
+  `sudo apt install -y libzmq3-dev`.
 
 Clone and build:
 
 ```bash
-git clone https://github.com/Distortions81/M45-Core-goPool.git
-cd M45-Core-goPool
+git clone https://github.com/Distortions81/M45-goPool.git
+cd M45-goPool
 go build -o goPool
 ```
 
@@ -77,10 +83,11 @@ Builds can embed two fields via `-ldflags`:
 - `main.buildTime`: the UTC timestamp recorded when the binary was compiled. The status UI exposes it as `build_time`.
 - `main.buildVersion`: the version label (e.g., `v1.2.3`) and shows up under `build_version`.
 
-GitHub Actions sets both automatically per run. If you build manually and want consistent metadata, pass the same flags yourself:
+The helper script `scripts/build-pool.sh` sets both fields automatically. To
+set them directly, pass the same flags to `go build`:
 
-```
-go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=vX.Y.Z" ./...
+```bash
+go build -ldflags="-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.buildVersion=vX.Y.Z" -o goPool .
 ```
 
 Both values appear on the status page and JSON endpoints so you can verify the exact build at runtime.
