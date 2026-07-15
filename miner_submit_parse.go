@@ -325,14 +325,13 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	if workerName == "" {
 		workerName = worker
 	}
-	if mc.isBanned(now) {
-		until, reason, _ := mc.banDetails()
-		logger.Warn("submit rejected: banned", "miner", mc.minerName(workerName), "ban_until", until, "reason", reason)
-		if mc.metrics != nil {
-			mc.metrics.RecordSubmitError("banned")
+	var banPolicy *bannedSubmitPolicy
+	if until, reason, _ := mc.banDetails(); now.Before(until) {
+		banPolicy = &bannedSubmitPolicy{
+			until:  until,
+			reason: reason,
+			err:    mc.bannedStratumError(),
 		}
-		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: mc.bannedStratumError()})
-		return submissionTask{}, false
 	}
 
 	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, notifiedCoinbase, coinbaseOK, ok := mc.jobForIDWithLast(jobID)
@@ -544,6 +543,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		scriptTime:          notifiedScriptTime,
 		assignedDifficulty:  mc.assignedDifficulty(jobID),
 		policyReject:        policyReject,
+		banPolicy:           banPolicy,
 		receivedAt:          now,
 	}
 	return task, true

@@ -335,6 +335,107 @@ func TestBlockBypassesPolicyRejects(t *testing.T) {
 	}
 }
 
+func TestBannedMinerBlockBypassesBanPolicy(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.cfg.DataDir = t.TempDir()
+	mc.cfg.ShareCheckDuplicate = false
+	rpc := &countingSubmitRPC{}
+	mc.rpc = rpc
+	job.Target = new(big.Int).Set(maxUint256)
+	wallet, payoutScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), wallet, payoutScript)
+	if script := mc.singlePayoutScript(job, mc.currentWorker()); len(script) == 0 {
+		t.Fatalf("missing payout script for current worker")
+	}
+
+	now := time.Unix(job.Template.CurTime, 0)
+	mc.stateMu.Lock()
+	mc.banUntil = now.Add(time.Hour)
+	mc.banReason = "test ban"
+	mc.invalidSubs = 3
+	mc.stateMu.Unlock()
+
+	conn := &recordConn{}
+	mc.conn = conn
+	task, ok := mc.prepareSubmissionTask(testSubmitRequestForJob(job, mc.currentWorker()), now)
+	if !ok {
+		t.Fatalf("banned miner's advertised work was rejected before PoW")
+	}
+	if task.banPolicy == nil {
+		t.Fatalf("submission task did not preserve receipt-time ban state")
+	}
+	if out := conn.String(); out != "" {
+		t.Fatalf("banned block candidate was rejected before PoW: %q", out)
+	}
+
+	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
+
+	if got := rpc.submitCalls.Load(); got != 1 {
+		t.Fatalf("submitblock calls = %d, want 1", got)
+	}
+	mc.metrics.mu.Lock()
+	shareErrors := mc.metrics.shareErrorCount
+	mc.metrics.mu.Unlock()
+	if shareErrors != 0 {
+		t.Fatalf("found block recorded %d banned submit errors, want 0", shareErrors)
+	}
+}
+
+func TestBannedMinerNonBlockRejectedWithoutPenalty(t *testing.T) {
+	mc, job := newSubmitReadyMinerConnForModesTest(t)
+	mc.cfg.ShareCheckDuplicate = false
+	rpc := &countingSubmitRPC{}
+	mc.rpc = rpc
+	job.Target = new(big.Int)
+	wallet, payoutScript := generateTestWallet(t)
+	mc.setWorkerWallet(mc.currentWorker(), wallet, payoutScript)
+	if script := mc.singlePayoutScript(job, mc.currentWorker()); len(script) == 0 {
+		t.Fatalf("missing payout script for current worker")
+	}
+
+	now := time.Unix(job.Template.CurTime, 0)
+	const initialInvalidSubs = 3
+	const initialValidSubs = 7
+	mc.stateMu.Lock()
+	mc.banUntil = now.Add(time.Hour)
+	mc.banReason = "test ban"
+	mc.invalidSubs = initialInvalidSubs
+	mc.validSubsForBan = initialValidSubs
+	mc.stateMu.Unlock()
+
+	conn := &recordConn{}
+	mc.conn = conn
+	task, ok := mc.prepareSubmissionTask(testSubmitRequestForJob(job, mc.currentWorker()), now)
+	if !ok {
+		t.Fatalf("banned miner's advertised work was rejected before PoW")
+	}
+	mc.processSubmissionTask(task)
+
+	if got := rpc.submitCalls.Load(); got != 0 {
+		t.Fatalf("submitblock calls = %d, want 0", got)
+	}
+	if out := conn.String(); !strings.Contains(out, "banned") {
+		t.Fatalf("expected banned response, got %q", out)
+	}
+	mc.stateMu.Lock()
+	invalidSubs := mc.invalidSubs
+	validSubs := mc.validSubsForBan
+	mc.stateMu.Unlock()
+	if invalidSubs != initialInvalidSubs {
+		t.Fatalf("invalid submission count = %d, want %d", invalidSubs, initialInvalidSubs)
+	}
+	if validSubs != initialValidSubs {
+		t.Fatalf("valid submission count = %d, want %d", validSubs, initialValidSubs)
+	}
+	mc.metrics.mu.Lock()
+	shareErrors := mc.metrics.shareErrorCount
+	mc.metrics.mu.Unlock()
+	if shareErrors != 1 {
+		t.Fatalf("banned non-block recorded %d submit errors, want 1", shareErrors)
+	}
+}
+
 func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	mc, notifyConn := minerConnForNotifyTest(t)
 	mc.cfg.DataDir = t.TempDir()

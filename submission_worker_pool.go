@@ -56,6 +56,7 @@ type submissionTask struct {
 	scriptTime          int64
 	assignedDifficulty  float64
 	policyReject        submitPolicyReject
+	banPolicy           *bannedSubmitPolicy
 	receivedAt          time.Time
 }
 
@@ -80,6 +81,12 @@ type submitPolicyReject struct {
 	reason  submitRejectReason
 	errCode int
 	errMsg  string
+}
+
+type bannedSubmitPolicy struct {
+	until  time.Time
+	reason string
+	err    []any
 }
 
 type submissionWorkerPool struct {

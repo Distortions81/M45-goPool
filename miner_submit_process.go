@@ -105,6 +105,24 @@ func (mc *MinerConn) processShare(task submissionTask, ctx shareContext) {
 		}
 	}
 
+	// A miner that was already banned when this submit arrived may still have
+	// been hashing work we advertised while it was authorized. Preserve the ban
+	// for ordinary shares, but only after every plausible header has been checked
+	// so a network-target block is never discarded. This direct response matches
+	// the old pre-PoW ban path and deliberately does not add another ban strike.
+	if !ctx.isBlock && task.banPolicy != nil {
+		logger.Warn("submit rejected: banned",
+			"miner", mc.minerName(workerName),
+			"ban_until", task.banPolicy.until,
+			"reason", task.banPolicy.reason,
+		)
+		if mc.metrics != nil {
+			mc.metrics.RecordSubmitError("banned")
+		}
+		mc.writeResponse(StratumResponse{ID: reqID, Result: false, Error: task.banPolicy.err})
+		return
+	}
+
 	if !ctx.isBlock && policyReject.reason != rejectUnknown {
 		mc.rejectShareWithBan(&StratumRequest{ID: reqID, Method: "mining.submit"}, workerName, policyReject.reason, policyReject.errCode, policyReject.errMsg, now)
 		return
