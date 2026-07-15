@@ -17,57 +17,63 @@ import (
 var nextConnectionID uint64
 
 func (mc *MinerConn) cleanup() {
-	mc.cleanupOnce.Do(func() {
-		// Publish the terminal state before closing subscriptions or the socket.
-		// A closed buffered job channel may still be drained by listenJobs, and
-		// concurrent notify callers may already be waiting on notifyMu.
-		mc.closed.Store(true)
-		// Break transport I/O promptly. Registry and stats cleanup can involve
-		// storage work and must not leave a failed session writable meanwhile.
-		if mc.conn != nil {
-			_ = mc.conn.Close()
-		}
-		mc.unregisterRegisteredWorker()
+	mc.cleanupOnce.Do(mc.cleanupResources)
+}
 
-		// Close stats channel and wait for worker to finish processing.
-		// Some tests build lightweight MinerConn instances without a stats
-		// worker/channel; guard those cases.
-		if mc.statsUpdates != nil {
-			close(mc.statsUpdates)
-			mc.statsWg.Wait()
-		}
+func (mc *MinerConn) cleanupResources() {
+	// Publish the terminal state before closing subscriptions or the socket.
+	// A closed buffered job channel may still be drained by listenJobs, and
+	// concurrent notify callers may already be waiting on notifyMu.
+	mc.closed.Store(true)
+	// Break transport I/O promptly. Registry and stats cleanup can involve
+	// storage work and must not leave a failed session writable meanwhile.
+	if mc.conn != nil {
+		_ = mc.conn.Close()
+	}
+	mc.unregisterRegisteredWorker()
 
-		if mc.metrics != nil {
-			if connSeq := atomic.LoadUint64(&mc.connectionSeq); connSeq != 0 {
-				mc.metrics.RemoveConnectionHashrate(connSeq)
-			}
-		}
+	// Close stats channel and wait for worker to finish processing.
+	// Some tests build lightweight MinerConn instances without a stats
+	// worker/channel; guard those cases.
+	if mc.statsUpdates != nil {
+		close(mc.statsUpdates)
+		mc.statsWg.Wait()
+	}
 
-		mc.statsMu.Lock()
-		mc.stats.WindowStart = time.Time{}
-		mc.stats.WindowAccepted = 0
-		mc.stats.WindowSubmissions = 0
-		mc.stats.WindowDifficulty = 0
-		mc.vardiffWindowStart = time.Time{}
-		mc.vardiffWindowResetAnchor = time.Time{}
-		mc.vardiffWindowAccepted = 0
-		mc.vardiffWindowSubmissions = 0
-		mc.vardiffWindowDifficulty = 0
-		mc.lastHashrateUpdate = time.Time{}
-		mc.rollingHashrateValue = 0
-		mc.statsMu.Unlock()
-		if mc.jobMgr != nil && mc.jobCh != nil {
-			mc.jobMgr.Unsubscribe(mc.jobCh)
+	if mc.metrics != nil {
+		if connSeq := atomic.LoadUint64(&mc.connectionSeq); connSeq != 0 {
+			mc.metrics.RemoveConnectionHashrate(connSeq)
 		}
-	})
+	}
+
+	mc.statsMu.Lock()
+	mc.stats.WindowStart = time.Time{}
+	mc.stats.WindowAccepted = 0
+	mc.stats.WindowSubmissions = 0
+	mc.stats.WindowDifficulty = 0
+	mc.vardiffWindowStart = time.Time{}
+	mc.vardiffWindowResetAnchor = time.Time{}
+	mc.vardiffWindowAccepted = 0
+	mc.vardiffWindowSubmissions = 0
+	mc.vardiffWindowDifficulty = 0
+	mc.lastHashrateUpdate = time.Time{}
+	mc.rollingHashrateValue = 0
+	mc.statsMu.Unlock()
+	if mc.jobMgr != nil && mc.jobCh != nil {
+		mc.jobMgr.Unsubscribe(mc.jobCh)
+	}
 }
 
 func (mc *MinerConn) Close(reason string) {
 	if reason == "" {
 		reason = "shutdown"
 	}
-	logger.Info("closing miner", "component", "miner", "kind", "lifecycle", "remote", mc.id, "reason", reason)
-	mc.cleanup()
+	mc.cleanupOnce.Do(func() {
+		// Keep the lifecycle log coupled to the cleanup winner. Concurrent or
+		// follow-up terminal paths should not emit duplicate close records.
+		logger.Info("closing miner", "component", "miner", "kind", "lifecycle", "remote", mc.id, "reason", reason)
+		mc.cleanupResources()
+	})
 }
 
 func (mc *MinerConn) assignConnectionSeq() {

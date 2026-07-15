@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"math/big"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -101,6 +102,143 @@ func (c *partialFailNotifyConn) Write(b []byte) (int, error) {
 func (c *partialFailNotifyConn) Close() error {
 	c.closeCalls.Add(1)
 	return nil
+}
+
+func TestOrdinaryResponseWriteFailureClosesAndSuppressesFurtherOutput(t *testing.T) {
+	mc, _ := minerConnForNotifyTest(t)
+	conn := &partialFailMethodConn{failNeedle: []byte(`"id":41`)}
+	mc.conn = conn
+
+	if mc.writeResponse(StratumResponse{ID: 41, Result: true}) {
+		t.Fatal("partial response write unexpectedly succeeded")
+	}
+	if !mc.closed.Load() || conn.closeCalls.Load() != 1 {
+		t.Fatalf("response failure did not close once: closed=%v close_calls=%d", mc.closed.Load(), conn.closeCalls.Load())
+	}
+
+	if mc.writeResponse(StratumResponse{ID: 42, Result: true}) {
+		t.Fatal("response on closed session unexpectedly succeeded")
+	}
+	job := benchmarkSubmitJobForTest(t)
+	job.ScriptTime = job.Template.CurTime
+	mc.sendNotifyFor(job, true)
+	mc.Close("redundant close")
+
+	mc.jobMu.Lock()
+	activeCount := len(mc.activeJobs)
+	retiredCount := len(mc.retiredJobs)
+	notifySeq := mc.notifySeq
+	mc.jobMu.Unlock()
+	if got := conn.responseWrites.Load(); got != 1 {
+		t.Fatalf("response write attempts = %d, want 1", got)
+	}
+	if got := conn.notifyWrites.Load(); got != 0 {
+		t.Fatalf("notify write attempts = %d, want 0", got)
+	}
+	if activeCount != 0 || retiredCount != 0 || notifySeq != 0 {
+		t.Fatalf("closed session changed job history: active=%d retired=%d notify_seq=%d", activeCount, retiredCount, notifySeq)
+	}
+	if got := conn.closeCalls.Load(); got != 1 {
+		t.Fatalf("connection close calls after redundant close = %d, want 1", got)
+	}
+}
+
+func TestClientShowMessageWriteFailureClosesAndSuppressesResponse(t *testing.T) {
+	mc, _ := minerConnForNotifyTest(t)
+	conn := &partialFailMethodConn{failNeedle: []byte(`"method":"client.show_message"`)}
+	mc.conn = conn
+
+	mc.sendClientShowMessage("Warning: terminal test")
+	if !mc.closed.Load() || conn.closeCalls.Load() != 1 {
+		t.Fatalf("show-message failure did not close once: closed=%v close_calls=%d", mc.closed.Load(), conn.closeCalls.Load())
+	}
+	if mc.writeResponse(StratumResponse{ID: 51, Result: true}) {
+		t.Fatal("response after show-message failure unexpectedly succeeded")
+	}
+	if got := conn.responseWrites.Load(); got != 0 {
+		t.Fatalf("response writes after show-message failure = %d, want 0", got)
+	}
+}
+
+func TestNilIDResponseRemainsNoOp(t *testing.T) {
+	mc, _ := minerConnForNotifyTest(t)
+	conn := &partialFailMethodConn{failNeedle: []byte(`"id":`)}
+	mc.conn = conn
+
+	if !mc.writeResponse(StratumResponse{ID: nil, Result: true}) {
+		t.Fatal("nil-ID response should remain a successful no-op")
+	}
+	if mc.closed.Load() || conn.closeCalls.Load() != 0 || conn.responseWrites.Load() != 0 || conn.failed.Load() {
+		t.Fatalf("nil-ID response touched transport: closed=%v close_calls=%d response_writes=%d failed=%v",
+			mc.closed.Load(), conn.closeCalls.Load(), conn.responseWrites.Load(), conn.failed.Load())
+	}
+}
+
+func TestResponseWriteFailureDoesNotDeadlockUnderNotifyMu(t *testing.T) {
+	mc, _ := minerConnForNotifyTest(t)
+	conn := &partialFailMethodConn{failNeedle: []byte(`"id":61`)}
+	mc.conn = conn
+	done := make(chan struct{})
+
+	go func() {
+		mc.notifyMu.Lock()
+		defer mc.notifyMu.Unlock()
+		mc.writeResponse(StratumResponse{ID: 61, Result: true})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("response failure deadlocked while notifyMu was held")
+	}
+	if !mc.closed.Load() || conn.closeCalls.Load() != 1 {
+		t.Fatalf("response failure under notifyMu did not close once: closed=%v close_calls=%d", mc.closed.Load(), conn.closeCalls.Load())
+	}
+}
+
+func TestCapturedBlockTaskStillSubmitsAfterWriteClosure(t *testing.T) {
+	mc := benchmarkMinerConnForSubmit(NewPoolMetrics())
+	mc.cfg.DataDir = t.TempDir()
+	rpc := &countingSubmitRPC{}
+	mc.rpc = rpc
+	job := benchmarkSubmitJobForTest(t)
+	job.Target = new(big.Int).Set(maxUint256)
+	task := submissionTask{
+		mc:               mc,
+		reqID:            71,
+		job:              job,
+		jobID:            job.JobID,
+		workerName:       mc.currentWorker(),
+		extranonce2:      "00000000",
+		extranonce2Large: []byte{0, 0, 0, 0},
+		ntime:            "6553f100",
+		ntimeVal:         0x6553f100,
+		nonce:            "00000000",
+		nonceVal:         0,
+		versionHex:       "00000001",
+		useVersion:       1,
+		scriptTime:       job.ScriptTime,
+		receivedAt:       time.Unix(1700000000, 0),
+	}
+
+	conn := &partialFailMethodConn{failNeedle: []byte(`"id":70`)}
+	mc.conn = conn
+	if mc.writeResponse(StratumResponse{ID: 70, Result: true}) {
+		t.Fatal("setup response write unexpectedly succeeded")
+	}
+	if !mc.closed.Load() {
+		t.Fatal("setup write failure did not close session")
+	}
+
+	mc.processSubmissionTask(task)
+	flushFoundBlockLog(t)
+	if got := rpc.submitCalls.Load(); got != 1 {
+		t.Fatalf("captured block submit calls after closure = %d, want 1", got)
+	}
+	if got := conn.responseWrites.Load(); got != 1 {
+		t.Fatalf("closed block task wrote another response: writes=%d, want only setup write", got)
+	}
 }
 
 func TestSendNotifyForClosesAfterPartialWriteWithoutChurningHistory(t *testing.T) {

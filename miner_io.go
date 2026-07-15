@@ -16,10 +16,26 @@ func (mc *MinerConn) writeJSON(v any) error {
 }
 
 func (mc *MinerConn) writeBytes(b []byte) error {
+	if mc.closed.Load() {
+		return io.ErrClosedPipe
+	}
 	mc.writeMu.Lock()
 	defer mc.writeMu.Unlock()
 
-	return mc.writeBytesLocked(b)
+	// A writer may have failed and closed the session while this caller was
+	// waiting for writeMu. Never touch the socket after terminal state has been
+	// published.
+	if mc.closed.Load() {
+		return io.ErrClosedPipe
+	}
+	err := mc.writeBytesLocked(b)
+	if err != nil {
+		// Publish terminal state before releasing writeMu so queued writers cannot
+		// slip another response or notification onto an ambiguous stream. The
+		// caller performs cleanup after writeJSON has released this lock.
+		mc.closed.Store(true)
+	}
+	return err
 }
 
 func (mc *MinerConn) writeBytesLocked(b []byte) error {
@@ -46,15 +62,19 @@ func (mc *MinerConn) writeResponse(resp StratumResponse) bool {
 	if resp.ID == nil {
 		return true
 	}
+	if mc.closed.Load() {
+		return false
+	}
 	if err := mc.writeJSON(resp); err != nil {
 		logger.Error("write error", "remote", mc.id, "error", err)
+		mc.Close("stratum response write failed")
 		return false
 	}
 	return true
 }
 
 func (mc *MinerConn) sendClientShowMessage(message string) {
-	if mc == nil || mc.conn == nil {
+	if mc == nil || mc.conn == nil || mc.closed.Load() {
 		return
 	}
 	message = strings.TrimSpace(message)
@@ -86,6 +106,7 @@ func (mc *MinerConn) sendClientShowMessage(message string) {
 		errFields := append([]any{}, fields...)
 		errFields = append(errFields, "error", err)
 		logger.Warn("client.show_message write error", errFields...)
+		mc.Close("client.show_message write failed")
 	}
 }
 
