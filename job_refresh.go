@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const jobTemplateRefreshTimeout = 10 * time.Second
+
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
 	return jm.refreshJobCtxMinInterval(ctx, 100*time.Millisecond)
 }
@@ -25,7 +27,14 @@ func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval 
 		"rules":        []string{"segwit"},
 		"capabilities": []string{"coinbasetxn", "workid", "coinbase/append"},
 	}
-	tpl, err := jm.fetchTemplateCtx(ctx, params, false)
+	refreshTimeout := jm.refreshRPCTimeout
+	if refreshTimeout <= 0 {
+		refreshTimeout = jobTemplateRefreshTimeout
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, refreshTimeout)
+	defer cancel()
+
+	tpl, err := jm.fetchTemplateCtx(refreshCtx, params, false)
 	if err != nil {
 		jm.recordJobError(err)
 		return err

@@ -849,7 +849,7 @@ func main() {
 			if now.Sub(startTime) >= stratumStartupGrace {
 				if h := stratumHealthStatus(jobMgr, now); !h.Healthy {
 					if unhealthySince.IsZero() {
-						unhealthySince = now
+						unhealthySince = h.unhealthyStart(now)
 					}
 					if now.Sub(unhealthySince) >= stratumStaleJobGrace {
 						if time.Since(lastRefuseLog) > 5*time.Second {
@@ -997,7 +997,7 @@ func enforceStratumFreshness(ctx context.Context, jobMgr *JobManager, registry *
 		h := stratumHealthStatus(jobMgr, now)
 		if !h.Healthy {
 			if unhealthySince.IsZero() {
-				unhealthySince = now
+				unhealthySince = h.unhealthyStart(now)
 			}
 			// Require a long continuous unhealthy window before disconnecting miners.
 			if wasHealthy && now.Sub(unhealthySince) >= stratumStaleJobGrace {

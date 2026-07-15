@@ -18,9 +18,13 @@ func (jm *JobManager) recordJobError(err error) {
 		return
 	}
 	jm.lastErrMu.Lock()
+	if jm.lastErr == nil || jm.lastErrAt.IsZero() {
+		// Keep the beginning of the continuous failure visible. Repeated
+		// heartbeat failures update the detail, but must not restart the
+		// stale-work grace window.
+		jm.lastErrAt = time.Now()
+	}
 	jm.lastErr = err
-	jm.lastErrAt = time.Now()
-	jm.lastJobSuccess = time.Time{}
 	jm.appendJobFeedError(err.Error())
 	jm.lastErrMu.Unlock()
 }

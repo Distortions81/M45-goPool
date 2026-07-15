@@ -128,6 +128,7 @@ type JobManager struct {
 	// template application from longpoll/ZMQ.
 	refreshMu          sync.Mutex
 	lastRefreshAttempt time.Time
+	refreshRPCTimeout  time.Duration
 	applyMu            sync.Mutex
 	zmqPayload         JobFeedPayloadStatus
 	zmqPayloadMu       sync.RWMutex
@@ -151,13 +152,14 @@ type JobManager struct {
 
 func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScript []byte, donationScript []byte) *JobManager {
 	return &JobManager{
-		rpc:            rpc,
-		cfg:            cfg,
-		metrics:        metrics,
-		payoutScript:   append([]byte(nil), payoutScript...),
-		donationScript: append([]byte(nil), donationScript...),
-		subs:           make(map[chan *Job]struct{}),
-		notifyQueue:    make(chan *Job, 100), // Buffered queue for async notifications
+		rpc:               rpc,
+		cfg:               cfg,
+		metrics:           metrics,
+		payoutScript:      append([]byte(nil), payoutScript...),
+		donationScript:    append([]byte(nil), donationScript...),
+		subs:              make(map[chan *Job]struct{}),
+		notifyQueue:       make(chan *Job, 100), // Buffered queue for async notifications
+		refreshRPCTimeout: jobTemplateRefreshTimeout,
 	}
 }
 
