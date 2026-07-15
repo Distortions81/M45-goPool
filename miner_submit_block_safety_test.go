@@ -438,6 +438,7 @@ func TestBannedMinerNonBlockRejectedWithoutPenalty(t *testing.T) {
 
 func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	mc, notifyConn := minerConnForNotifyTest(t)
+	mc.maxRecentJobs = 1
 	mc.cfg.DataDir = t.TempDir()
 	setupTestStateDB(t, mc.cfg.DataDir)
 	mc.cfg.SubmitProcessInline = true
@@ -454,6 +455,7 @@ func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	}
 
 	job := benchmarkSubmitJobForTest(t)
+	job.Generation = 1
 	job.Target = new(big.Int).Set(maxUint256)
 	const rawTxHex = "0100000001" +
 		"0000000000000000000000000000000000000000000000000000000000000000" +
@@ -521,6 +523,27 @@ func TestSubmitBlockMatchesNotifyPayload(t *testing.T) {
 	mc.setWorkerWallet(workerB, walletB, scriptB)
 	mc.handleAuthorizeID(2, workerB, "")
 	mc.setWorkerWallet(workerA, walletA, scriptB)
+
+	// Publish a newer competing branch after reauthorization. With a one-job
+	// active window this retires wallet A's exact advertised binding; a winning
+	// block on that displaced branch must still be reconstructed from A's notify.
+	reorg := *job
+	reorg.JobID = "wallet-b-reorg"
+	reorg.Generation = 2
+	reorg.Template.Previous = strings.Repeat("22", 32)
+	reorg.PrevHash = reorg.Template.Previous
+	reorg.Template.Height--
+	reorg.Target = new(big.Int)
+	reorg.targetBE = [32]byte{}
+	mc.sendNotifyFor(&reorg, true)
+	mc.jobMu.Lock()
+	_, oldActive := mc.activeJobs[stratumJobID]
+	retired, oldRetired := mc.retiredJobs[stratumJobID]
+	mc.jobMu.Unlock()
+	if oldActive || !oldRetired || retired.job != job || retired.worker != workerA {
+		t.Fatalf("old wallet binding state: active=%v retired=%v job_match=%v worker=%q",
+			oldActive, oldRetired, retired.job == job, retired.worker)
+	}
 
 	mc.handleSubmit(&StratumRequest{
 		ID:     1,

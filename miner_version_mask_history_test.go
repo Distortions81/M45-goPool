@@ -217,6 +217,15 @@ func TestNotifyVersionMaskBindingSurvivesReorgUntilJobEviction(t *testing.T) {
 	if oldJobRetained || oldBindingRetained {
 		t.Fatalf("evicted job retained state: job=%v binding=%v", oldJobRetained, oldBindingRetained)
 	}
+	retiredLookup := mc.jobForSubmissionWithLast(ids[0])
+	if !retiredLookup.found || !retiredLookup.retired || retiredLookup.job != initial || !retiredLookup.coinbaseOK {
+		t.Fatalf("evicted reorg binding was not retired exactly: found=%v retired=%v binding=%v",
+			retiredLookup.found, retiredLookup.retired, retiredLookup.coinbaseOK)
+	}
+	if !retiredLookup.coinbase.versionRollingActive || retiredLookup.coinbase.versionMask != oldMask {
+		t.Fatalf("retired binding policy = active:%v mask:%08x, want active:%v mask:%08x",
+			retiredLookup.coinbase.versionRollingActive, retiredLookup.coinbase.versionMask, true, oldMask)
+	}
 }
 
 func TestNotifyVersionMaskBindingPreservesActiveZeroMask(t *testing.T) {
@@ -268,6 +277,7 @@ func TestHistoricalVersionMaskRescuesBlockAcrossReorg(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mc, conn := minerConnForNotifyTest(t)
+			mc.maxRecentJobs = 1
 			mc.cfg.DataDir = t.TempDir()
 			mc.cfg.ShareCheckDuplicate = false
 			mc.cfg.ShareCheckParamFormat = true
@@ -307,9 +317,11 @@ func TestHistoricalVersionMaskRescuesBlockAcrossReorg(t *testing.T) {
 			if len(ids) != 2 {
 				t.Fatalf("notify IDs = %#v, want 2", ids)
 			}
-			oldJob, _, _, _, _, _, binding, bindingOK, oldOK := mc.jobForIDWithLast(ids[0])
-			if !oldOK || oldJob != job || !bindingOK {
-				t.Fatalf("old reorg job binding missing: jobOK=%v bindingOK=%v", oldOK, bindingOK)
+			lookup := mc.jobForSubmissionWithLast(ids[0])
+			oldJob := lookup.job
+			binding := lookup.coinbase
+			if !lookup.found || !lookup.retired || oldJob != job || !lookup.coinbaseOK {
+				t.Fatalf("old reorg job binding missing: found=%v retired=%v bindingOK=%v", lookup.found, lookup.retired, lookup.coinbaseOK)
 			}
 
 			extranonce2 := []byte{0, 0, 0, 0}

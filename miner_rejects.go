@@ -624,6 +624,9 @@ func (mc *MinerConn) trackJob(job *Job, stratumJobID string, clean bool) {
 	}
 	mc.jobMu.Lock()
 	defer mc.jobMu.Unlock()
+	// Stratum notify IDs are unique for a connection, but clear a retired
+	// collision defensively so a reused ID can never resolve to older work.
+	mc.removeRetiredJobLocked(stratumJobID)
 	// No longer clear old jobs on clean - preserve them for miners with latency
 	// The eviction logic below will handle cleanup when we exceed maxRecentJobs
 	if _, ok := mc.activeJobs[stratumJobID]; !ok {
@@ -658,6 +661,7 @@ func (mc *MinerConn) trackJob(job *Job, stratumJobID string, clean bool) {
 	for len(mc.jobOrder) > mc.maxRecentJobs && len(mc.jobOrder) > 0 {
 		oldest := mc.jobOrder[0]
 		mc.jobOrder = mc.jobOrder[1:]
+		mc.retireJobLocked(oldest)
 		delete(mc.activeJobs, oldest)
 		if mc.jobScriptTime != nil {
 			delete(mc.jobScriptTime, oldest)
@@ -697,6 +701,127 @@ func (mc *MinerConn) trackJob(job *Job, stratumJobID string, clean bool) {
 			}
 		}
 	}
+}
+
+// retireJobLocked preserves only the immutable data needed to reconstruct and
+// submit a network-target block. Ordinary share policy state is deliberately
+// discarded by trackJob after this returns. mc.jobMu must be held by callers.
+func (mc *MinerConn) retireJobLocked(jobID string) {
+	job := mc.activeJobs[jobID]
+	coinbase, coinbaseOK := mc.jobNotifyCoinbase[jobID]
+	// scriptTime is useful attribution metadata, but the exact binary coinbase
+	// is sufficient for block reconstruction when older/test state lacks it.
+	scriptTime := mc.jobScriptTime[jobID]
+	if job == nil || !coinbaseOK || len(coinbase.prefix) == 0 || len(coinbase.suffix) == 0 {
+		return
+	}
+	if mc.retiredJobs == nil {
+		mc.retiredJobs = make(map[string]retiredJobBinding, mc.maxRecentJobs)
+	}
+	if _, exists := mc.retiredJobs[jobID]; !exists {
+		mc.retiredJobOrder = append(mc.retiredJobOrder, jobID)
+	}
+	mc.retiredJobs[jobID] = retiredJobBinding{
+		job:                  job,
+		worker:               coinbase.worker,
+		prefix:               coinbase.prefix,
+		suffix:               coinbase.suffix,
+		scriptTime:           scriptTime,
+		versionRollingActive: coinbase.versionRollingActive,
+		versionMask:          coinbase.versionMask,
+	}
+
+	for len(mc.retiredJobOrder) > mc.maxRecentJobs && len(mc.retiredJobOrder) > 0 {
+		oldest := mc.retiredJobOrder[0]
+		mc.retiredJobOrder = mc.retiredJobOrder[1:]
+		delete(mc.retiredJobs, oldest)
+	}
+}
+
+// removeRetiredJobLocked removes both lookup and FIFO state for a job ID.
+// mc.jobMu must be held by callers.
+func (mc *MinerConn) removeRetiredJobLocked(jobID string) {
+	if _, ok := mc.retiredJobs[jobID]; !ok {
+		return
+	}
+	delete(mc.retiredJobs, jobID)
+	for i, id := range mc.retiredJobOrder {
+		if id != jobID {
+			continue
+		}
+		copy(mc.retiredJobOrder[i:], mc.retiredJobOrder[i+1:])
+		mc.retiredJobOrder = mc.retiredJobOrder[:len(mc.retiredJobOrder)-1]
+		return
+	}
+}
+
+type submissionJobLookup struct {
+	job          *Job
+	lastJob      *Job
+	lastPrevHash string
+	lastHeight   int64
+	ntimeBounds  jobNTimeBounds
+	scriptTime   int64
+	coinbase     notifiedCoinbaseParts
+	coinbaseOK   bool
+	found        bool
+	retired      bool
+}
+
+// jobForSubmissionWithLast distinguishes an active job from an exact
+// block-only retired binding. Missing IDs retain the existing last-job fallback
+// metadata for compatibility when freshness checks are disabled.
+func (mc *MinerConn) jobForSubmissionWithLast(jobID string) submissionJobLookup {
+	mc.jobMu.Lock()
+	defer mc.jobMu.Unlock()
+
+	lookup := submissionJobLookup{
+		lastJob:      mc.lastJob,
+		lastPrevHash: mc.lastJobPrevHash,
+		lastHeight:   mc.lastJobHeight,
+	}
+	if job := mc.activeJobs[jobID]; job != nil {
+		lookup.job = job
+		lookup.found = true
+		if mc.jobNotifyCoinbase != nil {
+			lookup.coinbase, lookup.coinbaseOK = mc.jobNotifyCoinbase[jobID]
+		}
+		if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
+			lookup.ntimeBounds = mc.jobNTimeBounds[jobID]
+		}
+		if mc.jobScriptTime != nil {
+			lookup.scriptTime = mc.jobScriptTime[jobID]
+		}
+		return lookup
+	}
+	if retired, ok := mc.retiredJobs[jobID]; ok && retired.job != nil {
+		lookup.job = retired.job
+		lookup.found = true
+		lookup.retired = true
+		lookup.scriptTime = retired.scriptTime
+		lookup.coinbase = notifiedCoinbaseParts{
+			worker:               retired.worker,
+			prefix:               retired.prefix,
+			suffix:               retired.suffix,
+			versionRollingActive: retired.versionRollingActive,
+			versionMask:          retired.versionMask,
+		}
+		lookup.coinbaseOK = len(retired.prefix) > 0 && len(retired.suffix) > 0
+		return lookup
+	}
+
+	if mc.lastJobID != "" {
+		if mc.jobNotifyCoinbase != nil {
+			lookup.coinbase, lookup.coinbaseOK = mc.jobNotifyCoinbase[mc.lastJobID]
+		}
+		if mc.cfg.ShareCheckNTimeWindow && mc.jobNTimeBounds != nil {
+			lookup.ntimeBounds = mc.jobNTimeBounds[mc.lastJobID]
+		}
+		if mc.jobScriptTime != nil {
+			lookup.scriptTime = mc.jobScriptTime[mc.lastJobID]
+		}
+	}
+	return lookup
 }
 
 func (mc *MinerConn) scriptTimeForJob(jobID string, fallback int64) int64 {

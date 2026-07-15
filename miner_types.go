@@ -102,6 +102,20 @@ type notifiedCoinbaseParts struct {
 	versionMask          uint32
 }
 
+// retiredJobBinding is the compact, block-only state retained after a job is
+// no longer eligible for ordinary share credit. The binary coinbase parts
+// already contain the connection's exact extranonce1 and advertised payout;
+// keeping the hex wire forms would only duplicate that data.
+type retiredJobBinding struct {
+	job                  *Job
+	worker               string
+	prefix               []byte
+	suffix               []byte
+	scriptTime           int64
+	versionRollingActive bool
+	versionMask          uint32
+}
+
 var defaultVarDiff = VarDiffConfig{
 	MinDiff:            defaultMinDifficulty,
 	MaxDiff:            defaultMaxDifficulty,
@@ -156,6 +170,8 @@ type MinerConn struct {
 	jobMu                sync.Mutex
 	activeJobs           map[string]*Job
 	jobOrder             []string
+	retiredJobs          map[string]retiredJobBinding
+	retiredJobOrder      []string
 	maxRecentJobs        int
 	shareCache           map[string]*duplicateShareSet
 	evictedShareCache    map[string]*evictedCacheEntry

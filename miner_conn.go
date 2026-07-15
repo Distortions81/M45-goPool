@@ -154,6 +154,8 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		discordNotifier:   notifier,
 		activeJobs:        make(map[string]*Job, maxRecentJobs), // Pre-allocate for expected job count
 		jobOrder:          make([]string, 0, maxRecentJobs),
+		retiredJobs:       make(map[string]retiredJobBinding, maxRecentJobs),
+		retiredJobOrder:   make([]string, 0, maxRecentJobs),
 		connectedAt:       now,
 		lastActivity:      now,
 		jobDifficulty:     make(map[string]float64, maxRecentJobs), // Pre-allocate for expected job count

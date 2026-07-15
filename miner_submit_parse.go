@@ -361,7 +361,17 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 		}
 	}
 
-	job, curLast, curPrevHash, curHeight, ntimeBounds, notifiedScriptTime, notifiedCoinbase, coinbaseOK, ok := mc.jobForIDWithLast(jobID)
+	jobLookup := mc.jobForSubmissionWithLast(jobID)
+	job := jobLookup.job
+	curLast := jobLookup.lastJob
+	curPrevHash := jobLookup.lastPrevHash
+	curHeight := jobLookup.lastHeight
+	ntimeBounds := jobLookup.ntimeBounds
+	notifiedScriptTime := jobLookup.scriptTime
+	notifiedCoinbase := jobLookup.coinbase
+	coinbaseOK := jobLookup.coinbaseOK
+	ok := jobLookup.found
+	retiredJob := jobLookup.retired
 	if coinbaseOK && notifiedCoinbase.worker != "" {
 		workerName = notifiedCoinbase.worker
 	}
@@ -388,9 +398,11 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	// Defensive: ensure the job template still matches what we advertised to this
 	// connection (prevhash/height). If it changed underneath us, reject as stale.
 	policyReject := submitPolicyReject{reason: rejectUnknown}
-	if usedFallbackJob {
+	if usedFallbackJob || retiredJob {
 		// Even when job-id freshness checks are disabled, classify non-block
-		// shares for unknown/expired job IDs as stale rather than lowdiff.
+		// shares for unknown/expired and retired job IDs as stale rather than
+		// lowdiff. Retired jobs continue through PoW validation solely so a real
+		// network-target block can be submitted exactly as advertised.
 		policyReject = submitPolicyReject{reason: rejectStaleJob, errCode: stratumErrCodeJobNotFound, errMsg: "job not found"}
 	}
 	if shareJobFreshnessChecksPrevhash(mc.cfg.ShareJobFreshnessMode) && curLast != nil && (curPrevHash != job.Template.Previous || curHeight != job.Template.Height) {
@@ -444,7 +456,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	// distance from the template.
 	minNTime := ntimeBounds.min
 	maxNTime := ntimeBounds.max
-	if mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
+	if !retiredJob && mc.cfg.ShareCheckNTimeWindow && (int64(ntimeVal) < minNTime || int64(ntimeVal) > maxNTime) {
 		// Policy-only: for safety we still run the PoW check and, if the share is
 		// a real block, submit it even if ntime violates the pool's tighter window.
 		logger.Warn("submit ntime outside window (policy)", "remote", mc.id, "ntime", ntimeVal, "min", minNTime, "max", maxNTime)
