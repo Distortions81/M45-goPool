@@ -260,3 +260,47 @@ func TestReplayPendingSubmissionsInconclusiveResultRetries(t *testing.T) {
 		t.Fatalf("expected status=submitted after successful retry, got %q", status)
 	}
 }
+
+func TestReplayPendingSubmissionsDuplicateMarksSubmitted(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := openStateDB(filepath.Join(tmpDir, "state", "workers.db"))
+	if err != nil {
+		t.Fatalf("openStateDB: %v", err)
+	}
+	defer db.Close()
+	cleanup := setSharedStateDBForTest(db)
+	defer cleanup()
+
+	rec := pendingSubmissionRecord{
+		Timestamp: time.Now().UTC(),
+		Height:    103,
+		Hash:      "duplicate-side-chain-hash",
+		Worker:    "worker4",
+		BlockHex:  "deadbeef",
+		Status:    pendingSubmissionStatusPending,
+	}
+	if err := appendPendingSubmissionRecord(rec); err != nil {
+		t.Fatalf("append pending submission: %v", err)
+	}
+
+	var submitCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		submitCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":"duplicate","error":null,"id":1}`))
+	}))
+	defer server.Close()
+	rpc := &RPCClient{url: server.URL, client: server.Client(), lp: server.Client(), nextID: 1}
+
+	replayPendingSubmissions(context.Background(), rpc)
+	if submitCalls != 1 {
+		t.Fatalf("submitblock calls = %d, want 1", submitCalls)
+	}
+	var status string
+	if err := db.QueryRow(`SELECT status FROM pending_submissions WHERE submission_key = ?`, rec.Hash).Scan(&status); err != nil {
+		t.Fatalf("query duplicate status: %v", err)
+	}
+	if status != pendingSubmissionStatusSubmitted {
+		t.Fatalf("duplicate status = %q, want %q", status, pendingSubmissionStatusSubmitted)
+	}
+}
