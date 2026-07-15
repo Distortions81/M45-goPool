@@ -61,7 +61,7 @@ The `data` directory is mounted into the container at `/app/data` to persist con
 
 Requirements:
 
-- **Go 1.26.0+** — install from [go.dev](https://go.dev/dl/).
+- **Go 1.26.5+** — install from [go.dev](https://go.dev/dl/).
 - **ZeroMQ headers** (`libzmq3-dev`, `zeromq`, etc.) for
   `github.com/pebbe/zmq4`. On Debian or Ubuntu, run
   `sudo apt install -y libzmq3-dev`.
