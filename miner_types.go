@@ -116,6 +116,7 @@ type MinerConn struct {
 	conn                 net.Conn
 	writeMu              sync.Mutex
 	notifyMu             sync.Mutex
+	versionMu            sync.Mutex
 	writeScratch         []byte
 	reader               *bufio.Reader
 	jobMgr               *JobManager
@@ -169,21 +170,24 @@ type MinerConn struct {
 	validSubsForBan      int
 	lastProtoViolation   time.Time
 	protoViolations      int
-	versionRoll          bool
-	versionMask          uint32
-	poolMask             uint32
-	minerMask            uint32
-	minVerBits           int
-	lastShareHash        string
-	lastShareAccepted    bool
-	lastShareDifficulty  float64
-	lastShareDetail      *ShareDetail
-	lastRejectReason     string
-	walletMu             sync.Mutex
-	workerWallets        map[string]workerWalletState
-	subscribed           bool
-	authorized           bool
-	cleanupOnce          sync.Once
+	// versionRoll records whether BIP310 version rolling was successfully
+	// negotiated for this connection. It remains true when versionMask is zero;
+	// a zero mask disables rolling bits without deactivating the extension.
+	versionRoll         bool
+	versionMask         uint32
+	poolMask            uint32
+	minerMask           uint32
+	minVerBits          int
+	lastShareHash       string
+	lastShareAccepted   bool
+	lastShareDifficulty float64
+	lastShareDetail     *ShareDetail
+	lastRejectReason    string
+	walletMu            sync.Mutex
+	workerWallets       map[string]workerWalletState
+	subscribed          bool
+	authorized          bool
+	cleanupOnce         sync.Once
 	// If true, VarDiff adjustments are disabled for this miner and the
 	// current difficulty is treated as fixed (typically from suggest_difficulty).
 	lockDifficulty bool
@@ -295,7 +299,9 @@ type MinerConn struct {
 	initialWorkDue       time.Time
 	initialWorkSent      bool
 	pendingDifficulty    bool
-	pendingVersionMask   bool
+	// pendingVersionMask is protected by versionMu together with the rest of
+	// the connection's BIP310 state.
+	pendingVersionMask bool
 }
 
 type rpcCaller interface {

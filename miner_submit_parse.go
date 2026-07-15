@@ -92,12 +92,15 @@ type submittedVersionResolution struct {
 
 // resolveSubmittedVersion prefers BIP310 replacement-bits semantics while
 // retaining a legacy XOR-delta alternate for miners that historically used it.
-func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, allowMaskMismatch, versionProvided bool) submittedVersionResolution {
+func resolveSubmittedVersion(baseVersion, submittedVersion, versionMask uint32, versionRollingActive, allowMaskMismatch, versionProvided bool) submittedVersionResolution {
 	if !versionProvided {
 		return submittedVersionResolution{useVersion: baseVersion}
 	}
 
-	if versionMask != 0 && submittedVersion&^versionMask == 0 {
+	// BIP310 replacement semantics also apply to an active zero mask. In that
+	// state the required explicit zero version_bits value preserves the complete
+	// job version.
+	if versionRollingActive && submittedVersion&^versionMask == 0 {
 		bip310Version := (baseVersion &^ versionMask) | (submittedVersion & versionMask)
 		xorVersion := baseVersion ^ submittedVersion
 		out := submittedVersionResolution{
@@ -407,7 +410,13 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 
 	// BIP320: reject version rolls outside the negotiated mask (docs/protocols/bip-0320.mediawiki).
 	baseVersion := uint32(job.Template.Version)
-	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, mc.versionMask, mc.cfg.ShareAllowOutOfMaskVersionBits, versionProvided)
+	// sendNotifyFor updates the connection-wide mask before writing
+	// mining.set_version_mask. Synchronize with that wire sequence so a submit
+	// cannot observe the new mask until the miner could have received it.
+	mc.notifyMu.Lock()
+	versionRollingActive, versionMask := mc.versionRollingPolicySnapshot()
+	mc.notifyMu.Unlock()
+	versionResolution := resolveSubmittedVersion(baseVersion, submittedVersion, versionMask, versionRollingActive, mc.cfg.ShareAllowOutOfMaskVersionBits, versionProvided)
 	useVersion := versionResolution.useVersion
 	versionDiff := versionResolution.versionDiff
 
@@ -415,8 +424,26 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 	if debugLogging || verboseRuntimeLogging {
 		versionHex = uint32ToHex8Lower(useVersion)
 	}
+	// Preserve the existing full-version compatibility path for nonzero masks.
+	// At an active zero mask, though, BIP310 requires the explicit value to be
+	// zero; comparing only the resolved version diff would miss a full job
+	// version supplied in the version_bits slot.
+	rawVersionMaskMismatch := versionRollingActive && versionMask == 0 && versionProvided && submittedVersion != 0
+	if mc.cfg.ShareCheckVersionRolling && rawVersionMaskMismatch {
+		if !mc.cfg.ShareAllowOutOfMaskVersionBits {
+			logger.Warn("submit version bits outside mask (policy)", "remote", mc.id, "version_bits", uint32ToHex8Lower(submittedVersion), "mask", uint32ToHex8Lower(versionMask))
+			if policyReject.reason == rejectUnknown {
+				policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
+			}
+		} else {
+			logger.Debug("submit version bits outside mask allowed (compat)",
+				"remote", mc.id,
+				"version_bits", uint32ToHex8Lower(submittedVersion),
+				"mask", uint32ToHex8Lower(versionMask))
+		}
+	}
 	if mc.cfg.ShareCheckVersionRolling && versionDiff != 0 {
-		if !mc.versionRoll {
+		if !versionRollingActive {
 			if !mc.cfg.ShareAllowOutOfMaskVersionBits {
 				logger.Warn("submit version rolling disabled (policy)", "remote", mc.id, "diff", uint32ToHex8Lower(versionDiff))
 				if policyReject.reason == rejectUnknown {
@@ -429,9 +456,9 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 			}
 		}
 
-		if versionDiff&^mc.versionMask != 0 {
+		if !rawVersionMaskMismatch && versionDiff&^versionMask != 0 {
 			if !mc.cfg.ShareAllowOutOfMaskVersionBits {
-				logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(mc.versionMask))
+				logger.Warn("submit version outside mask (policy)", "remote", mc.id, "version", uint32ToHex8Lower(useVersion), "mask", uint32ToHex8Lower(versionMask))
 				if policyReject.reason == rejectUnknown {
 					policyReject = submitPolicyReject{reason: rejectInvalidVersionMask, errCode: stratumErrCodeInvalidRequest, errMsg: "invalid version mask"}
 				}
@@ -439,7 +466,7 @@ func (mc *MinerConn) prepareSubmissionTaskFromParsed(reqID any, params submitPar
 				logger.Debug("submit version outside mask allowed (compat)",
 					"remote", mc.id,
 					"version", uint32ToHex8Lower(useVersion),
-					"mask", uint32ToHex8Lower(mc.versionMask))
+					"mask", uint32ToHex8Lower(versionMask))
 			}
 		}
 	}

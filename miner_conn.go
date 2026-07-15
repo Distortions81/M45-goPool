@@ -244,7 +244,9 @@ func (mc *MinerConn) ApplyRuntimeConfig(cfg Config) {
 
 	mc.cfg = cfg
 	mc.vardiff = buildVarDiffConfig(cfg)
-	mc.poolMask, mc.minVerBits = versionRollingPolicyFromConfig(cfg)
+	// Keep the effective BIP310 pool mask and miner-requested minimum stable for
+	// already-advertised work. A subsequent Job carries the new pool mask through
+	// sendNotifyFor, while new connections start from the updated config.
 	if cfg.MaxRecentJobs > 0 {
 		mc.maxRecentJobs = cfg.MaxRecentJobs
 	}

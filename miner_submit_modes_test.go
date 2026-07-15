@@ -632,6 +632,24 @@ func TestPrepareSubmissionTask_VersionRollingPolicyBoundaries(t *testing.T) {
 		}
 	})
 
+	t.Run("full rolled version remains accepted when its diff is in mask", func(t *testing.T) {
+		mc, req := newVersionReq("20000003")
+		mc.cfg.ShareAllowOutOfMaskVersionBits = false
+		mc.jobMu.Lock()
+		mc.lastJob.Template.Version = int32(0x20000001)
+		mc.jobMu.Unlock()
+		task, ok := mc.prepareSubmissionTask(req, time.Now())
+		if !ok {
+			t.Fatalf("expected compatible full version to remain processable")
+		}
+		if task.policyReject.reason != rejectUnknown {
+			t.Fatalf("unexpected full-version policy reject: %+v", task.policyReject)
+		}
+		if task.useVersion != 0x20000003 {
+			t.Fatalf("full rolled version=%08x want 20000003", task.useVersion)
+		}
+	})
+
 	t.Run("version rolling disabled policy rejects non-zero delta in strict mode", func(t *testing.T) {
 		mc, req := newVersionReq("00000003")
 		mc.versionRoll = false
@@ -662,7 +680,7 @@ func TestPrepareSubmissionTask_VersionRollingPolicyBoundaries(t *testing.T) {
 func TestResolveSubmittedVersionPrefersBIP310WithLegacyAlternate(t *testing.T) {
 	base := uint32(0x20002000)
 	mask := uint32(0x0000e000)
-	got := resolveSubmittedVersion(base, 0x00004000, mask, false, true)
+	got := resolveSubmittedVersion(base, 0x00004000, mask, true, false, true)
 
 	if got.useVersion != 0x20004000 {
 		t.Fatalf("BIP310 useVersion=%08x want 20004000", got.useVersion)
@@ -684,12 +702,12 @@ func TestResolveSubmittedVersionExplicitZeroClearsNegotiatedBits(t *testing.T) {
 		mask = uint32(0x1fffe000)
 	)
 
-	omitted := resolveSubmittedVersion(base, 0, mask, false, false)
+	omitted := resolveSubmittedVersion(base, 0, mask, true, false, false)
 	if omitted.useVersion != base {
 		t.Fatalf("omitted version = %08x, want base %08x", omitted.useVersion, base)
 	}
 
-	explicitZero := resolveSubmittedVersion(base, 0, mask, false, true)
+	explicitZero := resolveSubmittedVersion(base, 0, mask, true, false, true)
 	want := base &^ mask
 	if explicitZero.useVersion != want {
 		t.Fatalf("explicit zero version = %08x, want %08x", explicitZero.useVersion, want)

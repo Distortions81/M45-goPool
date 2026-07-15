@@ -8,8 +8,8 @@ import (
 // TestUpdateVersionMaskTransitions exercises the key transitions of
 // MinerConn.updateVersionMask:
 // - no miner mask (pool mask applied directly)
-// - enabling version-rolling when a miner mask is present
-// - shrinking the pool mask so the intersection goes to zero
+// - applying a miner mask after successful negotiation
+// - preserving negotiated state when the intersection goes to zero
 // - clamping minVerBits when the intersection loses bits.
 func TestUpdateVersionMaskTransitions(t *testing.T) {
 	const standardMask = uint32(0x1fffe000)
@@ -33,9 +33,10 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		}
 	})
 
-	t.Run("enableVersionRollWithMinerMask", func(t *testing.T) {
+	t.Run("negotiatedVersionRollUsesMinerMask", func(t *testing.T) {
 		mc := &MinerConn{
-			minVerBits: 3,
+			versionRoll: true,
+			minVerBits:  3,
 		}
 		// Simulate a miner mask negotiated via mining.configure.
 		minerMask := uint32(0x00ff0000)
@@ -44,7 +45,7 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		changed := mc.updateVersionMask(standardMask)
 
 		if !changed {
-			t.Fatalf("expected change when enabling version rolling with miner mask")
+			t.Fatalf("expected change when applying the pool mask")
 		}
 		final := standardMask & minerMask
 		if final == 0 {
@@ -64,7 +65,7 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 
 	t.Run("shrinkPoolMaskToZeroIntersection", func(t *testing.T) {
 		// Start from a state where version rolling is enabled with a non-zero intersection.
-		mc := &MinerConn{}
+		mc := &MinerConn{versionRoll: true}
 		mc.minerMask = standardMask
 		_ = mc.updateVersionMask(standardMask)
 		if !mc.versionRoll || mc.versionMask == 0 {
@@ -84,14 +85,14 @@ func TestUpdateVersionMaskTransitions(t *testing.T) {
 		if mc.versionMask != 0 {
 			t.Fatalf("versionMask should be zero when intersection is empty, got %#08x", mc.versionMask)
 		}
-		if mc.versionRoll {
-			t.Fatalf("versionRoll should be disabled when intersection is empty")
+		if !mc.versionRoll {
+			t.Fatalf("versionRoll negotiation should remain active at a zero mask")
 		}
 	})
 
 	t.Run("clampMinVerBitsWhenIntersectionShrinks", func(t *testing.T) {
 		// Start with a wider intersection supporting many bits.
-		mc := &MinerConn{}
+		mc := &MinerConn{versionRoll: true}
 		widePool := uint32(0x00ff0000)
 		mc.minerMask = widePool
 		mc.minVerBits = 8

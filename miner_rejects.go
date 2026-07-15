@@ -1511,15 +1511,26 @@ func (mc *MinerConn) startupPrimedDifficulty(diff float64) float64 {
 }
 
 func (mc *MinerConn) sendVersionMask() {
+	mc.versionMu.Lock()
 	if !mc.subscribed {
-		mc.pendingVersionMask = true
+		if mc.versionRoll {
+			mc.pendingVersionMask = true
+		}
+		mc.versionMu.Unlock()
 		return
 	}
+	if !mc.versionRoll {
+		mc.pendingVersionMask = false
+		mc.versionMu.Unlock()
+		return
+	}
+	mask := mc.versionMask
 	mc.pendingVersionMask = false
+	mc.versionMu.Unlock()
 	msg := map[string]any{
 		"id":     nil,
 		"method": "mining.set_version_mask",
-		"params": []any{uint32ToHex8Lower(mc.versionMask)},
+		"params": []any{uint32ToHex8Lower(mask)},
 	}
 	if err := mc.writeJSON(msg); err != nil {
 		logger.Error("version mask write error", "remote", mc.id, "error", err)
@@ -1533,12 +1544,79 @@ func (mc *MinerConn) sendPendingStratumSetup() {
 	if mc.pendingDifficulty {
 		mc.sendDifficultyNotification(mc.currentDifficulty())
 	}
-	if mc.pendingVersionMask && mc.versionRoll {
+	mc.versionMu.Lock()
+	pendingVersionMask := mc.pendingVersionMask && mc.versionRoll
+	mc.versionMu.Unlock()
+	if pendingVersionMask {
 		mc.sendVersionMask()
 	}
 }
 
+// versionRollingPolicySnapshot returns the current connection-wide BIP310
+// policy. BIP310 masks apply immediately to every active job, so submit parsing
+// must use this state rather than policy captured with an older job.
+func (mc *MinerConn) versionRollingPolicySnapshot() (active bool, mask uint32) {
+	mc.versionMu.Lock()
+	active = mc.versionRoll
+	mask = mc.versionMask
+	mc.versionMu.Unlock()
+	return active, mask
+}
+
+func (mc *MinerConn) queueVersionMaskIfActive() {
+	mc.versionMu.Lock()
+	if mc.versionRoll {
+		mc.pendingVersionMask = true
+	}
+	mc.versionMu.Unlock()
+}
+
+// negotiateVersionRolling atomically applies a mining.configure request to the
+// connection's BIP310 state. Only a successful negotiation activates the
+// extension; retaining a denied miner mask must never auto-activate it later.
+func (mc *MinerConn) negotiateVersionRolling(requestMask uint32, maskProvided bool, requestedMinBits int, minBitsProvided bool) (mask uint32, minBits int, ok bool) {
+	mc.versionMu.Lock()
+	defer mc.versionMu.Unlock()
+
+	if !maskProvided {
+		// BIP310 defines an omitted miner mask as all bits available. Keep that
+		// capability for later server-mask changes instead of freezing it to the
+		// pool mask that happened to be active during configuration.
+		requestMask = ^uint32(0)
+	}
+	if !minBitsProvided {
+		requestedMinBits = mc.minVerBits
+	}
+	if requestedMinBits <= 0 {
+		requestedMinBits = 1
+	}
+
+	mc.minerMask = requestMask
+	mask = requestMask & mc.poolMask
+	if mc.poolMask == 0 || mask == 0 {
+		mc.versionRoll = false
+		// With BIP310 inactive, preserve the pool mask for legacy compatibility
+		// handling without treating it as a negotiated client mask.
+		mc.versionMask = mc.poolMask
+		mc.minVerBits = requestedMinBits
+		mc.pendingVersionMask = false
+		return 0, requestedMinBits, false
+	}
+
+	available := bits.OnesCount32(mask)
+	if requestedMinBits > available {
+		requestedMinBits = available
+	}
+	mc.minVerBits = requestedMinBits
+	mc.versionRoll = true
+	mc.versionMask = mask
+	return mask, requestedMinBits, true
+}
+
 func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
+	mc.versionMu.Lock()
+	defer mc.versionMu.Unlock()
+
 	changed := false
 	if mc.poolMask != poolMask {
 		mc.poolMask = poolMask
@@ -1546,25 +1624,6 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 	}
 
 	if !mc.versionRoll {
-		if mc.minerMask != 0 {
-			final := poolMask & mc.minerMask
-			if final != 0 {
-				available := bits.OnesCount32(final)
-				if mc.minVerBits <= 0 {
-					mc.minVerBits = 1
-				}
-				if mc.minVerBits > available {
-					mc.minVerBits = available
-					changed = true
-				}
-				if mc.versionMask != final {
-					changed = true
-				}
-				mc.versionMask = final
-				mc.versionRoll = true
-				return changed
-			}
-		}
 		if mc.versionMask != poolMask {
 			changed = true
 		}
@@ -1573,16 +1632,11 @@ func (mc *MinerConn) updateVersionMask(poolMask uint32) bool {
 	}
 
 	finalMask := poolMask & mc.minerMask
-	if finalMask == 0 {
-		if mc.versionMask != 0 {
-			changed = true
-		}
-		mc.versionMask = 0
-		mc.versionRoll = false
-		return changed
-	}
-
 	available := bits.OnesCount32(finalMask)
+	if available > 0 && mc.minVerBits <= 0 {
+		mc.minVerBits = 1
+		changed = true
+	}
 	if mc.minVerBits > available {
 		mc.minVerBits = available
 		changed = true

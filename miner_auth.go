@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"math/bits"
 	"strconv"
 	"strings"
 	"time"
@@ -133,7 +132,9 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		mc.stateMu.Unlock()
 	}
 
+	mc.versionMu.Lock()
 	mc.subscribed = true
+	mc.versionMu.Unlock()
 
 	// Result spec (simplified):
 	// [
@@ -145,6 +146,19 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	en2Size := mc.cfg.Extranonce2Size
 	if en2Size <= 0 {
 		en2Size = 4
+	}
+
+	// Establish the current effective mask before the job listener can publish
+	// newer work. This avoids an authorize-before-subscribe race where the
+	// initial snapshot could overwrite a mask just applied by listenJobs.
+	var initialJob *Job
+	if mc.jobMgr != nil {
+		initialJob = mc.jobMgr.CurrentJob()
+	}
+	if initialJob != nil {
+		if mc.updateVersionMask(initialJob.VersionMask) {
+			mc.queueVersionMaskIfActive()
+		}
 	}
 
 	mc.writeSubscribeResponse(id, ex1, en2Size, mc.currentSessionID())
@@ -173,15 +187,6 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 		}
 	}
 
-	var initialJob *Job
-	if mc.jobMgr != nil {
-		initialJob = mc.jobMgr.CurrentJob()
-	}
-	if initialJob != nil {
-		if mc.updateVersionMask(initialJob.VersionMask) && mc.versionRoll {
-			mc.pendingVersionMask = true
-		}
-	}
 	// Only send mining.set_extranonce if the miner has explicitly subscribed
 	// to extranonce notifications via mining.extranonce.subscribe. Sending it
 	// unsolicited can confuse miners that don't expect it (e.g., NMAxe/Bitaxe)
@@ -1013,6 +1018,11 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		opts = parseConfigureOptions(req.Params[1])
 	}
 
+	// A configure response activates BIP310 immediately for the entire
+	// connection. Serialize it with mining.notify and mining.set_version_mask so
+	// no work notification can be interleaved between the response and its mask.
+	mc.notifyMu.Lock()
+
 	result := make(map[string]any)
 	shouldSendVersionMask := false
 	shouldSendExtranonce := false
@@ -1026,11 +1036,12 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		switch normalizeOptionKey(name) {
 		case "versionrolling":
 			// BIP310 version-rolling negotiation (docs/protocols/bip-0310.mediawiki).
-			if mc.poolMask == 0 {
-				result["version-rolling"] = false
-				break
-			}
-			requestMask := mc.poolMask
+			var (
+				requestMask   uint32
+				maskProvided  bool
+				requestedBits int
+				bitsProvided  bool
+			)
 			if opts != nil {
 				if rawMask, found := optionValueByAliases(opts,
 					"version-rolling.mask",
@@ -1040,6 +1051,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 				); found {
 					if parsed, ok := parseUint32Hexish(rawMask); ok {
 						requestMask = parsed
+						maskProvided = true
 					}
 				}
 				if rawMinBits, found := optionValueByAliases(opts,
@@ -1049,31 +1061,19 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 					"version_rolling_min_bit_count",
 				); found {
 					if minBits, ok := parsePositiveInt(rawMinBits); ok {
-						mc.minVerBits = minBits
+						requestedBits = minBits
+						bitsProvided = true
 					}
 				}
 			}
-			mask := requestMask & mc.poolMask
-			if mask == 0 {
+			mask, minBits, negotiated := mc.negotiateVersionRolling(requestMask, maskProvided, requestedBits, bitsProvided)
+			if !negotiated {
 				result["version-rolling"] = false
-				mc.versionRoll = false
-				mc.minerMask = requestMask
-				mc.updateVersionMask(mc.poolMask)
 				break
 			}
-			available := bits.OnesCount32(mask)
-			if mc.minVerBits <= 0 {
-				mc.minVerBits = 1
-			}
-			if mc.minVerBits > available {
-				mc.minVerBits = available
-			}
-			mc.minerMask = requestMask
-			mc.versionRoll = true
-			mc.versionMask = mask
 			result["version-rolling"] = true
 			result["version-rolling.mask"] = uint32ToHex8Lower(mask)
-			result["version-rolling.min-bit-count"] = mc.minVerBits
+			result["version-rolling.min-bit-count"] = minBits
 			// Important: some miners (including some cgminer-based firmwares)
 			// expect the immediate next line after mining.configure to be its
 			// JSON-RPC response. If we send an unsolicited notification before
@@ -1140,6 +1140,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 			Result: false,
 			Error:  mc.bannedStratumError(),
 		})
+		mc.notifyMu.Unlock()
 		mc.Close(banReason)
 		return
 	}
@@ -1156,6 +1157,7 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 		}
 		mc.sendSetExtranonce(ex1, en2Size)
 	}
+	mc.notifyMu.Unlock()
 	mc.maybeApplyMinimumDifficultyFloor(shouldApplyMinDifficulty)
 
 	// If initial work is scheduled, send it immediately after configure so
@@ -1198,7 +1200,8 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 	}
 
 	maskChanged := mc.updateVersionMask(job.VersionMask)
-	if maskChanged && mc.versionRoll {
+	versionRollingActive, _ := mc.versionRollingPolicySnapshot()
+	if maskChanged && versionRollingActive {
 		mc.sendVersionMask()
 	}
 	mc.sendPendingStratumSetup()
