@@ -41,6 +41,7 @@ type GBTTransaction struct {
 
 type Job struct {
 	JobID                   string
+	Generation              uint64
 	Template                GetBlockTemplateResult
 	Target                  *big.Int
 	targetBE                [32]byte
@@ -110,6 +111,7 @@ type JobManager struct {
 	donationScript      []byte
 	extraID             uint32
 	jobIDCounter        uint64
+	jobGeneration       uint64
 	subs                map[chan *Job]struct{}
 	subsMu              sync.Mutex
 	zmqHashblockHealthy atomic.Bool

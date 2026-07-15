@@ -1152,7 +1152,29 @@ func (mc *MinerConn) handleConfigure(req *StratumRequest) {
 }
 
 func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
+	if job == nil {
+		return
+	}
+	mc.notifyMu.Lock()
+	defer mc.notifyMu.Unlock()
 	if !mc.subscribed {
+		return
+	}
+
+	// Never let an older queued template replace newer work on this connection.
+	// Equal jobs remain eligible because vardiff changes intentionally re-notify
+	// the same template with a fresh Stratum job ID and coinbase script time.
+	mc.jobMu.Lock()
+	lastJob := mc.lastJob
+	mc.jobMu.Unlock()
+	if miningJobIsOlder(job, lastJob) {
+		logger.Warn("dropping out-of-order mining job",
+			"remote", mc.id,
+			"job", job.JobID,
+			"height", job.Template.Height,
+			"current_job", lastJob.JobID,
+			"current_height", lastJob.Template.Height,
+		)
 		return
 	}
 	// Opportunistically adjust difficulty before notifying about the job.
@@ -1325,6 +1347,19 @@ func (mc *MinerConn) sendNotifyFor(job *Job, forceClean bool) {
 		return
 	}
 	mc.recordNotifySent(time.Now())
+}
+
+func miningJobIsOlder(candidate, current *Job) bool {
+	if candidate == nil || current == nil {
+		return false
+	}
+	if candidate.Generation > 0 && current.Generation > 0 {
+		return candidate.Generation < current.Generation
+	}
+	if !candidate.CreatedAt.IsZero() && !current.CreatedAt.IsZero() {
+		return candidate.CreatedAt.Before(current.CreatedAt)
+	}
+	return false
 }
 
 // computeMerkleRootBE rebuilds the merkle root (big-endian) from coinb1/coinb2 and branches.

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -91,6 +92,7 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 
 	job := &Job{
 		JobID:                   jm.nextJobID(),
+		Generation:              atomic.AddUint64(&jm.jobGeneration, 1),
 		Template:                tpl,
 		Target:                  target,
 		targetBE:                uint256BEFromBigInt(target),

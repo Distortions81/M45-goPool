@@ -48,6 +48,9 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.applyMu.Lock()
 	defer jm.applyMu.Unlock()
 
+	jm.mu.RLock()
+	previousJob := jm.curJob
+	jm.mu.RUnlock()
 	needsNewJob, clean := jm.templateChanged(tpl)
 
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
@@ -74,7 +77,10 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 
 	jm.recordJobSuccess(job)
 	jm.updateBlockTipFromTemplate(tpl)
-	if tpl.Height > prevHeight {
+	tipChanged := previousJob == nil ||
+		previousJob.Template.Previous != tpl.Previous ||
+		previousJob.Template.Height != tpl.Height
+	if tipChanged || tpl.Height > prevHeight {
 		jm.refreshBlockHistoryFromRPC(ctx)
 	}
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))

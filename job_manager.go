@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -376,9 +375,10 @@ func (jm *JobManager) Start(ctx context.Context) {
 		ctx = context.Background()
 	}
 
-	// Start notification workers for async job distribution
-	// Use runtime.NumCPU() workers to handle fanout efficiently across available cores
-	numWorkers := runtime.NumCPU()
+	// A single dispatcher preserves FIFO job order. Parallel consumers can
+	// receive consecutive templates in order but acquire the subscriber lock in
+	// reverse order, rolling miners back to stale work.
+	numWorkers := 1
 	jm.notifyWg = sizedwaitgroup.New(numWorkers)
 	for i := range numWorkers {
 		jm.notifyWg.Add()

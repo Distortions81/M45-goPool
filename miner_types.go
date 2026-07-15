@@ -112,6 +112,7 @@ type MinerConn struct {
 	ctx                  context.Context
 	conn                 net.Conn
 	writeMu              sync.Mutex
+	notifyMu             sync.Mutex
 	writeScratch         []byte
 	reader               *bufio.Reader
 	jobMgr               *JobManager

@@ -53,14 +53,26 @@ func (jm *JobManager) ActiveMiners() int {
 }
 
 func (jm *JobManager) broadcastJob(job *Job) {
-	// Queue the job for async distribution instead of blocking here
+	// Queue the job for ordered async distribution. If the queue is full, replace
+	// its oldest pending update with this newest job. Broadcasting synchronously
+	// here would overtake already-queued jobs and allow a stale job to arrive last.
 	select {
 	case jm.notifyQueue <- job:
-		// Successfully queued for async processing
+		return
 	default:
-		// Queue is full, fall back to synchronous broadcast
-		logger.Warn("notification queue full, falling back to sync broadcast")
-		jm.broadcastJobSync(job)
+	}
+
+	dropped := false
+	select {
+	case <-jm.notifyQueue:
+		dropped = true
+	default:
+	}
+	select {
+	case jm.notifyQueue <- job:
+		logger.Warn("notification queue full; replaced oldest pending job", "dropped", dropped)
+	default:
+		logger.Warn("notification queue full; newest job could not be queued")
 	}
 }
 

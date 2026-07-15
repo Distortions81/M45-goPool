@@ -24,15 +24,9 @@ func (jm *JobManager) ensureTemplateFresh(ctx context.Context, tpl GetBlockTempl
 		return fmt.Errorf("%w: prev hash %s does not match best %s", errStaleTemplate, tpl.Previous, bestHash)
 	}
 
-	jm.mu.RLock()
-	cur := jm.curJob
-	jm.mu.RUnlock()
-	if cur != nil && tpl.Height < cur.Template.Height {
-		return fmt.Errorf("%w: template height regressed from %d to %d", errStaleTemplate, cur.Template.Height, tpl.Height)
-	}
-	if cur != nil && tpl.CurTime < cur.Template.CurTime {
-		return fmt.Errorf("%w: template curtime regressed from %d to %d", errStaleTemplate, cur.Template.CurTime, tpl.CurTime)
-	}
+	// Do not compare height or curtime with the previous job here. A legitimate
+	// chain reorganization can move either value backward. Matching bitcoind's
+	// current best hash is the authoritative freshness check.
 	return nil
 }
 

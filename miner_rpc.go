@@ -106,7 +106,7 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 		// If we've already seen a newer template height, there's no point
 		// continuing to spam submitblock for this block.
 		if mc.jobMgr != nil && job != nil {
-			if cur := mc.jobMgr.CurrentJob(); cur != nil && cur.Template.Height > job.Template.Height {
+			if cur := mc.jobMgr.CurrentJob(); submissionJobSuperseded(job, cur) {
 				logger.Warn("submitblock giving up after new block seen",
 					"original_height", job.Template.Height,
 					"current_height", cur.Template.Height,
@@ -130,6 +130,22 @@ func (mc *MinerConn) submitBlockWithFastRetry(job *Job, workerName, hashHex, blo
 
 		time.Sleep(retryInterval)
 	}
+}
+
+func submissionJobSuperseded(submitted, current *Job) bool {
+	if submitted == nil || current == nil {
+		return false
+	}
+	if current.Template.Height > submitted.Template.Height {
+		return true
+	}
+	// A reorg can replace the chain tip without increasing height, and can even
+	// temporarily reduce it. A newer pool generation with a different chain
+	// parent supersedes the old submission in all of those cases.
+	return submitted.Generation > 0 &&
+		current.Generation > submitted.Generation &&
+		(current.Template.Previous != submitted.Template.Previous ||
+			current.Template.Height != submitted.Template.Height)
 }
 
 func submitBlockResultError(submitRes *any) error {
