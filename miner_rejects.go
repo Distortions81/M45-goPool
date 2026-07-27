@@ -1068,17 +1068,7 @@ func (mc *MinerConn) suggestedVardiff(now time.Time, snap minerShareSnapshot) fl
 
 	rollingHashrate := snap.RollingHashrate
 	if rollingHashrate <= 0 {
-		if windowStart.IsZero() || !now.After(windowStart) || windowDifficulty <= 0 {
-			return currentDiff
-		}
-		windowSeconds := now.Sub(windowStart).Seconds()
-		if windowSeconds <= 0 {
-			return currentDiff
-		}
-		rollingHashrate = (windowDifficulty * hashPerShare) / windowSeconds
-		if rollingHashrate <= 0 {
-			return currentDiff
-		}
+		return currentDiff
 	}
 
 	interval := mc.vardiffRetargetInterval(rollingHashrate, currentDiff, targetShares, snap.RecentStaleRate)

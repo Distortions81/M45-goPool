@@ -236,7 +236,7 @@ func TestSuggestedVardiff_BootstrapAlsoRespectsAdjustmentWindow(t *testing.T) {
 	}
 }
 
-func TestSuggestedVardiff_UsesWindowDifficultyWhenRollingIsZero(t *testing.T) {
+func TestSuggestedVardiff_HoldsDifficultyWhenRollingIsZero(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	mc := &MinerConn{
 		cfg: Config{},
@@ -261,8 +261,42 @@ func TestSuggestedVardiff_UsesWindowDifficultyWhenRollingIsZero(t *testing.T) {
 		RollingHashrate: 0,
 	}
 
-	if got := mc.suggestedVardiff(now, snap); got != 8 {
-		t.Fatalf("got %.8g want %.8g when rolling hashrate is zero but window difficulty is available", got, 8.0)
+	if got := mc.suggestedVardiff(now, snap); got != 1 {
+		t.Fatalf("got %.8g want %.8g when rolling hashrate is zero", got, 1.0)
+	}
+}
+
+func TestSuggestedVardiff_ZeroRollingHashrateDoesNotCrushHighDifficulty(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	mc := &MinerConn{
+		cfg: Config{
+			MinDifficulty: 0.001,
+		},
+		vardiff: VarDiffConfig{
+			MinDiff:            0.001,
+			MaxDiff:            1 << 30,
+			TargetSharesPerMin: 15,
+			AdjustmentWindow:   time.Minute,
+			Step:               2,
+			DampingFactor:      0.7,
+		},
+	}
+	const currentDiff = 62269.0
+	atomicStoreFloat64(&mc.difficulty, currentDiff)
+	mc.lastDiffChange.Store(now.Add(-5 * time.Minute).UnixNano())
+
+	snap := minerShareSnapshot{
+		Stats: MinerStats{
+			WindowStart:       now.Add(-2 * time.Minute),
+			WindowAccepted:    1,
+			WindowSubmissions: 1,
+			WindowDifficulty:  0.001,
+		},
+		RollingHashrate: 0,
+	}
+
+	if got := mc.suggestedVardiff(now, snap); got != currentDiff {
+		t.Fatalf("got %.8g want %.8g when rolling hashrate is unavailable", got, currentDiff)
 	}
 }
 
