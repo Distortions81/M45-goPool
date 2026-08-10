@@ -32,5 +32,5 @@
   worker_notify_threshold_seconds = 300
 
 [status]
-  github_url = "https://github.com/Distortions81/M45-Core-goPool/blob/main/README.md"
+  github_url = "https://github.com/M45Core"
   mempool_address_url = "https://mempool.space/address/"
