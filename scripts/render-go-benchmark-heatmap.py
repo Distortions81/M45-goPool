@@ -132,6 +132,7 @@ def render_panel(
     rows: list[dict[str, Any]],
     metrics: list[tuple[str, str, bool]],
     y_offset: int,
+    log_scale: bool = False,
 ) -> list[str]:
     out: list[str] = [f'  <g transform="translate(0 {y_offset})">']
     out.append(svg_text(34, 0, "panel", title))
@@ -142,7 +143,7 @@ def render_panel(
     scales: dict[str, tuple[float, float]] = {}
     for _, key, _ in metrics:
         values = [
-            metric_value(row, key)
+            math.log10(max(metric_value(row, key), 1e-9)) if log_scale else metric_value(row, key)
             for row in rows
             if row.get("status") != "failed"
         ]
@@ -160,14 +161,16 @@ def render_panel(
             if row.get("status") == "failed":
                 out.append(f'    <rect x="179" y="{y}" width="590" height="32" fill="{FAILED}"/>')
                 reason = str(row.get("reason", "benchmark failed"))
-                out.append(svg_text(474, y + 16, "cell dark", f"FAIL — {reason}"))
+                label = "N/A*" if "connection cap is 4096" in reason else f"FAIL — {reason}"
+                out.append(svg_text(474, y + 16, "cell dark", label))
                 y += 32
                 continue
             for i, (_, key, higher_is_better) in enumerate(metrics):
                 x = 179 + i * 118
                 value = metric_value(row, key)
                 lo, hi = scales[key]
-                color = color_for(value, lo, hi, higher_is_better)
+                color_value = math.log10(max(value, 1e-9)) if log_scale else value
+                color = color_for(color_value, lo, hi, higher_is_better)
                 out.append(f'    <rect x="{x}" y="{y}" width="118" height="32" fill="{color}"/>')
                 out.append(
                     svg_text(
@@ -194,7 +197,7 @@ def main() -> None:
     notify_nozmq = panel_records(records, "notify", "no-zmq")
 
     lines = [
-        '<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1920" viewBox="0 0 820 1920" role="img" aria-labelledby="title desc">',
+        '<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1980" viewBox="0 0 820 1980" role="img" aria-labelledby="title desc">',
         '  <title id="title">goPool benchmark heat map</title>',
         f'  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the {html.escape(str(run_date))} rerun. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>',
         "  <style>",
@@ -208,9 +211,9 @@ def main() -> None:
         "    .light { fill: #111827; }",
         "    .dark { fill: #ffffff; }",
         "  </style>",
-        '  <rect width="820" height="1920" fill="#ffffff"/>',
+        '  <rect width="820" height="1980" fill="#ffffff"/>',
         '  <text x="34" y="42" class="title">Benchmark heat map</text>',
-        f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Green is better; dark red marks failures.</text>',
+        f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Green is better; red is worse.</text>',
         '  <g transform="translate(560 30)">',
         '    <rect x="0" y="0" width="44" height="16" fill="#188f4a"/>',
         '    <rect x="44" y="0" width="44" height="16" fill="#88b462"/>',
@@ -256,7 +259,10 @@ def main() -> None:
             ("max", "max", False),
         ],
         1328,
+        log_scale=True,
     )
+    lines.append(svg_text(34, 1940, "subtitle", "* WarpPool's stock Enterprise profile has a 4,096-connection hard cap."))
+    lines.append(svg_text(34, 1962, "subtitle", "No-ZMQ colors use a logarithmic scale so the ckpool outlier does not flatten the panel."))
     lines.append("</svg>")
 
     output = Path(args.output)
