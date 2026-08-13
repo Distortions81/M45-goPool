@@ -24,12 +24,11 @@ cells are explicitly recorded and rendered as failures.
 
 ![Benchmark heat map](heatmap.svg)
 
-Every numeric value is a colored tile. Each metric column is scaled
-independently; green is better and red is worse. WarpPool's `10000`-miner rows
-are marked `N/A*`, with its stock 4,096-connection hard cap noted below the chart.
-The no-ZMQ panel uses logarithmic color scaling so outliers do not collapse the
-color range for the other pools; displayed values remain the measured
-milliseconds.
+Every numeric value is a colored tile. Each metric column is logarithmically
+scaled independently so outliers do not collapse the useful color range; green
+is better and red is worse. Displayed values remain the raw measurements.
+WarpPool's `10000`-miner rows are marked `N/A*`, with its stock
+4,096-connection hard cap noted below the chart.
 
 The SVG includes `mining.submit`, `mining.notify` with ZMQ/default pool
 configuration, and `mining.notify` with pool-side ZMQ disabled.
