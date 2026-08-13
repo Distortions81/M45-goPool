@@ -262,7 +262,7 @@ def main() -> None:
         log_scale=True,
     )
     lines.append(svg_text(34, 1940, "subtitle", "* WarpPool's stock Enterprise profile has a 4,096-connection hard cap."))
-    lines.append(svg_text(34, 1962, "subtitle", "No-ZMQ colors use a logarithmic scale so the ckpool outlier does not flatten the panel."))
+    lines.append(svg_text(34, 1962, "subtitle", "No-ZMQ colors use a logarithmic scale so outliers do not flatten the panel."))
     lines.append("</svg>")
 
     output = Path(args.output)

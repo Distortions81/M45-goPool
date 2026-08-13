@@ -27,9 +27,9 @@ cells are explicitly recorded and rendered as failures.
 Every numeric value is a colored tile. Each metric column is scaled
 independently; green is better and red is worse. WarpPool's `10000`-miner rows
 are marked `N/A*`, with its stock 4,096-connection hard cap noted below the chart.
-The no-ZMQ panel uses logarithmic color scaling so ckpool's polling-latency
-outlier does not collapse the color range for the other pools; displayed values
-remain the measured milliseconds.
+The no-ZMQ panel uses logarithmic color scaling so outliers do not collapse the
+color range for the other pools; displayed values remain the measured
+milliseconds.
 
 The SVG includes `mining.submit`, `mining.notify` with ZMQ/default pool
 configuration, and `mining.notify` with pool-side ZMQ disabled.

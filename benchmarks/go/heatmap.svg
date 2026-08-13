@@ -523,5 +523,5 @@
 <text x="710" y="562" class="cell light">572.3</text>
   </g>
 <text x="34" y="1940" class="subtitle">* WarpPool&#x27;s stock Enterprise profile has a 4,096-connection hard cap.</text>
-<text x="34" y="1962" class="subtitle">No-ZMQ colors use a logarithmic scale so the ckpool outlier does not flatten the panel.</text>
+<text x="34" y="1962" class="subtitle">No-ZMQ colors use a logarithmic scale so outliers do not flatten the panel.</text>
 </svg>
