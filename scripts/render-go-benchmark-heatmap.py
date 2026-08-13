@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any
 
 
-POOLS = ["gopool", "pogolo", "ckpool"]
+POOLS = ["gopool", "pogolo", "ckpool", "warppool", "public-pool"]
 MINERS = [100, 1000, 10000]
 GOOD = (24, 143, 74)
 MID = (242, 215, 121)
 BAD = (217, 47, 39)
+FAILED = "#7f1d1d"
 
 
 def parse_args() -> argparse.Namespace:
@@ -134,13 +135,19 @@ def render_panel(
 ) -> list[str]:
     out: list[str] = [f'  <g transform="translate(0 {y_offset})">']
     out.append(svg_text(34, 0, "panel", title))
-    out.append(svg_text(34, 52, "head", "pool / miners"))
+    out.append(svg_text(96, 52, "head", "pool / miners"))
     for i, (label, _, _) in enumerate(metrics):
         out.append(svg_text(238 + i * 118, 52, "head", label))
 
     scales: dict[str, tuple[float, float]] = {}
     for _, key, _ in metrics:
-        values = [metric_value(row, key) for row in rows]
+        values = [
+            metric_value(row, key)
+            for row in rows
+            if row.get("status") != "failed"
+        ]
+        if not values:
+            values = [0.0]
         scales[key] = (min(values), max(values))
 
     y = 66
@@ -150,6 +157,12 @@ def render_panel(
         for miners in MINERS:
             row = next(r for r in rows if r["pool"] == pool and int(r["miners"]) == miners)
             out.append(svg_text(34, y + 16, "row", f"{pool} {miners}"))
+            if row.get("status") == "failed":
+                out.append(f'    <rect x="179" y="{y}" width="590" height="32" fill="{FAILED}"/>')
+                reason = str(row.get("reason", "benchmark failed"))
+                out.append(svg_text(474, y + 16, "cell dark", f"FAIL — {reason}"))
+                y += 32
+                continue
             for i, (_, key, higher_is_better) in enumerate(metrics):
                 x = 179 + i * 118
                 value = metric_value(row, key)
@@ -181,9 +194,9 @@ def main() -> None:
     notify_nozmq = panel_records(records, "notify", "no-zmq")
 
     lines = [
-        '<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1320" viewBox="0 0 820 1320" role="img" aria-labelledby="title desc">',
+        '<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1920" viewBox="0 0 820 1920" role="img" aria-labelledby="title desc">',
         '  <title id="title">goPool benchmark heat map</title>',
-        f'  <desc id="desc">Heat map of all numeric values in the mining.submit and mining.notify benchmark tables from the {html.escape(str(run_date))} rerun. Each metric column is colored independently; green is better and red is worse.</desc>',
+        f'  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the {html.escape(str(run_date))} rerun. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>',
         "  <style>",
         '    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #111827; }',
         "    .title { font-size: 26px; font-weight: 700; }",
@@ -195,9 +208,9 @@ def main() -> None:
         "    .light { fill: #111827; }",
         "    .dark { fill: #ffffff; }",
         "  </style>",
-        '  <rect width="820" height="1320" fill="#ffffff"/>',
+        '  <rect width="820" height="1920" fill="#ffffff"/>',
         '  <text x="34" y="42" class="title">Benchmark heat map</text>',
-        f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Every numeric table value is a tile; green is better, red is worse.</text>',
+        f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Green is better; dark red marks failures.</text>',
         '  <g transform="translate(560 30)">',
         '    <rect x="0" y="0" width="44" height="16" fill="#188f4a"/>',
         '    <rect x="44" y="0" width="44" height="16" fill="#88b462"/>',
@@ -230,7 +243,7 @@ def main() -> None:
             ("p99", "p99", False),
             ("max", "max", False),
         ],
-        520,
+        720,
     )
     lines += render_panel(
         "mining.notify, no pool-side ZMQ",
@@ -242,7 +255,7 @@ def main() -> None:
             ("p99", "p99", False),
             ("max", "max", False),
         ],
-        928,
+        1328,
     )
     lines.append("</svg>")
 

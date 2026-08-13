@@ -1,7 +1,8 @@
 # Go benchmark pool registry for local comparison runs.
 #
-# This overlay keeps the comparison intentionally focused on goPool, pogolo, and
-# ckpool. It is copied over the upstream harness by scripts/go-benchmark-env.sh.
+# This overlay keeps the comparison intentionally focused on goPool, pogolo,
+# ckpool, WarpPool, and public-pool. It is copied over the upstream harness by
+# scripts/go-benchmark-env.sh.
 
 regtest:
   rpc_user: openbench
@@ -74,3 +75,45 @@ pools:
     readiness:
       kind: tcp
       timeout_seconds: 120
+
+  warppool:
+    description: dvb-projekt/dvb-WarpPool v1.25.6 (Rust solo pool)
+    source: build
+    repo: https://git.warppool.org/dvb-projekt/dvb-WarpPool.git
+    repo_ref: v1.25.6
+    repo_dir: pools/warppool/src
+    build_context: pools/warppool/src
+    dockerfile: pools/warppool/Dockerfile
+    stratum_port: 3333
+    api_port: 18334
+    env:
+      WARPPOOL_RPC_USER: ${RPC_USER}
+      WARPPOOL_RPC_PASS: ${RPC_PASS}
+    config:
+      format: toml
+      template: pools/warppool/bench.toml
+      mount: /config/config.toml
+    readiness:
+      kind: http
+      url: http://${POOL_HOST}:${API_PORT}/readyz
+      status: 200
+      timeout_seconds: 120
+
+  public-pool:
+    description: benjamin-wilson/public-pool master (TypeScript/Node solo pool)
+    source: build
+    build_context: ../public-pool
+    repo: https://github.com/benjamin-wilson/public-pool.git
+    repo_ref: master
+    dockerfile: pools/public-pool/Dockerfile
+    stratum_port: 3333
+    api_port: 3334
+    env:
+      NODE_ENV: production
+    config:
+      format: env
+      template: pools/public-pool/bench.env
+      mount: /public-pool/.env
+    readiness:
+      kind: tcp
+      timeout_seconds: 150

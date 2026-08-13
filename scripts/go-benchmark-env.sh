@@ -32,6 +32,14 @@ mkdir -p "${bench_dir}/pools/gopool"
 cp "${overlay}/pools/gopool/bench.toml" "${bench_dir}/pools/gopool/bench.toml"
 cp "${overlay}/pools/gopool/Dockerfile" "${bench_dir}/pools/gopool/Dockerfile"
 cp "${overlay}/pools/gopool/entrypoint.sh" "${bench_dir}/pools/gopool/entrypoint.sh"
+mkdir -p "${bench_dir}/pools/warppool"
+cp "${overlay}/pools/warppool/bench.toml" "${bench_dir}/pools/warppool/bench.toml"
+cp "${overlay}/pools/warppool/Dockerfile" "${bench_dir}/pools/warppool/Dockerfile"
+mkdir -p "${bench_dir}/pools/public-pool"
+cp "${overlay}/pools/public-pool/bench.env" "${bench_dir}/pools/public-pool/bench.env"
+cp "${overlay}/pools/public-pool/Dockerfile" "${bench_dir}/pools/public-pool/Dockerfile"
+cp "${overlay}/pools/public-pool/Dockerfile.dockerignore" \
+  "${bench_dir}/pools/public-pool/Dockerfile.dockerignore"
 
 if [ "${GO_BENCHMARK_NO_ZMQ:-0}" = "1" ]; then
   sed -i \
@@ -44,6 +52,13 @@ if [ "${GO_BENCHMARK_NO_ZMQ:-0}" = "1" ]; then
   sed -i \
     -e 's#"zmqblock": .*#"zmqblock": "tcp://127.0.0.1:1",#' \
     "${bench_dir}/pools/ckpool/bench.conf"
+  sed -i \
+    -e 's#^zmq_hashblock_addr = .*#zmq_hashblock_addr = ""#' \
+    -e 's#^zmq_rawblock_addr = .*#zmq_rawblock_addr = ""#' \
+    "${bench_dir}/pools/warppool/bench.toml"
+  sed -i \
+    -e 's#^BITCOIN_ZMQ_HOST=.*#BITCOIN_ZMQ_HOST=#' \
+    "${bench_dir}/pools/public-pool/bench.env"
 fi
 
 # Keep hashblock and rawblock on separate ZMQ sockets. ckpool's ZMQ block

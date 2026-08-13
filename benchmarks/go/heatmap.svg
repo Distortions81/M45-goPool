@@ -1,349 +1,525 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1320" viewBox="0 0 820 1320" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1920" viewBox="0 0 820 1920" role="img" aria-labelledby="title desc">
   <title id="title">goPool benchmark heat map</title>
-  <desc id="desc">Heat map of all numeric values in the mining.submit and mining.notify benchmark tables from the July 6, 2026 rerun. Each metric column is colored independently; green is better and red is worse.</desc>
+  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the August 13, 2026 rerun. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>
   <style>
     text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #111827; }
     .title { font-size: 26px; font-weight: 700; }
-    .subtitle { font-size: 13px; fill: #4b5563; }
-    .panel { font-size: 19px; font-weight: 700; }
-    .head { font-size: 12px; font-weight: 800; fill: #374151; text-anchor: middle; }
-    .row { font-size: 12px; font-weight: 700; fill: #374151; dominant-baseline: middle; }
+    .subtitle { font-size: 14px; fill: #4b5563; }
+    .panel { font-size: 18px; font-weight: 700; }
+    .head { font-size: 12px; font-weight: 700; fill: #374151; text-anchor: middle; }
+    .row { font-size: 12px; font-weight: 650; dominant-baseline: middle; }
     .cell { font-size: 12px; font-weight: 750; text-anchor: middle; dominant-baseline: middle; }
     .light { fill: #111827; }
     .dark { fill: #ffffff; }
   </style>
-  <rect width="820" height="1320" fill="#ffffff"/>
+  <rect width="820" height="1920" fill="#ffffff"/>
   <text x="34" y="42" class="title">Benchmark heat map</text>
-  <text x="34" y="66" class="subtitle">Rerun July 6, 2026. Every numeric table value is a tile; green is better, red is worse.</text>
+  <text x="34" y="66" class="subtitle">Rerun August 13, 2026. Green is better; dark red marks failures.</text>
   <g transform="translate(560 30)">
     <rect x="0" y="0" width="44" height="16" fill="#188f4a"/>
     <rect x="44" y="0" width="44" height="16" fill="#88b462"/>
-    <rect x="88" y="0" width="44" height="16" fill="#f7d97a"/>
-    <rect x="132" y="0" width="44" height="16" fill="#e88450"/>
+    <rect x="88" y="0" width="44" height="16" fill="#f2d779"/>
+    <rect x="132" y="0" width="44" height="16" fill="#ea9257"/>
     <rect x="176" y="0" width="44" height="16" fill="#d92f27"/>
+    <text x="0" y="32" class="subtitle">better</text>
+    <text x="176" y="32" class="subtitle">worse</text>
   </g>
-  <g transform="translate(0 112)">
-    <text x="34" y="0" class="panel">mining.submit</text>
-    <text x="34" y="24" class="subtitle">Rows are pool/miner-count runs. Latency is ms.</text>
-    <text x="238" y="52" class="head">valid/s</text>
-    <text x="356" y="52" class="head">p50</text>
-    <text x="474" y="52" class="head">p95</text>
-    <text x="592" y="52" class="head">p99</text>
-    <text x="710" y="52" class="head">max</text>
-    <text x="34" y="82" class="row">gopool 100</text>
-    <rect x="179" y="66" width="118" height="32" fill="#4fa156"/>
-    <text x="238" y="82" class="cell dark">480,282</text>
-    <rect x="297" y="66" width="118" height="32" fill="#198f4a"/>
-    <text x="356" y="82" class="cell dark">0.127</text>
+  <g transform="translate(0 96)">
+<text x="34" y="0" class="panel">mining.submit</text>
+<text x="96" y="52" class="head">pool / miners</text>
+<text x="238" y="52" class="head">valid/s</text>
+<text x="356" y="52" class="head">p50</text>
+<text x="474" y="52" class="head">p95</text>
+<text x="592" y="52" class="head">p99</text>
+<text x="710" y="52" class="head">max</text>
+<text x="34" y="82" class="row">gopool 100</text>
+    <rect x="179" y="66" width="118" height="32" fill="#29954e"/>
+<text x="238" y="82" class="cell dark">490,576</text>
+    <rect x="297" y="66" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="82" class="cell dark">0.125</text>
     <rect x="415" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="474" y="82" class="cell dark">0.483</text>
+<text x="474" y="82" class="cell dark">0.467</text>
     <rect x="533" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="592" y="82" class="cell dark">0.795</text>
-    <rect x="651" y="66" width="118" height="32" fill="#4ba055"/>
-    <text x="710" y="82" class="cell dark">7.882</text>
-    <text x="34" y="114" class="row">gopool 1000</text>
+<text x="592" y="82" class="cell dark">0.768</text>
+    <rect x="651" y="66" width="118" height="32" fill="#188f4a"/>
+<text x="710" y="82" class="cell dark">6.615</text>
+<text x="34" y="114" class="row">gopool 1000</text>
     <rect x="179" y="98" width="118" height="32" fill="#188f4a"/>
-    <text x="238" y="114" class="cell dark">533,185</text>
-    <rect x="297" y="98" width="118" height="32" fill="#63a85a"/>
-    <text x="356" y="114" class="cell dark">1.366</text>
-    <rect x="415" y="98" width="118" height="32" fill="#a7be69"/>
-    <text x="474" y="114" class="cell light">4.759</text>
-    <rect x="533" y="98" width="118" height="32" fill="#cbca70"/>
-    <text x="592" y="114" class="cell light">8.395</text>
-    <rect x="651" y="98" width="118" height="32" fill="#e4d376"/>
-    <text x="710" y="114" class="cell light">32.3</text>
-    <text x="34" y="146" class="row">gopool 10000</text>
-    <rect x="179" y="130" width="118" height="32" fill="#9ebc67"/>
-    <text x="238" y="146" class="cell light">403,286</text>
-    <rect x="297" y="130" width="118" height="32" fill="#efa963"/>
-    <text x="356" y="146" class="cell light">18.8</text>
-    <rect x="415" y="130" width="118" height="32" fill="#e0593b"/>
-    <text x="474" y="146" class="cell dark">59.9</text>
-    <rect x="533" y="130" width="118" height="32" fill="#dd4733"/>
-    <text x="592" y="146" class="cell dark">81.8</text>
-    <rect x="651" y="130" width="118" height="32" fill="#dd4833"/>
-    <text x="710" y="146" class="cell dark">200.6</text>
-    <text x="34" y="186" class="row">pogolo 100</text>
-    <rect x="179" y="170" width="118" height="32" fill="#f1b669"/>
-    <text x="238" y="186" class="cell light">272,908</text>
+<text x="238" y="114" class="cell dark">510,114</text>
+    <rect x="297" y="98" width="118" height="32" fill="#198f4a"/>
+<text x="356" y="114" class="cell dark">1.439</text>
+    <rect x="415" y="98" width="118" height="32" fill="#1a904a"/>
+<text x="474" y="114" class="cell dark">4.953</text>
+    <rect x="533" y="98" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="114" class="cell dark">8.5</text>
+    <rect x="651" y="98" width="118" height="32" fill="#23934c"/>
+<text x="710" y="114" class="cell dark">33.1</text>
+<text x="34" y="146" class="row">gopool 10000</text>
+    <rect x="179" y="130" width="118" height="32" fill="#58a458"/>
+<text x="238" y="146" class="cell dark">436,888</text>
+    <rect x="297" y="130" width="118" height="32" fill="#20924c"/>
+<text x="356" y="146" class="cell dark">20.8</text>
+    <rect x="415" y="130" width="118" height="32" fill="#29944e"/>
+<text x="474" y="146" class="cell dark">41.6</text>
+    <rect x="533" y="130" width="118" height="32" fill="#2b954e"/>
+<text x="592" y="146" class="cell dark">49.0</text>
+    <rect x="651" y="130" width="118" height="32" fill="#3a9a51"/>
+<text x="710" y="146" class="cell dark">90.6</text>
+<text x="34" y="186" class="row">pogolo 100</text>
+    <rect x="179" y="170" width="118" height="32" fill="#f2d779"/>
+<text x="238" y="186" class="cell light">259,827</text>
     <rect x="297" y="170" width="118" height="32" fill="#188f4a"/>
-    <text x="356" y="186" class="cell dark">0.112</text>
-    <rect x="415" y="170" width="118" height="32" fill="#60a75a"/>
-    <text x="474" y="186" class="cell dark">1.943</text>
-    <rect x="533" y="170" width="118" height="32" fill="#6bab5c"/>
-    <text x="592" y="186" class="cell light">2.884</text>
-    <rect x="651" y="170" width="118" height="32" fill="#acc06a"/>
-    <text x="710" y="186" class="cell light">19.5</text>
-    <text x="34" y="218" class="row">pogolo 1000</text>
-    <rect x="179" y="202" width="118" height="32" fill="#f0b167"/>
-    <text x="238" y="218" class="cell light">267,217</text>
-    <rect x="297" y="202" width="118" height="32" fill="#479e54"/>
-    <text x="356" y="218" class="cell dark">0.781</text>
-    <rect x="415" y="202" width="118" height="32" fill="#f2d779"/>
-    <text x="474" y="218" class="cell light">10.8</text>
-    <rect x="533" y="202" width="118" height="32" fill="#e05439"/>
-    <text x="592" y="218" class="cell dark">69.9</text>
-    <rect x="651" y="202" width="118" height="32" fill="#d92f27"/>
-    <text x="710" y="218" class="cell dark">266.1</text>
-    <text x="34" y="250" class="row">pogolo 10000</text>
-    <rect x="179" y="234" width="118" height="32" fill="#ec995b"/>
-    <text x="238" y="250" class="cell light">236,880</text>
-    <rect x="297" y="234" width="118" height="32" fill="#e36943"/>
-    <text x="356" y="250" class="cell dark">45.3</text>
-    <rect x="415" y="234" width="118" height="32" fill="#df4e36"/>
-    <text x="474" y="250" class="cell dark">68.5</text>
-    <rect x="533" y="234" width="118" height="32" fill="#dd4532"/>
-    <text x="592" y="250" class="cell dark">84.1</text>
-    <rect x="651" y="234" width="118" height="32" fill="#dd4833"/>
-    <text x="710" y="250" class="cell dark">201.1</text>
-    <text x="34" y="290" class="row">ckpool 100</text>
-    <rect x="179" y="274" width="118" height="32" fill="#dc3d2e"/>
-    <text x="238" y="290" class="cell dark">120,123</text>
-    <rect x="297" y="274" width="118" height="32" fill="#489f54"/>
-    <text x="356" y="290" class="cell dark">0.802</text>
-    <rect x="415" y="274" width="118" height="32" fill="#419d53"/>
-    <text x="474" y="290" class="cell dark">1.196</text>
-    <rect x="533" y="274" width="118" height="32" fill="#3c9b52"/>
-    <text x="592" y="290" class="cell dark">1.497</text>
+<text x="356" y="186" class="cell dark">0.112</text>
+    <rect x="415" y="170" width="118" height="32" fill="#198f4a"/>
+<text x="474" y="186" class="cell dark">2.08</text>
+    <rect x="533" y="170" width="118" height="32" fill="#198f4a"/>
+<text x="592" y="186" class="cell dark">3.067</text>
+    <rect x="651" y="170" width="118" height="32" fill="#20924c"/>
+<text x="710" y="186" class="cell dark">26.5</text>
+<text x="34" y="218" class="row">pogolo 1000</text>
+    <rect x="179" y="202" width="118" height="32" fill="#f1d477"/>
+<text x="238" y="218" class="cell light">254,574</text>
+    <rect x="297" y="202" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="218" class="cell dark">0.629</text>
+    <rect x="415" y="202" width="118" height="32" fill="#1c904b"/>
+<text x="474" y="218" class="cell dark">10.1</text>
+    <rect x="533" y="202" width="118" height="32" fill="#3b9b52"/>
+<text x="592" y="218" class="cell dark">89.0</text>
+    <rect x="651" y="202" width="118" height="32" fill="#94b865"/>
+<text x="710" y="218" class="cell light">313.2</text>
+<text x="34" y="250" class="row">pogolo 10000</text>
+    <rect x="179" y="234" width="118" height="32" fill="#efc36f"/>
+<text x="238" y="250" class="cell light">230,116</text>
+    <rect x="297" y="234" width="118" height="32" fill="#2b954e"/>
+<text x="356" y="250" class="cell dark">46.9</text>
+    <rect x="415" y="234" width="118" height="32" fill="#349850"/>
+<text x="474" y="250" class="cell dark">70.0</text>
+    <rect x="533" y="234" width="118" height="32" fill="#3b9a51"/>
+<text x="592" y="250" class="cell dark">87.1</text>
+    <rect x="651" y="234" width="118" height="32" fill="#6eac5d"/>
+<text x="710" y="250" class="cell light">220.4</text>
+<text x="34" y="290" class="row">ckpool 100</text>
+    <rect x="179" y="274" width="118" height="32" fill="#e57f4e"/>
+<text x="238" y="290" class="cell light">129,190</text>
+    <rect x="297" y="274" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="290" class="cell dark">0.744</text>
+    <rect x="415" y="274" width="118" height="32" fill="#188f4a"/>
+<text x="474" y="290" class="cell dark">1.052</text>
+    <rect x="533" y="274" width="118" height="32" fill="#188f4a"/>
+<text x="592" y="290" class="cell dark">1.251</text>
     <rect x="651" y="274" width="118" height="32" fill="#188f4a"/>
-    <text x="710" y="290" class="cell dark">4.705</text>
-    <text x="34" y="322" class="row">ckpool 1000</text>
-    <rect x="179" y="306" width="118" height="32" fill="#db392c"/>
-    <text x="238" y="322" class="cell dark">113,931</text>
-    <rect x="297" y="306" width="118" height="32" fill="#efd678"/>
-    <text x="356" y="322" class="cell light">8.706</text>
-    <rect x="415" y="306" width="118" height="32" fill="#ecd578"/>
-    <text x="474" y="322" class="cell light">10.2</text>
-    <rect x="533" y="306" width="118" height="32" fill="#e6d376"/>
-    <text x="592" y="322" class="cell light">11.1</text>
-    <rect x="651" y="306" width="118" height="32" fill="#a5be68"/>
-    <text x="710" y="322" class="cell light">18.3</text>
-    <text x="34" y="354" class="row">ckpool 10000</text>
-    <rect x="179" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="238" y="354" class="cell dark">101,799</text>
-    <rect x="297" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="356" y="354" class="cell dark">98.7</text>
-    <rect x="415" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="474" y="354" class="cell dark">101.6</text>
-    <rect x="533" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="592" y="354" class="cell dark">110.5</text>
-    <rect x="651" y="338" width="118" height="32" fill="#e46e46"/>
-    <text x="710" y="354" class="cell dark">130.1</text>
+<text x="710" y="290" class="cell dark">6.429</text>
+<text x="34" y="322" class="row">ckpool 1000</text>
+    <rect x="179" y="306" width="118" height="32" fill="#e57e4e"/>
+<text x="238" y="322" class="cell light">127,117</text>
+    <rect x="297" y="306" width="118" height="32" fill="#1b904b"/>
+<text x="356" y="322" class="cell dark">7.889</text>
+    <rect x="415" y="306" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="322" class="cell dark">8.464</text>
+    <rect x="533" y="306" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="322" class="cell dark">8.835</text>
+    <rect x="651" y="306" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="322" class="cell dark">14.2</text>
+<text x="34" y="354" class="row">ckpool 10000</text>
+    <rect x="179" y="338" width="118" height="32" fill="#e4784b"/>
+<text x="238" y="354" class="cell light">118,054</text>
+    <rect x="297" y="338" width="118" height="32" fill="#3b9b52"/>
+<text x="356" y="354" class="cell dark">85.2</text>
+    <rect x="415" y="338" width="118" height="32" fill="#3b9a52"/>
+<text x="474" y="354" class="cell dark">86.8</text>
+    <rect x="533" y="338" width="118" height="32" fill="#3b9b52"/>
+<text x="592" y="354" class="cell dark">88.5</text>
+    <rect x="651" y="338" width="118" height="32" fill="#409c53"/>
+<text x="710" y="354" class="cell dark">106.0</text>
+<text x="34" y="394" class="row">warppool 100</text>
+    <rect x="179" y="378" width="118" height="32" fill="#eba762"/>
+<text x="238" y="394" class="cell light">188,228</text>
+    <rect x="297" y="378" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="394" class="cell dark">0.51</text>
+    <rect x="415" y="378" width="118" height="32" fill="#188f4a"/>
+<text x="474" y="394" class="cell dark">0.853</text>
+    <rect x="533" y="378" width="118" height="32" fill="#188f4a"/>
+<text x="592" y="394" class="cell dark">1.068</text>
+    <rect x="651" y="378" width="118" height="32" fill="#198f4a"/>
+<text x="710" y="394" class="cell dark">7.694</text>
+<text x="34" y="426" class="row">warppool 1000</text>
+    <rect x="179" y="410" width="118" height="32" fill="#ecb166"/>
+<text x="238" y="426" class="cell light">202,508</text>
+    <rect x="297" y="410" width="118" height="32" fill="#198f4a"/>
+<text x="356" y="426" class="cell dark">3.589</text>
+    <rect x="415" y="410" width="118" height="32" fill="#1d914b"/>
+<text x="474" y="426" class="cell dark">12.1</text>
+    <rect x="533" y="410" width="118" height="32" fill="#1e914b"/>
+<text x="592" y="426" class="cell dark">15.2</text>
+    <rect x="651" y="410" width="118" height="32" fill="#1f914c"/>
+<text x="710" y="426" class="cell dark">24.2</text>
+<text x="34" y="458" class="row">warppool 10000</text>
+    <rect x="179" y="442" width="590" height="32" fill="#7f1d1d"/>
+<text x="474" y="458" class="cell dark">FAIL — stock Enterprise profile connection cap is 4096</text>
+<text x="34" y="498" class="row">public-pool 100</text>
+    <rect x="179" y="482" width="118" height="32" fill="#d93027"/>
+<text x="238" y="498" class="cell dark">10,194</text>
+    <rect x="297" y="482" width="118" height="32" fill="#1c904b"/>
+<text x="356" y="498" class="cell dark">9.528</text>
+    <rect x="415" y="482" width="118" height="32" fill="#1c904b"/>
+<text x="474" y="498" class="cell dark">11.2</text>
+    <rect x="533" y="482" width="118" height="32" fill="#1c904b"/>
+<text x="592" y="498" class="cell dark">11.9</text>
+    <rect x="651" y="482" width="118" height="32" fill="#1f914c"/>
+<text x="710" y="498" class="cell dark">24.1</text>
+<text x="34" y="530" class="row">public-pool 1000</text>
+    <rect x="179" y="514" width="118" height="32" fill="#d92f27"/>
+<text x="238" y="530" class="cell dark">9,372</text>
+    <rect x="297" y="514" width="118" height="32" fill="#439d53"/>
+<text x="356" y="530" class="cell dark">106.3</text>
+    <rect x="415" y="514" width="118" height="32" fill="#449d53"/>
+<text x="474" y="530" class="cell dark">109.0</text>
+    <rect x="533" y="514" width="118" height="32" fill="#4aa055"/>
+<text x="592" y="530" class="cell dark">125.6</text>
+    <rect x="651" y="514" width="118" height="32" fill="#499f55"/>
+<text x="710" y="530" class="cell dark">128.6</text>
+<text x="34" y="562" class="row">public-pool 10000</text>
+    <rect x="179" y="546" width="118" height="32" fill="#d92f27"/>
+<text x="238" y="562" class="cell dark">9,373</text>
+    <rect x="297" y="546" width="118" height="32" fill="#d92f27"/>
+<text x="356" y="562" class="cell dark">1065.1</text>
+    <rect x="415" y="546" width="118" height="32" fill="#d92f27"/>
+<text x="474" y="562" class="cell dark">1082.6</text>
+    <rect x="533" y="546" width="118" height="32" fill="#d92f27"/>
+<text x="592" y="562" class="cell dark">1084.3</text>
+    <rect x="651" y="546" width="118" height="32" fill="#d92f27"/>
+<text x="710" y="562" class="cell dark">1085.6</text>
   </g>
-  <g transform="translate(0 520)">
-    <text x="34" y="0" class="panel">mining.notify, ZMQ/default</text>
-    <text x="34" y="24" class="subtitle">Rows are pool/miner-count runs. Latency is ms.</text>
-    <text x="238" y="52" class="head">avg</text>
-    <text x="356" y="52" class="head">p50</text>
-    <text x="474" y="52" class="head">p95</text>
-    <text x="592" y="52" class="head">p99</text>
-    <text x="710" y="52" class="head">max</text>
-    <text x="34" y="82" class="row">gopool 100</text>
+  <g transform="translate(0 720)">
+<text x="34" y="0" class="panel">mining.notify, ZMQ/default</text>
+<text x="96" y="52" class="head">pool / miners</text>
+<text x="238" y="52" class="head">avg</text>
+<text x="356" y="52" class="head">p50</text>
+<text x="474" y="52" class="head">p95</text>
+<text x="592" y="52" class="head">p99</text>
+<text x="710" y="52" class="head">max</text>
+<text x="34" y="82" class="row">gopool 100</text>
     <rect x="179" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="238" y="82" class="cell dark">2.2</text>
+<text x="238" y="82" class="cell dark">1.7</text>
     <rect x="297" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="356" y="82" class="cell dark">2.2</text>
+<text x="356" y="82" class="cell dark">1.7</text>
     <rect x="415" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="474" y="82" class="cell dark">2.5</text>
+<text x="474" y="82" class="cell dark">2</text>
     <rect x="533" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="592" y="82" class="cell dark">2.5</text>
+<text x="592" y="82" class="cell dark">2</text>
     <rect x="651" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="710" y="82" class="cell dark">2.6</text>
-    <text x="34" y="114" class="row">gopool 1000</text>
-    <rect x="179" y="98" width="118" height="32" fill="#27944d"/>
-    <text x="238" y="114" class="cell dark">2.6</text>
-    <rect x="297" y="98" width="118" height="32" fill="#27944d"/>
-    <text x="356" y="114" class="cell dark">2.6</text>
-    <rect x="415" y="98" width="118" height="32" fill="#30974f"/>
-    <text x="474" y="114" class="cell dark">3.3</text>
-    <rect x="533" y="98" width="118" height="32" fill="#329850"/>
-    <text x="592" y="114" class="cell dark">3.4</text>
-    <rect x="651" y="98" width="118" height="32" fill="#2f974f"/>
-    <text x="710" y="114" class="cell dark">3.4</text>
-    <text x="34" y="146" class="row">gopool 10000</text>
-    <rect x="179" y="130" width="118" height="32" fill="#b7c46c"/>
-    <text x="238" y="146" class="cell light">10.6</text>
-    <rect x="297" y="130" width="118" height="32" fill="#b7c46c"/>
-    <text x="356" y="146" class="cell light">10.6</text>
-    <rect x="415" y="130" width="118" height="32" fill="#dacf74"/>
-    <text x="474" y="146" class="cell light">17.9</text>
-    <rect x="533" y="130" width="118" height="32" fill="#dbd074"/>
-    <text x="592" y="146" class="cell light">18.3</text>
-    <rect x="651" y="130" width="118" height="32" fill="#dacf74"/>
-    <text x="710" y="146" class="cell light">18.4</text>
-    <text x="34" y="186" class="row">pogolo 100</text>
-    <rect x="179" y="170" width="118" height="32" fill="#e46e46"/>
-    <text x="238" y="186" class="cell dark">59.6</text>
-    <rect x="297" y="170" width="118" height="32" fill="#e46e46"/>
-    <text x="356" y="186" class="cell dark">59.7</text>
-    <rect x="415" y="170" width="118" height="32" fill="#e98852"/>
-    <text x="474" y="186" class="cell light">60.1</text>
-    <rect x="533" y="170" width="118" height="32" fill="#e98953"/>
-    <text x="592" y="186" class="cell light">60.1</text>
-    <rect x="651" y="170" width="118" height="32" fill="#e98b54"/>
-    <text x="710" y="186" class="cell light">60.1</text>
-    <text x="34" y="218" class="row">pogolo 1000</text>
-    <rect x="179" y="202" width="118" height="32" fill="#e36843"/>
-    <text x="238" y="218" class="cell dark">64.1</text>
-    <rect x="297" y="202" width="118" height="32" fill="#e36843"/>
-    <text x="356" y="218" class="cell dark">64.0</text>
-    <rect x="415" y="202" width="118" height="32" fill="#e8824f"/>
-    <text x="474" y="218" class="cell light">64.7</text>
-    <rect x="533" y="202" width="118" height="32" fill="#e88350"/>
-    <text x="592" y="218" class="cell light">64.9</text>
-    <rect x="651" y="202" width="118" height="32" fill="#e88450"/>
-    <text x="710" y="218" class="cell light">65.0</text>
-    <text x="34" y="250" class="row">pogolo 10000</text>
-    <rect x="179" y="234" width="118" height="32" fill="#e15c3d"/>
-    <text x="238" y="250" class="cell dark">72.6</text>
-    <rect x="297" y="234" width="118" height="32" fill="#e0573b"/>
-    <text x="356" y="250" class="cell dark">76.2</text>
-    <rect x="415" y="234" width="118" height="32" fill="#e47047"/>
-    <text x="474" y="250" class="cell dark">79.3</text>
-    <rect x="533" y="234" width="118" height="32" fill="#e57147"/>
-    <text x="592" y="250" class="cell dark">80.3</text>
-    <rect x="651" y="234" width="118" height="32" fill="#e57147"/>
-    <text x="710" y="250" class="cell dark">81.0</text>
-    <text x="34" y="290" class="row">ckpool 100</text>
-    <rect x="179" y="274" width="118" height="32" fill="#e46c45"/>
-    <text x="238" y="290" class="cell dark">61.1</text>
-    <rect x="297" y="274" width="118" height="32" fill="#e46c45"/>
-    <text x="356" y="290" class="cell dark">61.2</text>
-    <rect x="415" y="274" width="118" height="32" fill="#e88651"/>
-    <text x="474" y="290" class="cell light">61.6</text>
-    <rect x="533" y="274" width="118" height="32" fill="#e98752"/>
-    <text x="592" y="290" class="cell light">61.7</text>
-    <rect x="651" y="274" width="118" height="32" fill="#e98853"/>
-    <text x="710" y="290" class="cell light">61.7</text>
-    <text x="34" y="322" class="row">ckpool 1000</text>
-    <rect x="179" y="306" width="118" height="32" fill="#e26340"/>
-    <text x="238" y="322" class="cell dark">67.7</text>
-    <rect x="297" y="306" width="118" height="32" fill="#e26340"/>
-    <text x="356" y="322" class="cell dark">67.5</text>
-    <rect x="415" y="306" width="118" height="32" fill="#e6774a"/>
-    <text x="474" y="322" class="cell dark">73.1</text>
-    <rect x="533" y="306" width="118" height="32" fill="#e6784b"/>
-    <text x="592" y="322" class="cell dark">73.5</text>
-    <rect x="651" y="306" width="118" height="32" fill="#e6794b"/>
-    <text x="710" y="322" class="cell dark">73.6</text>
-    <text x="34" y="354" class="row">ckpool 10000</text>
+<text x="710" y="82" class="cell dark">2</text>
+<text x="34" y="114" class="row">gopool 1000</text>
+    <rect x="179" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="238" y="114" class="cell dark">1.9</text>
+    <rect x="297" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="114" class="cell dark">2</text>
+    <rect x="415" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="474" y="114" class="cell dark">2.4</text>
+    <rect x="533" y="98" width="118" height="32" fill="#198f4a"/>
+<text x="592" y="114" class="cell dark">2.5</text>
+    <rect x="651" y="98" width="118" height="32" fill="#198f4a"/>
+<text x="710" y="114" class="cell dark">2.6</text>
+<text x="34" y="146" class="row">gopool 10000</text>
+    <rect x="179" y="130" width="118" height="32" fill="#21924c"/>
+<text x="238" y="146" class="cell dark">9.7</text>
+    <rect x="297" y="130" width="118" height="32" fill="#22924c"/>
+<text x="356" y="146" class="cell dark">10.0</text>
+    <rect x="415" y="130" width="118" height="32" fill="#28944d"/>
+<text x="474" y="146" class="cell dark">16.8</text>
+    <rect x="533" y="130" width="118" height="32" fill="#28944d"/>
+<text x="592" y="146" class="cell dark">17.0</text>
+    <rect x="651" y="130" width="118" height="32" fill="#28944e"/>
+<text x="710" y="146" class="cell dark">17.2</text>
+<text x="34" y="186" class="row">pogolo 100</text>
+    <rect x="179" y="170" width="118" height="32" fill="#5ca559"/>
+<text x="238" y="186" class="cell dark">58.9</text>
+    <rect x="297" y="170" width="118" height="32" fill="#5ca559"/>
+<text x="356" y="186" class="cell dark">58.9</text>
+    <rect x="415" y="170" width="118" height="32" fill="#56a457"/>
+<text x="474" y="186" class="cell dark">59.5</text>
+    <rect x="533" y="170" width="118" height="32" fill="#56a357"/>
+<text x="592" y="186" class="cell dark">59.5</text>
+    <rect x="651" y="170" width="118" height="32" fill="#56a357"/>
+<text x="710" y="186" class="cell dark">59.5</text>
+<text x="34" y="218" class="row">pogolo 1000</text>
+    <rect x="179" y="202" width="118" height="32" fill="#60a75a"/>
+<text x="238" y="218" class="cell dark">63.0</text>
+    <rect x="297" y="202" width="118" height="32" fill="#60a75a"/>
+<text x="356" y="218" class="cell dark">62.9</text>
+    <rect x="415" y="202" width="118" height="32" fill="#5ba558"/>
+<text x="474" y="218" class="cell dark">63.5</text>
+    <rect x="533" y="202" width="118" height="32" fill="#5aa558"/>
+<text x="592" y="218" class="cell dark">63.5</text>
+    <rect x="651" y="202" width="118" height="32" fill="#5aa558"/>
+<text x="710" y="218" class="cell dark">63.6</text>
+<text x="34" y="250" class="row">pogolo 10000</text>
+    <rect x="179" y="234" width="118" height="32" fill="#66a95b"/>
+<text x="238" y="250" class="cell dark">67.8</text>
+    <rect x="297" y="234" width="118" height="32" fill="#66a95b"/>
+<text x="356" y="250" class="cell dark">67.8</text>
+    <rect x="415" y="234" width="118" height="32" fill="#66a95b"/>
+<text x="474" y="250" class="cell dark">73.7</text>
+    <rect x="533" y="234" width="118" height="32" fill="#66a95b"/>
+<text x="592" y="250" class="cell dark">74.4</text>
+    <rect x="651" y="234" width="118" height="32" fill="#66a95b"/>
+<text x="710" y="250" class="cell dark">74.5</text>
+<text x="34" y="290" class="row">ckpool 100</text>
+    <rect x="179" y="274" width="118" height="32" fill="#dc4331"/>
+<text x="238" y="290" class="cell dark">349.2</text>
+    <rect x="297" y="274" width="118" height="32" fill="#dc4230"/>
+<text x="356" y="290" class="cell dark">349.2</text>
+    <rect x="415" y="274" width="118" height="32" fill="#e05d3d"/>
+<text x="474" y="290" class="cell dark">349.6</text>
+    <rect x="533" y="274" width="118" height="32" fill="#e05f3f"/>
+<text x="592" y="290" class="cell dark">349.6</text>
+    <rect x="651" y="274" width="118" height="32" fill="#e0603f"/>
+<text x="710" y="290" class="cell dark">349.7</text>
+<text x="34" y="322" class="row">ckpool 1000</text>
+    <rect x="179" y="306" width="118" height="32" fill="#dd4c35"/>
+<text x="238" y="322" class="cell dark">339.6</text>
+    <rect x="297" y="306" width="118" height="32" fill="#dd4b34"/>
+<text x="356" y="322" class="cell dark">339.6</text>
+    <rect x="415" y="306" width="118" height="32" fill="#e16240"/>
+<text x="474" y="322" class="cell dark">344.0</text>
+    <rect x="533" y="306" width="118" height="32" fill="#e16441"/>
+<text x="592" y="322" class="cell dark">344.2</text>
+    <rect x="651" y="306" width="118" height="32" fill="#e16441"/>
+<text x="710" y="322" class="cell dark">344.3</text>
+<text x="34" y="354" class="row">ckpool 10000</text>
     <rect x="179" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="238" y="354" class="cell dark">118.0</text>
+<text x="238" y="354" class="cell dark">371.0</text>
     <rect x="297" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="356" y="354" class="cell dark">117.5</text>
+<text x="356" y="354" class="cell dark">369.9</text>
     <rect x="415" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="474" y="354" class="cell dark">167.6</text>
+<text x="474" y="354" class="cell dark">404.5</text>
     <rect x="533" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="592" y="354" class="cell dark">171.3</text>
+<text x="592" y="354" class="cell dark">407.8</text>
     <rect x="651" y="338" width="118" height="32" fill="#d92f27"/>
-    <text x="710" y="354" class="cell dark">172.4</text>
+<text x="710" y="354" class="cell dark">408.6</text>
+<text x="34" y="394" class="row">warppool 100</text>
+    <rect x="179" y="378" width="118" height="32" fill="#60a75a"/>
+<text x="238" y="394" class="cell dark">62.9</text>
+    <rect x="297" y="378" width="118" height="32" fill="#60a75a"/>
+<text x="356" y="394" class="cell dark">62.8</text>
+    <rect x="415" y="378" width="118" height="32" fill="#5aa558"/>
+<text x="474" y="394" class="cell dark">63.2</text>
+    <rect x="533" y="378" width="118" height="32" fill="#5aa558"/>
+<text x="592" y="394" class="cell dark">63.5</text>
+    <rect x="651" y="378" width="118" height="32" fill="#5aa558"/>
+<text x="710" y="394" class="cell dark">63.5</text>
+<text x="34" y="426" class="row">warppool 1000</text>
+    <rect x="179" y="410" width="118" height="32" fill="#5fa659"/>
+<text x="238" y="426" class="cell dark">61.7</text>
+    <rect x="297" y="410" width="118" height="32" fill="#5fa659"/>
+<text x="356" y="426" class="cell dark">61.7</text>
+    <rect x="415" y="410" width="118" height="32" fill="#5aa558"/>
+<text x="474" y="426" class="cell dark">63.0</text>
+    <rect x="533" y="410" width="118" height="32" fill="#5aa558"/>
+<text x="592" y="426" class="cell dark">63.1</text>
+    <rect x="651" y="410" width="118" height="32" fill="#5aa558"/>
+<text x="710" y="426" class="cell dark">63.1</text>
+<text x="34" y="458" class="row">warppool 10000</text>
+    <rect x="179" y="442" width="590" height="32" fill="#7f1d1d"/>
+<text x="474" y="458" class="cell dark">FAIL — stock Enterprise profile connection cap is 4096</text>
+<text x="34" y="498" class="row">public-pool 100</text>
+    <rect x="179" y="482" width="118" height="32" fill="#62a75a"/>
+<text x="238" y="498" class="cell dark">64.0</text>
+    <rect x="297" y="482" width="118" height="32" fill="#62a75a"/>
+<text x="356" y="498" class="cell dark">64.1</text>
+    <rect x="415" y="482" width="118" height="32" fill="#5da659"/>
+<text x="474" y="498" class="cell dark">65.3</text>
+    <rect x="533" y="482" width="118" height="32" fill="#5ca559"/>
+<text x="592" y="498" class="cell dark">65.4</text>
+    <rect x="651" y="482" width="118" height="32" fill="#5ca559"/>
+<text x="710" y="498" class="cell dark">65.4</text>
+<text x="34" y="530" class="row">public-pool 1000</text>
+    <rect x="179" y="514" width="118" height="32" fill="#72ad5d"/>
+<text x="238" y="530" class="cell light">77.9</text>
+    <rect x="297" y="514" width="118" height="32" fill="#72ad5d"/>
+<text x="356" y="530" class="cell light">77.9</text>
+    <rect x="415" y="514" width="118" height="32" fill="#76ae5e"/>
+<text x="474" y="530" class="cell light">89.1</text>
+    <rect x="533" y="514" width="118" height="32" fill="#77ae5e"/>
+<text x="592" y="530" class="cell light">90.1</text>
+    <rect x="651" y="514" width="118" height="32" fill="#77ae5e"/>
+<text x="710" y="530" class="cell light">90.4</text>
+<text x="34" y="562" class="row">public-pool 10000</text>
+    <rect x="179" y="546" width="118" height="32" fill="#f2d779"/>
+<text x="238" y="562" class="cell light">186.3</text>
+    <rect x="297" y="546" width="118" height="32" fill="#f2d478"/>
+<text x="356" y="562" class="cell light">188.6</text>
+    <rect x="415" y="546" width="118" height="32" fill="#e68651"/>
+<text x="474" y="562" class="cell light">300.7</text>
+    <rect x="533" y="546" width="118" height="32" fill="#e5804f"/>
+<text x="592" y="562" class="cell light">310.0</text>
+    <rect x="651" y="546" width="118" height="32" fill="#e57f4e"/>
+<text x="710" y="562" class="cell light">312.3</text>
   </g>
-  <g transform="translate(0 928)">
-    <text x="34" y="0" class="panel">mining.notify, no pool-side ZMQ</text>
-    <text x="34" y="24" class="subtitle">Rows are pool/miner-count runs. Latency is ms.</text>
-    <text x="238" y="52" class="head">avg</text>
-    <text x="356" y="52" class="head">p50</text>
-    <text x="474" y="52" class="head">p95</text>
-    <text x="592" y="52" class="head">p99</text>
-    <text x="710" y="52" class="head">max</text>
-    <text x="34" y="82" class="row">gopool 100</text>
+  <g transform="translate(0 1328)">
+<text x="34" y="0" class="panel">mining.notify, no pool-side ZMQ</text>
+<text x="96" y="52" class="head">pool / miners</text>
+<text x="238" y="52" class="head">avg</text>
+<text x="356" y="52" class="head">p50</text>
+<text x="474" y="52" class="head">p95</text>
+<text x="592" y="52" class="head">p99</text>
+<text x="710" y="52" class="head">max</text>
+<text x="34" y="82" class="row">gopool 100</text>
     <rect x="179" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="238" y="82" class="cell dark">2.1</text>
+<text x="238" y="82" class="cell dark">1.5</text>
     <rect x="297" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="356" y="82" class="cell dark">2</text>
+<text x="356" y="82" class="cell dark">1.6</text>
     <rect x="415" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="474" y="82" class="cell dark">2.4</text>
+<text x="474" y="82" class="cell dark">1.9</text>
     <rect x="533" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="592" y="82" class="cell dark">2.5</text>
+<text x="592" y="82" class="cell dark">1.9</text>
     <rect x="651" y="66" width="118" height="32" fill="#188f4a"/>
-    <text x="710" y="82" class="cell dark">2.6</text>
-    <text x="34" y="114" class="row">gopool 1000</text>
-    <rect x="179" y="98" width="118" height="32" fill="#31974f"/>
-    <text x="238" y="114" class="cell dark">4</text>
-    <rect x="297" y="98" width="118" height="32" fill="#349850"/>
-    <text x="356" y="114" class="cell dark">4.1</text>
-    <rect x="415" y="98" width="118" height="32" fill="#30974f"/>
-    <text x="474" y="114" class="cell dark">4.3</text>
-    <rect x="533" y="98" width="118" height="32" fill="#2e964f"/>
-    <text x="592" y="114" class="cell dark">4.3</text>
-    <rect x="651" y="98" width="118" height="32" fill="#2d964e"/>
-    <text x="710" y="114" class="cell dark">4.3</text>
-    <text x="34" y="146" class="row">gopool 10000</text>
-    <rect x="179" y="130" width="118" height="32" fill="#5ba558"/>
-    <text x="238" y="146" class="cell dark">10.0</text>
-    <rect x="297" y="130" width="118" height="32" fill="#5ea659"/>
-    <text x="356" y="146" class="cell dark">10.4</text>
-    <rect x="415" y="130" width="118" height="32" fill="#6eac5d"/>
-    <text x="474" y="146" class="cell light">16.1</text>
-    <rect x="533" y="130" width="118" height="32" fill="#6eab5c"/>
-    <text x="592" y="146" class="cell light">16.3</text>
-    <rect x="651" y="130" width="118" height="32" fill="#6dab5c"/>
-    <text x="710" y="146" class="cell light">16.4</text>
-    <text x="34" y="186" class="row">pogolo 100</text>
-    <rect x="179" y="170" width="118" height="32" fill="#d0cc71"/>
-    <text x="238" y="186" class="cell light">98.1</text>
-    <rect x="297" y="170" width="118" height="32" fill="#d1cc72"/>
-    <text x="356" y="186" class="cell light">98.1</text>
-    <rect x="415" y="170" width="118" height="32" fill="#cdcb71"/>
-    <text x="474" y="186" class="cell light">98.3</text>
-    <rect x="533" y="170" width="118" height="32" fill="#cccb71"/>
-    <text x="592" y="186" class="cell light">98.4</text>
-    <rect x="651" y="170" width="118" height="32" fill="#cbca71"/>
-    <text x="710" y="186" class="cell light">98.6</text>
-    <text x="34" y="218" class="row">pogolo 1000</text>
-    <rect x="179" y="202" width="118" height="32" fill="#cdcb71"/>
-    <text x="238" y="218" class="cell light">93.0</text>
-    <rect x="297" y="202" width="118" height="32" fill="#cecb71"/>
-    <text x="356" y="218" class="cell light">92.9</text>
-    <rect x="415" y="202" width="118" height="32" fill="#caca70"/>
-    <text x="474" y="218" class="cell light">93.7</text>
-    <rect x="533" y="202" width="118" height="32" fill="#c9ca70"/>
-    <text x="592" y="218" class="cell light">93.7</text>
-    <rect x="651" y="202" width="118" height="32" fill="#c8ca70"/>
-    <text x="710" y="218" class="cell light">93.7</text>
-    <text x="34" y="250" class="row">pogolo 10000</text>
-    <rect x="179" y="234" width="118" height="32" fill="#a4be68"/>
-    <text x="238" y="250" class="cell light">42.8</text>
-    <rect x="297" y="234" width="118" height="32" fill="#a6be69"/>
-    <text x="356" y="250" class="cell light">43.1</text>
-    <rect x="415" y="234" width="118" height="32" fill="#a8bf69"/>
-    <text x="474" y="250" class="cell light">48.8</text>
-    <rect x="533" y="234" width="118" height="32" fill="#a8bf69"/>
-    <text x="592" y="250" class="cell light">49.8</text>
-    <rect x="651" y="234" width="118" height="32" fill="#a7be69"/>
-    <text x="710" y="250" class="cell light">49.8</text>
-    <text x="34" y="290" class="row">ckpool 100</text>
-    <rect x="179" y="274" width="118" height="32" fill="#d93028"/>
-    <text x="238" y="290" class="cell dark">13631.1</text>
-    <rect x="297" y="274" width="118" height="32" fill="#d93028"/>
-    <text x="356" y="290" class="cell dark">13631.1</text>
-    <rect x="415" y="274" width="118" height="32" fill="#d93028"/>
-    <text x="474" y="290" class="cell dark">13631.7</text>
-    <rect x="533" y="274" width="118" height="32" fill="#d93028"/>
-    <text x="592" y="290" class="cell dark">13631.8</text>
-    <rect x="651" y="274" width="118" height="32" fill="#d93028"/>
-    <text x="710" y="290" class="cell dark">13631.8</text>
-    <text x="34" y="322" class="row">ckpool 1000</text>
-    <rect x="179" y="306" width="118" height="32" fill="#d92f27"/>
-    <text x="238" y="322" class="cell dark">14073.6</text>
-    <rect x="297" y="306" width="118" height="32" fill="#d92f27"/>
-    <text x="356" y="322" class="cell dark">14073.7</text>
-    <rect x="415" y="306" width="118" height="32" fill="#d92f27"/>
-    <text x="474" y="322" class="cell dark">14078.8</text>
-    <rect x="533" y="306" width="118" height="32" fill="#d92f27"/>
-    <text x="592" y="322" class="cell dark">14079.2</text>
-    <rect x="651" y="306" width="118" height="32" fill="#d92f27"/>
-    <text x="710" y="322" class="cell dark">14079.3</text>
-    <text x="34" y="354" class="row">ckpool 10000</text>
-    <rect x="179" y="338" width="118" height="32" fill="#d93028"/>
-    <text x="238" y="354" class="cell dark">13640.8</text>
-    <rect x="297" y="338" width="118" height="32" fill="#d93028"/>
-    <text x="356" y="354" class="cell dark">13641.2</text>
-    <rect x="415" y="338" width="118" height="32" fill="#d93028"/>
-    <text x="474" y="354" class="cell dark">13689.8</text>
-    <rect x="533" y="338" width="118" height="32" fill="#d93028"/>
-    <text x="592" y="354" class="cell dark">13693.4</text>
-    <rect x="651" y="338" width="118" height="32" fill="#d93028"/>
-    <text x="710" y="354" class="cell dark">13694.7</text>
+<text x="710" y="82" class="cell dark">1.9</text>
+<text x="34" y="114" class="row">gopool 1000</text>
+    <rect x="179" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="238" y="114" class="cell dark">2.2</text>
+    <rect x="297" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="114" class="cell dark">2.2</text>
+    <rect x="415" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="474" y="114" class="cell dark">2.6</text>
+    <rect x="533" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="592" y="114" class="cell dark">2.7</text>
+    <rect x="651" y="98" width="118" height="32" fill="#188f4a"/>
+<text x="710" y="114" class="cell dark">2.7</text>
+<text x="34" y="146" class="row">gopool 10000</text>
+    <rect x="179" y="130" width="118" height="32" fill="#188f4a"/>
+<text x="238" y="146" class="cell dark">8.7</text>
+    <rect x="297" y="130" width="118" height="32" fill="#188f4a"/>
+<text x="356" y="146" class="cell dark">8.6</text>
+    <rect x="415" y="130" width="118" height="32" fill="#188f4a"/>
+<text x="474" y="146" class="cell dark">15.3</text>
+    <rect x="533" y="130" width="118" height="32" fill="#188f4a"/>
+<text x="592" y="146" class="cell dark">15.5</text>
+    <rect x="651" y="130" width="118" height="32" fill="#188f4a"/>
+<text x="710" y="146" class="cell dark">15.6</text>
+<text x="34" y="186" class="row">pogolo 100</text>
+    <rect x="179" y="170" width="118" height="32" fill="#1b904b"/>
+<text x="238" y="186" class="cell dark">99.4</text>
+    <rect x="297" y="170" width="118" height="32" fill="#1b904b"/>
+<text x="356" y="186" class="cell dark">99.5</text>
+    <rect x="415" y="170" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="186" class="cell dark">99.9</text>
+    <rect x="533" y="170" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="186" class="cell dark">100.0</text>
+    <rect x="651" y="170" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="186" class="cell dark">100.0</text>
+<text x="34" y="218" class="row">pogolo 1000</text>
+    <rect x="179" y="202" width="118" height="32" fill="#1b904b"/>
+<text x="238" y="218" class="cell dark">93.6</text>
+    <rect x="297" y="202" width="118" height="32" fill="#1b904b"/>
+<text x="356" y="218" class="cell dark">94.5</text>
+    <rect x="415" y="202" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="218" class="cell dark">94.9</text>
+    <rect x="533" y="202" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="218" class="cell dark">95.0</text>
+    <rect x="651" y="202" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="218" class="cell dark">95.2</text>
+<text x="34" y="250" class="row">pogolo 10000</text>
+    <rect x="179" y="234" width="118" height="32" fill="#1a904b"/>
+<text x="238" y="250" class="cell dark">76.1</text>
+    <rect x="297" y="234" width="118" height="32" fill="#1a904b"/>
+<text x="356" y="250" class="cell dark">76.0</text>
+    <rect x="415" y="234" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="250" class="cell dark">81.4</text>
+    <rect x="533" y="234" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="250" class="cell dark">82.2</text>
+    <rect x="651" y="234" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="250" class="cell dark">82.3</text>
+<text x="34" y="290" class="row">ckpool 100</text>
+    <rect x="179" y="274" width="118" height="32" fill="#d93128"/>
+<text x="238" y="290" class="cell dark">13677.6</text>
+    <rect x="297" y="274" width="118" height="32" fill="#d93128"/>
+<text x="356" y="290" class="cell dark">13677.6</text>
+    <rect x="415" y="274" width="118" height="32" fill="#d93228"/>
+<text x="474" y="290" class="cell dark">13678.1</text>
+    <rect x="533" y="274" width="118" height="32" fill="#d93228"/>
+<text x="592" y="290" class="cell dark">13678.1</text>
+    <rect x="651" y="274" width="118" height="32" fill="#d93228"/>
+<text x="710" y="290" class="cell dark">13678.1</text>
+<text x="34" y="322" class="row">ckpool 1000</text>
+    <rect x="179" y="306" width="118" height="32" fill="#db392c"/>
+<text x="238" y="322" class="cell dark">13321.8</text>
+    <rect x="297" y="306" width="118" height="32" fill="#db392c"/>
+<text x="356" y="322" class="cell dark">13321.9</text>
+    <rect x="415" y="306" width="118" height="32" fill="#db3a2c"/>
+<text x="474" y="322" class="cell dark">13326.0</text>
+    <rect x="533" y="306" width="118" height="32" fill="#db3a2d"/>
+<text x="592" y="322" class="cell dark">13326.4</text>
+    <rect x="651" y="306" width="118" height="32" fill="#db3a2d"/>
+<text x="710" y="322" class="cell dark">13326.6</text>
+<text x="34" y="354" class="row">ckpool 10000</text>
+    <rect x="179" y="338" width="118" height="32" fill="#d92f27"/>
+<text x="238" y="354" class="cell dark">13739.7</text>
+    <rect x="297" y="338" width="118" height="32" fill="#d92f27"/>
+<text x="356" y="354" class="cell dark">13740.7</text>
+    <rect x="415" y="338" width="118" height="32" fill="#d92f27"/>
+<text x="474" y="354" class="cell dark">13785.4</text>
+    <rect x="533" y="338" width="118" height="32" fill="#d92f27"/>
+<text x="592" y="354" class="cell dark">13789.6</text>
+    <rect x="651" y="338" width="118" height="32" fill="#d92f27"/>
+<text x="710" y="354" class="cell dark">13790.5</text>
+<text x="34" y="394" class="row">warppool 100</text>
+    <rect x="179" y="378" width="118" height="32" fill="#ecb066"/>
+<text x="238" y="394" class="cell light">8458.5</text>
+    <rect x="297" y="378" width="118" height="32" fill="#ecb066"/>
+<text x="356" y="394" class="cell light">8458.5</text>
+    <rect x="415" y="378" width="118" height="32" fill="#ecb166"/>
+<text x="474" y="394" class="cell light">8458.9</text>
+    <rect x="533" y="378" width="118" height="32" fill="#ecb166"/>
+<text x="592" y="394" class="cell light">8458.9</text>
+    <rect x="651" y="378" width="118" height="32" fill="#ecb166"/>
+<text x="710" y="394" class="cell light">8458.9</text>
+<text x="34" y="426" class="row">warppool 1000</text>
+    <rect x="179" y="410" width="118" height="32" fill="#eaa15f"/>
+<text x="238" y="426" class="cell light">9060.0</text>
+    <rect x="297" y="410" width="118" height="32" fill="#eaa15f"/>
+<text x="356" y="426" class="cell light">9059.9</text>
+    <rect x="415" y="410" width="118" height="32" fill="#eaa25f"/>
+<text x="474" y="426" class="cell light">9062.2</text>
+    <rect x="533" y="410" width="118" height="32" fill="#eaa25f"/>
+<text x="592" y="426" class="cell light">9062.2</text>
+    <rect x="651" y="410" width="118" height="32" fill="#eaa25f"/>
+<text x="710" y="426" class="cell light">9062.3</text>
+<text x="34" y="458" class="row">warppool 10000</text>
+    <rect x="179" y="442" width="590" height="32" fill="#7f1d1d"/>
+<text x="474" y="458" class="cell dark">FAIL — stock Enterprise profile connection cap is 4096</text>
+<text x="34" y="498" class="row">public-pool 100</text>
+    <rect x="179" y="482" width="118" height="32" fill="#1b904b"/>
+<text x="238" y="498" class="cell dark">94.1</text>
+    <rect x="297" y="482" width="118" height="32" fill="#1b904b"/>
+<text x="356" y="498" class="cell dark">93.9</text>
+    <rect x="415" y="482" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="498" class="cell dark">96.8</text>
+    <rect x="533" y="482" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="498" class="cell dark">97.0</text>
+    <rect x="651" y="482" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="498" class="cell dark">97.1</text>
+<text x="34" y="530" class="row">public-pool 1000</text>
+    <rect x="179" y="514" width="118" height="32" fill="#1a904b"/>
+<text x="238" y="530" class="cell dark">74.9</text>
+    <rect x="297" y="514" width="118" height="32" fill="#1a904b"/>
+<text x="356" y="530" class="cell dark">75.2</text>
+    <rect x="415" y="514" width="118" height="32" fill="#1b904b"/>
+<text x="474" y="530" class="cell dark">87.3</text>
+    <rect x="533" y="514" width="118" height="32" fill="#1b904b"/>
+<text x="592" y="530" class="cell dark">88.4</text>
+    <rect x="651" y="514" width="118" height="32" fill="#1b904b"/>
+<text x="710" y="530" class="cell dark">88.6</text>
+<text x="34" y="562" class="row">public-pool 10000</text>
+    <rect x="179" y="546" width="118" height="32" fill="#26944d"/>
+<text x="238" y="562" class="cell dark">443.2</text>
+    <rect x="297" y="546" width="118" height="32" fill="#26944d"/>
+<text x="356" y="562" class="cell dark">445.6</text>
+    <rect x="415" y="546" width="118" height="32" fill="#2a954e"/>
+<text x="474" y="562" class="cell dark">560.8</text>
+    <rect x="533" y="546" width="118" height="32" fill="#2a954e"/>
+<text x="592" y="562" class="cell dark">570.1</text>
+    <rect x="651" y="546" width="118" height="32" fill="#2a954e"/>
+<text x="710" y="562" class="cell dark">572.3</text>
   </g>
 </svg>

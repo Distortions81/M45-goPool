@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-pools_csv="${GO_BENCH_POOLS:-gopool,pogolo,ckpool}"
+pools_csv="${GO_BENCH_POOLS:-gopool,pogolo,ckpool,warppool,public-pool}"
 miners_csv="${GO_BENCH_MINERS:-100,1000,10000}"
 pipeline="${GO_BENCH_SUBMIT_PIPELINE:-1}"
 warmup="${GO_BENCH_SUBMIT_WARMUP:-3s}"
@@ -60,7 +60,7 @@ PY
 
 pool_port() {
   case "$1" in
-    gopool|ckpool) printf '3333' ;;
+    gopool|ckpool|warppool|public-pool) printf '3333' ;;
     pogolo) printf '5661' ;;
     *) echo "unknown pool: $1" >&2; exit 2 ;;
   esac
@@ -69,8 +69,44 @@ pool_port() {
 pool_extra_flags() {
   case "$1" in
     ckpool) printf '%s\n' "--worker-suffix=false" "--ordered-handshake" ;;
+    public-pool) printf '%s\n' "--ordered-handshake" ;;
     *) ;;
   esac
+}
+
+pool_supports_miners() {
+  local pool="$1"
+  local miner_count="$2"
+  # Stock WarpPool Enterprise is the largest shipped profile and has a hard
+  # 4,096-connection cap. Preserve that design limit and chart larger cells as
+  # failures rather than patching upstream to satisfy the harness.
+  [ "$pool" != "warppool" ] || [ "$miner_count" -le 4096 ]
+}
+
+record_failure() {
+  local kind="$1"
+  local pool="$2"
+  local miner_count="$3"
+  local mode="$4"
+  local reason="$5"
+  log_msg "FAILED kind=${kind} mode=${mode:-n/a} pool=${pool} miners=${miner_count}: ${reason}"
+  python3 - "$jsonl" "$kind" "$pool" "$miner_count" "$mode" "$reason" <<'PY'
+import json
+import sys
+
+path, kind, pool, miners, mode, reason = sys.argv[1:7]
+row = {
+    "kind": kind,
+    "pool": pool,
+    "miners": int(miners),
+    "status": "failed",
+    "reason": reason,
+}
+if mode:
+    row["mode"] = mode
+with open(path, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(row, sort_keys=True) + "\n")
+PY
 }
 
 cleanup_env() {
@@ -124,7 +160,7 @@ record_submit() {
   port="$(pool_port "$pool")"
   log_msg "--- submit pool=${pool} miners=${miner_count} ---"
   local output
-  output="$(
+  if ! output="$(
     run_probe /bench/go-submit-bench \
       --host openbench-pool \
       --port "$port" \
@@ -135,7 +171,11 @@ record_submit() {
       --duration "$duration" \
       --batch "$batch" \
       "${extra[@]}"
-  )"
+  2>&1)"; then
+    printf '%s\n' "$output" | tee -a "$log"
+    record_failure "submit" "$pool" "$miner_count" "" "$(printf '%s\n' "$output" | tail -n 1)"
+    return
+  fi
   printf '%s\n' "$output" | tee -a "$log"
   local payload
   payload="$(printf '%s\n' "$output" | tail -n 1)"
@@ -177,7 +217,7 @@ record_notify() {
   port="$(pool_port "$pool")"
   log_msg "--- notify mode=${mode} pool=${pool} miners=${miner_count} ---"
   local output
-  output="$(
+  if ! output="$(
     run_probe /bench/go-notify-fanout \
       --host openbench-pool \
       --port "$port" \
@@ -189,7 +229,11 @@ record_notify() {
       --rounds "$notify_rounds" \
       --batch "$batch" \
       "${extra[@]}"
-  )"
+  2>&1)"; then
+    printf '%s\n' "$output" | tee -a "$log"
+    record_failure "notify" "$pool" "$miner_count" "$mode" "$(printf '%s\n' "$output" | tail -n 1)"
+    return
+  fi
   printf '%s\n' "$output" | tee -a "$log"
   local result
   result="$(printf '%s\n' "$output" | awk '/^RESULT /{line=$0} END{print line}')"
@@ -238,10 +282,18 @@ CGO_ENABLED=0 go build -o "$bin_path/go-notify-fanout" ./benchmarks/go/notify-fa
 for pool in "${pools[@]}"; do
   start_pool "$pool" 0
   for miner_count in "${miners[@]}"; do
-    record_submit "$pool" "$miner_count"
+    if pool_supports_miners "$pool" "$miner_count"; then
+      record_submit "$pool" "$miner_count"
+    else
+      record_failure "submit" "$pool" "$miner_count" "" "stock Enterprise profile connection cap is 4096"
+    fi
   done
   for miner_count in "${miners[@]}"; do
-    record_notify "$pool" "$miner_count" "zmq"
+    if pool_supports_miners "$pool" "$miner_count"; then
+      record_notify "$pool" "$miner_count" "zmq"
+    else
+      record_failure "notify" "$pool" "$miner_count" "zmq" "stock Enterprise profile connection cap is 4096"
+    fi
   done
   cleanup_env
 done
@@ -249,7 +301,11 @@ done
 for pool in "${pools[@]}"; do
   start_pool "$pool" 1
   for miner_count in "${miners[@]}"; do
-    record_notify "$pool" "$miner_count" "no-zmq"
+    if pool_supports_miners "$pool" "$miner_count"; then
+      record_notify "$pool" "$miner_count" "no-zmq"
+    else
+      record_failure "notify" "$pool" "$miner_count" "no-zmq" "stock Enterprise profile connection cap is 4096"
+    fi
   done
   cleanup_env
 done

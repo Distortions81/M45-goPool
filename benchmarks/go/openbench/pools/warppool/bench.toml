@@ -1,0 +1,43 @@
+# Rendered by the local benchmark harness for dvb-WarpPool v1.25.6.
+
+[branding]
+status_brand_name = "dvb-WarpPool openbench"
+
+[logging]
+debug = false
+net_debug = false
+json = false
+
+[profile]
+kind = "enterprise"
+
+[mining]
+payout_mode = "single"
+payout_address = "${ADDRESS}"
+pool_fee_percent = 0.0
+pooltag_prefix = "${TAG}"
+
+[node]
+rpc_url = "http://${RPC_HOST}:${RPC_PORT}"
+zmq_hashblock_addr = "tcp://${RPC_HOST}:28332"
+zmq_rawblock_addr = "tcp://${RPC_HOST}:28333"
+
+[server]
+pool_listen = ":3333"
+status_listen = ":18334"
+job_refresh_secs = 10
+
+[vardiff]
+enabled = true
+target_seconds_per_share = 30.0
+window = 90
+min_diff = ${MIN_DIFFICULTY}
+max_diff = ${MAX_DIFFICULTY}
+initial_diff = ${DIFFICULTY}
+
+[ratelimit]
+enabled = false
+connects_per_sec = 100000.0
+connect_burst = 100000
+auths_per_sec = 100000.0
+auth_burst = 100000

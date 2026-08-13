@@ -6,16 +6,27 @@ suite and regenerate the SVG.
 
 ## Current results
 
-Unpinned rerun from July 6, 2026 on a 32-logical-CPU host.
+Unpinned rerun from August 13, 2026 on a 32-logical-CPU host. The raw result
+matrix is committed as
+[`go-benchmarks-20260813T184353Z.jsonl`](../../reports/go-benchmarks/go-benchmarks-20260813T184353Z.jsonl).
 
 The goPool benchmark profile keeps normal submit-validation checks and vardiff
 enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
 `10000`-miner reject-load runs can complete.
 
+The suite also includes dvb-WarpPool v1.25.6 and public-pool's default
+single-process deployment. The WarpPool adapter builds the pinned
+upstream source without source patches and selects its shipped Enterprise
+profile. The harness supplies RPC/ZMQ/listen settings, relaxes connection-rate
+limits, and uses a 10-second polling interval for the no-ZMQ test. The stock
+Enterprise connection cap remains 4,096, so all three `10000`-miner WarpPool
+cells are explicitly recorded and rendered as failures.
+
 ![Benchmark heat map](heatmap.svg)
 
 Every numeric value is a colored tile. Each metric column is scaled
-independently; green is better and red is worse.
+independently; green is better and red is worse. Dark-red full-width rows are
+failed cases and include the failure reason.
 
 The SVG includes `mining.submit`, `mining.notify` with ZMQ/default pool
 configuration, and `mining.notify` with pool-side ZMQ disabled.
@@ -36,7 +47,7 @@ regenerates `benchmarks/go/heatmap.svg`. CPU pinning is disabled by default.
 Useful knobs:
 
 ```bash
-GO_BENCH_POOLS=gopool,pogolo,ckpool
+GO_BENCH_POOLS=gopool,pogolo,ckpool,warppool,public-pool
 GO_BENCH_MINERS=100,1000,10000
 GO_BENCH_SUBMIT_DURATION=8s
 GO_BENCH_NOTIFY_ROUNDS=5
