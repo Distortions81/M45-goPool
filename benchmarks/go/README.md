@@ -42,9 +42,11 @@ Run the full benchmark suite from the repository root:
 ```
 
 The script builds the Go probes, prepares the open-pool-benchmark regtest
-environment, starts one pool at a time, runs `100`, `1000`, and `10000` miner
-cases, writes raw JSONL/log output under `reports/go-benchmarks/`, and
-regenerates `benchmarks/go/heatmap.svg`. CPU pinning is disabled by default.
+environment, starts a fresh pool instance for every matrix cell, runs `100`,
+`1000`, and `10000` miner cases, writes raw JSONL/log output under
+`reports/go-benchmarks/`, and regenerates `benchmarks/go/heatmap.svg`. Fresh
+instances keep submit load, connection churn, and earlier notify rounds from
+affecting later measurements. CPU pinning is disabled by default.
 
 Useful knobs:
 

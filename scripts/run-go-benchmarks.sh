@@ -30,7 +30,7 @@ esac
 IFS=',' read -r -a pools <<< "$pools_csv"
 IFS=',' read -r -a miners <<< "$miners_csv"
 
-mkdir -p "$out_dir" "$bin_path"
+mkdir -p "$out_dir" "$bin_path" "$(dirname "$jsonl")" "$(dirname "$log")" "$(dirname "$svg")"
 
 log_msg() {
   printf '%s\n' "$*" | tee -a "$log"
@@ -52,6 +52,12 @@ row = {
     "pools": os.environ["GO_BENCH_POOLS_EFFECTIVE"].split(","),
     "miners": [int(v) for v in os.environ["GO_BENCH_MINERS_EFFECTIVE"].split(",")],
     "pinning": "disabled",
+    "case_isolation": "fresh_pool",
+    "submit_pipeline": int(os.environ["GO_BENCH_SUBMIT_PIPELINE_EFFECTIVE"]),
+    "submit_warmup": os.environ["GO_BENCH_SUBMIT_WARMUP_EFFECTIVE"],
+    "submit_duration": os.environ["GO_BENCH_SUBMIT_DURATION_EFFECTIVE"],
+    "notify_rounds": int(os.environ["GO_BENCH_NOTIFY_ROUNDS_EFFECTIVE"]),
+    "connect_batch": int(os.environ["GO_BENCH_BATCH_EFFECTIVE"]),
 }
 with open(path, "a", encoding="utf-8") as fh:
     fh.write(json.dumps(row, sort_keys=True) + "\n")
@@ -268,21 +274,29 @@ PY
 : >"$jsonl"
 export GO_BENCH_POOLS_EFFECTIVE="$pools_csv"
 export GO_BENCH_MINERS_EFFECTIVE="$miners_csv"
+export GO_BENCH_SUBMIT_PIPELINE_EFFECTIVE="$pipeline"
+export GO_BENCH_SUBMIT_WARMUP_EFFECTIVE="$warmup"
+export GO_BENCH_SUBMIT_DURATION_EFFECTIVE="$duration"
+export GO_BENCH_NOTIFY_ROUNDS_EFFECTIVE="$notify_rounds"
+export GO_BENCH_BATCH_EFFECTIVE="$batch"
+trap cleanup_env EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 append_metadata
 
 log_msg "go benchmark suite"
 log_msg "jsonl=${jsonl}"
 log_msg "log=${log}"
 log_msg "svg=${svg}"
-log_msg "pools=${pools_csv} miners=${miners_csv} pinning=disabled render_svg=${render_svg}"
+log_msg "pools=${pools_csv} miners=${miners_csv} pinning=disabled case_isolation=fresh_pool render_svg=${render_svg}"
 
 CGO_ENABLED=0 go build -o "$bin_path/go-submit-bench" ./benchmarks/go/submit
 CGO_ENABLED=0 go build -o "$bin_path/go-notify-fanout" ./benchmarks/go/notify-fanout
 
 for pool in "${pools[@]}"; do
-  start_pool "$pool" 0
   for miner_count in "${miners[@]}"; do
     if pool_supports_miners "$pool" "$miner_count"; then
+      start_pool "$pool" 0
       record_submit "$pool" "$miner_count"
     else
       record_failure "submit" "$pool" "$miner_count" "" "stock Enterprise profile connection cap is 4096"
@@ -290,28 +304,35 @@ for pool in "${pools[@]}"; do
   done
   for miner_count in "${miners[@]}"; do
     if pool_supports_miners "$pool" "$miner_count"; then
+      start_pool "$pool" 0
       record_notify "$pool" "$miner_count" "zmq"
     else
       record_failure "notify" "$pool" "$miner_count" "zmq" "stock Enterprise profile connection cap is 4096"
     fi
   done
-  cleanup_env
 done
 
 for pool in "${pools[@]}"; do
-  start_pool "$pool" 1
   for miner_count in "${miners[@]}"; do
     if pool_supports_miners "$pool" "$miner_count"; then
+      start_pool "$pool" 1
       record_notify "$pool" "$miner_count" "no-zmq"
     else
       record_failure "notify" "$pool" "$miner_count" "no-zmq" "stock Enterprise profile connection cap is 4096"
     fi
   done
-  cleanup_env
 done
+
+cleanup_env
 
 if [ "$render_svg" = "1" ]; then
   python3 scripts/render-go-benchmark-heatmap.py "$jsonl" -o "$svg"
   log_msg "wrote ${svg}"
 fi
 log_msg "wrote ${jsonl}"
+trap - EXIT
+if [ "$render_svg" = "1" ]; then
+  log_msg "artifacts: data=${jsonl} log=${log} svg=${svg}"
+else
+  log_msg "artifacts: data=${jsonl} log=${log}"
+fi
