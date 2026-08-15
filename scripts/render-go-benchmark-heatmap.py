@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 
-POOLS = ["gopool", "pogolo", "ckpool", "warppool", "public-pool"]
-MINERS = [100, 1000, 10000]
+DEFAULT_POOLS = ["gopool", "govault", "pogolo", "ckpool", "warppool", "public-pool"]
+DEFAULT_MINERS = [100, 1000, 10000]
 GOOD = (24, 143, 74)
 MID = (242, 215, 121)
 BAD = (217, 47, 39)
@@ -102,7 +102,11 @@ def text_class(hex_color: str) -> str:
 
 
 def panel_records(
-    records: list[dict[str, Any]], kind: str, mode: str | None = None
+    records: list[dict[str, Any]],
+    pools: list[str],
+    miners: list[int],
+    kind: str,
+    mode: str | None = None,
 ) -> list[dict[str, Any]]:
     by_key = {
         (row["pool"], int(row["miners"])): row
@@ -111,11 +115,11 @@ def panel_records(
     }
     ordered: list[dict[str, Any]] = []
     missing: list[str] = []
-    for pool in POOLS:
-        for miners in MINERS:
-            row = by_key.get((pool, miners))
+    for pool in pools:
+        for miner_count in miners:
+            row = by_key.get((pool, miner_count))
             if row is None:
-                missing.append(f"{kind}/{mode or '-'} {pool} {miners}")
+                missing.append(f"{kind}/{mode or '-'} {pool} {miner_count}")
             else:
                 ordered.append(row)
     if missing:
@@ -130,6 +134,8 @@ def svg_text(x: int, y: int, cls: str, text: str) -> str:
 def render_panel(
     title: str,
     rows: list[dict[str, Any]],
+    pools: list[str],
+    miners: list[int],
     metrics: list[tuple[str, str, bool]],
     y_offset: int,
     log_scale: bool = False,
@@ -152,12 +158,16 @@ def render_panel(
         scales[key] = (min(values), max(values))
 
     y = 66
-    for pool_index, pool in enumerate(POOLS):
+    for pool_index, pool in enumerate(pools):
         if pool_index:
             y += 8
-        for miners in MINERS:
-            row = next(r for r in rows if r["pool"] == pool and int(r["miners"]) == miners)
-            out.append(svg_text(34, y + 16, "row", f"{pool} {miners}"))
+        for miner_count in miners:
+            row = next(
+                r
+                for r in rows
+                if r["pool"] == pool and int(r["miners"]) == miner_count
+            )
+            out.append(svg_text(34, y + 16, "row", f"{pool} {miner_count}"))
             if row.get("status") == "failed":
                 out.append(f'    <rect x="179" y="{y}" width="590" height="32" fill="{FAILED}"/>')
                 reason = str(row.get("reason", "benchmark failed"))
@@ -192,12 +202,23 @@ def main() -> None:
     if run_date and len(run_date) == 10:
         run_date = dt.date.fromisoformat(run_date).strftime("%B %-d, %Y")
 
-    submit = panel_records(records, "submit")
-    notify_zmq = panel_records(records, "notify", "zmq")
-    notify_nozmq = panel_records(records, "notify", "no-zmq")
+    pools = [str(pool) for pool in metadata.get("pools", DEFAULT_POOLS)]
+    miners = [int(miner_count) for miner_count in metadata.get("miners", DEFAULT_MINERS)]
+    submit = panel_records(records, pools, miners, "submit")
+    notify_zmq = panel_records(records, pools, miners, "notify", "zmq")
+    notify_nozmq = panel_records(records, pools, miners, "notify", "no-zmq")
+
+    panel_height = 58 + (32 * len(miners) + 8) * len(pools)
+    panel_offsets = [
+        96,
+        96 + panel_height + 46,
+        96 + panel_height * 2 + 76,
+    ]
+    footnote_y = panel_offsets[2] + panel_height + 34
+    svg_height = footnote_y + 40
 
     lines = [
-        '<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1980" viewBox="0 0 820 1980" role="img" aria-labelledby="title desc">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="820" height="{svg_height}" viewBox="0 0 820 {svg_height}" role="img" aria-labelledby="title desc">',
         '  <title id="title">goPool benchmark heat map</title>',
         f'  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the {html.escape(str(run_date))} rerun. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>',
         "  <style>",
@@ -211,7 +232,7 @@ def main() -> None:
         "    .light { fill: #111827; }",
         "    .dark { fill: #ffffff; }",
         "  </style>",
-        '  <rect width="820" height="1980" fill="#ffffff"/>',
+        f'  <rect width="820" height="{svg_height}" fill="#ffffff"/>',
         '  <text x="34" y="42" class="title">Benchmark heat map</text>',
         f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Green is better; red is worse.</text>',
         '  <g transform="translate(560 30)">',
@@ -227,6 +248,8 @@ def main() -> None:
     lines += render_panel(
         "mining.submit",
         submit,
+        pools,
+        miners,
         [
             ("valid/s", "validated_per_sec", True),
             ("p50", "p50", False),
@@ -234,12 +257,14 @@ def main() -> None:
             ("p99", "p99", False),
             ("max", "max", False),
         ],
-        96,
+        panel_offsets[0],
         log_scale=True,
     )
     lines += render_panel(
         "mining.notify, ZMQ/default",
         notify_zmq,
+        pools,
+        miners,
         [
             ("avg", "avg", False),
             ("p50", "p50", False),
@@ -247,12 +272,14 @@ def main() -> None:
             ("p99", "p99", False),
             ("max", "max", False),
         ],
-        720,
+        panel_offsets[1],
         log_scale=True,
     )
     lines += render_panel(
         "mining.notify, no pool-side ZMQ",
         notify_nozmq,
+        pools,
+        miners,
         [
             ("avg", "avg", False),
             ("p50", "p50", False),
@@ -260,11 +287,11 @@ def main() -> None:
             ("p99", "p99", False),
             ("max", "max", False),
         ],
-        1328,
+        panel_offsets[2],
         log_scale=True,
     )
-    lines.append(svg_text(34, 1940, "subtitle", "* WarpPool's stock Enterprise profile has a 4,096-connection hard cap."))
-    lines.append(svg_text(34, 1962, "subtitle", "Colors use a logarithmic scale so outliers do not flatten the panels."))
+    lines.append(svg_text(34, footnote_y, "subtitle", "* WarpPool's stock Enterprise profile has a 4,096-connection hard cap."))
+    lines.append(svg_text(34, footnote_y + 22, "subtitle", "Colors use a logarithmic scale so outliers do not flatten the panels."))
     lines.append("</svg>")
 
     output = Path(args.output)

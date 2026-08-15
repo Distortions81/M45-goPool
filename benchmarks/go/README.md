@@ -14,13 +14,23 @@ The goPool benchmark profile keeps normal submit-validation checks and vardiff
 enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
 `10000`-miner reject-load runs can complete.
 
+The harness also supports [GoVault](https://github.com/ShaeOJ/GoVault) through a
+benchmark-only headless launcher built from its unmodified `main` branch
+packages. The committed August 13 result matrix predates that adapter; GoVault
+will appear in the heat map after the next full rerun.
+
+GoVault does not currently decode `bcrt1` payout addresses, so its adapter uses
+a standard regtest-compatible legacy P2PKH payout address. It also sets the app
+log level to `error` to keep per-share informational disk logging out of the
+validation hot-path measurement; vardiff and share validation remain enabled.
+
 The suite also includes dvb-WarpPool v1.25.6 and public-pool's default
-single-process deployment. The WarpPool adapter builds the pinned
-upstream source without source patches and selects its shipped Enterprise
-profile. The harness supplies RPC/ZMQ/listen settings, relaxes connection-rate
-limits, and uses a 10-second polling interval for the no-ZMQ test. The stock
-Enterprise connection cap remains 4,096, so all three `10000`-miner WarpPool
-cells are explicitly recorded and rendered as failures.
+single-process deployment. The WarpPool adapter builds the pinned upstream
+source without source patches and selects its shipped Enterprise profile. The
+harness supplies RPC/ZMQ/listen settings, relaxes connection-rate limits, and
+uses a 10-second polling interval for the no-ZMQ test. The stock Enterprise
+connection cap remains 4,096, so all three `10000`-miner WarpPool cells are
+explicitly recorded and rendered as failures.
 
 ![Benchmark heat map](heatmap.svg)
 
@@ -51,7 +61,7 @@ affecting later measurements. CPU pinning is disabled by default.
 Useful knobs:
 
 ```bash
-GO_BENCH_POOLS=gopool,pogolo,ckpool,warppool,public-pool
+GO_BENCH_POOLS=gopool,govault,pogolo,ckpool,warppool,public-pool
 GO_BENCH_MINERS=100,1000,10000
 GO_BENCH_SUBMIT_DURATION=8s
 GO_BENCH_NOTIFY_ROUNDS=5

@@ -1,0 +1,104 @@
+// Copied into GoVault's cmd/openbench directory by scripts/go-benchmark-env.sh.
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"govault/internal/coin"
+	"govault/internal/config"
+	"govault/internal/logger"
+	"govault/internal/node"
+	"govault/internal/stratum"
+)
+
+func main() {
+	configPath := flag.String("config", "/openbench/govault.json", "rendered GoVault config")
+	flag.Parse()
+
+	data, err := os.ReadFile(*configPath)
+	if err != nil {
+		fatalf("read config: %v", err)
+	}
+
+	var cfg config.Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		fatalf("parse config: %v", err)
+	}
+
+	log, err := logger.New("/tmp/govault-openbench-logs", cfg.App.LogLevel)
+	if err != nil {
+		fatalf("initialize logger: %v", err)
+	}
+	defer log.Close()
+
+	coinDef := coin.Get(cfg.Mining.Coin)
+	nodeClient := node.NewClient(
+		cfg.Node.Host,
+		cfg.Node.Port,
+		cfg.Node.Username,
+		cfg.Node.Password,
+		cfg.Node.UseSSL,
+	)
+	defer nodeClient.Close()
+
+	tmpl, err := initialTemplate(nodeClient, coinDef.GBTRules, 60*time.Second)
+	if err != nil {
+		fatalf("fetch initial block template: %v", err)
+	}
+
+	server := stratum.NewServer(
+		&cfg.Stratum,
+		&cfg.Mining,
+		&cfg.Vardiff,
+		nodeClient,
+		log,
+		coinDef,
+	)
+	server.NewBlockTemplate(tmpl)
+	if err := server.Start(); err != nil {
+		fatalf("start Stratum server: %v", err)
+	}
+
+	monitor := node.NewChainMonitor(nodeClient, 500*time.Millisecond, coinDef.GBTRules)
+	monitor.SetRefreshInterval(10 * time.Second)
+	monitor.OnNewBlock = server.NewBlockTemplate
+	monitor.OnTemplateRefresh = server.RefreshBlockTemplate
+	monitor.SetOnError(func(err error) {
+		log.Errorf("openbench", "chain monitor: %v", err)
+	})
+	monitor.Start()
+
+	fmt.Printf("GoVault openbench Stratum ready on port %d\n", cfg.Stratum.Port)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+
+	monitor.Stop()
+	server.Stop()
+}
+
+func initialTemplate(client *node.Client, rules []string, timeout time.Duration) (*node.BlockTemplate, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		tmpl, err := client.GetBlockTemplate(rules)
+		if err == nil {
+			return tmpl, nil
+		}
+		lastErr = err
+		time.Sleep(500 * time.Millisecond)
+	}
+	return nil, lastErr
+}
+
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "govault-openbench: "+format+"\n", args...)
+	os.Exit(1)
+}

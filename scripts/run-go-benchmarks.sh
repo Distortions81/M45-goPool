@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-pools_csv="${GO_BENCH_POOLS:-gopool,pogolo,ckpool,warppool,public-pool}"
+pools_csv="${GO_BENCH_POOLS:-gopool,govault,pogolo,ckpool,warppool,public-pool}"
 miners_csv="${GO_BENCH_MINERS:-100,1000,10000}"
 pipeline="${GO_BENCH_SUBMIT_PIPELINE:-1}"
 warmup="${GO_BENCH_SUBMIT_WARMUP:-3s}"
@@ -67,6 +67,7 @@ PY
 pool_port() {
   case "$1" in
     gopool|ckpool|warppool|public-pool) printf '3333' ;;
+    govault) printf '10333' ;;
     pogolo) printf '5661' ;;
     *) echo "unknown pool: $1" >&2; exit 2 ;;
   esac
@@ -75,6 +76,7 @@ pool_port() {
 pool_extra_flags() {
   case "$1" in
     ckpool) printf '%s\n' "--worker-suffix=false" "--ordered-handshake" ;;
+    govault) printf '%s\n' "--ordered-handshake" ;;
     public-pool) printf '%s\n' "--ordered-handshake" ;;
     *) ;;
   esac
@@ -126,23 +128,11 @@ start_pool() {
   log_msg "=== start pool=${pool} no_zmq=${no_zmq} ==="
   cleanup_env
   if [ "$no_zmq" = "1" ]; then
-    GO_BENCHMARK_NO_ZMQ=1 ./scripts/go-benchmark-env.sh notify-fanout \
-      --pools "$pool" \
-      --conns 1 \
-      --rounds 1 \
-      --shards 1 \
-      --no-pin \
-      --out '' \
-      --keep >>"$log" 2>&1 || true
+    GO_BENCHMARK_NO_ZMQ=1 ./scripts/go-benchmark-env.sh \
+      start-pool "$pool" --no-pin >>"$log" 2>&1 || true
   else
-    ./scripts/go-benchmark-env.sh notify-fanout \
-      --pools "$pool" \
-      --conns 1 \
-      --rounds 1 \
-      --shards 1 \
-      --no-pin \
-      --out '' \
-      --keep >>"$log" 2>&1 || true
+    ./scripts/go-benchmark-env.sh \
+      start-pool "$pool" --no-pin >>"$log" 2>&1 || true
   fi
   if ! docker ps --format '{{.Names}}' | grep -qx 'openbench-pool'; then
     echo "openbench-pool did not start for ${pool}; see ${log}" >&2
@@ -243,6 +233,10 @@ record_notify() {
   printf '%s\n' "$output" | tee -a "$log"
   local result
   result="$(printf '%s\n' "$output" | awk '/^RESULT /{line=$0} END{print line}')"
+  if [ -z "$result" ]; then
+    record_failure "notify" "$pool" "$miner_count" "$mode" "probe produced no RESULT line"
+    return
+  fi
   python3 - "$jsonl" "$pool" "$miner_count" "$mode" "$result" <<'PY'
 import json
 import re

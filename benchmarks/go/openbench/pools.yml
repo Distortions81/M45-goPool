@@ -1,8 +1,8 @@
 # Go benchmark pool registry for local comparison runs.
 #
-# This overlay keeps the comparison intentionally focused on goPool, pogolo,
-# ckpool, WarpPool, and public-pool. It is copied over the upstream harness by
-# scripts/go-benchmark-env.sh.
+# This overlay keeps the comparison intentionally focused on goPool, GoVault,
+# pogolo, ckpool, WarpPool, and public-pool. It is copied over the upstream
+# harness by scripts/go-benchmark-env.sh.
 
 regtest:
   rpc_user: openbench
@@ -45,6 +45,20 @@ pools:
     readiness:
       kind: tcp
       timeout_seconds: 90
+
+  govault:
+    description: ShaeOJ/GoVault main (Go solo pool)
+    source: build
+    build_context: pools/govault/src
+    dockerfile: pools/govault/Dockerfile
+    stratum_port: 10333
+    config:
+      format: json
+      template: pools/govault/bench.json
+      mount: /openbench/govault.json
+    readiness:
+      kind: tcp
+      timeout_seconds: 120
 
   pogolo:
     description: 0xf0xx0/pogolo (Go solo pool)

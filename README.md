@@ -80,10 +80,12 @@ The goPool benchmark profile keeps normal submit-validation checks and vardiff
 enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
 `10000`-miner reject-load runs can complete.
 
-The reproducible suite now compares goPool, pogolo, ckpool, dvb-WarpPool, and
-public-pool. WarpPool is built from unmodified v1.25.6 source with its stock
-Enterprise profile; its 10,000-client rows are reported as failures because
-that profile's shipped connection cap is 4,096.
+The reproducible suite supports goPool,
+[GoVault](https://github.com/ShaeOJ/GoVault), pogolo, ckpool, dvb-WarpPool, and
+public-pool. The committed August 13 heat map predates the GoVault adapter.
+WarpPool is built from unmodified v1.25.6 source with its stock Enterprise
+profile; its 10,000-client rows are reported as failures because that profile's
+shipped connection cap is 4,096.
 
 ![Benchmark heat map](benchmarks/go/heatmap.svg)
 
