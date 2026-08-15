@@ -74,8 +74,7 @@ Stratum notes:
 
 Current `mining.submit` and `mining.notify` results for `100`, `1000`, and
 `10000` miners are in [`benchmarks/go/`](benchmarks/go/). The heat map below is
-from the August 13, 2026 rerun and predates the production-profile rules below;
-it remains a legacy, unlabeled result until the next complete rerun.
+from the August 15, 2026 production-profile rerun.
 
 The production benchmark profile keeps normal submit-validation checks,
 vardiff, telemetry, and startup maintenance enabled. Connection-rate limits and
@@ -84,9 +83,8 @@ complete. All simulated connections use unique workers; per-share disk logging
 is disabled while errors remain enabled; CPU pinning and scheduler limits are
 not applied.
 
-The reproducible suite supports goPool,
-[GoVault](https://github.com/ShaeOJ/GoVault), pogolo, ckpool, dvb-WarpPool, and
-public-pool. The committed August 13 heat map predates the GoVault adapter.
+The reproducible suite supports goPool, pogolo, ckpool, dvb-WarpPool, and
+public-pool.
 WarpPool is built from unmodified v1.25.6 source with its stock Enterprise
 profile; its 10,000-client rows are reported as failures because that profile's
 shipped connection cap is 4,096.

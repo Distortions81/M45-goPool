@@ -7,11 +7,6 @@ upstream="${GO_BENCHMARK_ENV_REPO:-https://github.com/eandersson/open-pool-bench
 ref="${GO_BENCHMARK_ENV_REF:-main}"
 overlay="${repo_root}/benchmarks/go/openbench"
 src_dir="${bench_dir}/pools/gopool/src"
-govault_src_dir="${bench_dir}/pools/govault/src"
-govault_repo="${GO_BENCHMARK_GOVAULT_REPO:-https://github.com/ShaeOJ/GoVault.git}"
-govault_ref="${GO_BENCHMARK_GOVAULT_REF:-main}"
-govault_source_key="${govault_repo}#${govault_ref}"
-govault_source_key_file="${govault_src_dir}/.git/openbench-source"
 
 if ! command -v git >/dev/null 2>&1; then
   echo "git is required" >&2
@@ -41,22 +36,6 @@ cp "${overlay}/pools/gopool/entrypoint.sh" "${bench_dir}/pools/gopool/entrypoint
 mkdir -p "${bench_dir}/pools/ckpool"
 cp "${overlay}/pools/ckpool/bench.conf" "${bench_dir}/pools/ckpool/bench.conf"
 cp "${overlay}/pools/ckpool/Dockerfile" "${bench_dir}/pools/ckpool/Dockerfile"
-if [ ! -d "${govault_src_dir}/.git" ]; then
-  mkdir -p "$(dirname "${govault_src_dir}")"
-  git clone --depth 1 --branch "$govault_ref" "$govault_repo" "$govault_src_dir"
-  printf '%s\n' "$govault_source_key" >"$govault_source_key_file"
-elif [ ! -f "$govault_source_key_file" ] || \
-  [ "$(<"$govault_source_key_file")" != "$govault_source_key" ]; then
-  git -C "$govault_src_dir" remote set-url origin "$govault_repo"
-  git -C "$govault_src_dir" fetch --depth 1 origin "$govault_ref"
-  git -C "$govault_src_dir" checkout --detach FETCH_HEAD >/dev/null
-  git -C "$govault_src_dir" reset --hard FETCH_HEAD >/dev/null
-  printf '%s\n' "$govault_source_key" >"$govault_source_key_file"
-fi
-mkdir -p "${govault_src_dir}/cmd/openbench"
-cp "${overlay}/pools/govault/main.go.template" "${govault_src_dir}/cmd/openbench/main.go"
-cp "${overlay}/pools/govault/bench.json" "${bench_dir}/pools/govault/bench.json"
-cp "${overlay}/pools/govault/Dockerfile" "${bench_dir}/pools/govault/Dockerfile"
 mkdir -p "${bench_dir}/pools/warppool"
 cp "${overlay}/pools/warppool/bench.toml" "${bench_dir}/pools/warppool/bench.toml"
 cp "${overlay}/pools/warppool/Dockerfile" "${bench_dir}/pools/warppool/Dockerfile"

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_POOLS = ["gopool", "govault", "pogolo", "ckpool", "warppool", "public-pool"]
+DEFAULT_POOLS = ["gopool", "pogolo", "ckpool", "warppool", "public-pool"]
 DEFAULT_MINERS = [100, 1000, 10000]
 GOOD = (24, 143, 74)
 MID = (242, 215, 121)

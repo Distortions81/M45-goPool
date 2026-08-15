@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-pools_csv="${GO_BENCH_POOLS:-gopool,govault,pogolo,ckpool,warppool,public-pool}"
+pools_csv="${GO_BENCH_POOLS:-gopool,pogolo,ckpool,warppool,public-pool}"
 miners_csv="${GO_BENCH_MINERS:-100,1000,10000}"
 pipeline="${GO_BENCH_SUBMIT_PIPELINE:-1}"
 warmup="${GO_BENCH_SUBMIT_WARMUP:-3s}"
@@ -77,7 +77,6 @@ PY
 pool_port() {
   case "$1" in
     gopool|ckpool|warppool|public-pool) printf '3333' ;;
-    govault) printf '10333' ;;
     pogolo) printf '5661' ;;
     *) echo "unknown pool: $1" >&2; exit 2 ;;
   esac
@@ -86,7 +85,6 @@ pool_port() {
 pool_extra_flags() {
   case "$1" in
     ckpool) printf '%s\n' "--worker-suffix=true" "--ordered-handshake" ;;
-    govault) printf '%s\n' "--ordered-handshake" ;;
     public-pool) printf '%s\n' "--ordered-handshake" ;;
     *) ;;
   esac

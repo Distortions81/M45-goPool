@@ -6,12 +6,12 @@ suite and regenerate the SVG.
 
 ## Current results
 
-Unpinned rerun from August 13, 2026 on a 32-logical-CPU host. The raw result
-matrix is committed as
+The heat map shows the unpinned August 15, 2026 production-profile rerun on a
+32-logical-CPU host. The older August 13 raw result matrix is committed as
 [`go-benchmarks-20260813T184353Z.jsonl`](../../reports/go-benchmarks/go-benchmarks-20260813T184353Z.jsonl).
 That run predates the profile and worker-identity rules below, so it remains a
-legacy, unlabeled result set and must not be presented as a production-profile
-comparison. The next complete rerun will replace it.
+legacy, unlabeled result set and must not be presented as the production-profile
+comparison shown in the heat map.
 
 Results produced by this suite are labeled **production profile**. The goPool
 adapter keeps normal submit validation, vardiff, cumulative hashrate telemetry,
@@ -24,22 +24,12 @@ separately from the profile label.
 Every simulated connection authorizes a unique `wallet.wN` worker, including
 CKPool. The logging rule is uniform across adapters: do not write per-share
 records to disk, but keep error logging enabled. CKPool therefore runs at
-`LOG_ERR` without its `-L` per-share logging switch, GoVault uses its `error`
-level, and debug/network-share logging is disabled in the other adapters.
+`LOG_ERR` without its `-L` per-share logging switch, and debug/network-share
+logging is disabled in the other adapters.
 
 Pool and probe CPU pinning is disabled. The harness does not set `GOMAXPROCS`
 or an equivalent CPU quota, so every implementation retains unrestricted
 multicore scheduling.
-
-The harness also supports [GoVault](https://github.com/ShaeOJ/GoVault) through a
-benchmark-only headless launcher built from its unmodified `main` branch
-packages. The committed August 13 result matrix predates that adapter; GoVault
-will appear in the heat map after the next full rerun.
-
-GoVault does not currently decode `bcrt1` payout addresses, so its adapter uses
-a standard regtest-compatible legacy P2PKH payout address. It also sets the app
-log level to `error` to keep per-share informational disk logging out of the
-validation hot-path measurement; vardiff and share validation remain enabled.
 
 The suite also includes dvb-WarpPool v1.25.6 and public-pool's default
 single-process deployment. The WarpPool adapter builds the pinned upstream
@@ -79,7 +69,7 @@ logging, unique-worker, and unrestricted-multicore rules.
 Useful knobs:
 
 ```bash
-GO_BENCH_POOLS=gopool,govault,pogolo,ckpool,warppool,public-pool
+GO_BENCH_POOLS=gopool,pogolo,ckpool,warppool,public-pool
 GO_BENCH_MINERS=100,1000,10000
 GO_BENCH_SUBMIT_DURATION=8s
 GO_BENCH_NOTIFY_ROUNDS=5
