@@ -9,10 +9,27 @@ suite and regenerate the SVG.
 Unpinned rerun from August 13, 2026 on a 32-logical-CPU host. The raw result
 matrix is committed as
 [`go-benchmarks-20260813T184353Z.jsonl`](../../reports/go-benchmarks/go-benchmarks-20260813T184353Z.jsonl).
+That run predates the profile and worker-identity rules below, so it remains a
+legacy, unlabeled result set and must not be presented as a production-profile
+comparison. The next complete rerun will replace it.
 
-The goPool benchmark profile keeps normal submit-validation checks and vardiff
-enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
-`10000`-miner reject-load runs can complete.
+Results produced by this suite are labeled **production profile**. The goPool
+adapter keeps normal submit validation, vardiff, cumulative hashrate telemetry,
+recent-window telemetry, the ordinary three-hour saved-worker-history flush,
+and expired-ban startup maintenance enabled. Connection-rate limits and
+invalid-submit bans alone are relaxed so synthetic `10000`-miner reject-load
+runs can complete; those accommodations are recorded in result metadata
+separately from the profile label.
+
+Every simulated connection authorizes a unique `wallet.wN` worker, including
+CKPool. The logging rule is uniform across adapters: do not write per-share
+records to disk, but keep error logging enabled. CKPool therefore runs at
+`LOG_ERR` without its `-L` per-share logging switch, GoVault uses its `error`
+level, and debug/network-share logging is disabled in the other adapters.
+
+Pool and probe CPU pinning is disabled. The harness does not set `GOMAXPROCS`
+or an equivalent CPU quota, so every implementation retains unrestricted
+multicore scheduling.
 
 The harness also supports [GoVault](https://github.com/ShaeOJ/GoVault) through a
 benchmark-only headless launcher built from its unmodified `main` branch
@@ -56,7 +73,8 @@ environment, starts a fresh pool instance for every matrix cell, runs `100`,
 `1000`, and `10000` miner cases, writes raw JSONL/log output under
 `reports/go-benchmarks/`, and regenerates `benchmarks/go/heatmap.svg`. Fresh
 instances keep submit load, connection churn, and earlier notify rounds from
-affecting later measurements. CPU pinning is disabled by default.
+affecting later measurements. Result metadata records the production-profile,
+logging, unique-worker, and unrestricted-multicore rules.
 
 Useful knobs:
 

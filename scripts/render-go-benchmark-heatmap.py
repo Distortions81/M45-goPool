@@ -199,6 +199,7 @@ def main() -> None:
     args = parse_args()
     metadata, records = read_records(Path(args.input))
     run_date = args.title_date or metadata.get("date") or dt.datetime.now(dt.UTC).date().isoformat()
+    result_profile = str(metadata.get("result_profile", "legacy unlabeled profile"))
     if run_date and len(run_date) == 10:
         run_date = dt.date.fromisoformat(run_date).strftime("%B %-d, %Y")
 
@@ -220,7 +221,7 @@ def main() -> None:
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="820" height="{svg_height}" viewBox="0 0 820 {svg_height}" role="img" aria-labelledby="title desc">',
         '  <title id="title">goPool benchmark heat map</title>',
-        f'  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the {html.escape(str(run_date))} rerun. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>',
+        f'  <desc id="desc">Heat map of mining.submit and mining.notify benchmark results from the {html.escape(str(run_date))} rerun using the {html.escape(result_profile)}. Each numeric metric column is colored independently; failed cells are labeled explicitly.</desc>',
         "  <style>",
         '    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #111827; }',
         "    .title { font-size: 26px; font-weight: 700; }",
@@ -234,7 +235,7 @@ def main() -> None:
         "  </style>",
         f'  <rect width="820" height="{svg_height}" fill="#ffffff"/>',
         '  <text x="34" y="42" class="title">Benchmark heat map</text>',
-        f'  <text x="34" y="66" class="subtitle">Rerun {html.escape(str(run_date))}. Green is better; red is worse.</text>',
+        f'  <text x="34" y="66" class="subtitle">{html.escape(result_profile.title())} · rerun {html.escape(str(run_date))}. Green is better; red is worse.</text>',
         '  <g transform="translate(560 30)">',
         '    <rect x="0" y="0" width="44" height="16" fill="#188f4a"/>',
         '    <rect x="44" y="0" width="44" height="16" fill="#88b462"/>',

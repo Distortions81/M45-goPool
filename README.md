@@ -74,11 +74,15 @@ Stratum notes:
 
 Current `mining.submit` and `mining.notify` results for `100`, `1000`, and
 `10000` miners are in [`benchmarks/go/`](benchmarks/go/). The heat map below is
-from the August 13, 2026 rerun.
+from the August 13, 2026 rerun and predates the production-profile rules below;
+it remains a legacy, unlabeled result until the next complete rerun.
 
-The goPool benchmark profile keeps normal submit-validation checks and vardiff
-enabled. Connection-rate limits and invalid-submit bans are relaxed so synthetic
-`10000`-miner reject-load runs can complete.
+The production benchmark profile keeps normal submit-validation checks,
+vardiff, telemetry, and startup maintenance enabled. Connection-rate limits and
+invalid-submit bans are relaxed so synthetic `10000`-miner reject-load runs can
+complete. All simulated connections use unique workers; per-share disk logging
+is disabled while errors remain enabled; CPU pinning and scheduler limits are
+not applied.
 
 The reproducible suite supports goPool,
 [GoVault](https://github.com/ShaeOJ/GoVault), pogolo, ckpool, dvb-WarpPool, and

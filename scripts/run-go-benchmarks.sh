@@ -21,6 +21,8 @@ bin_dir="${GO_BENCH_BIN_DIR:-.benchmarks/go-benchmark-bin}"
 probe_image="${GO_BENCH_PROBE_IMAGE:-openbench-probes:latest}"
 network="${GO_BENCH_NETWORK:-openbench-regtest_default}"
 address="${GO_BENCH_ADDRESS:-bcrt1qlk935ze2fsu86zjp395uvtegztrkaezawxx0wf}"
+result_profile="production profile"
+logging_rule="no per-share disk logging; errors enabled"
 
 case "$bin_dir" in
   /*) bin_path="$bin_dir" ;;
@@ -52,6 +54,14 @@ row = {
     "pools": os.environ["GO_BENCH_POOLS_EFFECTIVE"].split(","),
     "miners": [int(v) for v in os.environ["GO_BENCH_MINERS_EFFECTIVE"].split(",")],
     "pinning": "disabled",
+    "scheduling": "unrestricted_multicore",
+    "result_profile": os.environ["GO_BENCH_RESULT_PROFILE_EFFECTIVE"],
+    "logging_rule": os.environ["GO_BENCH_LOGGING_RULE_EFFECTIVE"],
+    "worker_identity": "unique_per_connection",
+    "load_accommodations": [
+        "connection limits raised for 10000 synthetic clients",
+        "invalid-submit bans disabled for deliberate reject load",
+    ],
     "case_isolation": "fresh_pool",
     "submit_pipeline": int(os.environ["GO_BENCH_SUBMIT_PIPELINE_EFFECTIVE"]),
     "submit_warmup": os.environ["GO_BENCH_SUBMIT_WARMUP_EFFECTIVE"],
@@ -75,7 +85,7 @@ pool_port() {
 
 pool_extra_flags() {
   case "$1" in
-    ckpool) printf '%s\n' "--worker-suffix=false" "--ordered-handshake" ;;
+    ckpool) printf '%s\n' "--worker-suffix=true" "--ordered-handshake" ;;
     govault) printf '%s\n' "--ordered-handshake" ;;
     public-pool) printf '%s\n' "--ordered-handshake" ;;
     *) ;;
@@ -273,6 +283,8 @@ export GO_BENCH_SUBMIT_WARMUP_EFFECTIVE="$warmup"
 export GO_BENCH_SUBMIT_DURATION_EFFECTIVE="$duration"
 export GO_BENCH_NOTIFY_ROUNDS_EFFECTIVE="$notify_rounds"
 export GO_BENCH_BATCH_EFFECTIVE="$batch"
+export GO_BENCH_RESULT_PROFILE_EFFECTIVE="$result_profile"
+export GO_BENCH_LOGGING_RULE_EFFECTIVE="$logging_rule"
 trap cleanup_env EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -282,7 +294,7 @@ log_msg "go benchmark suite"
 log_msg "jsonl=${jsonl}"
 log_msg "log=${log}"
 log_msg "svg=${svg}"
-log_msg "pools=${pools_csv} miners=${miners_csv} pinning=disabled case_isolation=fresh_pool render_svg=${render_svg}"
+log_msg "pools=${pools_csv} miners=${miners_csv} profile=${result_profile} scheduling=unrestricted_multicore worker_identity=unique_per_connection logging_rule=${logging_rule} case_isolation=fresh_pool render_svg=${render_svg}"
 
 CGO_ENABLED=0 go build -o "$bin_path/go-submit-bench" ./benchmarks/go/submit
 CGO_ENABLED=0 go build -o "$bin_path/go-notify-fanout" ./benchmarks/go/notify-fanout

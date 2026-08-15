@@ -65,10 +65,11 @@ rpc_pass = "${RPC_PASS}"
   stratum_messages_per_minute = 0
 
 [hashrate]
-  hashrate_cumulative_enabled = false
+  # Keep the ordinary production telemetry paths active during comparison runs.
+  hashrate_cumulative_enabled = true
   hashrate_ema_tau_seconds = 30.0
-  hashrate_recent_cumulative_enabled = false
-  saved_worker_history_flush_interval_seconds = 86400
+  hashrate_recent_cumulative_enabled = true
+  saved_worker_history_flush_interval_seconds = 10800
   share_ntime_max_forward_seconds = 7000
 
 [peer_cleaning]
@@ -79,7 +80,9 @@ rpc_pass = "${RPC_PASS}"
 
 [bans]
   ban_invalid_submissions_after = 0
-  clean_expired_on_startup = false
+  # Startup maintenance remains enabled. The submit-ban threshold stays at zero
+  # only because the benchmark intentionally generates rejected shares.
+  clean_expired_on_startup = true
   reconnect_ban_threshold = 0
 
 [version]
