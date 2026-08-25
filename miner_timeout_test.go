@@ -1,13 +1,46 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"io"
+	"net"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
+
+type immediateTimeoutError struct{}
+
+func (immediateTimeoutError) Error() string   { return "immediate timeout" }
+func (immediateTimeoutError) Timeout() bool   { return true }
+func (immediateTimeoutError) Temporary() bool { return true }
+
+type timeoutThenEOFConn struct {
+	reads     int
+	deadlines []time.Time
+}
+
+func (c *timeoutThenEOFConn) Read([]byte) (int, error) {
+	c.reads++
+	if c.reads == 1 {
+		return 0, immediateTimeoutError{}
+	}
+	return 0, io.EOF
+}
+
+func (*timeoutThenEOFConn) Write(b []byte) (int, error) { return len(b), nil }
+func (*timeoutThenEOFConn) Close() error                { return nil }
+func (*timeoutThenEOFConn) LocalAddr() net.Addr         { return &net.IPAddr{} }
+func (*timeoutThenEOFConn) RemoteAddr() net.Addr        { return &net.IPAddr{} }
+func (*timeoutThenEOFConn) SetDeadline(time.Time) error { return nil }
+func (c *timeoutThenEOFConn) SetReadDeadline(deadline time.Time) error {
+	c.deadlines = append(c.deadlines, deadline)
+	return nil
+}
+func (*timeoutThenEOFConn) SetWriteDeadline(time.Time) error { return nil }
 
 func TestConnectionTimeoutZeroDisablesIdleExpiry(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
@@ -24,6 +57,42 @@ func TestConnectionTimeoutZeroDisablesIdleExpiry(t *testing.T) {
 	}
 	if got := mc.timeoutRiskDownshift(now, 2, time.Time{}, now.Add(-time.Hour), 1, hashPerShare); got != 0 {
 		t.Fatalf("timeout risk downshift = %v, want 0 when timeout is disabled", got)
+	}
+}
+
+func TestTLSReadTimeoutIsTerminal(t *testing.T) {
+	conn := &timeoutThenEOFConn{}
+	mc := &MinerConn{
+		ctx:             context.Background(),
+		conn:            conn,
+		reader:          bufio.NewReader(conn),
+		cfg:             Config{ConnectionTimeout: 3 * time.Minute},
+		lastActivity:    time.Now(),
+		isTLSConnection: true,
+	}
+
+	mc.handle()
+
+	if conn.reads != 1 {
+		t.Fatalf("TLS reads after timeout = %d, want 1", conn.reads)
+	}
+	if len(conn.deadlines) != 1 {
+		t.Fatalf("TLS read deadlines = %d, want 1", len(conn.deadlines))
+	}
+}
+
+func TestTLSReadTimeoutUsesIdlePolicyWithoutPolling(t *testing.T) {
+	mc := &MinerConn{
+		cfg:             Config{ConnectionTimeout: 0},
+		isTLSConnection: true,
+	}
+	if got := mc.currentReadTimeout(); got != 0 {
+		t.Fatalf("disabled TLS read timeout = %s, want 0", got)
+	}
+
+	mc.cfg.ConnectionTimeout = 3 * time.Minute
+	if got := mc.currentReadTimeout(); got != mc.cfg.ConnectionTimeout {
+		t.Fatalf("TLS read timeout = %s, want %s", got, mc.cfg.ConnectionTimeout)
 	}
 }
 

@@ -59,9 +59,13 @@ func (mc *MinerConn) cleanupResources() {
 	mc.lastHashrateUpdate = time.Time{}
 	mc.rollingHashrateValue = 0
 	mc.statsMu.Unlock()
+	mc.jobListenerMu.Lock()
 	if mc.jobMgr != nil && mc.jobCh != nil {
 		mc.jobMgr.Unsubscribe(mc.jobCh)
+		mc.jobCh = nil
 	}
+	mc.listenerOn = false
+	mc.jobListenerMu.Unlock()
 }
 
 func (mc *MinerConn) Close(reason string) {
@@ -114,7 +118,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		ctx = context.Background()
 	}
 	now := time.Now()
-	jobCh := jobMgr.Subscribe()
 	en1 := jobMgr.NextExtranonce1()
 	maxRecentJobs := cfg.MaxRecentJobs
 	if maxRecentJobs <= 0 {
@@ -154,7 +157,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		cfg:               cfg,
 		extranonce1:       en1,
 		extranonce1Hex:    hex.EncodeToString(en1),
-		jobCh:             jobCh,
 		vardiff:           vdiff,
 		metrics:           metrics,
 		accounting:        accounting,
@@ -259,7 +261,10 @@ func (mc *MinerConn) handle() {
 			return
 		}
 		mc.maybeSendInitialWorkDue(now)
-		deadline := now.Add(mc.currentReadTimeout())
+		deadline := time.Time{}
+		if readTimeout := mc.currentReadTimeout(); readTimeout > 0 {
+			deadline = now.Add(readTimeout)
+		}
 		if err := mc.conn.SetReadDeadline(deadline); err != nil {
 			if mc.ctx.Err() != nil {
 				return
@@ -285,6 +290,15 @@ func (mc *MinerConn) handle() {
 			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
 				if expired, reason := mc.idleExpired(now); expired {
 					logger.Warn("closing miner for idle timeout", "component", "miner", "kind", "timeout", "remote", mc.id, "reason", reason)
+					return
+				}
+				// A TLS read timeout cannot safely use the plain-TCP polling path.
+				// Depending on where the timeout lands in a TLS record, subsequent
+				// reads can immediately return the same error and turn this loop into
+				// a CPU spin. Reconnect the miner instead; active connections reset
+				// their deadline after every complete Stratum message.
+				if mc.isTLSConnection {
+					logger.Warn("closing TLS miner after read timeout", "component", "miner", "kind", "timeout", "remote", mc.id)
 					return
 				}
 				continue
@@ -563,13 +577,19 @@ func (mc *MinerConn) sendInitialWork() {
 }
 
 // currentReadTimeout returns a dynamic read timeout based on whether the
-// miner has proven itself by submitting accepted shares. New/idle
-// connections get a short timeout to protect against floods; once a miner
-// has submitted a few valid shares we switch to the configured, longer
-// timeout. When idle expiry is disabled, the short timeout remains as a
-// polling interval so context cancellation is still observed.
+// miner has proven itself by submitting accepted shares. New/idle plain-TCP
+// connections get a short polling timeout; once a miner has submitted a few
+// valid shares we switch to the configured, longer timeout.
+//
+// TLS reads do not use the polling timeout because a timeout in the middle of
+// a TLS record can make subsequent reads fail immediately. For TLS, use the
+// actual idle timeout and return zero (no deadline) when idle expiry is
+// disabled. Shutdown still interrupts the read by closing every connection.
 func (mc *MinerConn) currentReadTimeout() time.Duration {
 	base := mc.cfg.ConnectionTimeout
+	if mc.isTLSConnection {
+		return base
+	}
 
 	mc.statsMu.Lock()
 	accepted := mc.stats.Accepted
@@ -581,17 +601,44 @@ func (mc *MinerConn) currentReadTimeout() time.Duration {
 	return base
 }
 
-func (mc *MinerConn) listenJobs() {
+// startJobListener subscribes a connection to job broadcasts only after both
+// halves of the Stratum handshake have completed. Keeping pre-authentication
+// connections out of JobManager prevents their unread channels from reporting
+// a stale dropped update on every job.
+func (mc *MinerConn) startJobListener() bool {
+	if mc == nil || mc.jobMgr == nil || !mc.subscribed || !mc.authorized {
+		return false
+	}
+
+	mc.jobListenerMu.Lock()
+	defer mc.jobListenerMu.Unlock()
+	if mc.listenerOn {
+		return true
+	}
+	if mc.closed.Load() {
+		return false
+	}
+
+	jobCh := mc.jobMgr.Subscribe()
+	if mc.closed.Load() {
+		mc.jobMgr.Unsubscribe(jobCh)
+		return false
+	}
+	mc.jobCh = jobCh
+	mc.listenerOn = true
+	go mc.listenJobs(jobCh)
+	return true
+}
+
+func (mc *MinerConn) listenJobs(jobCh <-chan *Job) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error("listenJobs panic recovered", "remote", mc.id, "panic", r)
-			// Restart the listener after a brief delay to avoid tight panic loops
-			time.Sleep(100 * time.Millisecond)
-			go mc.listenJobs()
+			mc.Close("job listener panic")
 		}
 	}()
 
-	for job := range mc.jobCh {
+	for job := range jobCh {
 		mc.sendNotifyFor(job, false)
 	}
 }

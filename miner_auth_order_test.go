@@ -43,6 +43,44 @@ func TestHandleAuthorize_AllowsBeforeSubscribe(t *testing.T) {
 	}
 }
 
+func TestJobSubscriptionStartsOnlyWhenMinerReady(t *testing.T) {
+	cfg := defaultConfig()
+	jm := NewJobManager(nil, cfg, nil, nil, nil)
+	mc := NewMinerConn(context.Background(), nopConn{}, jm, nil, cfg, nil, nil, nil, nil, nil, false)
+	t.Cleanup(mc.cleanup)
+
+	if got := jm.ActiveMiners(); got != 0 {
+		t.Fatalf("new connection job subscribers = %d, want 0", got)
+	}
+	if mc.startJobListener() {
+		t.Fatal("job listener started before subscribe and authorize")
+	}
+
+	mc.subscribed = true
+	if mc.startJobListener() {
+		t.Fatal("job listener started before authorize")
+	}
+	if got := jm.ActiveMiners(); got != 0 {
+		t.Fatalf("subscribe-only job subscribers = %d, want 0", got)
+	}
+
+	mc.authorized = true
+	if !mc.startJobListener() {
+		t.Fatal("job listener did not start after subscribe and authorize")
+	}
+	if !mc.startJobListener() {
+		t.Fatal("repeated job listener start did not report active")
+	}
+	if got := jm.ActiveMiners(); got != 1 {
+		t.Fatalf("ready connection job subscribers = %d, want 1", got)
+	}
+
+	mc.cleanup()
+	if got := jm.ActiveMiners(); got != 0 {
+		t.Fatalf("cleaned connection job subscribers = %d, want 0", got)
+	}
+}
+
 func TestMinerConn_MiningAuthAlias(t *testing.T) {
 	server, client := net.Pipe()
 	defer client.Close()

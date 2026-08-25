@@ -127,16 +127,17 @@ var defaultVarDiff = VarDiffConfig{
 }
 
 type MinerConn struct {
-	id           string
-	ctx          context.Context
-	conn         net.Conn
-	writeMu      sync.Mutex
-	notifyMu     sync.Mutex
-	versionMu    sync.Mutex
-	writeScratch []byte
-	reader       *bufio.Reader
-	jobMgr       *JobManager
-	rpc          rpcCaller
+	id            string
+	ctx           context.Context
+	conn          net.Conn
+	writeMu       sync.Mutex
+	notifyMu      sync.Mutex
+	versionMu     sync.Mutex
+	jobListenerMu sync.Mutex
+	writeScratch  []byte
+	reader        *bufio.Reader
+	jobMgr        *JobManager
+	rpc           rpcCaller
 	// cfg is the immutable policy negotiated for this miner session. Admin
 	// updates are applied to newly connected miners; advertised jobs carry any
 	// future-job policy that can safely change without rewriting session state.

@@ -172,26 +172,7 @@ func (mc *MinerConn) handleSubscribeID(id any, clientID string, haveClientID boo
 	// Support authorize-before-subscribe: if the miner already authorized,
 	// start the listener and schedule initial work now that subscribe is done.
 	if mc.authorized {
-		if !mc.listenerOn {
-			if mc.jobCh != nil {
-				for {
-					select {
-					case _, ok := <-mc.jobCh:
-						if !ok {
-							return
-						}
-					default:
-						goto drained
-					}
-				}
-			}
-		drained:
-			mc.listenerOn = true
-			if mc.jobCh != nil {
-				go mc.listenJobs()
-			}
-		}
-		if mc.jobMgr != nil {
+		if mc.startJobListener() {
 			mc.scheduleInitialWork()
 		}
 	}
@@ -427,27 +408,8 @@ func (mc *MinerConn) handleAuthorizeID(id any, workerParam string, pass string) 
 		return
 	}
 
-	if !mc.listenerOn {
-		// Drain any buffered notifications that may have accumulated between
-		// subscribe and authorize; we'll send the current job explicitly below.
-		for {
-			select {
-			case _, ok := <-mc.jobCh:
-				if !ok {
-					return
-				}
-			default:
-				goto drained
-			}
-		}
-	drained:
-
-		mc.listenerOn = true
-		// Goroutine lifecycle: listenJobs reads from mc.jobCh until the channel is closed.
-		// Channel is closed via mc.jobMgr.Unsubscribe(mc.jobCh) in cleanup().
-		if mc.jobCh != nil {
-			go mc.listenJobs()
-		}
+	if !mc.startJobListener() {
+		return
 	}
 
 	if hasSuggestedDiff {
