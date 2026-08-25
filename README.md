@@ -85,8 +85,9 @@ not applied.
 
 The reproducible suite supports goPool, pogolo, ckpool, dvb-WarpPool, and
 public-pool.
-WarpPool is built from unmodified v1.25.6 source with its stock Enterprise
-profile; its 10,000-client rows are reported as failures because that profile's
+It uses pogolo v1.1.4-hotfix, CKPool v1.2.0, WarpPool's `main` branch, and
+public-pool's `master` branch. WarpPool is built unmodified with the stock
+Enterprise profile; its 10,000-client rows are reported as failures because that profile's
 shipped connection cap is 4,096.
 
 ![Benchmark heat map](benchmarks/go/heatmap.svg)

@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates git && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 ARG CKPOOL_REPO=https://bitbucket.org/ckolivas/ckpool.git
-ARG CKPOOL_REF=master
+ARG CKPOOL_REF=v1.2.0
 RUN git clone "$CKPOOL_REPO" . && git checkout "$CKPOOL_REF" \
     && ./autogen.sh && ./configure && make -j"$(nproc)"
 

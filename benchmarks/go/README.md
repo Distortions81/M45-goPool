@@ -31,9 +31,9 @@ Pool and probe CPU pinning is disabled. The harness does not set `GOMAXPROCS`
 or an equivalent CPU quota, so every implementation retains unrestricted
 multicore scheduling.
 
-The suite also includes dvb-WarpPool v1.25.6 and public-pool's default
-single-process deployment. The WarpPool adapter builds the pinned upstream
-source without source patches and selects its shipped Enterprise profile. The
+The comparison uses pogolo v1.1.4-hotfix, CKPool v1.2.0, dvb-WarpPool's `main`
+branch, and public-pool's default `master` branch. The WarpPool adapter builds
+upstream source without source patches and selects its shipped Enterprise profile. The
 harness supplies RPC/ZMQ/listen settings, relaxes connection-rate limits, and
 uses a 10-second polling interval for the no-ZMQ test. The stock Enterprise
 connection cap remains 4,096, so all three `10000`-miner WarpPool cells are

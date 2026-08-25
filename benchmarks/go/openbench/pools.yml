@@ -47,9 +47,9 @@ pools:
       timeout_seconds: 90
 
   pogolo:
-    description: 0xf0xx0/pogolo (Go solo pool)
+    description: 0xf0xx0/pogolo v1.1.4-hotfix (Go solo pool)
     source: image
-    image: 0xf0xx0/pogolo:testing
+    image: 0xf0xx0/pogolo:v1.1.4-hotfix
     stratum_port: 5661
     api_port: 5662
     config:
@@ -63,7 +63,7 @@ pools:
       timeout_seconds: 40
 
   ckpool:
-    description: ckolivas/ckpool (C solo pool, BTCSOLO mode)
+    description: ckolivas/ckpool v1.2.0 (C solo pool, BTCSOLO mode)
     source: build
     build_context: pools/ckpool
     dockerfile: Dockerfile
@@ -77,10 +77,10 @@ pools:
       timeout_seconds: 120
 
   warppool:
-    description: dvb-projekt/dvb-WarpPool v1.25.6 (Rust solo pool)
+    description: dvb-projekt/dvb-WarpPool main (Rust solo pool)
     source: build
     repo: https://git.warppool.org/dvb-projekt/dvb-WarpPool.git
-    repo_ref: v1.25.6
+    repo_ref: main
     repo_dir: pools/warppool/src
     build_context: pools/warppool/src
     dockerfile: pools/warppool/Dockerfile
