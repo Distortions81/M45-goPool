@@ -119,6 +119,12 @@ type StatusData struct {
 	RPCGBTLastSec                   float64               `json:"rpc_gbt_last_sec"`
 	RPCGBTMaxSec                    float64               `json:"rpc_gbt_max_sec"`
 	RPCGBTCount                     uint64                `json:"rpc_gbt_count"`
+	RPCGBTHeadersLastSec            float64               `json:"rpc_gbt_headers_last_sec"`
+	RPCGBTBodyLastSec               float64               `json:"rpc_gbt_body_last_sec"`
+	RPCGBTDecodeLastSec             float64               `json:"rpc_gbt_decode_last_sec"`
+	RPCGBTApplyNotifyLastSec        float64               `json:"rpc_gbt_apply_notify_last_sec"`
+	RPCGBTApplyNotifyMaxSec         float64               `json:"rpc_gbt_apply_notify_max_sec"`
+	RPCGBTApplyNotifyCount          uint64                `json:"rpc_gbt_apply_notify_count"`
 	RPCSubmitLastSec                float64               `json:"rpc_submit_last_sec"`
 	RPCSubmitMaxSec                 float64               `json:"rpc_submit_max_sec"`
 	RPCSubmitCount                  uint64                `json:"rpc_submit_count"`
@@ -213,6 +219,12 @@ type PoolPageData struct {
 	RPCGBTLastSec                   float64               `json:"rpc_gbt_last_sec"`
 	RPCGBTMaxSec                    float64               `json:"rpc_gbt_max_sec"`
 	RPCGBTCount                     uint64                `json:"rpc_gbt_count"`
+	RPCGBTHeadersLastSec            float64               `json:"rpc_gbt_headers_last_sec"`
+	RPCGBTBodyLastSec               float64               `json:"rpc_gbt_body_last_sec"`
+	RPCGBTDecodeLastSec             float64               `json:"rpc_gbt_decode_last_sec"`
+	RPCGBTApplyNotifyLastSec        float64               `json:"rpc_gbt_apply_notify_last_sec"`
+	RPCGBTApplyNotifyMaxSec         float64               `json:"rpc_gbt_apply_notify_max_sec"`
+	RPCGBTApplyNotifyCount          uint64                `json:"rpc_gbt_apply_notify_count"`
 	RPCSubmitLastSec                float64               `json:"rpc_submit_last_sec"`
 	RPCSubmitMaxSec                 float64               `json:"rpc_submit_max_sec"`
 	RPCSubmitCount                  uint64                `json:"rpc_submit_count"`

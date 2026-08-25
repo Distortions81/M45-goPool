@@ -9,22 +9,34 @@ import (
 const (
 	jobTemplateRefreshTimeout     = 10 * time.Second
 	jobBlockHistoryRefreshTimeout = 3 * time.Second
+	jobLongPollCoalesceDelay      = 25 * time.Millisecond
 )
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
-	return jm.refreshJobCtxMinInterval(ctx, 100*time.Millisecond)
+	return jm.refreshJobCtxMinIntervalUnlessParent(ctx, 100*time.Millisecond, "")
 }
 
 func (jm *JobManager) refreshJobCtxForce(ctx context.Context) error {
-	return jm.refreshJobCtxMinInterval(ctx, 0)
+	return jm.refreshJobCtxMinIntervalUnlessParent(ctx, 0, "")
 }
 
 func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval time.Duration) error {
+	return jm.refreshJobCtxMinIntervalUnlessParent(ctx, minInterval, "")
+}
+
+func (jm *JobManager) refreshJobCtxForceUnlessParent(ctx context.Context, parent string) error {
+	return jm.refreshJobCtxMinIntervalUnlessParent(ctx, 0, parent)
+}
+
+func (jm *JobManager) refreshJobCtxMinIntervalUnlessParent(ctx context.Context, minInterval time.Duration, parent string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	jm.refreshMu.Lock()
 	defer jm.refreshMu.Unlock()
+	if jm.currentTemplateUsesParent(parent) {
+		return nil
+	}
 	if minInterval > 0 && time.Since(jm.lastRefreshAttempt) < minInterval {
 		return nil
 	}
@@ -52,6 +64,12 @@ func (jm *JobManager) refreshJobCtxMinInterval(ctx context.Context, minInterval 
 	return jm.refreshFromTemplate(refreshCtx, tpl)
 }
 
+func (jm *JobManager) applyLongPollTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
+	jm.refreshMu.Lock()
+	defer jm.refreshMu.Unlock()
+	return jm.refreshFromTemplate(ctx, tpl)
+}
+
 func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]any, useLongPoll bool) (GetBlockTemplateResult, error) {
 	var tpl GetBlockTemplateResult
 	var err error
@@ -64,6 +82,7 @@ func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]an
 }
 
 func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
+	templateReceivedAt := time.Now()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -102,6 +121,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 		jm.recordJobSuccess(nil)
 		jm.updateBlockTipFromTemplate(tpl)
 		jm.applyMu.Unlock()
+		jm.signalTemplateUpdate()
 		return nil
 	}
 
@@ -112,6 +132,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 		return err
 	}
 	job.Clean = clean
+	job.templateReceivedAt = templateReceivedAt
 
 	jm.mu.Lock()
 	jm.curJob = job
@@ -130,6 +151,7 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.broadcastJob(job)
 	jm.recordJobSuccess(job)
 	jm.applyMu.Unlock()
+	jm.signalTemplateUpdate()
 
 	// Header history feeds only status/timing data. Run it after the complete
 	// mining update is published and after applyMu is released. The worker is
@@ -138,6 +160,66 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 		jm.scheduleBlockHistoryRefresh(job)
 	}
 	return nil
+}
+
+func (jm *JobManager) signalTemplateUpdate() {
+	jm.templateUpdateMu.Lock()
+	if jm.templateUpdateCh != nil {
+		close(jm.templateUpdateCh)
+	}
+	jm.templateUpdateCh = make(chan struct{})
+	jm.templateUpdateMu.Unlock()
+}
+
+func (jm *JobManager) templateUpdateWaiter() <-chan struct{} {
+	jm.templateUpdateMu.Lock()
+	if jm.templateUpdateCh == nil {
+		jm.templateUpdateCh = make(chan struct{})
+	}
+	ch := jm.templateUpdateCh
+	jm.templateUpdateMu.Unlock()
+	return ch
+}
+
+func (jm *JobManager) currentTemplateUsesParent(parent string) bool {
+	if parent == "" {
+		return false
+	}
+	job := jm.CurrentJob()
+	return job != nil && job.Template.Previous == parent
+}
+
+func (jm *JobManager) waitForLongPollParent(ctx context.Context, parent string) bool {
+	if jm.currentTemplateUsesParent(parent) {
+		return true
+	}
+	if !jm.longPollActive.Load() {
+		return false
+	}
+	delay := jm.longPollCoalesceDelay
+	if delay <= 0 {
+		delay = jobLongPollCoalesceDelay
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	for {
+		updated := jm.templateUpdateWaiter()
+		// Close can race with obtaining the waiter, so recheck the published
+		// parent before blocking.
+		if jm.currentTemplateUsesParent(parent) {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-timer.C:
+			return jm.currentTemplateUsesParent(parent)
+		case <-updated:
+			if jm.currentTemplateUsesParent(parent) {
+				return true
+			}
+		}
+	}
 }
 
 func lockMutexContext(ctx context.Context, mu *sync.Mutex) error {

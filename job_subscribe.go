@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"sync/atomic"
+	"time"
 )
 
 func (jm *JobManager) CurrentJob() *Job {
@@ -150,6 +151,9 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 
 			if dropped > 0 {
 				logger.Warn("job broadcast dropped stale updates", "worker", workerID, "subscribers", subscribers, "dropped", dropped)
+			}
+			if jm.metrics != nil && !job.templateReceivedAt.IsZero() {
+				jm.metrics.ObserveGBTApplyNotifyLatency(time.Since(job.templateReceivedAt))
 			}
 		}
 	}

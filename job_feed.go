@@ -135,8 +135,10 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			"rules":      []string{"segwit"},
 			"longpollid": longPollID,
 		}
+		jm.longPollActive.Store(true)
 		tpl, err := jm.fetchTemplateCtx(ctx, params, true)
 		if err != nil {
+			jm.longPollActive.Store(false)
 			jm.recordJobError(err)
 			if errors.Is(err, context.Canceled) {
 				// bitcoind can cancel longpoll waits during template churn; treat
@@ -154,7 +156,8 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			continue
 		}
 
-		if err := jm.refreshFromTemplate(ctx, tpl); err != nil {
+		if err := jm.applyLongPollTemplate(ctx, tpl); err != nil {
+			jm.longPollActive.Store(false)
 			logger.Error("longpoll refresh error", "component", "rpc", "kind", "longpoll", "error", err)
 			if errors.Is(err, errStaleTemplate) {
 				if err := jm.refreshJobCtx(ctx); err != nil {
@@ -166,15 +169,18 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			}
 			continue
 		}
+		jm.longPollActive.Store(false)
 	}
 }
 
 func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, payload []byte) error {
+	var parent string
 	switch topic {
 	case "hashblock":
-		blockHash := hex.EncodeToString(payload)
-		logger.Info("zmq block notification", "component", "zmq", "kind", "notify", "block_hash", blockHash)
-		return jm.refreshJobCtxForce(ctx)
+		if len(payload) == 32 {
+			parent = hex.EncodeToString(reverseBytes(payload))
+		}
+		logger.Info("zmq block notification", "component", "zmq", "kind", "notify", "block_hash", parent)
 	case "rawblock":
 		tip, err := parseRawBlockTip(payload)
 		if err != nil {
@@ -183,14 +189,22 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 			}
 		} else {
 			jm.recordBlockTip(tip)
+			parent = tip.Hash
 		}
 		jm.recordRawBlockPayload(len(payload))
-		// Some deployments only publish rawblock and not hashblock; refresh the
-		// template on rawblock as well so job/tip advance on new blocks.
-		return jm.refreshJobCtxForce(ctx)
 	default:
 		return nil
 	}
+
+	// The open GBT long poll normally returns the complete template at the same
+	// time as Core emits its ZMQ block notification. Give that response a small,
+	// bounded opportunity to publish the new parent so we do not request and
+	// serialize the same template twice. If long poll is absent or delayed, fall
+	// back to the existing forced refresh immediately or after the short bound.
+	if jm.waitForLongPollParent(ctx, parent) {
+		return nil
+	}
+	return jm.refreshJobCtxForceUnlessParent(ctx, parent)
 }
 
 func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket, remoteAddr string, topics []string) (*zmq4.Socket, error) {

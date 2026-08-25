@@ -37,6 +37,22 @@ type latencyBucket struct {
 	max   float64
 }
 
+type RPCCallTiming struct {
+	Headers time.Duration
+	Body    time.Duration
+	Decode  time.Duration
+	Total   time.Duration
+}
+
+type GBTTimingSnapshot struct {
+	HeadersLast      float64
+	BodyLast         float64
+	DecodeLast       float64
+	ApplyNotifyLast  float64
+	ApplyNotifyMax   float64
+	ApplyNotifyCount uint64
+}
+
 type PoolMetrics struct {
 	accepted uint64
 	rejected uint64
@@ -59,12 +75,18 @@ type PoolMetrics struct {
 	bestShareChan  chan BestShare
 
 	// Simple RPC latency summaries for diagnostics (seconds).
-	rpcGBTLast     float64
-	rpcGBTMax      float64
-	rpcGBTCount    uint64
-	rpcSubmitLast  float64
-	rpcSubmitMax   float64
-	rpcSubmitCount uint64
+	rpcGBTLast             float64
+	rpcGBTMax              float64
+	rpcGBTCount            uint64
+	rpcGBTHeadersLast      float64
+	rpcGBTBodyLast         float64
+	rpcGBTDecodeLast       float64
+	rpcGBTApplyNotifyLast  float64
+	rpcGBTApplyNotifyMax   float64
+	rpcGBTApplyNotifyCount uint64
+	rpcSubmitLast          float64
+	rpcSubmitMax           float64
+	rpcSubmitCount         uint64
 
 	rpcGBTBuckets []latencyBucket
 
@@ -373,11 +395,11 @@ func (m *PoolMetrics) RecordSubmitError(reason string) {
 	m.mu.Unlock()
 }
 
-func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.Duration) {
+func (m *PoolMetrics) ObserveRPCCall(method string, longPoll bool, timing RPCCallTiming) {
 	if m == nil {
 		return
 	}
-	seconds := dur.Seconds()
+	seconds := timing.Total.Seconds()
 	// Track simple summaries for a few key methods for the server dashboard.
 	now := time.Now()
 	m.mu.Lock()
@@ -387,6 +409,9 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 			m.mu.Unlock()
 			return
 		}
+		m.rpcGBTHeadersLast = timing.Headers.Seconds()
+		m.rpcGBTBodyLast = timing.Body.Seconds()
+		m.rpcGBTDecodeLast = timing.Decode.Seconds()
 		m.rpcGBTLast = seconds
 		if seconds > m.rpcGBTMax {
 			m.rpcGBTMax = seconds
@@ -401,6 +426,36 @@ func (m *PoolMetrics) ObserveRPCLatency(method string, longPoll bool, dur time.D
 		m.rpcSubmitCount++
 	}
 	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) ObserveGBTApplyNotifyLatency(dur time.Duration) {
+	if m == nil {
+		return
+	}
+	seconds := dur.Seconds()
+	m.mu.Lock()
+	m.rpcGBTApplyNotifyLast = seconds
+	if seconds > m.rpcGBTApplyNotifyMax {
+		m.rpcGBTApplyNotifyMax = seconds
+	}
+	m.rpcGBTApplyNotifyCount++
+	m.mu.Unlock()
+}
+
+func (m *PoolMetrics) SnapshotGBTTiming() GBTTimingSnapshot {
+	if m == nil {
+		return GBTTimingSnapshot{}
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return GBTTimingSnapshot{
+		HeadersLast:      m.rpcGBTHeadersLast,
+		BodyLast:         m.rpcGBTBodyLast,
+		DecodeLast:       m.rpcGBTDecodeLast,
+		ApplyNotifyLast:  m.rpcGBTApplyNotifyLast,
+		ApplyNotifyMax:   m.rpcGBTApplyNotifyMax,
+		ApplyNotifyCount: m.rpcGBTApplyNotifyCount,
+	}
 }
 
 func (m *PoolMetrics) RecordRPCError(err error) {

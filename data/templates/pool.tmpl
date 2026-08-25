@@ -242,7 +242,7 @@
 				blockSubEl.textContent = `accepted: ${data.blocks_accepted || 0}   errors: ${data.blocks_errored || 0}`;
 			}
 			if (rpcGBTEl) {
-				rpcGBTEl.innerHTML = `1h min: ${formatMilliseconds(data.rpc_gbt_min_1h_sec)}<br>1h avg: ${formatMilliseconds(data.rpc_gbt_avg_1h_sec)}<br>1h max: ${formatMilliseconds(data.rpc_gbt_max_1h_sec)}<br>calls: ${data.rpc_gbt_count || 0}`;
+				rpcGBTEl.innerHTML = `1h full RPC min: ${formatMilliseconds(data.rpc_gbt_min_1h_sec)}<br>1h full RPC avg: ${formatMilliseconds(data.rpc_gbt_avg_1h_sec)}<br>1h full RPC max: ${formatMilliseconds(data.rpc_gbt_max_1h_sec)}<br>latest request to headers: ${formatMilliseconds(data.rpc_gbt_headers_last_sec)}<br>latest body read: ${formatMilliseconds(data.rpc_gbt_body_last_sec)}<br>latest JSON decode: ${formatMilliseconds(data.rpc_gbt_decode_last_sec)}<br>latest template to notify: ${formatMilliseconds(data.rpc_gbt_apply_notify_last_sec)}<br>template to notify max: ${formatMilliseconds(data.rpc_gbt_apply_notify_max_sec)}<br>RPC calls: ${data.rpc_gbt_count || 0}, job notifies: ${data.rpc_gbt_apply_notify_count || 0}`;
 			}
 			if (rpcSubmitEl) {
 				rpcSubmitEl.innerHTML = `last: ${formatMilliseconds(data.rpc_submit_last_sec)}<br>max: ${formatMilliseconds(data.rpc_submit_max_sec)}<br>calls: ${data.rpc_submit_count || 0}`;

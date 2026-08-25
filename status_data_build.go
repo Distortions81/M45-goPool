@@ -22,6 +22,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 	var rpcSubmitCount uint64
 	var rpcErrors, shareErrors uint64
 	var rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h float64
+	var rpcGBTTiming GBTTimingSnapshot
 	var errorHistory []PoolErrorEvent
 	now := time.Now()
 	if s.metrics != nil {
@@ -32,6 +33,7 @@ func (s *StatusServer) buildStatusData() StatusData {
 			rpcSubmitLast, rpcSubmitMax, rpcSubmitCount,
 			rpcErrors, shareErrors = s.metrics.SnapshotDiagnostics()
 		rpcGBTMin1h, rpcGBTAvg1h, rpcGBTMax1h = s.metrics.SnapshotGBTRollingStats(now)
+		rpcGBTTiming = s.metrics.SnapshotGBTTiming()
 		rawErrors := s.metrics.SnapshotErrorHistory()
 		if filtered := filterRecentPoolErrorEvents(rawErrors, now, poolErrorHistoryDisplayWindow); len(filtered) > 0 {
 			errorHistory = filtered
@@ -609,6 +611,12 @@ func (s *StatusServer) buildStatusData() StatusData {
 		RPCGBTLastSec:                  rpcGBTLast,
 		RPCGBTMaxSec:                   rpcGBTMax,
 		RPCGBTCount:                    rpcGBTCount,
+		RPCGBTHeadersLastSec:           rpcGBTTiming.HeadersLast,
+		RPCGBTBodyLastSec:              rpcGBTTiming.BodyLast,
+		RPCGBTDecodeLastSec:            rpcGBTTiming.DecodeLast,
+		RPCGBTApplyNotifyLastSec:       rpcGBTTiming.ApplyNotifyLast,
+		RPCGBTApplyNotifyMaxSec:        rpcGBTTiming.ApplyNotifyMax,
+		RPCGBTApplyNotifyCount:         rpcGBTTiming.ApplyNotifyCount,
 		RPCSubmitLastSec:               rpcSubmitLast,
 		RPCSubmitMaxSec:                rpcSubmitMax,
 		RPCSubmitCount:                 rpcSubmitCount,

@@ -237,21 +237,21 @@ func (c *RPCClient) SetResultHook(hook func(method string, params any, raw json.
 }
 
 func (c *RPCClient) callCtx(ctx context.Context, method string, params any, out any) error {
-	return c.callWithClientCtx(ctx, c.client, method, params, out)
+	return c.callWithClientCtx(ctx, c.client, false, method, params, out)
 }
 
 func (c *RPCClient) callLongPollCtx(ctx context.Context, method string, params any, out any) error {
-	return c.callWithClientCtx(ctx, c.lp, method, params, out)
+	return c.callWithClientCtx(ctx, c.lp, true, method, params, out)
 }
 
-func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, method string, params any, out any) error {
+func (c *RPCClient) callWithClientCtx(ctx context.Context, client *http.Client, longPoll bool, method string, params any, out any) error {
 	retryCount := 0
 	for {
 		if ctx.Err() != nil {
 			c.recordLastError(ctx.Err())
 			return ctx.Err()
 		}
-		err := c.performCall(ctx, client, method, params, out)
+		err := c.performCall(ctx, client, longPoll, method, params, out)
 		if err == nil {
 			if c.unhealthy.Swap(false) {
 				c.reconnects.Add(1)
@@ -355,7 +355,7 @@ func isRPCConnectivityError(err error) bool {
 	return false
 }
 
-func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method string, params any, out any) error {
+func (c *RPCClient) performCall(ctx context.Context, client *http.Client, longPoll bool, method string, params any, out any) error {
 	c.idMu.Lock()
 	id := c.nextID
 	c.nextID++
@@ -390,15 +390,14 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 
 	start := time.Now()
 	resp, err := client.Do(req)
-	if c.metrics != nil {
-		c.metrics.ObserveRPCLatency(method, client == c.lp, time.Since(start))
-	}
+	headersDone := time.Now()
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
+	bodyDone := time.Now()
 	if err != nil {
 		return err
 	}
@@ -441,10 +440,21 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, method
 		hook(method, params, rpcResp.Result)
 	}
 
-	if out == nil {
-		return nil
+	if out != nil {
+		if err := fastJSONUnmarshal(rpcResp.Result, out); err != nil {
+			return err
+		}
 	}
-	return fastJSONUnmarshal(rpcResp.Result, out)
+	decodeDone := time.Now()
+	if c.metrics != nil {
+		c.metrics.ObserveRPCCall(method, longPoll, RPCCallTiming{
+			Headers: headersDone.Sub(start),
+			Body:    bodyDone.Sub(headersDone),
+			Decode:  decodeDone.Sub(bodyDone),
+			Total:   decodeDone.Sub(start),
+		})
+	}
+	return nil
 }
 
 func shouldIgnoreRPCError(method string, err *rpcError) bool {

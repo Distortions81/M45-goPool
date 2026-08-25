@@ -14,6 +14,28 @@ import (
 	"time"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type delayedReadCloser struct {
+	reader  *strings.Reader
+	delay   time.Duration
+	delayed bool
+}
+
+func (r *delayedReadCloser) Read(p []byte) (int, error) {
+	if !r.delayed {
+		r.delayed = true
+		time.Sleep(r.delay)
+	}
+	return r.reader.Read(p)
+}
+
+func (r *delayedReadCloser) Close() error { return nil }
+
 func TestRPCClientHTTPStatusError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -326,5 +348,51 @@ func TestRPCClientTracksDisconnectsAndReconnects(t *testing.T) {
 	}
 	if !client.Healthy() {
 		t.Fatalf("expected client to be healthy after retry")
+	}
+}
+
+func TestRPCClientMeasuresCompleteGBTPhases(t *testing.T) {
+	const bodyDelay = 20 * time.Millisecond
+	result, _ := json.Marshal(GetBlockTemplateResult{Height: 1})
+	body, _ := json.Marshal(rpcResponse{ID: 1, Result: result})
+	httpClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body: &delayedReadCloser{
+				reader: strings.NewReader(string(body)),
+				delay:  bodyDelay,
+			},
+			Request: req,
+		}, nil
+	})}
+
+	metrics := NewPoolMetrics()
+	client := &RPCClient{
+		url:     "http://bitcoin.test",
+		client:  httpClient,
+		lp:      &http.Client{Transport: httpClient.Transport},
+		metrics: metrics,
+	}
+	var tpl GetBlockTemplateResult
+	if err := client.callCtx(context.Background(), "getblocktemplate", []any{map[string]any{}}, &tpl); err != nil {
+		t.Fatalf("getblocktemplate: %v", err)
+	}
+	if tpl.Height != 1 {
+		t.Fatalf("template height = %d, want 1", tpl.Height)
+	}
+
+	timing := metrics.SnapshotGBTTiming()
+	if timing.BodyLast < (bodyDelay - 5*time.Millisecond).Seconds() {
+		t.Fatalf("body phase = %.6fs, want at least %.6fs", timing.BodyLast, (bodyDelay - 5*time.Millisecond).Seconds())
+	}
+	_, _, _, _, total, _, count, _, _, _, _, _ := metrics.SnapshotDiagnostics()
+	if count != 1 {
+		t.Fatalf("GBT count = %d, want 1", count)
+	}
+	phaseSum := timing.HeadersLast + timing.BodyLast + timing.DecodeLast
+	if total < phaseSum-0.001 || total > phaseSum+0.001 {
+		t.Fatalf("total %.6fs does not match phase sum %.6fs", total, phaseSum)
 	}
 }
