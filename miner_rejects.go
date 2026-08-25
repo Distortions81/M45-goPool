@@ -43,9 +43,6 @@ func (mc *MinerConn) stratumMsgRateLimitExceeded(now time.Time, method string) b
 
 func (mc *MinerConn) idleExpired(now time.Time) (bool, string) {
 	timeout := mc.cfg.ConnectionTimeout
-	if timeout <= 0 {
-		timeout = defaultConnectionTimeout
-	}
 	if timeout <= 0 || mc.lastActivity.IsZero() {
 		return false, ""
 	}
@@ -1347,9 +1344,6 @@ func (mc *MinerConn) timeoutRiskDownshift(now time.Time, currentDiff float64, la
 	}
 
 	timeout := mc.cfg.ConnectionTimeout
-	if timeout <= 0 {
-		timeout = defaultConnectionTimeout
-	}
 	if timeout <= 0 {
 		return 0
 	}

@@ -264,8 +264,8 @@
 					</p>
 					<div class="grid admin-grid">
 					<div>
-						<div class="label">connection_timeout_seconds<div class="label-note">Miner connection idle timeout (seconds). Applies on live apply.</div></div>
-						<input name="connection_timeout_seconds" type="number" min="30" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
+						<div class="label">connection_timeout_seconds<div class="label-note">Miner connection idle timeout in seconds; 0 disables idle disconnects. Applies on live apply.</div></div>
+						<input name="connection_timeout_seconds" type="number" min="0" max="86400" class="textfield" value="{{.Settings.ConnectionTimeoutSeconds}}">
 					</div>
 						<div>
 							<div class="label">share_job_freshness_mode<div class="label-note">Job freshness policy for submit validation. Applies on live apply.</div></div>

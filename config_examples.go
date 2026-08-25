@@ -185,7 +185,7 @@ func policyConfigDocComments() []byte {
 # - share_allow_degraded_version_bits: retained compatibility flag; in-mask BIP310 submits are accepted even when fewer bits change on a single share.
 #
 # Timeouts ([timeouts])
-# - connection_timeout_seconds
+# - connection_timeout_seconds: Miner idle timeout in seconds; 0 disables idle disconnects.
 #
 # Bans ([bans])
 # - invalid-submit and reconnect ban thresholds/windows.

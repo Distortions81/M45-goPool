@@ -705,8 +705,8 @@ func applyAdminSettingsForm(cfg *Config, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if timeoutSec < adminMinConnectionTimeoutSeconds || timeoutSec > adminMaxConnectionTimeoutSeconds {
-		return fmt.Errorf("connection_timeout_seconds must be between %d and %d", adminMinConnectionTimeoutSeconds, adminMaxConnectionTimeoutSeconds)
+	if timeoutSec < 0 || timeoutSec > adminMaxConnectionTimeoutSeconds || (timeoutSec > 0 && timeoutSec < adminMinConnectionTimeoutSeconds) {
+		return fmt.Errorf("connection_timeout_seconds must be 0 (disabled) or between %d and %d", adminMinConnectionTimeoutSeconds, adminMaxConnectionTimeoutSeconds)
 	}
 	next.ConnectionTimeout = time.Duration(timeoutSec) * time.Second
 

@@ -152,7 +152,7 @@ const (
 	minMinerTimeout       = 30 * time.Second
 
 	// Grace periods for new/changing connections.
-	initialReadTimeout          = 90 * time.Second // kick idle connections that never submit valid shares
+	initialReadTimeout          = 90 * time.Second // poll new/idle connections; idle policy decides whether to disconnect
 	previousDiffGracePeriod     = time.Minute      // accept shares at old difficulty briefly after a change
 	earlySubmitHalfWeightWindow = defaultVarDiffAdjustmentWindow * 4
 	stratumFloodLimitMultiplier = 2

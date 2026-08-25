@@ -114,9 +114,6 @@ func NewMinerConn(ctx context.Context, c net.Conn, jobMgr *JobManager, rpc rpcCa
 		ctx = context.Background()
 	}
 	now := time.Now()
-	if cfg.ConnectionTimeout <= 0 {
-		cfg.ConnectionTimeout = defaultConnectionTimeout
-	}
 	jobCh := jobMgr.Subscribe()
 	en1 := jobMgr.NextExtranonce1()
 	maxRecentJobs := cfg.MaxRecentJobs
@@ -569,18 +566,16 @@ func (mc *MinerConn) sendInitialWork() {
 // miner has proven itself by submitting accepted shares. New/idle
 // connections get a short timeout to protect against floods; once a miner
 // has submitted a few valid shares we switch to the configured, longer
-// timeout.
+// timeout. When idle expiry is disabled, the short timeout remains as a
+// polling interval so context cancellation is still observed.
 func (mc *MinerConn) currentReadTimeout() time.Duration {
 	base := mc.cfg.ConnectionTimeout
-	if base <= 0 {
-		base = defaultConnectionTimeout
-	}
 
 	mc.statsMu.Lock()
 	accepted := mc.stats.Accepted
 	mc.statsMu.Unlock()
 
-	if accepted < 3 {
+	if accepted < 3 || base == 0 {
 		return initialReadTimeout
 	}
 	return base

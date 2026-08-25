@@ -72,7 +72,7 @@ func validateConfig(cfg Config) error {
 	if cfg.ConnectionTimeout < 0 {
 		return fmt.Errorf("connection_timeout_seconds cannot be negative")
 	}
-	if cfg.ConnectionTimeout < minMinerTimeout {
+	if cfg.ConnectionTimeout > 0 && cfg.ConnectionTimeout < minMinerTimeout {
 		return fmt.Errorf("connection_timeout_seconds must be >= %s, got %s", minMinerTimeout, cfg.ConnectionTimeout)
 	}
 	if cfg.MinVersionBits < 0 {

@@ -162,7 +162,7 @@ Optional split override files can layer advanced settings without touching the m
 - `services.toml`: service/integration settings:
   `auth` (Clerk URLs/session cookie), `backblaze_backup` (backup service settings), `discord` (Discord URLs/channels + worker notify threshold), `status` (`mempool_address_url`, `github_url` links).
 - `[rate_limits]`: `max_conns`, burst windows, steady-state rates, `stratum_messages_per_minute` (messages/min before disconnect + 1h ban), and whether to auto-calculate throttles from `max_conns`.
-- `[timeouts]`: `connection_timeout_seconds`.
+- `[timeouts]`: `connection_timeout_seconds` controls the Stratum miner idle timeout; set it to `0` to disable idle disconnects.
 - `[mining]` in `policy.toml`: share-validation policy toggles (`share_*` settings) plus `submit_process_inline`.
 - `[difficulty]`: `default_difficulty` fallback when no suggestion arrives, `max_difficulty`/`min_difficulty` clamps (0 disables a clamp), whether to lock miner-suggested difficulty, and whether to enforce min/max on suggested difficulty (ban/disconnect when outside limits). The first `mining.suggest_*` is honored once per connection, triggers a clean notify, and subsequent suggests are ignored.
 - `[mining]`: `extranonce2_size`, `template_extra_nonce2_size`, `job_entropy`, `coinbase_scriptsig_max_bytes`, and `disable_pool_job_entropy` to remove the `<pool_entropy>-<job_entropy>` suffix. Assigned Stratum difficulty is rounded to whole numbers at difficulty `>= 1` for broad miner compatibility; fractional difficulty is only used below `1`.
