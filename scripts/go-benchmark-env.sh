@@ -83,18 +83,12 @@ fi
 
 rm -rf "$src_dir"
 mkdir -p "$src_dir"
-tar -C "$repo_root" \
-  --exclude='./.git' \
-  --exclude='./.benchmarks' \
-  --exclude='./data/logs' \
-  --exclude='./data/state' \
-  --exclude='./data/config/*.toml' \
-  --exclude='./data/config/*.toml.bak' \
-  --exclude='./goPool' \
-  --exclude='./gopool' \
-  --exclude='./*.test' \
-  --exclude='./*.out' \
-  -cf - . | tar -C "$src_dir" -xf -
+# Snapshot tracked files plus non-ignored working-tree files. Copying `.` here
+# also pulled in ignored runtime data (notably bitcoin-node/), which could turn a
+# small source context into tens of gigabytes on an active development machine.
+git -C "$repo_root" ls-files --cached --others --exclude-standard -z |
+  tar --null -C "$repo_root" -T - -cf - |
+  tar -C "$src_dir" -xf -
 
 cd "$bench_dir"
 
