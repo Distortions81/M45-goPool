@@ -16,10 +16,10 @@ func (jm *JobManager) ensureTemplateFresh(ctx context.Context, tpl GetBlockTempl
 	return jm.ensureTemplateFreshWithParent(ctx, tpl, "")
 }
 
-// ensureTemplateFreshWithParent validates a template against either a recent,
-// trusted ZMQ active-tip proof or an explicit getbestblockhash RPC. The proof
-// is only supplied for a changed-parent transition; unchanged templates still
-// require RPC verification so a missed ZMQ notification cannot mask staleness.
+// ensureTemplateFreshWithParent validates a template against either the parent
+// bound to this exact ZMQ-triggered request or an explicit getbestblockhash RPC.
+// Generic and long-poll templates never receive the shortcut, so an older ZMQ
+// event cannot authorize a late response after a newer parent has won.
 func (jm *JobManager) ensureTemplateFreshWithParent(ctx context.Context, tpl GetBlockTemplateResult, expectedParent string) error {
 	if tpl.CurTime <= 0 {
 		return fmt.Errorf("template curtime invalid: %d", tpl.CurTime)

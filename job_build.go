@@ -21,8 +21,8 @@ func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateRe
 	return jm.buildJobLockedWithParent(ctx, tpl, "")
 }
 
-// buildJobLockedWithParent accepts a recent ZMQ active-tip proof for a
-// changed-parent template. The caller must hold jm.applyMu.
+// buildJobLockedWithParent accepts the parent bound to the exact ZMQ-triggered
+// GBT request. The caller must hold jm.applyMu.
 func (jm *JobManager) buildJobLockedWithParent(ctx context.Context, tpl GetBlockTemplateResult, expectedParent string) (*Job, error) {
 	if len(jm.payoutScript) == 0 {
 		return nil, fmt.Errorf("payout script not configured")

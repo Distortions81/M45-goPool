@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 const (
 	jobTemplateRefreshTimeout     = 10 * time.Second
 	jobBlockHistoryRefreshTimeout = 3 * time.Second
+	jobRawBlockCoalesceDelay      = 25 * time.Millisecond
 )
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
@@ -188,11 +190,11 @@ func (jm *JobManager) refreshFromTemplateExpected(ctx context.Context, tpl GetBl
 		return nil
 	}
 
-	parentProof := expectedParent
-	if parentProof == "" && (previousJob == nil || previousJob.Template.Previous != tpl.Previous) {
-		parentProof = jm.recentZMQParentProof(tpl.Previous)
-	}
-	job, err := jm.buildJobLockedWithParent(refreshCtx, tpl, parentProof)
+	// Only the GBT request started for this exact ZMQ notification may bypass
+	// getbestblockhash. A time-based global announcement is not a freshness
+	// proof: an unrelated long-poll response can arrive after a newer parent has
+	// already won and otherwise roll miners back to stale work.
+	job, err := jm.buildJobLockedWithParent(refreshCtx, tpl, expectedParent)
 	if err != nil {
 		jm.recordJobError(err)
 		jm.applyMu.Unlock()
@@ -229,30 +231,81 @@ func (jm *JobManager) refreshFromTemplateExpected(ctx context.Context, tpl GetBl
 	return nil
 }
 
-const zmqParentProofTTL = 15 * time.Second
-
-func (jm *JobManager) recordZMQParentProof(parent string) {
-	if parent == "" {
-		return
+// deferHashblockRefresh gives the matching rawblock notification a short
+// opportunity to publish a safe empty job first. The timer is deliberately
+// asynchronous so hashblock and rawblock may share one SUB socket without the
+// receive loop blocking rawblock behind the delay.
+func (jm *JobManager) deferHashblockRefresh(ctx context.Context, parent string) bool {
+	if jm == nil || parent == "" {
+		return false
 	}
-	jm.zmqParentProofMu.Lock()
-	jm.zmqParentProof = parent
-	jm.zmqParentProofAt = time.Now()
-	jm.zmqParentProofMu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	delay := jm.rawBlockCoalesceDelay
+	if delay <= 0 {
+		delay = jobRawBlockCoalesceDelay
+	}
+
+	jm.hashblockFallbackMu.Lock()
+	if jm.hashblockFallbackTimer != nil && jm.hashblockFallbackParent == parent {
+		jm.hashblockFallbackMu.Unlock()
+		return true
+	}
+	if jm.hashblockFallbackTimer != nil {
+		jm.hashblockFallbackTimer.Stop()
+	}
+	jm.hashblockFallbackGeneration++
+	generation := jm.hashblockFallbackGeneration
+	jm.hashblockFallbackParent = parent
+	jm.hashblockFallbackTimer = time.AfterFunc(delay, func() {
+		jm.runDeferredHashblockRefresh(ctx, parent, generation)
+	})
+	jm.hashblockFallbackMu.Unlock()
+	return true
 }
 
-func (jm *JobManager) recentZMQParentProof(parent string) string {
-	if parent == "" {
-		return ""
+func (jm *JobManager) runDeferredHashblockRefresh(ctx context.Context, parent string, generation uint64) {
+	jm.hashblockFallbackMu.Lock()
+	if jm.hashblockFallbackGeneration != generation || jm.hashblockFallbackParent != parent {
+		jm.hashblockFallbackMu.Unlock()
+		return
 	}
-	jm.zmqParentProofMu.RLock()
-	proof := jm.zmqParentProof
-	at := jm.zmqParentProofAt
-	jm.zmqParentProofMu.RUnlock()
-	if proof != parent || at.IsZero() || time.Since(at) > zmqParentProofTTL {
-		return ""
+	jm.hashblockFallbackTimer = nil
+	jm.hashblockFallbackParent = ""
+	jm.hashblockFallbackMu.Unlock()
+
+	if ctx.Err() != nil {
+		return
 	}
-	return proof
+	if err := jm.refreshJobCtxRaceParent(ctx, parent); err != nil {
+		if errors.Is(err, errStaleTemplate) {
+			if debugLogging {
+				logger.Debug("deferred hashblock refresh superseded", "component", "zmq", "kind", "coalesce", "block_hash", parent, "error", err)
+			}
+			return
+		}
+		logger.Error("deferred hashblock refresh error", "component", "zmq", "kind", "coalesce", "block_hash", parent, "error", err)
+	}
+}
+
+// cancelDeferredHashblockRefresh transfers responsibility for the full GBT to
+// the matching rawblock handler. Advancing the generation also makes a timer
+// callback that was queued concurrently become a no-op.
+func (jm *JobManager) cancelDeferredHashblockRefresh(parent string) bool {
+	if jm == nil || parent == "" {
+		return false
+	}
+	jm.hashblockFallbackMu.Lock()
+	defer jm.hashblockFallbackMu.Unlock()
+	if jm.hashblockFallbackTimer == nil || jm.hashblockFallbackParent != parent {
+		return false
+	}
+	jm.hashblockFallbackGeneration++
+	jm.hashblockFallbackTimer.Stop()
+	jm.hashblockFallbackTimer = nil
+	jm.hashblockFallbackParent = ""
+	return true
 }
 
 func (jm *JobManager) currentTemplateUsesParent(parent string) bool {

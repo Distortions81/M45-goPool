@@ -165,6 +165,24 @@ func parseCoinbaseHeight(block []byte) (int64, error) {
 	}
 	offset += n
 	if inCount == 0 {
+		// Witness transactions encode a zero marker and a one-byte witness flag
+		// between the version and the real input count. Modern mainnet coinbases
+		// carry a witness commitment, so their raw serialization normally uses
+		// this form even though the height remains in the ordinary scriptSig.
+		if offset >= len(block) {
+			return 0, fmt.Errorf("missing witness flag")
+		}
+		if flag := block[offset]; flag != 0x01 {
+			return 0, fmt.Errorf("unsupported witness flag %02x", flag)
+		}
+		offset++
+		inCount, n, err = readVarInt(block[offset:])
+		if err != nil {
+			return 0, err
+		}
+		offset += n
+	}
+	if inCount == 0 {
 		return 0, fmt.Errorf("zero inputs")
 	}
 	if len(block) < offset+36 {
@@ -176,7 +194,7 @@ func parseCoinbaseHeight(block []byte) (int64, error) {
 		return 0, err
 	}
 	offset += n
-	if len(block) < offset+int(scriptLen) {
+	if scriptLen > uint64(len(block)-offset) {
 		return 0, fmt.Errorf("script too short")
 	}
 	script := block[offset : offset+int(scriptLen)]

@@ -38,6 +38,7 @@ func fastEmptyRawBlockPayload(t *testing.T, height int64, timestamp uint32, bits
 	payload := append([]byte(nil), header...)
 	payload = append(payload, 0x01)                   // transaction count
 	payload = append(payload, 0x01, 0x00, 0x00, 0x00) // coinbase version
+	payload = append(payload, 0x00, 0x01)             // witness marker and flag
 	payload = append(payload, 0x01)                   // input count
 	payload = append(payload, make([]byte, 36)...)    // null previous output
 	payload = append(payload, byte(len(heightScript)))

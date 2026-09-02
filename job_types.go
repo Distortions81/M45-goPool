@@ -143,12 +143,14 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	refreshRPCTimeout  time.Duration
 	applyMu            sync.Mutex
-	// zmqParentProof records the newest active-tip hash announced by Core's
-	// trusted *block ZMQ feed. A matching, recent proof lets a changed-parent
-	// GBT avoid a second, serialized getbestblockhash RPC before publication.
-	zmqParentProofMu sync.RWMutex
-	zmqParentProof   string
-	zmqParentProofAt time.Time
+	// hashblockFallback* coordinates the short handoff from hashblock to
+	// rawblock. If the matching raw payload does not arrive in time, the timer
+	// starts the full-template refresh so ZMQ loss cannot leave miners stale.
+	hashblockFallbackMu         sync.Mutex
+	hashblockFallbackTimer      *time.Timer
+	hashblockFallbackParent     string
+	hashblockFallbackGeneration uint64
+	rawBlockCoalesceDelay       time.Duration
 	// historyMu serializes the best-effort block-history worker. At most one
 	// RPC walk is active and one newest request is pending, so template churn
 	// cannot create an unbounded goroutine/RPC backlog.

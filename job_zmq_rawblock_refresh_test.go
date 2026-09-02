@@ -15,8 +15,9 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 
 	// Build a minimal raw block payload sufficient for parseRawBlockTip().
-	// Header (80 bytes) + tx count (1) + coinbase tx version + input count (1) + prevout (36)
-	// + script len + scriptSig (first push encodes height=2).
+	// Header (80 bytes) + tx count (1) + witness coinbase version/marker/flag
+	// + input count (1) + prevout (36) + script len + scriptSig (first push
+	// encodes height=2).
 	payload := make([]byte, 0, 140)
 	header := make([]byte, 80)
 	binary.LittleEndian.PutUint32(header[68:72], uint32(now.Unix()))
@@ -24,6 +25,7 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 	payload = append(payload, header...)
 	payload = append(payload, 0x01)                   // tx count = 1
 	payload = append(payload, 0x01, 0x00, 0x00, 0x00) // version
+	payload = append(payload, 0x00, 0x01)             // witness marker and flag
 	payload = append(payload, 0x01)                   // input count = 1
 	payload = append(payload, make([]byte, 36)...)    // prevout
 	payload = append(payload, 0x02)                   // script len = 2

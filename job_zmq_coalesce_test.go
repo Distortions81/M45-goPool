@@ -20,20 +20,23 @@ func TestHashBlockUsesBitcoinCoreDisplayByteOrder(t *testing.T) {
 	parent := hex.EncodeToString(payload)
 
 	jm := NewJobManager(nil, Config{ZMQHashBlockAddr: "tcp://127.0.0.1:28334"}, nil, nil, nil)
-	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: parent}}
+	current := &Job{Template: GetBlockTemplateResult{Previous: parent}}
+	jm.curJob = current
 
 	if err := jm.handleZMQNotification(context.Background(), "hashblock", payload); err != nil {
 		t.Fatalf("handle hashblock notification: %v", err)
 	}
-	if got := jm.recentZMQParentProof(parent); got != parent {
-		t.Fatalf("hashblock parent proof = %q, want %q", got, parent)
+	if got := jm.CurrentJob(); got != current {
+		t.Fatal("display-order current parent was not recognized")
 	}
 }
 
-func TestHashBlockDefersRefreshToHealthyRawBlock(t *testing.T) {
+func TestHashBlockHasBoundedFallbackWhenRawBlockIsMissing(t *testing.T) {
 	var rpcCalls atomic.Int32
+	called := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rpcCalls.Add(1)
+		close(called)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
@@ -45,6 +48,7 @@ func TestHashBlockDefersRefreshToHealthyRawBlock(t *testing.T) {
 	}, nil, nil, nil)
 	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: "old-parent"}}
 	jm.zmqRawblockHealthy.Store(true)
+	jm.rawBlockCoalesceDelay = 10 * time.Millisecond
 
 	payload := make([]byte, 32)
 	payload[31] = 1
@@ -52,11 +56,15 @@ func TestHashBlockDefersRefreshToHealthyRawBlock(t *testing.T) {
 		t.Fatalf("handle hashblock notification: %v", err)
 	}
 	if got := rpcCalls.Load(); got != 0 {
-		t.Fatalf("hashblock made %d GBT calls while rawblock was healthy, want 0", got)
+		t.Fatalf("hashblock made %d GBT calls before coalescing delay, want 0", got)
 	}
-	parent := hex.EncodeToString(payload)
-	if got := jm.recentZMQParentProof(parent); got != parent {
-		t.Fatalf("hashblock parent proof = %q, want %q", got, parent)
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("hashblock fallback did not start after rawblock deadline")
+	}
+	if got := rpcCalls.Load(); got != 1 {
+		t.Fatalf("hashblock fallback made %d GBT calls, want 1", got)
 	}
 }
 
@@ -109,10 +117,63 @@ func rawBlockNotificationPayload(tipTime uint32, height byte) []byte {
 	payload = append(payload, header...)
 	payload = append(payload, 0x01)
 	payload = append(payload, 0x01, 0x00, 0x00, 0x00)
+	payload = append(payload, 0x00, 0x01)
 	payload = append(payload, 0x01)
 	payload = append(payload, make([]byte, 36)...)
 	payload = append(payload, 0x02, 0x01, height)
 	return payload
+}
+
+func TestMalformedRawBlockTriggersFullRefreshAndCancelsHashFallback(t *testing.T) {
+	payload := rawBlockNotificationPayload(uint32(time.Now().Unix()), 2)
+	// Replace the supported witness flag with an unknown flag. The header hash
+	// is still available and must drive the full-template fallback.
+	payload[80+1+4+1] = 0x02
+	parent := blockHashFromHeader(payload[:80])
+	hashPayload, err := hex.DecodeString(parent)
+	if err != nil {
+		t.Fatalf("decode parent: %v", err)
+	}
+
+	var gbtCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		if req.Method != "getblocktemplate" {
+			t.Errorf("RPC method = %q, want getblocktemplate", req.Method)
+			return
+		}
+		gbtCalls.Add(1)
+		result, _ := json.Marshal(GetBlockTemplateResult{Previous: parent})
+		_ = json.NewEncoder(w).Encode(rpcResponse{ID: req.ID, Result: result})
+	}))
+	t.Cleanup(srv.Close)
+
+	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
+	jm := NewJobManager(rpc, Config{
+		ZMQHashBlockAddr: "tcp://127.0.0.1:28334",
+		ZMQRawBlockAddr:  "tcp://127.0.0.1:28332",
+	}, nil, nil, nil)
+	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: "old-parent"}}
+	jm.zmqRawblockHealthy.Store(true)
+	jm.rawBlockCoalesceDelay = 50 * time.Millisecond
+
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", hashPayload); err != nil {
+		t.Fatalf("handle hashblock: %v", err)
+	}
+	if err := jm.handleZMQNotification(context.Background(), "rawblock", payload); err == nil {
+		t.Fatal("expected deliberately incomplete fallback template to fail")
+	}
+	if got := gbtCalls.Load(); got != 1 {
+		t.Fatalf("raw parse failure made %d immediate GBT calls, want 1", got)
+	}
+	time.Sleep(2 * jm.rawBlockCoalesceDelay)
+	if got := gbtCalls.Load(); got != 1 {
+		t.Fatalf("canceled hashblock timer made an extra GBT call: got %d", got)
+	}
 }
 
 func TestZMQRefreshRacesActiveLongPollAndDiscardsLosingFetch(t *testing.T) {

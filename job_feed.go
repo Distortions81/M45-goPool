@@ -182,11 +182,15 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		}
 		logger.Info("zmq block notification", "component", "zmq", "kind", "notify", "block_hash", parent)
 	case "rawblock":
+		// The header hash remains usable as a refresh key even when parsing the
+		// coinbase metadata fails. Never let optional fast-path parsing disable
+		// the authoritative full-template fallback.
+		if len(payload) >= 80 {
+			parent = blockHashFromHeader(payload[:80])
+		}
 		tip, err := parseRawBlockTip(payload)
 		if err != nil {
-			if debugLogging {
-				logger.Debug("parse raw block tip failed", "component", "zmq", "kind", "parse", "error", err)
-			}
+			logger.Warn("parse raw block tip failed; continuing with full template", "component", "zmq", "kind", "parse", "block_hash", parent, "error", err)
 		} else {
 			jm.recordBlockTip(tip)
 			parent = tip.Hash
@@ -197,19 +201,19 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		return nil
 	}
 
-	// Core's long poll and an immediate normal GBT now race. Both results remain
-	// full Core-authored templates; applyMu admits the first matching parent and
-	// the losing raced request is discarded if that parent is already current.
-	jm.recordZMQParentProof(parent)
 	if topic == "hashblock" && jm.zmqRawBlockAddr != "" && jm.zmqRawblockHealthy.Load() {
 		// Core normally publishes hashblock before rawblock. Let the raw payload
-		// activate the guarded empty-job fast path before starting the full GBT
-		// race. If rawblock is unavailable, hashblock retains its immediate
-		// refresh fallback below; longpoll also remains authoritative.
+		// activate the guarded empty-job fast path first, but retain a bounded
+		// full-GBT fallback in case rawblock is missing, malformed, or delayed.
 		if debugLogging {
-			logger.Debug("deferring hashblock refresh to healthy rawblock feed", "component", "zmq", "kind", "coalesce", "block_hash", parent)
+			logger.Debug("briefly deferring hashblock refresh to healthy rawblock feed", "component", "zmq", "kind", "coalesce", "block_hash", parent)
 		}
-		return nil
+		if jm.deferHashblockRefresh(ctx, parent) {
+			return nil
+		}
+	}
+	if topic == "rawblock" {
+		jm.cancelDeferredHashblockRefresh(parent)
 	}
 	if rawTip != nil {
 		if _, activated, err := jm.activateFastEmptyJob(*rawTip, receivedAt); err != nil {
@@ -217,6 +221,11 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		} else if !activated && debugLogging {
 			logger.Debug("fast empty job skipped; continuing with full template", "component", "job", "kind", "fast_empty", "parent", parent)
 		}
+	}
+	if parent == "" {
+		// A malformed notification cannot safely name the expected parent, but a
+		// normal GBT plus getbestblockhash verification can still recover miners.
+		return jm.refreshJobCtxForce(ctx)
 	}
 	return jm.refreshJobCtxRaceParent(ctx, parent)
 }
@@ -433,7 +442,6 @@ zmqLoop:
 			continue
 		}
 
-		jm.markZMQHealthy(topics, addr)
 		logger.Info("watching ZMQ notifications", "addr", addr, "topics", topics, "label", label)
 		backoff = defaultZMQRecreateBackoffMin
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,77 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLongPollCannotReuseSupersededZMQAnnouncement(t *testing.T) {
+	const (
+		baseParent  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		staleParent = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		newerParent = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	)
+	var bestHashCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode RPC request: %v", err)
+			return
+		}
+		if req.Method != "getbestblockhash" {
+			t.Errorf("RPC method = %q, want getbestblockhash", req.Method)
+			return
+		}
+		bestHashCalls.Add(1)
+		result, _ := json.Marshal(newerParent)
+		_ = json.NewEncoder(w).Encode(rpcResponse{Result: result, ID: req.ID})
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := Config{
+		RPCURL:           server.URL,
+		ZMQHashBlockAddr: "tcp://127.0.0.1:28334",
+		ZMQRawBlockAddr:  "tcp://127.0.0.1:28332",
+	}
+	jm := NewJobManager(NewRPCClient(cfg, nil), cfg, nil, []byte{0x51}, nil)
+	jm.curJob = &Job{Generation: 1, Template: GetBlockTemplateResult{Previous: baseParent}}
+	jm.zmqRawblockHealthy.Store(true)
+	jm.rawBlockCoalesceDelay = time.Second
+
+	staleHash, err := hex.DecodeString(staleParent)
+	if err != nil {
+		t.Fatalf("decode stale parent: %v", err)
+	}
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", staleHash); err != nil {
+		t.Fatalf("record stale hashblock: %v", err)
+	}
+	if !jm.cancelDeferredHashblockRefresh(staleParent) {
+		t.Fatal("expected pending hashblock fallback")
+	}
+
+	newer := &Job{Generation: 2, Template: GetBlockTemplateResult{Previous: newerParent}}
+	jm.mu.Lock()
+	jm.curJob = newer
+	jm.mu.Unlock()
+
+	staleTemplate := GetBlockTemplateResult{
+		Previous:                 staleParent,
+		Height:                   101,
+		CurTime:                  1_700_000_000,
+		Bits:                     "1d00ffff",
+		Target:                   "00000000ffff0000000000000000000000000000000000000000000000000000",
+		Version:                  0x20000000,
+		CoinbaseValue:            50 * 1e8,
+		DefaultWitnessCommitment: "00",
+	}
+	err = jm.applyLongPollTemplate(context.Background(), staleTemplate)
+	if !errors.Is(err, errStaleTemplate) {
+		t.Fatalf("late long-poll error = %v, want errStaleTemplate", err)
+	}
+	if got := jm.CurrentJob(); got != newer {
+		t.Fatal("late long-poll response replaced the newer parent")
+	}
+	if got := bestHashCalls.Load(); got != 1 {
+		t.Fatalf("getbestblockhash calls = %d, want 1", got)
+	}
+}
 
 func TestLongPollCursorAdvancesWithoutJobChurn(t *testing.T) {
 	cfg := Config{}
