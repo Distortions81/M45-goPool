@@ -79,9 +79,15 @@ jobs:
         working-directory: source
         run: |
           repository="${GITHUB_REPOSITORY,,}"
+          umbrel_version="$(tr -d '[:space:]' < UMBREL_VERSION)"
+          if [[ ! "${umbrel_version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "UMBREL_VERSION must contain a semantic version such as 0.1.0." >&2
+            exit 1
+          fi
           echo "name=ghcr.io/${repository}" >> "${GITHUB_OUTPUT}"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
           echo "revision=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          echo "umbrel_version=${umbrel_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
@@ -169,7 +175,8 @@ jobs:
             --arg tag "${RELEASE_TAG}" \
             --arg image "${IMAGE_NAME}" \
             --arg digest "${IMAGE_DIGEST}" \
-            '{event_type: "gopool-release", client_payload: {tag: $tag, image: $image, digest: $digest}}' \
+            --arg umbrel_version "${{ steps.image.outputs.umbrel_version }}" \
+            '{event_type: "gopool-release", client_payload: {tag: $tag, image: $image, digest: $digest, umbrel_version: $umbrel_version}}' \
             | gh api \
                 --method POST \
                 "repos/${UMBREL_STORE_REPOSITORY}/dispatches" \

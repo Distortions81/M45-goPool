@@ -179,6 +179,18 @@ multi-platform image, and community-store update. The workflow also supports a
 manual run for an existing tag, which is useful for bootstrapping `v0.3.4`
 after the automation is merged.
 
+The source and Umbrel package have independent versions. Before tagging, set
+[`UMBREL_VERSION`](UMBREL_VERSION) to the package version you want umbrelOS to
+display. The first M45Core community-store release is `0.1.0`, even though the
+corresponding goPool source release is `v0.3.5`.
+
+For a checked release that runs the test suite, validates both version numbers,
+creates an annotated tag, and pushes `main` plus the tag, use:
+
+```bash
+./scripts/release.sh v0.3.5
+```
+
 ## Configuration overview
 
 - `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.
