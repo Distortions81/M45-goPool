@@ -135,10 +135,8 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			"rules":      []string{"segwit"},
 			"longpollid": longPollID,
 		}
-		jm.longPollActive.Store(true)
 		tpl, err := jm.fetchTemplateCtx(ctx, params, true)
 		if err != nil {
-			jm.longPollActive.Store(false)
 			jm.recordJobError(err)
 			if errors.Is(err, context.Canceled) {
 				// bitcoind can cancel longpoll waits during template churn; treat
@@ -157,7 +155,6 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 		}
 
 		if err := jm.applyLongPollTemplate(ctx, tpl); err != nil {
-			jm.longPollActive.Store(false)
 			logger.Error("longpoll refresh error", "component", "rpc", "kind", "longpoll", "error", err)
 			if errors.Is(err, errStaleTemplate) {
 				if err := jm.refreshJobCtx(ctx); err != nil {
@@ -169,7 +166,6 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 			}
 			continue
 		}
-		jm.longPollActive.Store(false)
 	}
 }
 
@@ -196,15 +192,11 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		return nil
 	}
 
-	// The open GBT long poll normally returns the complete template at the same
-	// time as Core emits its ZMQ block notification. Give that response a small,
-	// bounded opportunity to publish the new parent so we do not request and
-	// serialize the same template twice. If long poll is absent or delayed, fall
-	// back to the existing forced refresh immediately or after the short bound.
-	if jm.waitForLongPollParent(ctx, parent) {
-		return nil
-	}
-	return jm.refreshJobCtxForceUnlessParent(ctx, parent)
+	// Core's long poll and an immediate normal GBT now race. Both results remain
+	// full Core-authored templates; applyMu admits the first matching parent and
+	// the losing raced request is discarded if that parent is already current.
+	jm.recordZMQParentProof(parent)
+	return jm.refreshJobCtxRaceParent(ctx, parent)
 }
 
 func (jm *JobManager) startZMQMonitor(ctx context.Context, sub *zmq4.Socket, remoteAddr string, topics []string) (*zmq4.Socket, error) {

@@ -3,16 +3,32 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/btcsuite/btcd/btcutil"
 )
 
 func (jm *JobManager) ensureTemplateFresh(ctx context.Context, tpl GetBlockTemplateResult) error {
+	return jm.ensureTemplateFreshWithParent(ctx, tpl, "")
+}
+
+// ensureTemplateFreshWithParent validates a template against either a recent,
+// trusted ZMQ active-tip proof or an explicit getbestblockhash RPC. The proof
+// is only supplied for a changed-parent transition; unchanged templates still
+// require RPC verification so a missed ZMQ notification cannot mask staleness.
+func (jm *JobManager) ensureTemplateFreshWithParent(ctx context.Context, tpl GetBlockTemplateResult, expectedParent string) error {
 	if tpl.CurTime <= 0 {
 		return fmt.Errorf("template curtime invalid: %d", tpl.CurTime)
+	}
+	if expectedParent != "" {
+		if tpl.Previous != expectedParent {
+			return fmt.Errorf("%w: prev hash %s does not match announced %s", errStaleTemplate, tpl.Previous, expectedParent)
+		}
+		return nil
 	}
 
 	if ctx == nil {
@@ -55,6 +71,77 @@ func validateWitnessCommitment(commitment string) error {
 }
 
 func validateTransactions(txs []GBTTransaction) ([]*btcutil.Tx, error) {
+	return validateTransactionsWithCache(txs, nil)
+}
+
+func (jm *JobManager) validateTransactions(txs []GBTTransaction) ([]*btcutil.Tx, error) {
+	if jm == nil {
+		return validateTransactions(txs)
+	}
+	return validateTransactionsWithCache(txs, jm.txValidationCache)
+}
+
+type validatedTransactionCacheKey struct {
+	txid          [32]byte
+	wtxid         [32]byte
+	hasWTxID      bool
+	dataHexDigest [32]byte
+}
+
+type validatedTransactionCache struct {
+	mu      sync.Mutex
+	entries map[validatedTransactionCacheKey]*btcutil.Tx
+	order   []validatedTransactionCacheKey
+	next    int
+	limit   int
+}
+
+const defaultValidatedTransactionCacheSize = 32768
+
+func newValidatedTransactionCache(limit int) *validatedTransactionCache {
+	if limit <= 0 {
+		return nil
+	}
+	return &validatedTransactionCache{
+		entries: make(map[validatedTransactionCacheKey]*btcutil.Tx, limit),
+		order:   make([]validatedTransactionCacheKey, 0, limit),
+		limit:   limit,
+	}
+}
+
+func (c *validatedTransactionCache) get(key validatedTransactionCacheKey) (*btcutil.Tx, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	tx, ok := c.entries[key]
+	c.mu.Unlock()
+	return tx, ok
+}
+
+func (c *validatedTransactionCache) add(key validatedTransactionCacheKey, tx *btcutil.Tx) {
+	if c == nil || tx == nil || c.limit <= 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, exists := c.entries[key]; exists {
+		return
+	}
+	if len(c.order) < c.limit {
+		c.order = append(c.order, key)
+	} else {
+		delete(c.entries, c.order[c.next])
+		c.order[c.next] = key
+		c.next++
+		if c.next == c.limit {
+			c.next = 0
+		}
+	}
+	c.entries[key] = tx
+}
+
+func validateTransactionsWithCache(txs []GBTTransaction, cache *validatedTransactionCache) ([]*btcutil.Tx, error) {
 	transactions := make([]*btcutil.Tx, len(txs))
 	for i, tx := range txs {
 		if len(tx.Txid) != 64 {
@@ -66,6 +153,25 @@ func validateTransactions(txs []GBTTransaction) ([]*btcutil.Tx, error) {
 		}
 		if len(txidBytes) != 32 {
 			return nil, fmt.Errorf("tx %d txid must be 32 bytes, got %d", i, len(txidBytes))
+		}
+		var key validatedTransactionCacheKey
+		copy(key.txid[:], txidBytes)
+		key.dataHexDigest = sha256.Sum256([]byte(tx.Data))
+
+		if tx.Hash != "" {
+			wtxidBytes, err := hex.DecodeString(tx.Hash)
+			if err != nil {
+				return nil, fmt.Errorf("decode wtxid %s: %w", tx.Hash, err)
+			}
+			if len(wtxidBytes) != 32 {
+				return nil, fmt.Errorf("tx %d wtxid must be 32 bytes, got %d", i, len(wtxidBytes))
+			}
+			copy(key.wtxid[:], wtxidBytes)
+			key.hasWTxID = true
+		}
+		if cached, ok := cache.get(key); ok {
+			transactions[i] = cached
+			continue
 		}
 
 		raw, err := hex.DecodeString(tx.Data)
@@ -86,21 +192,15 @@ func validateTransactions(txs []GBTTransaction) ([]*btcutil.Tx, error) {
 			return nil, fmt.Errorf("tx %d txid mismatch with provided data", i)
 		}
 
-		if tx.Hash != "" {
-			wtxidBytes, err := hex.DecodeString(tx.Hash)
-			if err != nil {
-				return nil, fmt.Errorf("decode wtxid %s: %w", tx.Hash, err)
-			}
-			if len(wtxidBytes) != 32 {
-				return nil, fmt.Errorf("tx %d wtxid must be 32 bytes, got %d", i, len(wtxidBytes))
-			}
+		if key.hasWTxID {
 			computedWTxID := parsedTx.MsgTx().WitnessHash()
-			if !bytes.Equal(reverseBytes(computedWTxID[:]), wtxidBytes) {
+			if !bytes.Equal(reverseBytes(computedWTxID[:]), key.wtxid[:]) {
 				return nil, fmt.Errorf("tx %d wtxid mismatch with provided data", i)
 			}
 		}
 
 		transactions[i] = parsedTx
+		cache.add(key, parsedTx)
 	}
 	return transactions, nil
 }

@@ -39,6 +39,14 @@ type rpcResponse struct {
 	ID     int             `json:"id"`
 }
 
+// gbtRPCResponse avoids decoding a large GBT result first as RawMessage and
+// then scanning the same JSON a second time into GetBlockTemplateResult.
+type gbtRPCResponse struct {
+	Result GetBlockTemplateResult `json:"result"`
+	Error  *rpcError              `json:"error"`
+	ID     int                    `json:"id"`
+}
+
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -420,30 +428,47 @@ func (c *RPCClient) performCall(ctx context.Context, client *http.Client, longPo
 		return fmt.Errorf("rpc empty response body")
 	}
 
-	var rpcResp rpcResponse
-	if err := fastJSONUnmarshal(data, &rpcResp); err != nil {
-		return fmt.Errorf("decode rpc response: %w", err)
-	}
-	if rpcResp.Error != nil {
-		if shouldIgnoreRPCError(method, rpcResp.Error) {
-			return nil
+	var resultForHook json.RawMessage
+	if tplOut, ok := out.(*GetBlockTemplateResult); method == "getblocktemplate" && ok {
+		var rpcResp gbtRPCResponse
+		if err := fastJSONUnmarshal(data, &rpcResp); err != nil {
+			return fmt.Errorf("decode rpc response: %w", err)
 		}
-		return rpcResp.Error
+		if rpcResp.Error != nil {
+			if shouldIgnoreRPCError(method, rpcResp.Error) {
+				return nil
+			}
+			return rpcResp.Error
+		}
+		*tplOut = rpcResp.Result
+		// The only in-process result hook intentionally ignores GBT. Avoid
+		// remarshal work here so this remains a true single-pass decode.
+	} else {
+		var rpcResp rpcResponse
+		if err := fastJSONUnmarshal(data, &rpcResp); err != nil {
+			return fmt.Errorf("decode rpc response: %w", err)
+		}
+		if rpcResp.Error != nil {
+			if shouldIgnoreRPCError(method, rpcResp.Error) {
+				return nil
+			}
+			return rpcResp.Error
+		}
+		resultForHook = rpcResp.Result
+		if out != nil {
+			if err := fastJSONUnmarshal(rpcResp.Result, out); err != nil {
+				return err
+			}
+		}
 	}
 
-	// Publish the raw result to any registered hook so other components
-	// can opportunistically warm caches.
+	// Publish raw non-GBT results so status caches can be warmed from ordinary
+	// RPC traffic. GBT uses the typed single-pass path above and has no consumer.
 	c.hookMu.RLock()
 	hook := c.resultHook
 	c.hookMu.RUnlock()
-	if hook != nil {
-		hook(method, params, rpcResp.Result)
-	}
-
-	if out != nil {
-		if err := fastJSONUnmarshal(rpcResp.Result, out); err != nil {
-			return err
-		}
+	if hook != nil && resultForHook != nil {
+		hook(method, params, resultForHook)
 	}
 	decodeDone := time.Now()
 	if c.metrics != nil {

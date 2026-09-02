@@ -25,41 +25,45 @@ func rawBlockNotificationPayload(tipTime uint32, height byte) []byte {
 	return payload
 }
 
-func TestZMQRefreshJoinsActiveLongPollTemplate(t *testing.T) {
+func TestZMQRefreshRacesActiveLongPollAndDiscardsLosingFetch(t *testing.T) {
 	var rpcCalls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rpcCalls.Add(1)
-		var req rpcRequest
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		_ = json.NewEncoder(w).Encode(rpcResponse{
-			ID:    req.ID,
-			Error: &rpcError{Code: -1, Message: "unexpected fallback RPC"},
-		})
-	}))
-	t.Cleanup(srv.Close)
-
+	fallbackStarted := make(chan struct{})
+	releaseFallback := make(chan struct{})
+	defer closeTestChannel(releaseFallback)
 	payload := rawBlockNotificationPayload(uint32(time.Now().Unix()), 2)
 	tip, err := parseRawBlockTip(payload)
 	if err != nil {
 		t.Fatalf("parse raw block tip: %v", err)
 	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rpcCalls.Add(1)
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		close(fallbackStarted)
+		<-releaseFallback
+		result, _ := json.Marshal(GetBlockTemplateResult{Previous: tip.Hash})
+		_ = json.NewEncoder(w).Encode(rpcResponse{ID: req.ID, Result: result})
+	}))
+	t.Cleanup(srv.Close)
 
 	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
 	jm := NewJobManager(rpc, Config{}, nil, []byte{0x51}, nil)
-	jm.longPollCoalesceDelay = 250 * time.Millisecond
 	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: "old-parent"}}
-	jm.longPollActive.Store(true)
 
 	done := make(chan error, 1)
 	go func() {
 		done <- jm.handleZMQNotification(context.Background(), "rawblock", payload)
 	}()
 
-	time.Sleep(10 * time.Millisecond)
+	select {
+	case <-fallbackStarted:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("ZMQ fallback did not start immediately while long poll was active")
+	}
 	jm.mu.Lock()
 	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: tip.Hash}}
 	jm.mu.Unlock()
-	jm.signalTemplateUpdate()
+	close(releaseFallback)
 
 	select {
 	case err := <-done:
@@ -67,10 +71,10 @@ func TestZMQRefreshJoinsActiveLongPollTemplate(t *testing.T) {
 			t.Fatalf("handle ZMQ notification: %v", err)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("ZMQ handler did not join the long-poll update")
+		t.Fatal("ZMQ handler did not discard its fetch after long poll won")
 	}
-	if got := rpcCalls.Load(); got != 0 {
-		t.Fatalf("fallback RPC calls = %d, want 0", got)
+	if got := rpcCalls.Load(); got != 1 {
+		t.Fatalf("raced fallback RPC calls = %d, want 1", got)
 	}
 }
 
@@ -98,7 +102,6 @@ func TestZMQRefreshFallsBackWithoutActiveLongPoll(t *testing.T) {
 
 	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
 	jm := NewJobManager(rpc, Config{}, nil, nil, nil)
-	jm.longPollCoalesceDelay = 500 * time.Millisecond
 	start := time.Now()
 	if err := jm.handleZMQNotification(context.Background(), "rawblock", payload); err == nil {
 		t.Fatal("expected invalid fallback template to fail")
@@ -143,5 +146,57 @@ func TestZMQFallbackRechecksParentAfterRefreshSerialization(t *testing.T) {
 	}
 	if got := rpcCalls.Load(); got != 0 {
 		t.Fatalf("RPC calls = %d, want 0 after parent recheck", got)
+	}
+}
+
+func TestRacedGBTNeverRollsBackANewerParent(t *testing.T) {
+	const (
+		baseParent  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		racedParent = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		newerParent = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	)
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	defer closeTestChannel(releaseRequest)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		close(requestStarted)
+		<-releaseRequest
+		result, _ := json.Marshal(GetBlockTemplateResult{Previous: racedParent})
+		_ = json.NewEncoder(w).Encode(rpcResponse{ID: req.ID, Result: result})
+	}))
+	t.Cleanup(srv.Close)
+
+	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
+	jm := NewJobManager(rpc, Config{}, nil, []byte{0x51}, nil)
+	base := &Job{Generation: 1, Template: GetBlockTemplateResult{Previous: baseParent}}
+	jm.curJob = base
+
+	done := make(chan error, 1)
+	go func() {
+		done <- jm.refreshJobCtxRaceParent(context.Background(), racedParent)
+	}()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("raced GBT did not start")
+	}
+	newer := &Job{Generation: 2, Template: GetBlockTemplateResult{Previous: newerParent}}
+	jm.mu.Lock()
+	jm.curJob = newer
+	jm.mu.Unlock()
+	close(releaseRequest)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("superseded raced GBT: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("superseded raced GBT did not finish")
+	}
+	if got := jm.CurrentJob(); got != newer {
+		t.Fatalf("slower raced GBT rolled back current job: got=%p want=%p", got, newer)
 	}
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -124,7 +126,81 @@ func (jm *JobManager) broadcastJobSync(job *Job) {
 	}
 }
 
-// notificationWorker processes job notifications asynchronously
+const (
+	jobFanoutMaxShards           = 8
+	jobFanoutSubscribersPerShard = 256
+)
+
+func jobFanoutShardCount(subscribers int) int {
+	if subscribers <= jobFanoutSubscribersPerShard {
+		return 1
+	}
+	shards := (subscribers + jobFanoutSubscribersPerShard - 1) / jobFanoutSubscribersPerShard
+	if procs := runtime.GOMAXPROCS(0); shards > procs {
+		shards = procs
+	}
+	if shards > jobFanoutMaxShards {
+		shards = jobFanoutMaxShards
+	}
+	if shards < 1 {
+		return 1
+	}
+	return shards
+}
+
+// distributeJobSharded keeps subsMu held until every shard completes. This
+// prevents Unsubscribe from closing a channel during delivery. The caller does
+// not dequeue the next job until this barrier finishes, preserving per-miner
+// FIFO order while parallelizing large fanouts.
+func (jm *JobManager) distributeJobSharded(job *Job) (subscribers, dropped, shards int) {
+	jm.subsMu.Lock()
+	defer jm.subsMu.Unlock()
+
+	subscribers = len(jm.subs)
+	shards = jobFanoutShardCount(subscribers)
+	if shards == 1 {
+		for ch := range jm.subs {
+			if sendJobNonBlocking(ch, job) {
+				dropped++
+			}
+		}
+		return subscribers, dropped, shards
+	}
+
+	buckets := make([][]chan *Job, shards)
+	i := 0
+	for ch := range jm.subs {
+		bucket := i % shards
+		buckets[bucket] = append(buckets[bucket], ch)
+		i++
+	}
+	droppedByShard := make([]int, shards)
+	deliver := func(shard int) {
+		for _, ch := range buckets[shard] {
+			if sendJobNonBlocking(ch, job) {
+				droppedByShard[shard]++
+			}
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(shards - 1)
+	for shard := 1; shard < shards; shard++ {
+		go func(shard int) {
+			defer wg.Done()
+			deliver(shard)
+		}(shard)
+	}
+	deliver(0)
+	wg.Wait()
+	for _, count := range droppedByShard {
+		dropped += count
+	}
+	return subscribers, dropped, shards
+}
+
+// notificationWorker is the single FIFO ingress for job notifications. Each
+// job may fan out in parallel, but the next job waits for the current barrier.
 func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 	defer jm.notifyWg.Done()
 
@@ -137,20 +213,10 @@ func (jm *JobManager) notificationWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			// Keep lock held during sends so Unsubscribe can't close channels
-			// concurrently. Sends are non-blocking (drop/replace semantics).
-			jm.subsMu.Lock()
-			dropped := 0
-			subscribers := len(jm.subs)
-			for ch := range jm.subs {
-				if sendJobNonBlocking(ch, job) {
-					dropped++
-				}
-			}
-			jm.subsMu.Unlock()
+			subscribers, dropped, shards := jm.distributeJobSharded(job)
 
 			if dropped > 0 {
-				logger.Warn("job broadcast dropped stale updates", "worker", workerID, "subscribers", subscribers, "dropped", dropped)
+				logger.Warn("job broadcast dropped stale updates", "worker", workerID, "subscribers", subscribers, "dropped", dropped, "shards", shards)
 			}
 			if jm.metrics != nil && !job.templateReceivedAt.IsZero() {
 				jm.metrics.ObserveGBTApplyNotifyLatency(time.Since(job.templateReceivedAt))

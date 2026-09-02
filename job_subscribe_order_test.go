@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/remeh/sizedwaitgroup"
 )
 
 func TestBroadcastJobFullQueueKeepsNewestPendingJob(t *testing.T) {
@@ -43,4 +46,46 @@ func TestMiningJobOrderingUsesGenerationNotHeight(t *testing.T) {
 	if !miningJobIsOlder(&Job{CreatedAt: now.Add(-time.Second)}, &Job{CreatedAt: now}) {
 		t.Fatal("timestamp fallback did not classify an older manual job")
 	}
+}
+
+func TestShardedFanoutPreservesPerSubscriberOrder(t *testing.T) {
+	jm := NewJobManager(nil, Config{}, nil, nil, nil)
+	const subscribers = jobFanoutSubscribersPerShard + 32
+	channels := make([]chan *Job, 0, subscribers)
+	for range subscribers {
+		channels = append(channels, jm.Subscribe())
+	}
+	if got := jobFanoutShardCount(subscribers); got < 2 {
+		t.Fatalf("fanout shard count = %d, want at least 2", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	jm.notifyWg = sizedwaitgroup.New(1)
+	jm.notifyWg.Add()
+	go jm.notificationWorker(ctx, 0)
+
+	first := &Job{JobID: "first", Generation: 1}
+	second := &Job{JobID: "second", Generation: 2}
+	jm.broadcastJob(first)
+	jm.broadcastJob(second)
+	for i, ch := range channels {
+		select {
+		case got := <-ch:
+			if got != first {
+				t.Fatalf("subscriber %d first job = %v, want first", i, got)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("subscriber %d timed out waiting for first job", i)
+		}
+		select {
+		case got := <-ch:
+			if got != second {
+				t.Fatalf("subscriber %d second job = %v, want second", i, got)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("subscriber %d timed out waiting for second job", i)
+		}
+	}
+	cancel()
+	jm.notifyWg.Wait()
 }

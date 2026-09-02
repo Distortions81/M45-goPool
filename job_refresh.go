@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -9,7 +10,6 @@ import (
 const (
 	jobTemplateRefreshTimeout     = 10 * time.Second
 	jobBlockHistoryRefreshTimeout = 3 * time.Second
-	jobLongPollCoalesceDelay      = 25 * time.Millisecond
 )
 
 func (jm *JobManager) refreshJobCtx(ctx context.Context) error {
@@ -64,9 +64,51 @@ func (jm *JobManager) refreshJobCtxMinIntervalUnlessParent(ctx context.Context, 
 	return jm.refreshFromTemplate(refreshCtx, tpl)
 }
 
+// refreshJobCtxRaceParent starts a normal GBT request without taking refreshMu
+// so it can genuinely race the already-open long poll. Template application is
+// still serialized by applyMu, and a long-poll winner makes this result a no-op.
+func (jm *JobManager) refreshJobCtxRaceParent(ctx context.Context, parent string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if parent == "" || jm.currentTemplateUsesParent(parent) {
+		return nil
+	}
+	baseJob := jm.CurrentJob()
+	baseParent := ""
+	baseHadJob := baseJob != nil
+	if baseJob != nil {
+		baseParent = baseJob.Template.Previous
+	}
+	timeout := jm.refreshRPCTimeout
+	if timeout <= 0 {
+		timeout = jobTemplateRefreshTimeout
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	params := map[string]any{
+		"rules":        []string{"segwit"},
+		"capabilities": []string{"coinbasetxn", "workid", "coinbase/append"},
+	}
+	tpl, err := jm.fetchTemplateCtx(refreshCtx, params, false)
+	if err != nil {
+		jm.recordJobError(err)
+		return err
+	}
+	if jm.currentTemplateUsesParent(parent) {
+		jm.recordJobSuccess(nil)
+		return nil
+	}
+	if tpl.Previous != parent {
+		err := fmt.Errorf("%w: raced template parent %s does not match announced %s", errStaleTemplate, tpl.Previous, parent)
+		jm.recordJobError(err)
+		return err
+	}
+	return jm.refreshFromTemplateExpected(refreshCtx, tpl, parent, true, baseParent, baseHadJob)
+}
+
 func (jm *JobManager) applyLongPollTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
-	jm.refreshMu.Lock()
-	defer jm.refreshMu.Unlock()
 	return jm.refreshFromTemplate(ctx, tpl)
 }
 
@@ -82,6 +124,10 @@ func (jm *JobManager) fetchTemplateCtx(ctx context.Context, params map[string]an
 }
 
 func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTemplateResult) error {
+	return jm.refreshFromTemplateExpected(ctx, tpl, "", false, "", false)
+}
+
+func (jm *JobManager) refreshFromTemplateExpected(ctx context.Context, tpl GetBlockTemplateResult, expectedParent string, discardIfParentCurrent bool, raceBaseParent string, raceBaseHadJob bool) error {
 	templateReceivedAt := time.Now()
 	if ctx == nil {
 		ctx = context.Background()
@@ -100,6 +146,24 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.mu.RLock()
 	previousJob := jm.curJob
 	jm.mu.RUnlock()
+	if expectedParent != "" && tpl.Previous != expectedParent {
+		err := fmt.Errorf("%w: prev hash %s does not match announced %s", errStaleTemplate, tpl.Previous, expectedParent)
+		jm.recordJobError(err)
+		jm.applyMu.Unlock()
+		return err
+	}
+	if discardIfParentCurrent && previousJob != nil && previousJob.Template.Previous == expectedParent {
+		jm.recordJobSuccess(nil)
+		jm.applyMu.Unlock()
+		return nil
+	}
+	if discardIfParentCurrent && ((!raceBaseHadJob && previousJob != nil) ||
+		(raceBaseHadJob && (previousJob == nil || previousJob.Template.Previous != raceBaseParent))) {
+		// A different parent won while this request was in flight. Never let the
+		// slower result roll work back, even though its own ZMQ proof is valid.
+		jm.applyMu.Unlock()
+		return nil
+	}
 	needsNewJob, clean := jm.templateChangedLocked(tpl)
 
 	// If the template hasn't meaningfully changed, skip building and broadcasting a new job.
@@ -121,11 +185,14 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 		jm.recordJobSuccess(nil)
 		jm.updateBlockTipFromTemplate(tpl)
 		jm.applyMu.Unlock()
-		jm.signalTemplateUpdate()
 		return nil
 	}
 
-	job, err := jm.buildJobLocked(refreshCtx, tpl)
+	parentProof := expectedParent
+	if parentProof == "" && (previousJob == nil || previousJob.Template.Previous != tpl.Previous) {
+		parentProof = jm.recentZMQParentProof(tpl.Previous)
+	}
+	job, err := jm.buildJobLockedWithParent(refreshCtx, tpl, parentProof)
 	if err != nil {
 		jm.recordJobError(err)
 		jm.applyMu.Unlock()
@@ -151,7 +218,6 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	jm.broadcastJob(job)
 	jm.recordJobSuccess(job)
 	jm.applyMu.Unlock()
-	jm.signalTemplateUpdate()
 
 	// Header history feeds only status/timing data. Run it after the complete
 	// mining update is published and after applyMu is released. The worker is
@@ -162,23 +228,30 @@ func (jm *JobManager) refreshFromTemplate(ctx context.Context, tpl GetBlockTempl
 	return nil
 }
 
-func (jm *JobManager) signalTemplateUpdate() {
-	jm.templateUpdateMu.Lock()
-	if jm.templateUpdateCh != nil {
-		close(jm.templateUpdateCh)
+const zmqParentProofTTL = 15 * time.Second
+
+func (jm *JobManager) recordZMQParentProof(parent string) {
+	if parent == "" {
+		return
 	}
-	jm.templateUpdateCh = make(chan struct{})
-	jm.templateUpdateMu.Unlock()
+	jm.zmqParentProofMu.Lock()
+	jm.zmqParentProof = parent
+	jm.zmqParentProofAt = time.Now()
+	jm.zmqParentProofMu.Unlock()
 }
 
-func (jm *JobManager) templateUpdateWaiter() <-chan struct{} {
-	jm.templateUpdateMu.Lock()
-	if jm.templateUpdateCh == nil {
-		jm.templateUpdateCh = make(chan struct{})
+func (jm *JobManager) recentZMQParentProof(parent string) string {
+	if parent == "" {
+		return ""
 	}
-	ch := jm.templateUpdateCh
-	jm.templateUpdateMu.Unlock()
-	return ch
+	jm.zmqParentProofMu.RLock()
+	proof := jm.zmqParentProof
+	at := jm.zmqParentProofAt
+	jm.zmqParentProofMu.RUnlock()
+	if proof != parent || at.IsZero() || time.Since(at) > zmqParentProofTTL {
+		return ""
+	}
+	return proof
 }
 
 func (jm *JobManager) currentTemplateUsesParent(parent string) bool {
@@ -187,39 +260,6 @@ func (jm *JobManager) currentTemplateUsesParent(parent string) bool {
 	}
 	job := jm.CurrentJob()
 	return job != nil && job.Template.Previous == parent
-}
-
-func (jm *JobManager) waitForLongPollParent(ctx context.Context, parent string) bool {
-	if jm.currentTemplateUsesParent(parent) {
-		return true
-	}
-	if !jm.longPollActive.Load() {
-		return false
-	}
-	delay := jm.longPollCoalesceDelay
-	if delay <= 0 {
-		delay = jobLongPollCoalesceDelay
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	for {
-		updated := jm.templateUpdateWaiter()
-		// Close can race with obtaining the waiter, so recheck the published
-		// parent before blocking.
-		if jm.currentTemplateUsesParent(parent) {
-			return true
-		}
-		select {
-		case <-ctx.Done():
-			return false
-		case <-timer.C:
-			return jm.currentTemplateUsesParent(parent)
-		case <-updated:
-			if jm.currentTemplateUsesParent(parent) {
-				return true
-			}
-		}
-	}
 }
 
 func lockMutexContext(ctx context.Context, mu *sync.Mutex) error {

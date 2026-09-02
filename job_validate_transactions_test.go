@@ -63,3 +63,59 @@ func TestValidateTransactionsUsesBtcdInternalHashOrder(t *testing.T) {
 		t.Fatal("validateTransactions accepted an internal-order hash in the display-order GBT txid field")
 	}
 }
+
+func cachedValidationTestTransaction(t *testing.T, marker byte) GBTTransaction {
+	t.Helper()
+	var prevHash chainhash.Hash
+	prevHash[0] = marker
+	msgTx := wire.NewMsgTx(2)
+	msgTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&prevHash, uint32(marker)), nil, wire.TxWitness{
+		[]byte{marker, 0x01},
+	}))
+	msgTx.AddTxOut(wire.NewTxOut(1000+int64(marker), []byte{0x51}))
+	var serialized bytes.Buffer
+	if err := msgTx.Serialize(&serialized); err != nil {
+		t.Fatalf("serialize transaction: %v", err)
+	}
+	tx := btcutil.NewTx(msgTx)
+	return GBTTransaction{
+		Data: hex.EncodeToString(serialized.Bytes()),
+		Txid: tx.Hash().String(),
+		Hash: msgTx.WitnessHash().String(),
+	}
+}
+
+func TestValidatedTransactionCacheReusesExactContentAndRejectsChanges(t *testing.T) {
+	cache := newValidatedTransactionCache(1)
+	first := cachedValidationTestTransaction(t, 0x11)
+
+	initial, err := validateTransactionsWithCache([]GBTTransaction{first}, cache)
+	if err != nil {
+		t.Fatalf("initial validation: %v", err)
+	}
+	reused, err := validateTransactionsWithCache([]GBTTransaction{first}, cache)
+	if err != nil {
+		t.Fatalf("cached validation: %v", err)
+	}
+	if initial[0] != reused[0] {
+		t.Fatal("exact transaction content did not reuse cached validation")
+	}
+
+	changed := first
+	changed.Data = "00"
+	if _, err := validateTransactionsWithCache([]GBTTransaction{changed}, cache); err == nil {
+		t.Fatal("cache accepted changed raw data for an existing txid")
+	}
+
+	second := cachedValidationTestTransaction(t, 0x22)
+	if _, err := validateTransactionsWithCache([]GBTTransaction{second}, cache); err != nil {
+		t.Fatalf("second validation: %v", err)
+	}
+	revalidated, err := validateTransactionsWithCache([]GBTTransaction{first}, cache)
+	if err != nil {
+		t.Fatalf("validation after eviction: %v", err)
+	}
+	if revalidated[0] == initial[0] {
+		t.Fatal("one-entry cache did not evict the oldest transaction")
+	}
+}

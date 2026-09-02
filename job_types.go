@@ -135,13 +135,12 @@ type JobManager struct {
 	lastRefreshAttempt time.Time
 	refreshRPCTimeout  time.Duration
 	applyMu            sync.Mutex
-	// templateUpdateCh is closed and replaced whenever a fetched template has
-	// been applied. ZMQ refreshes use it to join an already-returning long poll
-	// instead of issuing a duplicate getblocktemplate request for the same tip.
-	templateUpdateMu      sync.Mutex
-	templateUpdateCh      chan struct{}
-	longPollActive        atomic.Bool
-	longPollCoalesceDelay time.Duration
+	// zmqParentProof records the newest active-tip hash announced by Core's
+	// trusted *block ZMQ feed. A matching, recent proof lets a changed-parent
+	// GBT avoid a second, serialized getbestblockhash RPC before publication.
+	zmqParentProofMu sync.RWMutex
+	zmqParentProof   string
+	zmqParentProofAt time.Time
 	// historyMu serializes the best-effort block-history worker. At most one
 	// RPC walk is active and one newest request is pending, so template churn
 	// cannot create an unbounded goroutine/RPC backlog.
@@ -166,8 +165,9 @@ type JobManager struct {
 	nodeHeaders     int64
 	nodeSyncFetched time.Time
 	// Async notification queue
-	notifyQueue chan *Job
-	notifyWg    sizedwaitgroup.SizedWaitGroup
+	notifyQueue       chan *Job
+	notifyWg          sizedwaitgroup.SizedWaitGroup
+	txValidationCache *validatedTransactionCache
 	// Callback for new block notifications
 	onNewBlock func()
 	// Retry backoff state for job refresh loops
@@ -177,19 +177,18 @@ type JobManager struct {
 
 func NewJobManager(rpc *RPCClient, cfg Config, metrics *PoolMetrics, payoutScript []byte, donationScript []byte) *JobManager {
 	return &JobManager{
-		rpc:                   rpc,
-		cfg:                   cfg,
-		zmqHashBlockAddr:      cfg.ZMQHashBlockAddr,
-		zmqRawBlockAddr:       cfg.ZMQRawBlockAddr,
-		metrics:               metrics,
-		payoutScript:          append([]byte(nil), payoutScript...),
-		donationScript:        append([]byte(nil), donationScript...),
-		subs:                  make(map[chan *Job]struct{}),
-		notifyQueue:           make(chan *Job, 100), // Buffered queue for async notifications
-		templateUpdateCh:      make(chan struct{}),
-		longPollCoalesceDelay: jobLongPollCoalesceDelay,
-		refreshRPCTimeout:     jobTemplateRefreshTimeout,
-		historyRPCTimeout:     jobBlockHistoryRefreshTimeout,
+		rpc:               rpc,
+		cfg:               cfg,
+		zmqHashBlockAddr:  cfg.ZMQHashBlockAddr,
+		zmqRawBlockAddr:   cfg.ZMQRawBlockAddr,
+		metrics:           metrics,
+		payoutScript:      append([]byte(nil), payoutScript...),
+		donationScript:    append([]byte(nil), donationScript...),
+		subs:              make(map[chan *Job]struct{}),
+		notifyQueue:       make(chan *Job, 100), // Buffered queue for async notifications
+		txValidationCache: newValidatedTransactionCache(defaultValidatedTransactionCacheSize),
+		refreshRPCTimeout: jobTemplateRefreshTimeout,
+		historyRPCTimeout: jobBlockHistoryRefreshTimeout,
 	}
 }
 

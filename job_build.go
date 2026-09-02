@@ -18,11 +18,17 @@ func (jm *JobManager) buildJob(ctx context.Context, tpl GetBlockTemplateResult) 
 // buildJobLocked builds from one coherent runtime configuration snapshot.
 // The caller must hold jm.applyMu.
 func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateResult) (*Job, error) {
+	return jm.buildJobLockedWithParent(ctx, tpl, "")
+}
+
+// buildJobLockedWithParent accepts a recent ZMQ active-tip proof for a
+// changed-parent template. The caller must hold jm.applyMu.
+func (jm *JobManager) buildJobLockedWithParent(ctx context.Context, tpl GetBlockTemplateResult, expectedParent string) (*Job, error) {
 	if len(jm.payoutScript) == 0 {
 		return nil, fmt.Errorf("payout script not configured")
 	}
 
-	if err := jm.ensureTemplateFresh(ctx, tpl); err != nil {
+	if err := jm.ensureTemplateFreshWithParent(ctx, tpl, expectedParent); err != nil {
 		return nil, err
 	}
 
@@ -35,7 +41,7 @@ func (jm *JobManager) buildJobLocked(ctx context.Context, tpl GetBlockTemplateRe
 		return nil, err
 	}
 
-	transactions, err := validateTransactions(tpl.Transactions)
+	transactions, err := jm.validateTransactions(tpl.Transactions)
 	if err != nil {
 		return nil, err
 	}

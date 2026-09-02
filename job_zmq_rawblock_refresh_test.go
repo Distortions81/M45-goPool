@@ -6,13 +6,34 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
-	bestHash := "0000000000000000000000000000000000000000000000000000000000000001"
 	now := time.Unix(1_700_000_000, 0).UTC()
+
+	// Build a minimal raw block payload sufficient for parseRawBlockTip().
+	// Header (80 bytes) + tx count (1) + coinbase tx version + input count (1) + prevout (36)
+	// + script len + scriptSig (first push encodes height=2).
+	payload := make([]byte, 0, 140)
+	header := make([]byte, 80)
+	binary.LittleEndian.PutUint32(header[68:72], uint32(now.Unix()))
+	binary.LittleEndian.PutUint32(header[72:76], 0x1d00ffff) // bits
+	payload = append(payload, header...)
+	payload = append(payload, 0x01)                   // tx count = 1
+	payload = append(payload, 0x01, 0x00, 0x00, 0x00) // version
+	payload = append(payload, 0x01)                   // input count = 1
+	payload = append(payload, make([]byte, 36)...)    // prevout
+	payload = append(payload, 0x02)                   // script len = 2
+	payload = append(payload, 0x01, 0x02)             // push 1-byte height=2
+	tip, err := parseRawBlockTip(payload)
+	if err != nil {
+		t.Fatalf("parse raw block tip: %v", err)
+	}
+	bestHash := tip.Hash
+	var bestHashCalls atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
@@ -23,6 +44,7 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 
 		switch req.Method {
 		case "getbestblockhash":
+			bestHashCalls.Add(1)
 			data, _ := json.Marshal(bestHash)
 			resp.Result = data
 		case "getblockheader":
@@ -49,21 +71,9 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 
 	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
 	jm := NewJobManager(rpc, Config{ZMQRawBlockAddr: "tcp://127.0.0.1:28332", Extranonce2Size: 4, TemplateExtraNonce2Size: 8}, nil, []byte{0x51}, nil)
-
-	// Build a minimal raw block payload sufficient for parseRawBlockTip().
-	// Header (80 bytes) + tx count (1) + coinbase tx version + input count (1) + prevout (36)
-	// + script len + scriptSig (first push encodes height=2).
-	payload := make([]byte, 0, 140)
-	header := make([]byte, 80)
-	binary.LittleEndian.PutUint32(header[68:72], uint32(now.Unix()))
-	binary.LittleEndian.PutUint32(header[72:76], 0x1d00ffff) // bits
-	payload = append(payload, header...)
-	payload = append(payload, 0x01)                   // tx count = 1
-	payload = append(payload, 0x01, 0x00, 0x00, 0x00) // version
-	payload = append(payload, 0x01)                   // input count = 1
-	payload = append(payload, make([]byte, 36)...)    // prevout
-	payload = append(payload, 0x02)                   // script len = 2
-	payload = append(payload, 0x01, 0x02)             // push 1-byte height=2
+	historyCtx, cancelHistory := context.WithCancel(context.Background())
+	cancelHistory()
+	jm.historyCtx = historyCtx
 
 	if err := jm.handleZMQNotification(context.Background(), "rawblock", payload); err != nil {
 		t.Fatalf("handleZMQNotification error: %v", err)
@@ -78,5 +88,8 @@ func TestJobManagerHandleZMQNotification_RawBlockRefreshesJob(t *testing.T) {
 	}
 	if jm.blockTipHeight() != 2 {
 		t.Fatalf("expected tip height 2, got %d", jm.blockTipHeight())
+	}
+	if got := bestHashCalls.Load(); got != 0 {
+		t.Fatalf("new-parent ZMQ proof made %d getbestblockhash calls, want 0", got)
 	}
 }
