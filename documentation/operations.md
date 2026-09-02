@@ -69,7 +69,7 @@ Requirements:
 Clone and build:
 
 ```bash
-git clone https://github.com/Distortions81/M45-goPool.git
+git clone https://github.com/M45Core/M45-goPool.git
 cd M45-goPool
 go build -o goPool
 ```

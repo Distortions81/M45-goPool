@@ -37,5 +37,7 @@ jobs:
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.out
-          fail_ci_if_error: true
+          # Coverage is useful, but a new repository should not fail its test
+          # suite before the project has been activated in Codecov.
+          fail_ci_if_error: false
           use_oidc: true

@@ -1,10 +1,9 @@
 # <img src="data/www/logo.png" alt="goPool logo" width="32" height="32"> M45-goPool
 
-[![Go CI](https://github.com/Distortions81/M45-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/Distortions81/M45-goPool/actions/workflows/ci.yml)
-[![Go Vulncheck](https://github.com/Distortions81/M45-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Distortions81/M45-goPool/actions/workflows/govulncheck.yml)
-[![Coverage](https://codecov.io/github/Distortions81/M45-goPool/graph/badge.svg)](https://app.codecov.io/github/Distortions81/M45-goPool)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Distortions81/M45-goPool)](https://goreportcard.com/report/github.com/Distortions81/M45-goPool)
-[![License](https://img.shields.io/github/license/Distortions81/M45-goPool)](LICENSE)
+[![Go CI](https://github.com/M45Core/M45-goPool/actions/workflows/ci.yml/badge.svg)](https://github.com/M45Core/M45-goPool/actions/workflows/ci.yml)
+[![Go Vulncheck](https://github.com/M45Core/M45-goPool/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/M45Core/M45-goPool/actions/workflows/govulncheck.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/M45Core/M45-goPool)](https://goreportcard.com/report/github.com/M45Core/M45-goPool)
+[![License](https://img.shields.io/github/license/M45Core/M45-goPool)](LICENSE)
 
 goPool is a from-scratch Go solo Bitcoin mining pool. It connects directly to
 Bitcoin Core over JSON-RPC and ZMQ, exposes Stratum v1 with optional TLS, and
@@ -108,7 +107,7 @@ Reproduce the benchmark and regenerate the SVG with:
 1. Install Go 1.26.8 or later and ZeroMQ (`libzmq3-dev` or equivalent depending on your platform).
 2. Clone the repo and build the pool:
     ```bash
-    git clone https://github.com/Distortions81/M45-goPool.git
+    git clone https://github.com/M45Core/M45-goPool.git
     cd M45-goPool
     go build -o goPool
     ```
