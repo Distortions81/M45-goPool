@@ -1,6 +1,6 @@
 module goPool
 
-go 1.26.5
+go 1.26.8
 
 require (
 	github.com/Backblaze/blazer v0.7.2
