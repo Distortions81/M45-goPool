@@ -33,7 +33,7 @@ profiles:
 
 pools:
   gopool:
-    description: Distortions81/M45-Core-goPool (Go solo pool)
+    description: M45Core/M45-goPool (Go solo pool)
     source: build
     build_context: pools/gopool/src
     dockerfile: pools/gopool/Dockerfile
