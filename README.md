@@ -173,21 +173,20 @@ it to push the verified metadata update because the M45Core organization
 enforces read-only built-in workflow tokens. The
 `ghcr.io/m45core/m45-gopool` package must also be public so umbrelOS can pull it
 without registry credentials. Once those one-time settings are in place,
-pushing a semantic version tag such as `v0.3.5` creates the GitHub release,
+pushing a semantic version tag such as `v0.1.1` creates the GitHub release,
 multi-platform image, and community-store update. The workflow also supports a
-manual run for an existing tag, which is useful for bootstrapping `v0.3.4`
-after the automation is merged.
+manual run for an existing tag.
 
-The source and Umbrel package have independent versions. Before tagging, set
+The source and Umbrel package can have independent versions. Before tagging, set
 [`UMBREL_VERSION`](UMBREL_VERSION) to the package version you want umbrelOS to
-display. The first M45Core community-store release is `0.1.0`, even though the
-corresponding goPool source release is `v0.3.5`.
+display. Release `v0.1.1` updates the existing `0.1.0` bootstrap package and
+keeps the source and Umbrel version numbers aligned.
 
 For a checked release that runs the test suite, validates both version numbers,
 creates an annotated tag, and pushes `main` plus the tag, use:
 
 ```bash
-./scripts/release.sh v0.3.5
+./scripts/release.sh v0.1.1
 ```
 
 ## Configuration overview
