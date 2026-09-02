@@ -170,7 +170,9 @@ func (jm *JobManager) longpollLoop(ctx context.Context) {
 }
 
 func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, payload []byte) error {
+	receivedAt := time.Now()
 	var parent string
+	var rawTip *ZMQBlockTip
 	switch topic {
 	case "hashblock":
 		if len(payload) == 32 {
@@ -186,6 +188,7 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 		} else {
 			jm.recordBlockTip(tip)
 			parent = tip.Hash
+			rawTip = &tip
 		}
 		jm.recordRawBlockPayload(len(payload))
 	default:
@@ -196,6 +199,13 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 	// full Core-authored templates; applyMu admits the first matching parent and
 	// the losing raced request is discarded if that parent is already current.
 	jm.recordZMQParentProof(parent)
+	if rawTip != nil {
+		if _, activated, err := jm.activateFastEmptyJob(*rawTip, receivedAt); err != nil {
+			logger.Warn("fast empty job activation failed; continuing with full template", "component", "job", "kind", "fast_empty", "parent", parent, "error", err)
+		} else if !activated && debugLogging {
+			logger.Debug("fast empty job skipped; continuing with full template", "component", "job", "kind", "fast_empty", "parent", parent)
+		}
+	}
 	return jm.refreshJobCtxRaceParent(ctx, parent)
 }
 

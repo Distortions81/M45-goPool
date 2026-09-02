@@ -25,6 +25,10 @@ func SetChainParams(network string) {
 		chainParams = &chaincfg.TestNet3Params
 	case "regtest", "regressiontest":
 		chainParams = &chaincfg.RegressionNetParams
+	case "signet":
+		chainParams = &chaincfg.SigNetParams
+	case "testnet4":
+		chainParams = &chaincfg.TestNet4Params
 	default:
 		chainParams = &chaincfg.MainNetParams
 	}

@@ -45,12 +45,15 @@ type RPCCallTiming struct {
 }
 
 type GBTTimingSnapshot struct {
-	HeadersLast      float64
-	BodyLast         float64
-	DecodeLast       float64
-	ApplyNotifyLast  float64
-	ApplyNotifyMax   float64
-	ApplyNotifyCount uint64
+	HeadersLast          float64
+	BodyLast             float64
+	DecodeLast           float64
+	ApplyNotifyLast      float64
+	ApplyNotifyMax       float64
+	ApplyNotifyCount     uint64
+	FastEmptyNotifyLast  float64
+	FastEmptyNotifyMax   float64
+	FastEmptyNotifyCount uint64
 }
 
 type PoolMetrics struct {
@@ -84,6 +87,9 @@ type PoolMetrics struct {
 	rpcGBTApplyNotifyLast  float64
 	rpcGBTApplyNotifyMax   float64
 	rpcGBTApplyNotifyCount uint64
+	fastEmptyNotifyLast    float64
+	fastEmptyNotifyMax     float64
+	fastEmptyNotifyCount   uint64
 	rpcSubmitLast          float64
 	rpcSubmitMax           float64
 	rpcSubmitCount         uint64
@@ -442,6 +448,20 @@ func (m *PoolMetrics) ObserveGBTApplyNotifyLatency(dur time.Duration) {
 	m.mu.Unlock()
 }
 
+func (m *PoolMetrics) ObserveFastEmptyNotifyLatency(dur time.Duration) {
+	if m == nil {
+		return
+	}
+	seconds := dur.Seconds()
+	m.mu.Lock()
+	m.fastEmptyNotifyLast = seconds
+	if seconds > m.fastEmptyNotifyMax {
+		m.fastEmptyNotifyMax = seconds
+	}
+	m.fastEmptyNotifyCount++
+	m.mu.Unlock()
+}
+
 func (m *PoolMetrics) SnapshotGBTTiming() GBTTimingSnapshot {
 	if m == nil {
 		return GBTTimingSnapshot{}
@@ -449,12 +469,15 @@ func (m *PoolMetrics) SnapshotGBTTiming() GBTTimingSnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return GBTTimingSnapshot{
-		HeadersLast:      m.rpcGBTHeadersLast,
-		BodyLast:         m.rpcGBTBodyLast,
-		DecodeLast:       m.rpcGBTDecodeLast,
-		ApplyNotifyLast:  m.rpcGBTApplyNotifyLast,
-		ApplyNotifyMax:   m.rpcGBTApplyNotifyMax,
-		ApplyNotifyCount: m.rpcGBTApplyNotifyCount,
+		HeadersLast:          m.rpcGBTHeadersLast,
+		BodyLast:             m.rpcGBTBodyLast,
+		DecodeLast:           m.rpcGBTDecodeLast,
+		ApplyNotifyLast:      m.rpcGBTApplyNotifyLast,
+		ApplyNotifyMax:       m.rpcGBTApplyNotifyMax,
+		ApplyNotifyCount:     m.rpcGBTApplyNotifyCount,
+		FastEmptyNotifyLast:  m.fastEmptyNotifyLast,
+		FastEmptyNotifyMax:   m.fastEmptyNotifyMax,
+		FastEmptyNotifyCount: m.fastEmptyNotifyCount,
 	}
 }
 

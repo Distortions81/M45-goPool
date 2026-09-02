@@ -31,13 +31,30 @@ func (jm *JobManager) buildJobLockedWithParent(ctx context.Context, tpl GetBlock
 	if err := jm.ensureTemplateFreshWithParent(ctx, tpl, expectedParent); err != nil {
 		return nil, err
 	}
-
-	target, err := validateBits(tpl.Bits, tpl.Target)
-	if err != nil {
+	if err := validateWitnessCommitment(tpl.DefaultWitnessCommitment); err != nil {
 		return nil, err
 	}
+	return jm.buildJobFromTemplateLocked(tpl)
+}
 
-	if err := validateWitnessCommitment(tpl.DefaultWitnessCommitment); err != nil {
+// buildFastEmptyJobLocked builds a coinbase-only job after the caller has
+// independently established the parent and derived the next consensus fields
+// from raw-block data and cached header history. It deliberately permits an
+// absent witness commitment because a block with no witness transactions does
+// not require one.
+func (jm *JobManager) buildFastEmptyJobLocked(tpl GetBlockTemplateResult) (*Job, error) {
+	if len(jm.payoutScript) == 0 {
+		return nil, fmt.Errorf("payout script not configured")
+	}
+	if len(tpl.Transactions) != 0 {
+		return nil, fmt.Errorf("fast empty template contains %d transactions", len(tpl.Transactions))
+	}
+	return jm.buildJobFromTemplateLocked(tpl)
+}
+
+func (jm *JobManager) buildJobFromTemplateLocked(tpl GetBlockTemplateResult) (*Job, error) {
+	target, err := validateBits(tpl.Bits, tpl.Target)
+	if err != nil {
 		return nil, err
 	}
 

@@ -152,7 +152,7 @@ func (jm *JobManager) refreshFromTemplateExpected(ctx context.Context, tpl GetBl
 		jm.applyMu.Unlock()
 		return err
 	}
-	if discardIfParentCurrent && previousJob != nil && previousJob.Template.Previous == expectedParent {
+	if discardIfParentCurrent && previousJob != nil && !previousJob.FastEmpty && previousJob.Template.Previous == expectedParent {
 		jm.recordJobSuccess(nil)
 		jm.applyMu.Unlock()
 		return nil
@@ -209,6 +209,7 @@ func (jm *JobManager) refreshFromTemplateExpected(ctx context.Context, tpl GetBl
 	prevHeight := jm.blockTipHeight()
 	jm.updateBlockTipFromTemplate(tpl)
 	tipChanged := previousJob == nil ||
+		previousJob.FastEmpty ||
 		previousJob.Template.Previous != tpl.Previous ||
 		previousJob.Template.Height != tpl.Height
 	logger.Info("new job", "height", tpl.Height, "job_id", job.JobID, "bits", tpl.Bits, "txs", len(tpl.Transactions))
@@ -259,7 +260,9 @@ func (jm *JobManager) currentTemplateUsesParent(parent string) bool {
 		return false
 	}
 	job := jm.CurrentJob()
-	return job != nil && job.Template.Previous == parent
+	// A fast empty job starts useful work but does not satisfy the pending full
+	// template refresh for that parent.
+	return job != nil && !job.FastEmpty && job.Template.Previous == parent
 }
 
 func lockMutexContext(ctx context.Context, mu *sync.Mutex) error {

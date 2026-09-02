@@ -72,6 +72,11 @@ type Job struct {
 	ScriptTime                int64
 	TemplateExtraNonce2Size   int
 	CoinbaseScriptSigMaxBytes int
+	// FastEmpty marks a coinbase-only job activated directly from an
+	// authoritative raw-block ZMQ notification while the full Core template is
+	// still in flight. It remains valid work and is retained for submissions.
+	FastEmpty            bool
+	fastEmptyTriggeredAt time.Time
 }
 
 const (
@@ -100,6 +105,9 @@ type ZMQBlockTip struct {
 	Time       time.Time
 	Bits       string
 	Difficulty float64
+	// previousHash is parsed from rawblock payloads and intentionally omitted
+	// from status JSON. It authenticates direct-successor fast-path activation.
+	previousHash string
 }
 
 const jobFeedErrorHistorySize = 3
@@ -154,8 +162,15 @@ type JobManager struct {
 	// blockTipSequence advances when an authoritative raw-block notification
 	// replaces the payload tip. It is guarded by zmqPayloadMu.
 	blockTipSequence uint64
-	zmqPayload       JobFeedPayloadStatus
-	zmqPayloadMu     sync.RWMutex
+	// consensusHistory* caches an exact, consecutive header-time window ending
+	// at consensusHistoryTip. It is populated asynchronously after full GBT
+	// publication and lets the next raw-block event derive median-time-past
+	// without putting an RPC on the empty-job activation path.
+	consensusHistoryTip    string
+	consensusHistoryHeight int64
+	consensusHistoryTimes  []time.Time
+	zmqPayload             JobFeedPayloadStatus
+	zmqPayloadMu           sync.RWMutex
 	// nodeSync* tracks whether the node is in a usable state for mining.
 	// When the node reports IBD/syncing, we treat Stratum as degraded to avoid
 	// miners wasting power on stale work.

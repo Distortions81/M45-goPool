@@ -199,7 +199,9 @@ To change network defaults, use the `-network` flag:
 
 ### ZMQ block updates
 
-goPool can use Bitcoin Core's ZMQ publisher to learn about new blocks quickly, but it still uses RPC (including longpoll) to fetch the actual `getblocktemplate` payload and keep templates current.
+goPool can use Bitcoin Core's ZMQ publisher to learn about new blocks quickly. A direct-successor `rawblock` notification can activate a valid subsidy-only, coinbase-only job immediately while the full `getblocktemplate` remains in flight. The full Core template then replaces that job without invalidating shares from the empty job.
+
+The empty fast path is enabled for mainnet (and regtest validation) and fails closed unless goPool has an exact cached header-time window and can prove the raw block directly extends the template currently being mined. It is skipped for reorgs, missed notifications, difficulty/versionbits boundaries, signet, reduced-difficulty networks, or incomplete history. In every skipped case, normal RPC/longpoll template refresh continues unchanged.
 
 `node.zmq_hashblock_addr` and `node.zmq_rawblock_addr` control the ZMQ subscriber connections. When both are empty goPool disables ZMQ and logs a warning that you are running RPC/longpoll-only; this lets regtest or longpoll-only pools skip configuring a publisher. When a network flag (`-network`) is set and both are blank, goPool auto-fills the default `tcp://127.0.0.1:28332` for that network.
 
@@ -215,7 +217,7 @@ If both are set to the same `tcp://IP:port`, goPool will share a single ZMQ conn
 goPool subscribes to these Bitcoin Core ZMQ topics:
 
 - `hashblock`: triggers an immediate template refresh (new block).
-- `rawblock`: records block-tip telemetry (height/time/difficulty + payload size) and triggers an immediate template refresh (new block).
+- `rawblock`: records block-tip telemetry, activates the guarded coinbase-only fast job when safe, and triggers the full template refresh.
 
 Only `hashblock` and `rawblock` affect job freshness.
 

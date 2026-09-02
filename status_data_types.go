@@ -125,6 +125,9 @@ type StatusData struct {
 	RPCGBTApplyNotifyLastSec        float64               `json:"rpc_gbt_apply_notify_last_sec"`
 	RPCGBTApplyNotifyMaxSec         float64               `json:"rpc_gbt_apply_notify_max_sec"`
 	RPCGBTApplyNotifyCount          uint64                `json:"rpc_gbt_apply_notify_count"`
+	FastEmptyNotifyLastSec          float64               `json:"fast_empty_notify_last_sec"`
+	FastEmptyNotifyMaxSec           float64               `json:"fast_empty_notify_max_sec"`
+	FastEmptyNotifyCount            uint64                `json:"fast_empty_notify_count"`
 	RPCSubmitLastSec                float64               `json:"rpc_submit_last_sec"`
 	RPCSubmitMaxSec                 float64               `json:"rpc_submit_max_sec"`
 	RPCSubmitCount                  uint64                `json:"rpc_submit_count"`
@@ -225,6 +228,9 @@ type PoolPageData struct {
 	RPCGBTApplyNotifyLastSec        float64               `json:"rpc_gbt_apply_notify_last_sec"`
 	RPCGBTApplyNotifyMaxSec         float64               `json:"rpc_gbt_apply_notify_max_sec"`
 	RPCGBTApplyNotifyCount          uint64                `json:"rpc_gbt_apply_notify_count"`
+	FastEmptyNotifyLastSec          float64               `json:"fast_empty_notify_last_sec"`
+	FastEmptyNotifyMaxSec           float64               `json:"fast_empty_notify_max_sec"`
+	FastEmptyNotifyCount            uint64                `json:"fast_empty_notify_count"`
 	RPCSubmitLastSec                float64               `json:"rpc_submit_last_sec"`
 	RPCSubmitMaxSec                 float64               `json:"rpc_submit_max_sec"`
 	RPCSubmitCount                  uint64                `json:"rpc_submit_count"`

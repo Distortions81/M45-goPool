@@ -131,12 +131,14 @@ func parseRawBlockTip(payload []byte) (ZMQBlockTip, error) {
 		return ZMQBlockTip{}, err
 	}
 	hash := blockHashFromHeader(header)
+	previousHash := hex.EncodeToString(reverseBytes(header[4:36]))
 	return ZMQBlockTip{
-		Hash:       hash,
-		Height:     height,
-		Time:       time.Unix(int64(tipTime), 0).UTC(),
-		Bits:       uint32ToHex8Lower(bits),
-		Difficulty: difficultyFromBits(bits),
+		Hash:         hash,
+		Height:       height,
+		Time:         time.Unix(int64(tipTime), 0).UTC(),
+		Bits:         uint32ToHex8Lower(bits),
+		Difficulty:   difficultyFromBits(bits),
+		previousHash: previousHash,
 	}, nil
 }
 
@@ -191,6 +193,10 @@ func extractPushData(script []byte) ([]byte, error) {
 	}
 	op := script[0]
 	switch {
+	case op >= 0x51 && op <= 0x60:
+		// Minimally encoded script numbers 1..16 use OP_1..OP_16. This
+		// occurs on short regtest chains and is valid BIP34 height encoding.
+		return []byte{op - 0x50}, nil
 	case op <= 0x4b:
 		if len(script) < 1+int(op) {
 			return nil, fmt.Errorf("script shorter than push")

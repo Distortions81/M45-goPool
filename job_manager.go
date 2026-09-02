@@ -285,7 +285,7 @@ func (jm *JobManager) fetchBlockHistoryFromRPC(ctx context.Context, expectedHash
 
 	recentTimes := []time.Time{tip.Time}
 	prevHash := header.PreviousBlockHash
-	for i := 0; i < 3 && prevHash != ""; i++ {
+	for i := 0; i < fastEmptyMedianTimeWindow-1 && prevHash != ""; i++ {
 		prevHeader, err := jm.rpc.GetBlockHeader(ctx, prevHash)
 		if err != nil {
 			logger.Warn("failed to fetch previous block header for block history", "height", header.Height-int64(i+1), "error", err)
@@ -295,8 +295,8 @@ func (jm *JobManager) fetchBlockHistoryFromRPC(ctx context.Context, expectedHash
 		prevHash = prevHeader.PreviousBlockHash
 	}
 
-	if len(recentTimes) > 4 {
-		recentTimes = recentTimes[len(recentTimes)-4:]
+	if len(recentTimes) > fastEmptyMedianTimeWindow {
+		recentTimes = recentTimes[len(recentTimes)-fastEmptyMedianTimeWindow:]
 	}
 
 	return tip, recentTimes, true
@@ -305,9 +305,24 @@ func (jm *JobManager) fetchBlockHistoryFromRPC(ctx context.Context, expectedHash
 func (jm *JobManager) storeBlockHistory(tip ZMQBlockTip, recentTimes []time.Time) {
 	jm.zmqPayloadMu.Lock()
 	jm.zmqPayload.BlockTip = tip
-	jm.zmqPayload.RecentBlockTimes = recentTimes
+	jm.storeConsensusHistoryLocked(tip, recentTimes)
 	jm.zmqPayload.BlockTimerActive = true
 	jm.zmqPayloadMu.Unlock()
+}
+
+func (jm *JobManager) storeConsensusHistoryLocked(tip ZMQBlockTip, times []time.Time) {
+	if len(times) > fastEmptyMedianTimeWindow {
+		times = times[len(times)-fastEmptyMedianTimeWindow:]
+	}
+	jm.consensusHistoryTip = tip.Hash
+	jm.consensusHistoryHeight = tip.Height
+	jm.consensusHistoryTimes = append(jm.consensusHistoryTimes[:0], times...)
+
+	statusTimes := times
+	if len(statusTimes) > 4 {
+		statusTimes = statusTimes[len(statusTimes)-4:]
+	}
+	jm.zmqPayload.RecentBlockTimes = append(jm.zmqPayload.RecentBlockTimes[:0], statusTimes...)
 }
 
 func (jm *JobManager) scheduleBlockHistoryRefresh(job *Job) {
@@ -405,7 +420,7 @@ func (jm *JobManager) commitBlockHistoryIfCurrent(req blockHistoryRefreshRequest
 		return false
 	}
 	jm.zmqPayload.BlockTip = tip
-	jm.zmqPayload.RecentBlockTimes = recentTimes
+	jm.storeConsensusHistoryLocked(tip, recentTimes)
 	jm.zmqPayload.BlockTimerActive = true
 	return true
 }

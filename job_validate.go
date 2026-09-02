@@ -265,6 +265,12 @@ func (jm *JobManager) templateChangedLocked(tpl GetBlockTemplateResult) (needsNe
 	if miningTemplateRequiresClean(prev, cur.VersionMask, next, nextVersionMask) {
 		return true, true
 	}
+	// A Core-authored full template must always replace the temporary valid
+	// coinbase-only job, even when the node's mempool is empty. Header policy is
+	// unchanged, so miners may finish or submit work from either job.
+	if cur.FastEmpty {
+		return true, false
+	}
 
 	// Coinbase and transaction updates form a new, internally coherent job, but
 	// old work on the same header policy remains valid and need not be discarded.
