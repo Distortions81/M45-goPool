@@ -1,0 +1,27 @@
+.git
+.github
+.benchmarks
+.VSCodeCounter
+bitcoin-node
+reports
+vendor
+.env
+.env.*
+*.log
+
+# Local build and test output.
+goPool
+gopool-test
+*.test
+*.out
+profile.svg
+
+# Local runtime state and credentials must never enter an image build context.
+data/*.pem
+data/*.toml
+data/certbot-webroot
+data/config/*.toml
+data/config/*.toml.bak
+data/config/*.tmp
+data/logs
+data/state

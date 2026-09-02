@@ -589,6 +589,7 @@ func run() (exitCode int) {
 	mux.HandleFunc("/server", statusServer.handleServerInfoPage)
 	mux.HandleFunc("/about", statusServer.handleAboutPage)
 	mux.HandleFunc("/help", statusServer.handleHelpPage)
+	mux.HandleFunc("/umbrel", statusServer.handleUmbrelPage)
 	// Static legal pages
 	mux.HandleFunc("/privacy", statusServer.handleStaticFile("privacy.html"))
 	mux.HandleFunc("/terms", statusServer.handleStaticFile("terms.html"))

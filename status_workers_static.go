@@ -80,3 +80,23 @@ func (s *StatusServer) handleHelpPage(w http.ResponseWriter, r *http.Request) {
 			"Template error while rendering the solo mining help page view.")
 	}
 }
+
+// handleUmbrelPage renders the public installation and miner setup guide for
+// the M45Core umbrelOS community package.
+func (s *StatusServer) handleUmbrelPage(w http.ResponseWriter, r *http.Request) {
+	if err := s.serveCachedHTML(w, "page_umbrel", func() ([]byte, error) {
+		start := time.Now()
+		data := s.baseTemplateData(start)
+		var buf bytes.Buffer
+		if err := s.executeTemplate(&buf, "umbrel", data); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}); err != nil {
+		logger.Error("Umbrel guide template error", "error", err)
+		s.renderErrorPage(w, r, http.StatusInternalServerError,
+			"Umbrel guide error",
+			"We couldn't render the Umbrel setup guide.",
+			"Template error while rendering the Umbrel setup guide.")
+	}
+}

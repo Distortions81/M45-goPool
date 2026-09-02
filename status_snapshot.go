@@ -854,6 +854,7 @@ func loadTemplatesFromAssets(assets *uiAssetLoader) (*template.Template, error) 
 		{"pool", "pool.tmpl", "pool template"},
 		{"about", "about.tmpl", "about template"},
 		{"help", "help.tmpl", "help template"},
+		{"umbrel", "umbrel.tmpl", "Umbrel guide template"},
 		{"node_down", "node_down.tmpl", "node down template"},
 		{"admin", "admin.tmpl", "admin template"},
 		{"admin_miners", "admin_miners.tmpl", "admin miners template"},

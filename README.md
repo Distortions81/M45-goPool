@@ -143,6 +143,42 @@ docker compose logs -f
 docker compose down
 ```
 
+### Umbrel community-store releases
+
+For the friendly install walkthrough, miner settings, fee disclosure, and
+troubleshooting, visit [m45core.com/umbrel](https://m45core.com/umbrel).
+
+Tagged releases are published automatically for both `linux/amd64` and
+`linux/arm64`. The release workflow pushes an immutable versioned image to
+GitHub Container Registry, then dispatches its multi-platform digest to the
+[M45Core Umbrel Community App Store](https://github.com/M45Core/M45-Umbrel-Community-App-Store).
+The store verifies the source tag and image before committing its own app
+version, release notes, and digest pin. This remains a community-store release;
+it does not submit the app to Umbrel's official store.
+
+The Umbrel package defaults to a 2% pool fee paid to
+`3B86bWqfjdQeLEr8nkeeWU6ygksc2K7MoL`. When the worker supplies a valid payout
+wallet through Stratum, the remaining 98% is paid to that wallet. The package
+currently targets Bitcoin mainnet.
+
+Add this community-store URL in the umbrelOS App Store UI:
+
+```text
+https://github.com/M45Core/M45-Umbrel-Community-App-Store
+```
+
+Create an `UMBREL_STORE_TOKEN` fine-grained token limited to the community-store
+repository with Contents read/write access, then add it as an Actions secret in
+both repositories. The source uses it to dispatch the release; the store uses
+it to push the verified metadata update because the M45Core organization
+enforces read-only built-in workflow tokens. The
+`ghcr.io/m45core/m45-gopool` package must also be public so umbrelOS can pull it
+without registry credentials. Once those one-time settings are in place,
+pushing a semantic version tag such as `v0.3.5` creates the GitHub release,
+multi-platform image, and community-store update. The workflow also supports a
+manual run for an existing tag, which is useful for bootstrapping `v0.3.4`
+after the automation is merged.
+
 ## Configuration overview
 
 - `data/config/config.toml` controls listener ports, core branding, node endpoints, fee percentages, and most runtime behavior.

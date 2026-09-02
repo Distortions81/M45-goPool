@@ -1,0 +1,161 @@
+{{/* M45Core Umbrel community package guide */}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="Install M45 goPool on umbrelOS and connect Bitcoin miners on your home network.">
+	<link rel="canonical" href="https://m45core.com/umbrel">
+	<meta property="og:type" content="website">
+	<meta property="og:title" content="Run M45 goPool on Umbrel">
+	<meta property="og:description" content="A friendly setup guide for running a private solo Bitcoin mining pool on your Umbrel.">
+	<meta property="og:url" content="https://m45core.com/umbrel">
+	<meta property="og:image" content="https://m45core.com/umbrel-og.png">
+	<meta property="og:image:width" content="1731">
+	<meta property="og:image:height" content="909">
+	<meta property="og:image:alt" content="Run M45 goPool on Umbrel — Your Bitcoin node. Your solo pool.">
+	<meta name="twitter:card" content="summary_large_image">
+	<meta name="twitter:title" content="Run M45 goPool on Umbrel">
+	<meta name="twitter:description" content="Install a private solo Bitcoin mining pool beside your Umbrel Bitcoin Node.">
+	<meta name="twitter:image" content="https://m45core.com/umbrel-og.png">
+	<meta name="twitter:image:alt" content="Run M45 goPool on Umbrel — Your Bitcoin node. Your solo pool.">
+	<meta name="theme-color" content="#080c14">
+	<title>M45Core — Run goPool on Umbrel</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	{{template "header" .}}
+	<main class="page" id="content">
+		<div class="panel-stack panel-stack-wide">
+			<section class="umbrel-hero" aria-labelledby="umbrel-title">
+				<div class="umbrel-eyebrow">M45Core Community App</div>
+				<h1 id="umbrel-title">Your Bitcoin node. Your solo pool. One Umbrel app.</h1>
+				<p class="umbrel-lede">M45 goPool runs beside Bitcoin Core on your Umbrel and gives your home miners a private Stratum endpoint, a live dashboard, and per-worker stats.</p>
+				<div class="umbrel-actions">
+					<a class="btn btn-highlight no-glow" href="#install">Start setup</a>
+					<button class="btn btn-secondary" id="shareUmbrelGuide" type="button">Share this guide</button>
+					<a class="btn btn-secondary" href="https://github.com/M45Core/M45-Umbrel-Community-App-Store" target="_blank" rel="noopener noreferrer">View community store</a>
+				</div>
+				<p class="umbrel-share-status text-sm" id="shareUmbrelStatus" role="status" aria-live="polite"></p>
+				<div class="umbrel-facts" aria-label="Package summary">
+					<div class="umbrel-fact"><strong>Automatic node connection</strong><span>Uses Umbrel's Bitcoin Node dependency and read-only RPC cookie.</span></div>
+					<div class="umbrel-fact"><strong>Home-LAN friendly</strong><span>One plain Stratum endpoint on port 23456; no self-signed TLS.</span></div>
+					<div class="umbrel-fact"><strong>Transparent 2% fee</strong><span>The other 98% pays the valid Bitcoin address supplied by the winning miner.</span></div>
+				</div>
+			</section>
+
+			<section class="card" aria-labelledby="before-title">
+				<h2 id="before-title" style="margin-top:0;">Before you begin</h2>
+				<ul class="umbrel-checklist">
+					<li>An Umbrel device with enough storage for Bitcoin Core.</li>
+					<li>Bitcoin Node running on <strong>mainnet</strong>. Mining waits safely while the node is syncing.</li>
+					<li>Your miners and Umbrel on the same trusted home network.</li>
+				</ul>
+				<div class="button-row"><a class="btn btn-secondary" href="https://umbrel.com/umbrelos" target="_blank" rel="noopener noreferrer">Get umbrelOS</a></div>
+			</section>
+
+			<section id="install" aria-labelledby="install-title">
+				<h2 id="install-title">Install M45 goPool</h2>
+				<div class="umbrel-steps">
+					<article class="card umbrel-step">
+						<h2>Add the M45Core store</h2>
+						<p>In umbrelOS, open <strong>App Store</strong>, open its menu, choose <strong>Community App Stores</strong>, then add this exact URL:</p>
+						<button class="umbrel-store-url copyable" type="button" data-copy="https://github.com/M45Core/M45-Umbrel-Community-App-Store" title="Copy community-store URL">https://github.com/M45Core/M45-Umbrel-Community-App-Store</button>
+						<p class="text-sm">This is a community store, separate from Umbrel's official App Store.</p>
+					</article>
+					<article class="card umbrel-step">
+						<h2>Install Bitcoin Node</h2>
+						<p>Install Umbrel's <strong>Bitcoin Node</strong> app and leave it on mainnet. You can install goPool while the initial block download runs, but miners will not receive work until the node is ready.</p>
+					</article>
+					<article class="card umbrel-step">
+						<h2>Install M45 goPool</h2>
+						<p>Return to the App Store, open the M45Core community store, and install <strong>M45 goPool</strong>. Open it from your Umbrel home screen when installation completes.</p>
+					</article>
+				</div>
+			</section>
+
+			<section class="card" aria-labelledby="connect-title">
+				<h2 id="connect-title" style="margin-top:0;">Connect a miner</h2>
+				<p>Use the same numeric LAN IP address you use to reach your Umbrel. Numeric IPs are usually more reliable than <span class="mono">umbrel.local</span> on ASIC firmware.</p>
+				<p><strong>Pool URL</strong></p>
+				<button class="umbrel-miner-example copyable" type="button" data-copy="stratum+tcp://&lt;umbrel-lan-ip&gt;:23456" title="Copy Stratum URL">stratum+tcp://&lt;umbrel-lan-ip&gt;:23456</button>
+				<p><strong>Username</strong></p>
+				<button class="umbrel-miner-example copyable" type="button" data-copy="YourMainnetBitcoinAddress.WorkerName" title="Copy username format">YourMainnetBitcoinAddress.WorkerName</button>
+				<p><strong>Password</strong></p>
+				<button class="umbrel-miner-example copyable" type="button" data-copy="x" title="Copy password">x</button>
+				<p class="umbrel-note"><strong>Keep it local:</strong> this package intentionally uses plain Stratum on a trusted LAN. Do not port-forward port 23456 or expose it directly to the internet.</p>
+			</section>
+
+			<section class="card" aria-labelledby="fee-title">
+				<h2 id="fee-title" style="margin-top:0;">Payout and fee</h2>
+				<p>The package starts with a <strong>2% pool fee</strong> paid directly in the block coinbase to:</p>
+				<button class="umbrel-store-url copyable" type="button" data-copy="3B86bWqfjdQeLEr8nkeeWU6ygksc2K7MoL" title="Copy fee address">3B86bWqfjdQeLEr8nkeeWU6ygksc2K7MoL</button>
+				<p>The remaining 98% is paid to the valid mainnet Bitcoin address in the winning miner's username. Solo mining is probabilistic: ordinary shares show that a miner is working, but only finding a valid Bitcoin block creates a payout.</p>
+			</section>
+
+			<section class="card" aria-labelledby="troubleshooting-title">
+				<h2 id="troubleshooting-title" style="margin-top:0;">Quick troubleshooting</h2>
+				<details class="connect-advanced">
+					<summary>The miner cannot connect</summary>
+					<div class="connect-advanced-body"><p>Confirm the miner and Umbrel are on the same LAN, use the Umbrel's numeric IP, include port 23456, and check that a router or host firewall is not blocking local traffic.</p></div>
+				</details>
+				<details class="connect-advanced">
+					<summary>The pool says the node is syncing or unavailable</summary>
+					<div class="connect-advanced-body"><p>Open Bitcoin Node in Umbrel and let it finish syncing. goPool deliberately withholds work when Bitcoin Core is not ready so your miners do not waste hashes on unusable jobs.</p></div>
+				</details>
+				<details class="connect-advanced">
+					<summary>The username is rejected</summary>
+					<div class="connect-advanced-body"><p>Use a valid Bitcoin mainnet address. Add an optional worker suffix after a period, and give each miner on the same wallet a different worker name.</p></div>
+				</details>
+				<div class="button-row" style="margin-top:16px;">
+					<a class="btn btn-highlight no-glow" href="https://github.com/M45Core/M45-goPool/issues" target="_blank" rel="noopener noreferrer">Get help on GitHub</a>
+					<a class="btn btn-secondary" href="/help">Read Solo Mining 101</a>
+				</div>
+			</section>
+
+			<p class="umbrel-note"><strong>Community package:</strong> M45 goPool is distributed through M45Core's community store and is not reviewed or endorsed by Umbrel. Review the package, keep umbrelOS updated, and use it only on networks you trust.</p>
+		</div>
+
+		{{template "footer" .}}
+	</main>
+	<script>
+	(function() {
+		const shareButton = document.getElementById('shareUmbrelGuide');
+		const shareStatus = document.getElementById('shareUmbrelStatus');
+		if (!shareButton || !shareStatus) return;
+		const shareURL = 'https://m45core.com/umbrel';
+		shareButton.addEventListener('click', async function() {
+			try {
+				if (navigator.share) {
+					await navigator.share({
+						title: 'Run M45 goPool on Umbrel',
+						text: 'Install a private solo Bitcoin mining pool on your Umbrel.',
+						url: shareURL
+					});
+					shareStatus.textContent = 'Guide shared.';
+					return;
+				}
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					await navigator.clipboard.writeText(shareURL);
+				} else {
+					const input = document.createElement('textarea');
+					input.value = shareURL;
+					input.setAttribute('readonly', '');
+					input.style.position = 'fixed';
+					input.style.opacity = '0';
+					document.body.appendChild(input);
+					input.select();
+					document.execCommand('copy');
+					input.remove();
+				}
+				shareStatus.textContent = 'Guide link copied.';
+			} catch (err) {
+				if (err && err.name === 'AbortError') return;
+				shareStatus.textContent = 'Copy this link: ' + shareURL;
+			}
+		});
+	})();
+	</script>
+</body>
+</html>
