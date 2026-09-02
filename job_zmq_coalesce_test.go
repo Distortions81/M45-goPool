@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,95 @@ import (
 	"testing"
 	"time"
 )
+
+func TestHashBlockUsesBitcoinCoreDisplayByteOrder(t *testing.T) {
+	payload := make([]byte, 32)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	parent := hex.EncodeToString(payload)
+
+	jm := NewJobManager(nil, Config{ZMQHashBlockAddr: "tcp://127.0.0.1:28334"}, nil, nil, nil)
+	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: parent}}
+
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", payload); err != nil {
+		t.Fatalf("handle hashblock notification: %v", err)
+	}
+	if got := jm.recentZMQParentProof(parent); got != parent {
+		t.Fatalf("hashblock parent proof = %q, want %q", got, parent)
+	}
+}
+
+func TestHashBlockDefersRefreshToHealthyRawBlock(t *testing.T) {
+	var rpcCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rpcCalls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
+	jm := NewJobManager(rpc, Config{
+		ZMQHashBlockAddr: "tcp://127.0.0.1:28334",
+		ZMQRawBlockAddr:  "tcp://127.0.0.1:28332",
+	}, nil, nil, nil)
+	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: "old-parent"}}
+	jm.zmqRawblockHealthy.Store(true)
+
+	payload := make([]byte, 32)
+	payload[31] = 1
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", payload); err != nil {
+		t.Fatalf("handle hashblock notification: %v", err)
+	}
+	if got := rpcCalls.Load(); got != 0 {
+		t.Fatalf("hashblock made %d GBT calls while rawblock was healthy, want 0", got)
+	}
+	parent := hex.EncodeToString(payload)
+	if got := jm.recentZMQParentProof(parent); got != parent {
+		t.Fatalf("hashblock parent proof = %q, want %q", got, parent)
+	}
+}
+
+func TestHashBlockRefreshesWhenRawBlockIsUnhealthy(t *testing.T) {
+	var rpcCalls atomic.Int32
+	payload := make([]byte, 32)
+	payload[31] = 2
+	parent := hex.EncodeToString(payload)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rpcCalls.Add(1)
+		var req rpcRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		result, _ := json.Marshal(GetBlockTemplateResult{Previous: parent})
+		_ = json.NewEncoder(w).Encode(rpcResponse{ID: req.ID, Result: result})
+	}))
+	t.Cleanup(srv.Close)
+
+	rpc := &RPCClient{url: srv.URL, client: srv.Client(), lp: srv.Client()}
+	jm := NewJobManager(rpc, Config{
+		ZMQHashBlockAddr: "tcp://127.0.0.1:28334",
+		ZMQRawBlockAddr:  "tcp://127.0.0.1:28332",
+	}, nil, nil, nil)
+	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: parent}}
+	jm.zmqRawblockHealthy.Store(false)
+
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", payload); err != nil {
+		t.Fatalf("handle hashblock notification: %v", err)
+	}
+	if got := rpcCalls.Load(); got != 0 {
+		t.Fatalf("current-parent hashblock made %d GBT calls, want 0", got)
+	}
+
+	jm.mu.Lock()
+	jm.curJob = &Job{Template: GetBlockTemplateResult{Previous: "old-parent"}}
+	jm.mu.Unlock()
+	if err := jm.handleZMQNotification(context.Background(), "hashblock", payload); err == nil {
+		t.Fatal("expected deliberately incomplete fallback template to fail")
+	}
+	if got := rpcCalls.Load(); got != 1 {
+		t.Fatalf("hashblock made %d GBT calls while rawblock was unhealthy, want 1", got)
+	}
+}
 
 func rawBlockNotificationPayload(tipTime uint32, height byte) []byte {
 	payload := make([]byte, 0, 140)

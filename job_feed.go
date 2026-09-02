@@ -176,7 +176,9 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 	switch topic {
 	case "hashblock":
 		if len(payload) == 32 {
-			parent = hex.EncodeToString(reverseBytes(payload))
+			// Bitcoin Core publishes hashblock in the same reversed/display
+			// byte order used by RPC and block explorers.
+			parent = hex.EncodeToString(payload)
 		}
 		logger.Info("zmq block notification", "component", "zmq", "kind", "notify", "block_hash", parent)
 	case "rawblock":
@@ -199,6 +201,16 @@ func (jm *JobManager) handleZMQNotification(ctx context.Context, topic string, p
 	// full Core-authored templates; applyMu admits the first matching parent and
 	// the losing raced request is discarded if that parent is already current.
 	jm.recordZMQParentProof(parent)
+	if topic == "hashblock" && jm.zmqRawBlockAddr != "" && jm.zmqRawblockHealthy.Load() {
+		// Core normally publishes hashblock before rawblock. Let the raw payload
+		// activate the guarded empty-job fast path before starting the full GBT
+		// race. If rawblock is unavailable, hashblock retains its immediate
+		// refresh fallback below; longpoll also remains authoritative.
+		if debugLogging {
+			logger.Debug("deferring hashblock refresh to healthy rawblock feed", "component", "zmq", "kind", "coalesce", "block_hash", parent)
+		}
+		return nil
+	}
 	if rawTip != nil {
 		if _, activated, err := jm.activateFastEmptyJob(*rawTip, receivedAt); err != nil {
 			logger.Warn("fast empty job activation failed; continuing with full template", "component", "job", "kind", "fast_empty", "parent", parent, "error", err)

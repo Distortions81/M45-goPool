@@ -216,7 +216,7 @@ If both are set to the same `tcp://IP:port`, goPool will share a single ZMQ conn
 
 goPool subscribes to these Bitcoin Core ZMQ topics:
 
-- `hashblock`: triggers an immediate template refresh (new block).
+- `hashblock`: triggers an immediate template refresh when `rawblock` is unavailable. When a configured `rawblock` feed is healthy, goPool records the hash and lets the following raw payload activate the guarded empty job before the full-template refresh.
 - `rawblock`: records block-tip telemetry, activates the guarded coinbase-only fast job when safe, and triggers the full template refresh.
 
 Only `hashblock` and `rawblock` affect job freshness.
