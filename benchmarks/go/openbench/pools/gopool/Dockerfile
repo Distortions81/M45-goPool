@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26.5-bookworm AS builder
+FROM golang:1.26.8-bookworm AS builder
 
 WORKDIR /src
 
